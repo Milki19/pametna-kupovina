@@ -273,10 +273,27 @@ public class PriceImportService {
                         vat_rate
                     )
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT (
+                        retailer_product_id,
+                        price_date,
+                        retailer_format_name
+                    )
+                    DO UPDATE SET
+                        import_run_id = EXCLUDED.import_run_id,
+                        regular_price = EXCLUDED.regular_price,
+                        unit_price = EXCLUDED.unit_price,
+                        discounted_price = EXCLUDED.discounted_price,
+                        discount_start = EXCLUDED.discount_start,
+                        discount_end = EXCLUDED.discount_end,
+                        vat_rate = EXCLUDED.vat_rate
                     """)
                 .param(1, retailerProductId)
                 .param(2, importRunId)
-                .param(3, nullableText(retailerFormatName), Types.VARCHAR)
+                .param(
+                        3,
+                        nullableText(retailerFormatName),
+                        Types.VARCHAR
+                )
                 .param(4, priceDate, Types.DATE)
                 .param(5, regularPrice, Types.NUMERIC)
                 .param(6, unitPrice, Types.NUMERIC)
