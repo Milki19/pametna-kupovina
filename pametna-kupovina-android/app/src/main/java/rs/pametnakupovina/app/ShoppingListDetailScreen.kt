@@ -13,15 +13,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import java.math.BigDecimal
+import java.math.RoundingMode
 
 @Composable
 fun ShoppingListDetailScreen(
     listId: Long,
     onBack: () -> Unit,
     onShowBestPrices: () -> Unit,
-    viewModel: ShoppingListDetailViewModel = viewModel()
+    viewModel: ShoppingListDetailViewModel = viewModel(),
+    searchViewModel: ProductSearchViewModel = viewModel()
 ) {
     val state = viewModel.uiState
+    val searchState = searchViewModel.uiState
+
     var showAddItemDialog by rememberSaveable {
         mutableStateOf(false)
     }
@@ -34,12 +39,15 @@ fun ShoppingListDetailScreen(
 
     if (showAddItemDialog) {
         AddShoppingListItemDialog(
+            searchState = searchState,
             isSaving = state.isAddingItem,
             errorMessage = state.addItemError,
+            onQueryChange = searchViewModel::updateQuery,
             onDismiss = {
                 if (!state.isAddingItem) {
                     showAddItemDialog = false
                     viewModel.clearAddItemError()
+                    searchViewModel.clearSearch()
                 }
             },
             onConfirm = { name, barcode, quantity ->
@@ -50,6 +58,7 @@ fun ShoppingListDetailScreen(
                     quantity = quantity,
                     onSuccess = {
                         showAddItemDialog = false
+                        searchViewModel.clearSearch()
                     }
                 )
             }
@@ -88,6 +97,7 @@ fun ShoppingListDetailScreen(
                     shoppingList = state.shoppingList,
                     onAddItem = {
                         viewModel.clearAddItemError()
+                        searchViewModel.clearSearch()
                         showAddItemDialog = true
                     },
                     onShowBestPrices = onShowBestPrices
@@ -127,6 +137,7 @@ private fun ColumnScope.ShoppingListContent(
     ) {
         Text("Dodaj artikal")
     }
+
     Spacer(modifier = Modifier.height(8.dp))
 
     OutlinedButton(
@@ -191,8 +202,10 @@ private fun ShoppingListItemCard(
 
 @Composable
 private fun AddShoppingListItemDialog(
+    searchState: ProductSearchUiState,
     isSaving: Boolean,
     errorMessage: String?,
+    onQueryChange: (String) -> Unit,
     onDismiss: () -> Unit,
     onConfirm: (
         name: String,
@@ -200,12 +213,8 @@ private fun AddShoppingListItemDialog(
         quantity: Double
     ) -> Unit
 ) {
-    var name by rememberSaveable {
-        mutableStateOf("")
-    }
-
-    var barcode by rememberSaveable {
-        mutableStateOf("")
+    var selectedProduct by remember {
+        mutableStateOf<ProductSearchResultDto?>(null)
     }
 
     var quantityText by rememberSaveable {
@@ -216,8 +225,11 @@ private fun AddShoppingListItemDialog(
         .replace(',', '.')
         .toDoubleOrNull()
 
+    val itemName = selectedProduct?.name
+        ?: searchState.query.trim()
+
     val canSave =
-        name.isNotBlank() &&
+        itemName.isNotBlank() &&
                 quantity != null &&
                 quantity > 0 &&
                 !isSaving
@@ -229,33 +241,33 @@ private fun AddShoppingListItemDialog(
         },
         text = {
             Column(
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 OutlinedTextField(
-                    value = name,
-                    onValueChange = {
-                        name = it
+                    value = searchState.query,
+                    onValueChange = { query ->
+                        selectedProduct = null
+                        onQueryChange(query)
                     },
                     label = {
-                        Text("Naziv artikla")
+                        Text("Naziv ili barkod")
                     },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                OutlinedTextField(
-                    value = barcode,
-                    onValueChange = {
-                        barcode = it
-                    },
-                    label = {
-                        Text("Barkod — opciono")
-                    },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Number
-                    ),
-                    modifier = Modifier.fillMaxWidth()
+                selectedProduct?.let { product ->
+                    SelectedProductCard(
+                        product = product,
+                        onChangeProduct = {
+                            selectedProduct = null
+                        }
+                    )
+                } ?: ProductSearchResults(
+                    searchState = searchState,
+                    onProductSelected = { product ->
+                        selectedProduct = product
+                    }
                 )
 
                 OutlinedTextField(
@@ -287,8 +299,8 @@ private fun AddShoppingListItemDialog(
                 enabled = canSave,
                 onClick = {
                     onConfirm(
-                        name,
-                        barcode.takeIf { it.isNotBlank() },
+                        itemName,
+                        selectedProduct?.barcode,
                         quantity ?: return@TextButton
                     )
                 }
@@ -299,7 +311,13 @@ private fun AddShoppingListItemDialog(
                         strokeWidth = 2.dp
                     )
                 } else {
-                    Text("Dodaj")
+                    Text(
+                        if (selectedProduct != null) {
+                            "Dodaj proizvod"
+                        } else {
+                            "Dodaj kao opšti artikal"
+                        }
+                    )
                 }
             }
         },
@@ -312,6 +330,167 @@ private fun AddShoppingListItemDialog(
             }
         }
     )
+}
+
+@Composable
+private fun ProductSearchResults(
+    searchState: ProductSearchUiState,
+    onProductSelected: (ProductSearchResultDto) -> Unit
+) {
+    when {
+        searchState.query.trim().length < 2 -> {
+            Text(
+                text = "Unesi najmanje 2 karaktera za pretragu.",
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+
+        searchState.isLoading -> {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(80.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(28.dp),
+                    strokeWidth = 3.dp
+                )
+            }
+        }
+
+        searchState.errorMessage != null -> {
+            Text(
+                text = searchState.errorMessage,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+
+        searchState.results.isEmpty() -> {
+            Text(
+                text = "Nema rezultata. Artikal možeš dodati kao opšti.",
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+
+        else -> {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 230.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(
+                    items = searchState.results,
+                    key = { product ->
+                        product.barcode
+                            ?.takeIf { it.isNotBlank() }
+                            ?: product.productId
+                    }
+                ) { product ->
+                    ProductSearchResultCard(
+                        product = product,
+                        onClick = {
+                            onProductSelected(product)
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProductSearchResultCard(
+    product: ProductSearchResultDto,
+    onClick: () -> Unit
+) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp)
+        ) {
+            Text(
+                text = product.name,
+                style = MaterialTheme.typography.titleSmall
+            )
+
+            product.brand
+                ?.takeIf { it.isNotBlank() }
+                ?.let { brand ->
+                    Text(
+                        text = "Brend: $brand",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+
+            product.categoryName
+                ?.takeIf { it.isNotBlank() }
+                ?.let { category ->
+                    Text(
+                        text = category,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+
+            if (
+                product.retailerName != null &&
+                product.effectivePrice != null
+            ) {
+                Text(
+                    text = "${product.retailerName}: " +
+                            formatCatalogPrice(product.effectivePrice),
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SelectedProductCard(
+    product: ProductSearchResultDto,
+    onChangeProduct: () -> Unit
+) {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer
+        ),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp)
+        ) {
+            Text(
+                text = "Izabran proizvod",
+                style = MaterialTheme.typography.labelMedium
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Text(
+                text = product.name,
+                style = MaterialTheme.typography.titleSmall
+            )
+
+            product.barcode?.let {
+                Text(
+                    text = "Barkod: $it",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+
+            TextButton(
+                onClick = onChangeProduct,
+                contentPadding = PaddingValues(0.dp)
+            ) {
+                Text("Promeni proizvod")
+            }
+        }
+    }
 }
 
 @Composable
@@ -359,4 +538,11 @@ private fun formatQuantity(quantity: Double): String {
     } else {
         quantity.toString()
     }
+}
+
+private fun formatCatalogPrice(value: Double): String {
+    return BigDecimal
+        .valueOf(value)
+        .setScale(2, RoundingMode.HALF_UP)
+        .toPlainString() + " RSD"
 }

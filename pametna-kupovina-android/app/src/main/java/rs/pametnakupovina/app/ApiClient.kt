@@ -6,6 +6,7 @@ import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.Path
+import retrofit2.http.Query
 
 data class ShoppingListSummaryDto(
     val id: Long,
@@ -62,6 +63,23 @@ data class BestPriceItemDto(
     val effectivePrice: Double?,
     val lineTotal: Double?
 )
+
+data class ProductSearchResultDto(
+    val productId: Long,
+    val name: String,
+    val brand: String?,
+    val barcode: String?,
+    val unit: String?,
+    val categoryName: String?,
+    val retailerCode: String?,
+    val retailerName: String?,
+    val retailerFormatName: String?,
+    val priceDate: String?,
+    val regularPrice: Double?,
+    val discountedPrice: Double?,
+    val unitPrice: Double?,
+    val effectivePrice: Double?
+)
 interface ShoppingApiService {
 
     @GET("api/v1/shopping-lists")
@@ -82,6 +100,12 @@ interface ShoppingApiService {
     suspend fun getBestPrices(
         @Path("id") listId: Long
     ): BestPricesDto
+
+    @GET("api/v1/products/search")
+    suspend fun searchProducts(
+        @Query("query") query: String,
+        @Query("limit") limit: Int = 20
+    ): List<ProductSearchResultDto>
 }
 
 object ApiClient {
