@@ -21,6 +21,7 @@ fun ShoppingListDetailScreen(
     listId: Long,
     onBack: () -> Unit,
     onShowBestPrices: () -> Unit,
+    onShowLocationOptimization: () -> Unit,
     viewModel: ShoppingListDetailViewModel = viewModel(),
     searchViewModel: ProductSearchViewModel = viewModel()
 ) {
@@ -155,6 +156,7 @@ fun ShoppingListDetailScreen(
                         searchViewModel.clearSearch()
                         showAddItemDialog = true
                     },
+                    onShowLocationOptimization = onShowLocationOptimization,
                     onShowBestPrices = onShowBestPrices,
                     onItemClick = { item ->
                         viewModel.clearItemActionError()
@@ -170,8 +172,9 @@ fun ShoppingListDetailScreen(
 private fun ColumnScope.ShoppingListContent(
     shoppingList: ShoppingListDetailsDto,
     onAddItem: () -> Unit,
+    onShowLocationOptimization: () -> Unit,
     onShowBestPrices: () -> Unit,
-    onItemClick: (ShoppingListItemDto) -> Unit
+    onItemClick: (ShoppingListItemDto) -> Unit,
 ) {
     Text(
         text = shoppingList.name,
@@ -205,6 +208,15 @@ private fun ColumnScope.ShoppingListContent(
         modifier = Modifier.fillMaxWidth()
     ) {
         Text("Pronađi najbolje cene")
+    }
+
+    Spacer(modifier = Modifier.height(8.dp))
+
+    OutlinedButton(
+        onClick = onShowLocationOptimization,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text("Optimizuj po lokaciji")
     }
 
     Spacer(modifier = Modifier.height(16.dp))

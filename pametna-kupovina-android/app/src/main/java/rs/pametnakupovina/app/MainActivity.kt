@@ -25,6 +25,10 @@ class MainActivity : ComponentActivity() {
                     mutableStateOf(false)
                 }
 
+                var showLocationOptimization by rememberSaveable {
+                    mutableStateOf(false)
+                }
+
                 val listsViewModel: ShoppingListsViewModel = viewModel()
                 val listId = selectedListId
 
@@ -34,8 +38,18 @@ class MainActivity : ComponentActivity() {
                             onListClick = { selectedId ->
                                 selectedListId = selectedId
                                 showBestPrices = false
+                                showLocationOptimization = false
                             },
                             viewModel = listsViewModel
+                        )
+                    }
+
+                    showLocationOptimization -> {
+                        LocationOptimizationScreen(
+                            listId = listId,
+                            onBack = {
+                                showLocationOptimization = false
+                            }
                         )
                     }
 
@@ -54,10 +68,16 @@ class MainActivity : ComponentActivity() {
                             onBack = {
                                 selectedListId = null
                                 showBestPrices = false
+                                showLocationOptimization = false
                                 listsViewModel.loadShoppingLists()
                             },
                             onShowBestPrices = {
                                 showBestPrices = true
+                                showLocationOptimization = false
+                            },
+                            onShowLocationOptimization = {
+                                showLocationOptimization = true
+                                showBestPrices = false
                             }
                         )
                     }

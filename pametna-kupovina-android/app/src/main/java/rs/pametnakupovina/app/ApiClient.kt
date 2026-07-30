@@ -90,6 +90,43 @@ data class UpdateShoppingListItemRequest(
     val quantity: Double
 )
 
+data class LocationOptimizationDto(
+    val listId: Long,
+    val listName: String,
+    val latitude: Double,
+    val longitude: Double,
+    val costPerKm: Double,
+    val currency: String,
+    val distanceMethod: String,
+    val recommendation: String,
+    val recommendedStrategy: PurchaseStrategyDto?,
+    val multiStoreStrategy: PurchaseStrategyDto,
+    val singleStoreStrategies: List<PurchaseStrategyDto>
+)
+
+data class PurchaseStrategyDto(
+    val strategy: String,
+    val available: Boolean,
+    val retailerCodes: List<String>,
+    val basketTotal: Double,
+    val routeDistanceKm: Double,
+    val travelCost: Double?,
+    val finalTotal: Double?,
+    val reason: String?,
+    val route: List<RouteStopDto>
+)
+
+data class RouteStopDto(
+    val order: Int,
+    val retailerCode: String,
+    val locationId: Long,
+    val locationName: String,
+    val city: String?,
+    val latitude: Double,
+    val longitude: Double,
+    val distanceFromPreviousKm: Double
+)
+
 interface ShoppingApiService {
 
     @GET("api/v1/shopping-lists")
@@ -129,6 +166,14 @@ interface ShoppingApiService {
         @Path("listId") listId: Long,
         @Path("itemId") itemId: Long
     ): Response<Unit>
+
+    @GET("api/v1/shopping-lists/{id}/location-optimization")
+    suspend fun getLocationOptimization(
+        @Path("id") listId: Long,
+        @Query("latitude") latitude: Double,
+        @Query("longitude") longitude: Double,
+        @Query("costPerKm") costPerKm: Double
+    ): LocationOptimizationDto
 }
 
 object ApiClient {
