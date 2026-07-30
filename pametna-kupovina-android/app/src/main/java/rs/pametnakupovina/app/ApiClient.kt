@@ -127,6 +127,18 @@ data class RouteStopDto(
     val distanceFromPreviousKm: Double
 )
 
+data class RetailerLocationDto(
+    val id: Long,
+    val retailerCode: String,
+    val retailerName: String,
+    val locationName: String,
+    val address: String?,
+    val city: String?,
+    val latitude: Double,
+    val longitude: Double,
+    val distanceKm: Double
+)
+
 interface ShoppingApiService {
 
     @GET("api/v1/shopping-lists")
@@ -174,6 +186,13 @@ interface ShoppingApiService {
         @Query("longitude") longitude: Double,
         @Query("costPerKm") costPerKm: Double
     ): LocationOptimizationDto
+
+    @GET("api/v1/retailer-locations/nearest")
+    suspend fun getNearestRetailerLocations(
+        @Query("latitude") latitude: Double,
+        @Query("longitude") longitude: Double,
+        @Query("limit") limit: Int
+    ): List<RetailerLocationDto>
 }
 
 object ApiClient {

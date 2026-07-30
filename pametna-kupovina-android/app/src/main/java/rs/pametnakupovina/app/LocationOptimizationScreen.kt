@@ -14,13 +14,14 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import java.math.BigDecimal
 import java.math.RoundingMode
 
-private const val TEST_LATITUDE = 44.7866
-private const val TEST_LONGITUDE = 20.4489
 private const val TEST_COST_PER_KM = 20.0
 
 @Composable
 fun LocationOptimizationScreen(
     listId: Long,
+    latitude: Double,
+    longitude: Double,
+    isTestLocation: Boolean,
     onBack: () -> Unit,
     viewModel: LocationOptimizationViewModel = viewModel()
 ) {
@@ -28,11 +29,15 @@ fun LocationOptimizationScreen(
 
     BackHandler(onBack = onBack)
 
-    LaunchedEffect(listId) {
+    LaunchedEffect(
+        listId,
+        latitude,
+        longitude
+    ) {
         viewModel.loadOptimization(
             listId = listId,
-            latitude = TEST_LATITUDE,
-            longitude = TEST_LONGITUDE,
+            latitude = latitude,
+            longitude = longitude,
             costPerKm = TEST_COST_PER_KM
         )
     }
@@ -66,8 +71,8 @@ fun LocationOptimizationScreen(
                     onRetry = {
                         viewModel.loadOptimization(
                             listId = listId,
-                            latitude = TEST_LATITUDE,
-                            longitude = TEST_LONGITUDE,
+                            latitude = latitude,
+                            longitude = longitude,
                             costPerKm = TEST_COST_PER_KM
                         )
                     }
@@ -75,7 +80,11 @@ fun LocationOptimizationScreen(
             }
 
             state.result != null -> {
-                LocationOptimizationContent(state.result)
+                LocationOptimizationContent(
+                    result = state.result,
+                    locations = state.locations,
+                    isTestLocation = isTestLocation
+                )
             }
         }
     }
@@ -83,7 +92,9 @@ fun LocationOptimizationScreen(
 
 @Composable
 private fun ColumnScope.LocationOptimizationContent(
-    result: LocationOptimizationDto
+    result: LocationOptimizationDto,
+    locations: List<RetailerLocationDto>,
+    isTestLocation: Boolean
 ) {
     Text(
         text = "Optimizacija kupovine",
@@ -106,7 +117,18 @@ private fun ColumnScope.LocationOptimizationContent(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            LocationInformationCard(result)
+            LocationInformationCard(
+                result = result,
+                isTestLocation = isTestLocation
+            )
+        }
+
+        item {
+            OptimizationMapCard(
+                latitude = result.latitude,
+                longitude = result.longitude,
+                locations = locations
+            )
         }
 
         item {
@@ -149,7 +171,8 @@ private fun ColumnScope.LocationOptimizationContent(
 
 @Composable
 private fun LocationInformationCard(
-    result: LocationOptimizationDto
+    result: LocationOptimizationDto,
+    isTestLocation: Boolean
 ) {
     Card(
         modifier = Modifier.fillMaxWidth()
@@ -158,7 +181,11 @@ private fun LocationInformationCard(
             modifier = Modifier.padding(16.dp)
         ) {
             Text(
-                text = "Test lokacija: Beograd",
+                text = if (isTestLocation) {
+                    "Test lokacija: Beograd"
+                } else {
+                    "Trenutna lokacija"
+                },
                 style = MaterialTheme.typography.titleMedium
             )
 

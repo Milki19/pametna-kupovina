@@ -10,6 +10,7 @@ import kotlinx.coroutines.launch
 data class LocationOptimizationUiState(
     val isLoading: Boolean = false,
     val result: LocationOptimizationDto? = null,
+    val locations: List<RetailerLocationDto> = emptyList(),
     val errorMessage: String? = null
 )
 
@@ -30,13 +31,24 @@ class LocationOptimizationViewModel : ViewModel() {
             )
 
             uiState = try {
-                LocationOptimizationUiState(
-                    result = ApiClient.shoppingApi.getLocationOptimization(
+                val result =
+                    ApiClient.shoppingApi.getLocationOptimization(
                         listId = listId,
                         latitude = latitude,
                         longitude = longitude,
                         costPerKm = costPerKm
                     )
+
+                val locations =
+                    ApiClient.shoppingApi.getNearestRetailerLocations(
+                        latitude = latitude,
+                        longitude = longitude,
+                        limit = 10
+                    )
+
+                LocationOptimizationUiState(
+                    result = result,
+                    locations = locations
                 )
             } catch (exception: Exception) {
                 LocationOptimizationUiState(

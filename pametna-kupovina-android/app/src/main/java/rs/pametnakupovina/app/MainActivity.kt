@@ -45,7 +45,7 @@ class MainActivity : ComponentActivity() {
                     }
 
                     showLocationOptimization -> {
-                        LocationOptimizationScreen(
+                        LocationOptimizationRoute(
                             listId = listId,
                             onBack = {
                                 showLocationOptimization = false
