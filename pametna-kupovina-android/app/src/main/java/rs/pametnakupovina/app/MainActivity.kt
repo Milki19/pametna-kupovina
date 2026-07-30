@@ -21,22 +21,47 @@ class MainActivity : ComponentActivity() {
                     mutableStateOf<Long?>(null)
                 }
 
-                val listsViewModel: ShoppingListsViewModel = viewModel()
+                var showBestPrices by rememberSaveable {
+                    mutableStateOf(false)
+                }
 
-                selectedListId?.let { listId ->
-                    ShoppingListDetailScreen(
-                        listId = listId,
-                        onBack = {
-                            selectedListId = null
-                            listsViewModel.loadShoppingLists()
-                        }
-                    )
-                } ?: ShoppingListsScreen(
-                    onListClick = { listId ->
-                        selectedListId = listId
-                    },
-                    viewModel = listsViewModel
-                )
+                val listsViewModel: ShoppingListsViewModel = viewModel()
+                val listId = selectedListId
+
+                when {
+                    listId == null -> {
+                        ShoppingListsScreen(
+                            onListClick = { selectedId ->
+                                selectedListId = selectedId
+                                showBestPrices = false
+                            },
+                            viewModel = listsViewModel
+                        )
+                    }
+
+                    showBestPrices -> {
+                        BestPricesScreen(
+                            listId = listId,
+                            onBack = {
+                                showBestPrices = false
+                            }
+                        )
+                    }
+
+                    else -> {
+                        ShoppingListDetailScreen(
+                            listId = listId,
+                            onBack = {
+                                selectedListId = null
+                                showBestPrices = false
+                                listsViewModel.loadShoppingLists()
+                            },
+                            onShowBestPrices = {
+                                showBestPrices = true
+                            }
+                        )
+                    }
+                }
             }
         }
     }

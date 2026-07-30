@@ -18,6 +18,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 fun ShoppingListDetailScreen(
     listId: Long,
     onBack: () -> Unit,
+    onShowBestPrices: () -> Unit,
     viewModel: ShoppingListDetailViewModel = viewModel()
 ) {
     val state = viewModel.uiState
@@ -88,7 +89,8 @@ fun ShoppingListDetailScreen(
                     onAddItem = {
                         viewModel.clearAddItemError()
                         showAddItemDialog = true
-                    }
+                    },
+                    onShowBestPrices = onShowBestPrices
                 )
             }
         }
@@ -98,7 +100,8 @@ fun ShoppingListDetailScreen(
 @Composable
 private fun ColumnScope.ShoppingListContent(
     shoppingList: ShoppingListDetailsDto,
-    onAddItem: () -> Unit
+    onAddItem: () -> Unit,
+    onShowBestPrices: () -> Unit
 ) {
     Text(
         text = shoppingList.name,
@@ -123,6 +126,14 @@ private fun ColumnScope.ShoppingListContent(
         modifier = Modifier.fillMaxWidth()
     ) {
         Text("Dodaj artikal")
+    }
+    Spacer(modifier = Modifier.height(8.dp))
+
+    OutlinedButton(
+        onClick = onShowBestPrices,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text("Pronađi najbolje cene")
     }
 
     Spacer(modifier = Modifier.height(16.dp))

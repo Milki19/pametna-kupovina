@@ -37,6 +37,31 @@ data class CreateShoppingListItemRequest(
     val quantity: Double
 )
 
+data class BestPricesDto(
+    val listId: Long,
+    val listName: String,
+    val matchedItems: Int,
+    val unmatchedItems: Int,
+    val totalPrice: Double,
+    val items: List<BestPriceItemDto>
+)
+
+data class BestPriceItemDto(
+    val itemId: Long,
+    val requestedName: String,
+    val barcode: String?,
+    val quantity: Double,
+    val matched: Boolean,
+    val productId: Long?,
+    val productName: String?,
+    val retailerCode: String?,
+    val retailerName: String?,
+    val priceDate: String?,
+    val regularPrice: Double?,
+    val discountedPrice: Double?,
+    val effectivePrice: Double?,
+    val lineTotal: Double?
+)
 interface ShoppingApiService {
 
     @GET("api/v1/shopping-lists")
@@ -52,6 +77,11 @@ interface ShoppingApiService {
         @Path("id") listId: Long,
         @Body request: CreateShoppingListItemRequest
     ): ShoppingListItemDto
+
+    @GET("api/v1/shopping-lists/{id}/best-prices")
+    suspend fun getBestPrices(
+        @Path("id") listId: Long
+    ): BestPricesDto
 }
 
 object ApiClient {
