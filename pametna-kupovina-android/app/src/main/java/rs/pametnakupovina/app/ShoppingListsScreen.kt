@@ -12,6 +12,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 
 @Composable
 fun ShoppingListsScreen(
+    onListClick: (Long) -> Unit,
     viewModel: ShoppingListsViewModel = viewModel()
 ) {
     val state = viewModel.uiState
@@ -88,7 +89,12 @@ fun ShoppingListsScreen(
                         items = state.lists,
                         key = { it.id }
                     ) { shoppingList ->
-                        ShoppingListCard(shoppingList)
+                        ShoppingListCard(
+                            shoppingList = shoppingList,
+                            onClick = {
+                                onListClick(shoppingList.id)
+                            }
+                        )
                     }
                 }
             }
@@ -98,9 +104,11 @@ fun ShoppingListsScreen(
 
 @Composable
 private fun ShoppingListCard(
-    shoppingList: ShoppingListSummaryDto
+    shoppingList: ShoppingListSummaryDto,
+    onClick: () -> Unit
 ) {
     Card(
+        onClick = onClick,
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
