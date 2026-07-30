@@ -31,6 +31,14 @@ fun ShoppingListDetailScreen(
         mutableStateOf(false)
     }
 
+    var itemToEdit by remember {
+        mutableStateOf<ShoppingListItemDto?>(null)
+    }
+
+    var itemToDelete by remember {
+        mutableStateOf<ShoppingListItemDto?>(null)
+    }
+
     BackHandler(onBack = onBack)
 
     LaunchedEffect(listId) {
@@ -61,6 +69,53 @@ fun ShoppingListDetailScreen(
                         searchViewModel.clearSearch()
                     }
                 )
+            }
+        )
+    }
+    itemToEdit?.let { item ->
+        EditShoppingListItemDialog(
+            item = item,
+            isSaving = state.isItemActionInProgress,
+            errorMessage = state.itemActionError,
+            onSave = { quantity ->
+                viewModel.updateItem(
+                    listId = listId,
+                    item = item,
+                    quantity = quantity,
+                    onSuccess = {
+                        itemToEdit = null
+                    }
+                )
+            },
+            onDelete = {
+                itemToEdit = null
+                viewModel.clearItemActionError()
+                itemToDelete = item
+            },
+            onDismiss = {
+                itemToEdit = null
+                viewModel.clearItemActionError()
+            }
+        )
+    }
+
+    itemToDelete?.let { item ->
+        DeleteShoppingListItemDialog(
+            item = item,
+            isDeleting = state.isItemActionInProgress,
+            errorMessage = state.itemActionError,
+            onConfirm = {
+                viewModel.deleteItem(
+                    listId = listId,
+                    item = item,
+                    onSuccess = {
+                        itemToDelete = null
+                    }
+                )
+            },
+            onDismiss = {
+                itemToDelete = null
+                viewModel.clearItemActionError()
             }
         )
     }
@@ -100,7 +155,11 @@ fun ShoppingListDetailScreen(
                         searchViewModel.clearSearch()
                         showAddItemDialog = true
                     },
-                    onShowBestPrices = onShowBestPrices
+                    onShowBestPrices = onShowBestPrices,
+                    onItemClick = { item ->
+                        viewModel.clearItemActionError()
+                        itemToEdit = item
+                    }
                 )
             }
         }
@@ -111,7 +170,8 @@ fun ShoppingListDetailScreen(
 private fun ColumnScope.ShoppingListContent(
     shoppingList: ShoppingListDetailsDto,
     onAddItem: () -> Unit,
-    onShowBestPrices: () -> Unit
+    onShowBestPrices: () -> Unit,
+    onItemClick: (ShoppingListItemDto) -> Unit
 ) {
     Text(
         text = shoppingList.name,
@@ -159,16 +219,23 @@ private fun ColumnScope.ShoppingListContent(
             items = shoppingList.items,
             key = { it.id }
         ) { item ->
-            ShoppingListItemCard(item)
+            ShoppingListItemCard(
+                item = item,
+                onClick = {
+                    onItemClick(item)
+                }
+            )
         }
     }
 }
 
 @Composable
 private fun ShoppingListItemCard(
-    item: ShoppingListItemDto
+    item: ShoppingListItemDto,
+    onClick: () -> Unit
 ) {
     Card(
+        onClick = onClick,
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
@@ -197,6 +264,12 @@ private fun ShoppingListItemCard(
                     )
                 }
         }
+        Spacer(modifier = Modifier.height(6.dp))
+
+        Text(
+            text = "Dodirni za izmenu",
+            style = MaterialTheme.typography.labelSmall
+        )
     }
 }
 

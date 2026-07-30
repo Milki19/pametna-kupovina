@@ -7,6 +7,9 @@ import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.Path
 import retrofit2.http.Query
+import retrofit2.Response
+import retrofit2.http.DELETE
+import retrofit2.http.PUT
 
 data class ShoppingListSummaryDto(
     val id: Long,
@@ -80,6 +83,13 @@ data class ProductSearchResultDto(
     val unitPrice: Double?,
     val effectivePrice: Double?
 )
+
+data class UpdateShoppingListItemRequest(
+    val name: String,
+    val barcode: String?,
+    val quantity: Double
+)
+
 interface ShoppingApiService {
 
     @GET("api/v1/shopping-lists")
@@ -106,6 +116,19 @@ interface ShoppingApiService {
         @Query("query") query: String,
         @Query("limit") limit: Int = 20
     ): List<ProductSearchResultDto>
+
+    @PUT("api/v1/shopping-lists/{listId}/items/{itemId}")
+    suspend fun updateShoppingListItem(
+        @Path("listId") listId: Long,
+        @Path("itemId") itemId: Long,
+        @Body request: UpdateShoppingListItemRequest
+    ): ShoppingListItemDto
+
+    @DELETE("api/v1/shopping-lists/{listId}/items/{itemId}")
+    suspend fun deleteShoppingListItem(
+        @Path("listId") listId: Long,
+        @Path("itemId") itemId: Long
+    ): Response<Unit>
 }
 
 object ApiClient {

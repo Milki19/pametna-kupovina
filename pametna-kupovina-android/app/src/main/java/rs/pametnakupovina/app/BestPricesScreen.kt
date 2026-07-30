@@ -25,7 +25,10 @@ fun BestPricesScreen(
     BackHandler(onBack = onBack)
 
     LaunchedEffect(listId) {
-        viewModel.loadBestPrices(listId)
+        viewModel.loadBestPrices(
+            listId = listId,
+            forceReload = true
+        )
     }
 
     Column(
