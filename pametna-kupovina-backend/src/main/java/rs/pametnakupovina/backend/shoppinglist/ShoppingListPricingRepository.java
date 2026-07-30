@@ -112,15 +112,8 @@ public class ShoppingListPricingRepository {
                                          po.id DESC
                                 LIMIT 1
                             ) latest_price ON TRUE
-                            WHERE (
-                                sli.barcode IS NOT NULL
-                                AND rp.barcode = sli.barcode
-                            )
-                            OR (
-                                sli.barcode IS NULL
-                                AND rp.name ILIKE
-                                    '%' || sli.name || '%'
-                            )
+                            WHERE sli.barcode IS NOT NULL
+                               AND rp.barcode = sli.barcode
                             ORDER BY effective_price ASC NULLS LAST,
                                      rp.id ASC
                             LIMIT 1

@@ -124,6 +124,65 @@ public class ShoppingListService {
         }
     }
 
+    @Transactional
+    public ShoppingListItemResponse updateItem(
+            Long listId,
+            Long itemId,
+            UpdateShoppingListItemRequest request
+    ) {
+        requireList(listId);
+
+        String name = requiredText(
+                request == null ? null : request.name(),
+                "Naziv artikla"
+        );
+
+        if (name.length() > 500) {
+            throw badRequest(
+                    "Naziv artikla može imati najviše 500 karaktera"
+            );
+        }
+
+        String barcode = nullableText(
+                request == null ? null : request.barcode()
+        );
+
+        if (barcode != null && barcode.length() > 32) {
+            throw badRequest(
+                    "Barkod može imati najviše 32 karaktera"
+            );
+        }
+
+        BigDecimal quantity =
+                request == null || request.quantity() == null
+                        ? BigDecimal.ONE
+                        : request.quantity();
+
+        if (quantity.compareTo(BigDecimal.ZERO) <= 0) {
+            throw badRequest(
+                    "Količina mora biti veća od nule"
+            );
+        }
+
+        ShoppingListItemResponse updatedItem =
+                repository.updateItem(
+                        listId,
+                        itemId,
+                        name,
+                        barcode,
+                        quantity
+                ).orElseThrow(() ->
+                        new ResponseStatusException(
+                                HttpStatus.NOT_FOUND,
+                                "Stavka nije pronađena: " + itemId
+                        )
+                );
+
+        repository.touch(listId);
+
+        return updatedItem;
+    }
+
     private void requireList(Long listId) {
         if (!repository.existsById(listId)) {
             throw new ResponseStatusException(

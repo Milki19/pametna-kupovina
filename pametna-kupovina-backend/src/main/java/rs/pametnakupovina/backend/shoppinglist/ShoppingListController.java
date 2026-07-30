@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.PutMapping;
 
 import java.util.List;
 
@@ -18,13 +19,16 @@ public class ShoppingListController {
 
     private final ShoppingListService service;
     private final ShoppingListPricingService pricingService;
+    private final ShoppingListOptimizationService optimizationService;
 
     public ShoppingListController(
             ShoppingListService service,
-            ShoppingListPricingService pricingService
+            ShoppingListPricingService pricingService,
+            ShoppingListOptimizationService optimizationService
     ) {
         this.service = service;
         this.pricingService = pricingService;
+        this.optimizationService = optimizationService;
     }
 
     @PostMapping
@@ -61,6 +65,26 @@ public class ShoppingListController {
             @PathVariable("listId") Long listId
     ) {
         return pricingService.calculateBestPrices(listId);
+    }
+
+    @GetMapping("/{listId}/optimization")
+    public ShoppingListOptimizationResponse optimize(
+            @PathVariable("listId") Long listId
+    ) {
+        return optimizationService.optimize(listId);
+    }
+
+    @PutMapping("/{listId}/items/{itemId}")
+    public ShoppingListItemResponse updateItem(
+            @PathVariable("listId") Long listId,
+            @PathVariable("itemId") Long itemId,
+            @RequestBody UpdateShoppingListItemRequest request
+    ) {
+        return service.updateItem(
+                listId,
+                itemId,
+                request
+        );
     }
 
     @DeleteMapping("/{listId}/items/{itemId}")

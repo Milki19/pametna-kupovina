@@ -217,6 +217,35 @@ public class ShoppingListRepository {
                 .update();
     }
 
+    public Optional<ShoppingListItemResponse> updateItem(
+            Long listId,
+            Long itemId,
+            String name,
+            String barcode,
+            java.math.BigDecimal quantity
+    ) {
+        return jdbcClient.sql("""
+                    UPDATE app.shopping_list_item
+                    SET name = ?,
+                        barcode = ?,
+                        quantity = ?
+                    WHERE id = ?
+                      AND shopping_list_id = ?
+                    RETURNING id,
+                              name,
+                              barcode,
+                              quantity,
+                              created_at
+                    """)
+                .param(1, name)
+                .param(2, barcode, Types.VARCHAR)
+                .param(3, quantity, Types.NUMERIC)
+                .param(4, itemId)
+                .param(5, listId)
+                .query(ITEM_ROW_MAPPER)
+                .optional();
+    }
+
     private record ShoppingListHeader(
             Long id,
             String name,

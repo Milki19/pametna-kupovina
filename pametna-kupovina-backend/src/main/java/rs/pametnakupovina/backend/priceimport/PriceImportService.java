@@ -7,7 +7,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import rs.pametnakupovina.backend.retailer.Retailer;
 import rs.pametnakupovina.backend.retailer.RetailerRepository;
 
@@ -40,6 +39,8 @@ public class PriceImportService {
             .setHeader()
             .setSkipHeaderRecord(true)
             .setIgnoreEmptyLines(true)
+            .setIgnoreHeaderCase(true)
+            .setIgnoreSurroundingSpaces(true)
             .setTrim(true)
             .get();
 
@@ -113,8 +114,15 @@ public class PriceImportService {
                     rowsRead++;
 
                     try {
-                        saveRecord(retailer.id(), importRunId, record);
-                        rowsSaved++;
+                        boolean saved = saveRecord(
+                                retailer.id(),
+                                importRunId,
+                                record
+                        );
+
+                        if (saved) {
+                            rowsSaved++;
+                        }
                     } catch (RuntimeException exception) {
                         log.warn(
                                 "Preskočen CSV red {}: {}",
@@ -149,8 +157,7 @@ public class PriceImportService {
         }
     }
 
-    @Transactional
-    protected void saveRecord(
+    protected boolean saveRecord(
             Long retailerId,
             Long importRunId,
             CSVRecord record
@@ -165,6 +172,42 @@ public class PriceImportService {
                 "Barkod proizvoda"
         );
 
+        String retailerFormatName = nullableText(
+                record.get("Naziv trgovca - formata*")
+        );
+
+        LocalDate priceDate = parseRequiredDate(
+                record.get("Datum cenovnika")
+        );
+
+        BigDecimal regularPrice = parseDecimal(
+                record.get("Redovna cena")
+        );
+
+        BigDecimal unitPrice = parseDecimal(
+                record.get("Cena po jedinici mere")
+        );
+
+        BigDecimal discountedPrice = parseDecimal(
+                record.get("Snižena cena")
+        );
+
+        LocalDate discountStartDate = parseDate(
+                record.get("Datum početka sniženja")
+        );
+
+        LocalDate discountEndDate = parseDate(
+                record.get("Datum kraja sniženja")
+        );
+
+        BigDecimal vatRate = parseDecimal(
+                record.get("Stopa PDV")
+        );
+
+        if (regularPrice == null && discountedPrice == null) {
+            return false;
+        }
+
         Long retailerProductId = upsertProduct(
                 retailerId,
                 record.get("KATEGORIJA"),
@@ -178,15 +221,17 @@ public class PriceImportService {
         insertPriceObservation(
                 retailerProductId,
                 importRunId,
-                record.get("Naziv trgovca - formata*"),
-                parseRequiredDate(record.get("Datum cenovnika")),
-                parseDecimal(record.get("Redovna cena")),
-                parseDecimal(record.get("Cena po jedinici mere")),
-                parseDecimal(record.get("Snižena cena")),
-                parseDate(record.get("Datum početka sniženja")),
-                parseDate(record.get("Datum kraja sniženja")),
-                parseDecimal(record.get("Stopa PDV"))
+                retailerFormatName,
+                priceDate,
+                regularPrice,
+                unitPrice,
+                discountedPrice,
+                discountStartDate,
+                discountEndDate,
+                vatRate
         );
+
+        return true;
     }
 
     private Long startImport(Long retailerId, String sourceUrl) {
