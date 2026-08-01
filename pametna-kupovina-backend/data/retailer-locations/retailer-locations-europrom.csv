@@ -1,0 +1,6 @@
+external_code;name;address;city;latitude;longitude;active
+radnicka;Europrom Radnička;Radnička 75;Valjevo;44.276799189056;19.875690666901;true
+kolubara-mala;Europrom Kolubara mala;Vladike Nikolaja 24;Valjevo;44.273796497972;19.883389109691;true
+kod-kasarne;Europrom Kod kasarne;Vojvode Mišića 38;Valjevo;44.273226402827;19.884001240080;true
+brdjani;Europrom Brđani;Kneza Miloša 100;Valjevo;44.272361097053;19.872843921125;true
+pocuta;Europrom Poćuta;Selo Poćuta bb;Poćuta;44.208960000000;19.728610000000;true
