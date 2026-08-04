@@ -75,6 +75,9 @@ public class RetailerLocationImportService {
                                 )
                         );
 
+        Long storeFormatId =
+                ensureDefaultStoreFormatId(retailer.id());
+
         int rowsRead = 0;
         int rowsSaved = 0;
 
@@ -94,6 +97,7 @@ public class RetailerLocationImportService {
                 try {
                     upsertLocation(
                             retailer.id(),
+                            storeFormatId,
                             record
                     );
 
@@ -129,6 +133,7 @@ public class RetailerLocationImportService {
 
     private void upsertLocation(
             Long retailerId,
+            Long storeFormatId,
             CSVRecord record
     ) {
         String externalCode = requiredText(
@@ -168,8 +173,9 @@ public class RetailerLocationImportService {
         );
 
         jdbcClient.sql("""
-                    INSERT INTO app.retailer_location (
+                    INSERT INTO app.store (
                         retailer_id,
+                        store_format_id,
                         external_code,
                         name,
                         address,
@@ -178,7 +184,7 @@ public class RetailerLocationImportService {
                         active
                     )
                     VALUES (
-                        ?, ?, ?, ?, ?,
+                        ?, ?, ?, ?, ?, ?,
                         ST_SetSRID(
                             ST_MakePoint(?, ?),
                             4326
@@ -191,17 +197,36 @@ public class RetailerLocationImportService {
                         address = EXCLUDED.address,
                         city = EXCLUDED.city,
                         location = EXCLUDED.location,
-                        active = EXCLUDED.active
+                        active = EXCLUDED.active,
+                        updated_at = NOW()
                     """)
                 .param(1, retailerId)
-                .param(2, externalCode)
-                .param(3, name)
-                .param(4, address, Types.VARCHAR)
-                .param(5, city, Types.VARCHAR)
-                .param(6, longitude)
-                .param(7, latitude)
-                .param(8, active)
+                .param(2, storeFormatId)
+                .param(3, externalCode)
+                .param(4, name)
+                .param(5, address, Types.VARCHAR)
+                .param(6, city, Types.VARCHAR)
+                .param(7, longitude)
+                .param(8, latitude)
+                .param(9, active)
                 .update();
+    }
+
+    private Long ensureDefaultStoreFormatId(Long retailerId) {
+        return jdbcClient.sql("""
+                        INSERT INTO app.store_format (
+                            retailer_id,
+                            code,
+                            name
+                        )
+                        VALUES (?, 'STANDARD', 'Standardni format')
+                        ON CONFLICT (retailer_id, code)
+                        DO UPDATE SET code = EXCLUDED.code
+                        RETURNING id
+                        """)
+                .param(retailerId)
+                .query(Long.class)
+                .single();
     }
 
     private void validateHeaders(CSVParser parser) {

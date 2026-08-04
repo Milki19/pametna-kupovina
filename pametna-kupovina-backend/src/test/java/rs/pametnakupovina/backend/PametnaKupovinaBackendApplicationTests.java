@@ -30,7 +30,13 @@ import rs.pametnakupovina.backend.product.CanonicalProductSearchPage;
 import rs.pametnakupovina.backend.product.CanonicalProductSearchService;
 import rs.pametnakupovina.backend.product.ProductSearchResult;
 import rs.pametnakupovina.backend.product.ProductSearchService;
+import rs.pametnakupovina.backend.retailerlocation.RetailerLocationImportResult;
+import rs.pametnakupovina.backend.retailerlocation.RetailerLocationImportService;
+import rs.pametnakupovina.backend.store.Store;
+import rs.pametnakupovina.backend.store.StoreFormat;
+import rs.pametnakupovina.backend.store.StoreRepository;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.math.BigDecimal;
@@ -60,6 +66,11 @@ class PametnaKupovinaBackendApplicationTests {
     private static final String EXACT_EAN_B_CSV_CONTENT = """
             KATEGORIJA;NAZIV KATEGORIJE;Naziv proizvoda;Robna marka;Barkod proizvoda;Jedinica mere;Naziv trgovca - formata*;Redovna cena;Snižena cena;Datum cenovnika;Cena po jedinici mere;Datum početka sniženja;Datum kraja sniženja;Stopa PDV
             NAPICI;Bezalkoholna pića;Pomorandža sok 1000 ml;Test sok;8601234567899;ml;Format B;205;;04-08-2026;205;;;20
+            """;
+
+    private static final String RETAILER_LOCATION_CSV_CONTENT = """
+            external_code;name;address;city;latitude;longitude;active
+            PK037-IMPORT-001;Test objekat;Test adresa 1;Beograd;44.8176;20.4569;true
             """;
 
     @Container
@@ -95,6 +106,12 @@ class PametnaKupovinaBackendApplicationTests {
     private ProductMatchFeedbackService matchFeedbackService;
 
     @Autowired
+    private StoreRepository storeRepository;
+
+    @Autowired
+    private RetailerLocationImportService retailerLocationImportService;
+
+    @Autowired
     private JdbcClient jdbcClient;
 
     @BeforeEach
@@ -106,7 +123,8 @@ class PametnaKupovinaBackendApplicationTests {
                             app.price_observation,
                             app.retailer_product,
                             app.import_run,
-                            app.retailer_location,
+                            app.store,
+                            app.store_format,
                             app.canonical_product,
                             app.retailer
                         RESTART IDENTITY
@@ -1270,6 +1288,184 @@ class PametnaKupovinaBackendApplicationTests {
                 .param(4, Long.MAX_VALUE)
                 .update())
                 .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void storeModelRepresentsChainFormatAndPhysicalObjects() {
+        Long retailerId = jdbcClient.sql("""
+                        INSERT INTO app.retailer (code, name)
+                        VALUES ('PK037_CHAIN', 'PK-037 test lanac')
+                        RETURNING id
+                        """)
+                .query(Long.class)
+                .single();
+
+        Long storeFormatId = jdbcClient.sql("""
+                        INSERT INTO app.store_format (
+                            retailer_id,
+                            code,
+                            name
+                        )
+                        VALUES (?, 'SUPERMARKET', 'Supermarket')
+                        RETURNING id
+                        """)
+                .param(retailerId)
+                .query(Long.class)
+                .single();
+
+        jdbcClient.sql("""
+                        INSERT INTO app.store (
+                            retailer_id,
+                            store_format_id,
+                            external_code,
+                            name,
+                            address,
+                            city,
+                            location,
+                            active
+                        )
+                        VALUES (
+                            ?, ?, 'BG-001', 'Centar',
+                            'Knez Mihailova 1', 'Beograd',
+                            ST_SetSRID(
+                                ST_MakePoint(20.4569, 44.8176),
+                                4326
+                            )::geography,
+                            TRUE
+                        ), (
+                            ?, ?, 'BG-002', 'Novi Beograd',
+                            'Bulevar Mihajla Pupina 1', 'Beograd',
+                            NULL,
+                            TRUE
+                        )
+                        """)
+                .param(1, retailerId)
+                .param(2, storeFormatId)
+                .param(3, retailerId)
+                .param(4, storeFormatId)
+                .update();
+
+        List<StoreFormat> formats =
+                storeRepository.findFormatsByRetailerCode(
+                        "PK037_CHAIN"
+                );
+
+        List<Store> stores =
+                storeRepository.findStoresByRetailerCode(
+                        "PK037_CHAIN"
+                );
+
+        String locationIndexDefinition = jdbcClient.sql("""
+                        SELECT indexdef
+                        FROM pg_indexes
+                        WHERE schemaname = 'app'
+                          AND tablename = 'store'
+                          AND indexname = 'idx_store_location'
+                        """)
+                .query(String.class)
+                .single();
+
+        assertThat(formats).hasSize(1);
+        assertThat(formats.getFirst().retailerCode())
+                .isEqualTo("PK037_CHAIN");
+        assertThat(formats.getFirst().code())
+                .isEqualTo("SUPERMARKET");
+
+        assertThat(stores).hasSize(2);
+        assertThat(stores.getFirst().retailerName())
+                .isEqualTo("PK-037 test lanac");
+        assertThat(stores.getFirst().storeFormatCode())
+                .isEqualTo("SUPERMARKET");
+        assertThat(stores.getFirst().externalCode())
+                .isEqualTo("BG-001");
+        assertThat(stores.getFirst().latitude())
+                .isEqualTo(44.8176);
+        assertThat(stores.getFirst().longitude())
+                .isEqualTo(20.4569);
+
+        assertThat(stores.get(1).externalCode())
+                .isEqualTo("BG-002");
+        assertThat(stores.get(1).latitude()).isNull();
+        assertThat(stores.get(1).longitude()).isNull();
+
+        assertThat(locationIndexDefinition.toLowerCase())
+                .contains("using gist (location)");
+    }
+
+    @Test
+    void storeRejectsFormatOwnedByAnotherRetailer() {
+        List<Long> retailerIds = jdbcClient.sql("""
+                        INSERT INTO app.retailer (code, name)
+                        VALUES
+                            ('PK037_OWNER', 'Vlasnik formata'),
+                            ('PK037_OTHER', 'Drugi lanac')
+                        RETURNING id
+                        """)
+                .query(Long.class)
+                .list();
+
+        Long foreignStoreFormatId = jdbcClient.sql("""
+                        INSERT INTO app.store_format (
+                            retailer_id,
+                            code,
+                            name
+                        )
+                        VALUES (?, 'MINI', 'Mini market')
+                        RETURNING id
+                        """)
+                .param(retailerIds.getFirst())
+                .query(Long.class)
+                .single();
+
+        assertThatThrownBy(() -> jdbcClient.sql("""
+                        INSERT INTO app.store (
+                            retailer_id,
+                            store_format_id,
+                            external_code,
+                            name
+                        )
+                        VALUES (?, ?, 'INVALID-001', 'Pogrešan lanac')
+                        """)
+                .param(1, retailerIds.get(1))
+                .param(2, foreignStoreFormatId)
+                .update())
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void existingLocationImportWritesToStoreWithDefaultFormat() {
+        jdbcClient.sql("""
+                        INSERT INTO app.retailer (code, name)
+                        VALUES ('PK037_IMPORT', 'Import test lanac')
+                        """)
+                .update();
+
+        RetailerLocationImportResult result =
+                retailerLocationImportService.importLocations(
+                        "PK037_IMPORT",
+                        new ByteArrayInputStream(
+                                RETAILER_LOCATION_CSV_CONTENT.getBytes(
+                                        StandardCharsets.UTF_8
+                                )
+                        ),
+                        100
+                );
+
+        List<Store> stores =
+                storeRepository.findStoresByRetailerCode(
+                        "PK037_IMPORT"
+                );
+
+        assertThat(result.rowsRead()).isEqualTo(1);
+        assertThat(result.rowsSaved()).isEqualTo(1);
+        assertThat(result.rowsSkipped()).isZero();
+        assertThat(result.status()).isEqualTo("SUCCEEDED");
+
+        assertThat(stores).hasSize(1);
+        assertThat(stores.getFirst().externalCode())
+                .isEqualTo("PK037-IMPORT-001");
+        assertThat(stores.getFirst().storeFormatCode())
+                .isEqualTo("STANDARD");
     }
 
     private void assertCanonicalProductInsertFails(

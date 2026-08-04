@@ -64,11 +64,12 @@ public class RetailerLocationRepository {
                                    )::numeric,
                                    2
                                )::double precision AS distance_km
-                        FROM app.retailer_location rl
+                        FROM app.store rl
                         JOIN app.retailer r
                           ON r.id = rl.retailer_id
                         CROSS JOIN user_position up
                         WHERE rl.active = TRUE
+                          AND rl.location IS NOT NULL
                         ORDER BY rl.location <-> up.location
                         LIMIT ?
                         """)
@@ -113,10 +114,11 @@ public class RetailerLocationRepository {
                                2
                            )::double precision AS distance_km
                     FROM app.retailer r
-                    JOIN app.retailer_location rl
+                    JOIN app.store rl
                       ON rl.retailer_id = r.id
                     CROSS JOIN user_position up
                     WHERE rl.active = TRUE
+                      AND rl.location IS NOT NULL
                     ORDER BY r.id,
                              rl.location <-> up.location
                     """)
