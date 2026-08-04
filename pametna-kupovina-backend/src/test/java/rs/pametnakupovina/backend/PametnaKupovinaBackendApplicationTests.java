@@ -195,17 +195,19 @@ class PametnaKupovinaBackendApplicationTests {
                 .single();
 
         Long retailerProductId = jdbcClient.sql("""
-                        INSERT INTO app.retailer_product (
-                            retailer_id,
-                            name,
-                            canonical_product_id
-                        )
-                        VALUES (?, ?, ?)
-                        RETURNING id
-                        """)
+                INSERT INTO app.retailer_product (
+                    retailer_id,
+                    source_product_key,
+                    name,
+                    canonical_product_id
+                )
+                VALUES (?, ?, ?, ?)
+                RETURNING id
+                """)
                 .param(1, retailerId)
-                .param(2, "Test mleko")
-                .param(3, canonicalProductId)
+                .param(2, "TEST-MLEKO-SOURCE-1")
+                .param(3, "Test mleko")
+                .param(4, canonicalProductId)
                 .query(Long.class)
                 .single();
 
