@@ -22,7 +22,8 @@ public class ProductMatchDecisionRepository {
             Long matchedCanonicalProductId,
             BigDecimal score,
             ProductMatchStatus status,
-            String algorithmVersion
+            String algorithmVersion,
+            String clientToken
     ) {
         return jdbcClient.sql("""
                         INSERT INTO app.product_match_decision (
@@ -32,9 +33,10 @@ public class ProductMatchDecisionRepository {
                             matched_canonical_product_id,
                             score,
                             status,
-                            algorithm_version
+                            algorithm_version,
+                            client_token
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                         RETURNING id
                         """)
                 .param(1, rawQuery)
@@ -48,6 +50,7 @@ public class ProductMatchDecisionRepository {
                 .param(5, score)
                 .param(6, status.name())
                 .param(7, algorithmVersion)
+                .param(8, clientToken, Types.VARCHAR)
                 .query(Long.class)
                 .single();
     }

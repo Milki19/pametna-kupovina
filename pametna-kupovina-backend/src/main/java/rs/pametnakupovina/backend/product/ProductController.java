@@ -2,6 +2,7 @@ package rs.pametnakupovina.backend.product;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -12,6 +13,9 @@ import rs.pametnakupovina.backend.matching.FuzzyProductCandidate;
 import rs.pametnakupovina.backend.matching.FuzzyProductCandidateService;
 import rs.pametnakupovina.backend.matching.ProductMatchDecision;
 import rs.pametnakupovina.backend.matching.ProductMatchDecisionService;
+import rs.pametnakupovina.backend.matching.ProductMatchFeedback;
+import rs.pametnakupovina.backend.matching.ProductMatchFeedbackRequest;
+import rs.pametnakupovina.backend.matching.ProductMatchFeedbackService;
 import rs.pametnakupovina.backend.matching.ProductMatchRequest;
 
 import java.util.List;
@@ -24,17 +28,20 @@ public class ProductController {
     private final ProductSearchService productSearchService;
     private final FuzzyProductCandidateService fuzzyCandidateService;
     private final ProductMatchDecisionService matchDecisionService;
+    private final ProductMatchFeedbackService matchFeedbackService;
 
     public ProductController(
             CanonicalProductSearchService canonicalSearchService,
             ProductSearchService productSearchService,
             FuzzyProductCandidateService fuzzyCandidateService,
-            ProductMatchDecisionService matchDecisionService
+            ProductMatchDecisionService matchDecisionService,
+            ProductMatchFeedbackService matchFeedbackService
     ) {
         this.canonicalSearchService = canonicalSearchService;
         this.productSearchService = productSearchService;
         this.fuzzyCandidateService = fuzzyCandidateService;
         this.matchDecisionService = matchDecisionService;
+        this.matchFeedbackService = matchFeedbackService;
     }
 
     @GetMapping("/search")
@@ -105,8 +112,25 @@ public class ProductController {
         try {
             return matchDecisionService.decide(
                     request.query(),
-                    request.resolvedLimit()
+                    request.resolvedLimit(),
+                    request.clientToken()
             );
+        } catch (IllegalArgumentException exception) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    exception.getMessage(),
+                    exception
+            );
+        }
+    }
+
+    @PostMapping("/match-decisions/{decisionId}/feedback")
+    public ProductMatchFeedback recordMatchFeedback(
+            @PathVariable("decisionId") Long decisionId,
+            @RequestBody ProductMatchFeedbackRequest request
+    ) {
+        try {
+            return matchFeedbackService.record(decisionId, request);
         } catch (IllegalArgumentException exception) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,

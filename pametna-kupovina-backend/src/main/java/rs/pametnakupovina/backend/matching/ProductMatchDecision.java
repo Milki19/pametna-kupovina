@@ -11,7 +11,9 @@ public record ProductMatchDecision(
         BigDecimal autoAcceptThreshold,
         BigDecimal confirmationThreshold,
         String algorithmVersion,
-        List<FuzzyProductCandidate> candidates
+        List<FuzzyProductCandidate> candidates,
+        ProductMatchDecisionSource source,
+        Long reusedFeedbackId
 ) {
 
     public ProductMatchDecision {

@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.testcontainers.junit.jupiter.Container;
@@ -17,7 +18,12 @@ import org.testcontainers.utility.DockerImageName;
 import rs.pametnakupovina.backend.matching.FuzzyProductCandidate;
 import rs.pametnakupovina.backend.matching.FuzzyProductCandidateService;
 import rs.pametnakupovina.backend.matching.ProductMatchDecision;
+import rs.pametnakupovina.backend.matching.ProductMatchDecisionSource;
 import rs.pametnakupovina.backend.matching.ProductMatchDecisionService;
+import rs.pametnakupovina.backend.matching.ProductMatchFeedback;
+import rs.pametnakupovina.backend.matching.ProductMatchFeedbackAction;
+import rs.pametnakupovina.backend.matching.ProductMatchFeedbackRequest;
+import rs.pametnakupovina.backend.matching.ProductMatchFeedbackService;
 import rs.pametnakupovina.backend.matching.ProductMatchStatus;
 import rs.pametnakupovina.backend.priceimport.PriceImportService;
 import rs.pametnakupovina.backend.product.CanonicalProductSearchPage;
@@ -86,12 +92,16 @@ class PametnaKupovinaBackendApplicationTests {
     private ProductMatchDecisionService matchDecisionService;
 
     @Autowired
+    private ProductMatchFeedbackService matchFeedbackService;
+
+    @Autowired
     private JdbcClient jdbcClient;
 
     @BeforeEach
     void cleanBusinessData() {
         jdbcClient.sql("""
                         TRUNCATE TABLE
+                            app.product_match_feedback,
                             app.product_match_decision,
                             app.price_observation,
                             app.retailer_product,
@@ -856,6 +866,236 @@ class PametnaKupovinaBackendApplicationTests {
 
         assertThat(automaticDecisionRows).isEqualTo(1);
         assertThat(lowScoreDecisionRows).isEqualTo(1);
+    }
+
+    @Test
+    void userFeedbackIsAppendOnlyAndLatestConfirmationIsReused() {
+        Long algorithmCandidateId = jdbcClient.sql("""
+                        INSERT INTO app.canonical_product (
+                            canonical_key,
+                            name,
+                            normalized_name,
+                            brand,
+                            quantity_value,
+                            base_unit
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?)
+                        RETURNING id
+                        """)
+                .param(1, "PK036-ALGORITHM-CANDIDATE")
+                .param(2, "Audit Imlek mleko 1 l")
+                .param(3, "audit imlek mleko 1 l")
+                .param(4, "Imlek")
+                .param(5, 1000)
+                .param(6, "ml")
+                .query(Long.class)
+                .single();
+
+        Long userSelectedProductId = jdbcClient.sql("""
+                        INSERT INTO app.canonical_product (
+                            canonical_key,
+                            name,
+                            normalized_name,
+                            brand,
+                            quantity_value,
+                            base_unit
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?)
+                        RETURNING id
+                        """)
+                .param(1, "PK036-USER-SELECTION")
+                .param(2, "Audit Imlek sveže mleko 1 l")
+                .param(3, "audit imlek sveze mleko 1 l")
+                .param(4, "Imlek")
+                .param(5, 1000)
+                .param(6, "ml")
+                .query(Long.class)
+                .single();
+
+        String clientToken = "test-device-pk036";
+
+        ProductMatchDecision algorithmDecision =
+                matchDecisionService.decide(
+                        "Audit Imlek mleko 1l",
+                        3,
+                        clientToken
+                );
+
+        assertThat(algorithmDecision.source())
+                .isEqualTo(ProductMatchDecisionSource.ALGORITHM);
+        assertThat(algorithmDecision.matchedCanonicalProductId())
+                .isEqualTo(algorithmCandidateId);
+
+        ProductMatchFeedback rejected = matchFeedbackService.record(
+                algorithmDecision.decisionId(),
+                new ProductMatchFeedbackRequest(
+                        clientToken,
+                        ProductMatchFeedbackAction.REJECTED,
+                        null,
+                        "Automatski izbor nije proizvod koji korisnik želi"
+                )
+        );
+
+        ProductMatchDecision reusedRejection =
+                matchDecisionService.decide(
+                        "Audit Imlek mleko 1l",
+                        3,
+                        clientToken
+                );
+
+        assertThat(rejected.reusable()).isTrue();
+        assertThat(reusedRejection.source())
+                .isEqualTo(ProductMatchDecisionSource.USER_REJECTION);
+        assertThat(reusedRejection.status())
+                .isEqualTo(ProductMatchStatus.UNMATCHED);
+        assertThat(reusedRejection.matchedCanonicalProductId())
+                .isNull();
+        assertThat(reusedRejection.reusedFeedbackId())
+                .isEqualTo(rejected.feedbackId());
+
+        ProductMatchFeedback confirmed = matchFeedbackService.record(
+                algorithmDecision.decisionId(),
+                new ProductMatchFeedbackRequest(
+                        clientToken,
+                        ProductMatchFeedbackAction.CONFIRMED,
+                        userSelectedProductId,
+                        "Korisnik je izabrao sveže mleko"
+                )
+        );
+
+        ProductMatchDecision reusedDecision =
+                matchDecisionService.decide(
+                        "Аудит Имлек млеко 1л",
+                        3,
+                        clientToken
+                );
+
+        assertThat(confirmed.reusable()).isTrue();
+        assertThat(reusedDecision.source())
+                .isEqualTo(ProductMatchDecisionSource.USER_CONFIRMATION);
+        assertThat(reusedDecision.matchedCanonicalProductId())
+                .isEqualTo(userSelectedProductId);
+        assertThat(reusedDecision.reusedFeedbackId())
+                .isEqualTo(confirmed.feedbackId());
+        assertThat(reusedDecision.candidates()).isEmpty();
+
+        List<String> feedbackActions = jdbcClient.sql("""
+                        SELECT action
+                        FROM app.product_match_feedback
+                        WHERE decision_id = ?
+                        ORDER BY id
+                        """)
+                .param(1, algorithmDecision.decisionId())
+                .query(String.class)
+                .list();
+
+        String originalDecisionStatus = jdbcClient.sql("""
+                        SELECT status
+                        FROM app.product_match_decision
+                        WHERE id = ?
+                        """)
+                .param(1, algorithmDecision.decisionId())
+                .query(String.class)
+                .single();
+
+        Long decisionsForClient = jdbcClient.sql("""
+                        SELECT COUNT(*)
+                        FROM app.product_match_decision
+                        WHERE client_token = ?
+                        """)
+                .param(1, clientToken)
+                .query(Long.class)
+                .single();
+
+        assertThat(feedbackActions)
+                .containsExactly("REJECTED", "CONFIRMED");
+        assertThat(originalDecisionStatus)
+                .isEqualTo(algorithmDecision.status().name());
+        assertThat(decisionsForClient).isEqualTo(1);
+
+        ProductMatchDecision otherClientDecision =
+                matchDecisionService.decide(
+                        "Audit Imlek mleko 1l",
+                        3,
+                        "other-test-device"
+                );
+
+        assertThat(otherClientDecision.source())
+                .isEqualTo(ProductMatchDecisionSource.ALGORITHM);
+        assertThat(otherClientDecision.matchedCanonicalProductId())
+                .isEqualTo(algorithmCandidateId);
+
+        assertThatThrownBy(() -> jdbcClient.sql("""
+                        UPDATE app.product_match_feedback
+                        SET note = 'Pokušaj izmene istorije'
+                        WHERE id = ?
+                        """)
+                .param(1, confirmed.feedbackId())
+                .update())
+                .isInstanceOf(DataAccessException.class);
+    }
+
+    @Test
+    void userFeedbackRejectsInvalidActionProductAndClientCombinations() {
+        Long canonicalProductId = jdbcClient.sql("""
+                        INSERT INTO app.canonical_product (
+                            canonical_key,
+                            name,
+                            normalized_name
+                        )
+                        VALUES (?, ?, ?)
+                        RETURNING id
+                        """)
+                .param(1, "PK036-VALIDATION-PRODUCT")
+                .param(2, "Validation proizvod")
+                .param(3, "validation proizvod")
+                .query(Long.class)
+                .single();
+
+        ProductMatchDecision decision = matchDecisionService.decide(
+                "Validation proizvod",
+                3,
+                "validation-client"
+        );
+
+        assertThatThrownBy(() -> matchFeedbackService.record(
+                decision.decisionId(),
+                new ProductMatchFeedbackRequest(
+                        "different-client",
+                        ProductMatchFeedbackAction.CONFIRMED,
+                        canonicalProductId,
+                        null
+                )
+        )).isInstanceOf(IllegalArgumentException.class)
+                .hasMessage(
+                        "Odluka o uparivanju ne postoji za dati clientToken"
+                );
+
+        assertThatThrownBy(() -> matchFeedbackService.record(
+                decision.decisionId(),
+                new ProductMatchFeedbackRequest(
+                        "validation-client",
+                        ProductMatchFeedbackAction.CONFIRMED,
+                        null,
+                        null
+                )
+        )).isInstanceOf(IllegalArgumentException.class)
+                .hasMessage(
+                        "selectedCanonicalProductId je obavezan za potvrdu"
+                );
+
+        assertThatThrownBy(() -> matchFeedbackService.record(
+                decision.decisionId(),
+                new ProductMatchFeedbackRequest(
+                        "validation-client",
+                        ProductMatchFeedbackAction.REJECTED,
+                        canonicalProductId,
+                        null
+                )
+        )).isInstanceOf(IllegalArgumentException.class)
+                .hasMessage(
+                        "Odbijanje ne sme da izabere kanonski proizvod"
+                );
     }
 
     @Test
