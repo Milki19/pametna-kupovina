@@ -11,6 +11,7 @@ import org.springframework.boot.testcontainers.service.connection.ServiceConnect
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.web.server.ResponseStatusException;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
@@ -37,6 +38,8 @@ import rs.pametnakupovina.backend.product.ProductSearchResult;
 import rs.pametnakupovina.backend.product.ProductSearchService;
 import rs.pametnakupovina.backend.retailerlocation.RetailerLocationImportResult;
 import rs.pametnakupovina.backend.retailerlocation.RetailerLocationImportService;
+import rs.pametnakupovina.backend.store.NearbyStore;
+import rs.pametnakupovina.backend.store.NearbyStoreService;
 import rs.pametnakupovina.backend.store.Store;
 import rs.pametnakupovina.backend.store.StoreFormat;
 import rs.pametnakupovina.backend.store.StoreRepository;
@@ -129,6 +132,9 @@ class PametnaKupovinaBackendApplicationTests {
 
     @Autowired
     private StoreGeocodingService storeGeocodingService;
+
+    @Autowired
+    private NearbyStoreService nearbyStoreService;
 
     @Autowired
     private JdbcClient jdbcClient;
@@ -1731,6 +1737,169 @@ class PametnaKupovinaBackendApplicationTests {
                 .isEqualTo(19.8863);
     }
 
+    @Test
+    void nearbyStoresAreVerifiedActiveInsideRadiusAndSortedByDistance() {
+        Long retailerId = jdbcClient.sql("""
+                        INSERT INTO app.retailer (code, name)
+                        VALUES ('PK040_CHAIN', 'PK-040 test lanac')
+                        RETURNING id
+                        """)
+                .query(Long.class)
+                .single();
+
+        Long activeFormatId = jdbcClient.sql("""
+                        INSERT INTO app.store_format (
+                            retailer_id,
+                            code,
+                            name,
+                            active
+                        )
+                        VALUES (?, 'MARKET', 'Market', TRUE)
+                        RETURNING id
+                        """)
+                .param(retailerId)
+                .query(Long.class)
+                .single();
+
+        Long inactiveFormatId = jdbcClient.sql("""
+                        INSERT INTO app.store_format (
+                            retailer_id,
+                            code,
+                            name,
+                            active
+                        )
+                        VALUES (?, 'CLOSED_FORMAT', 'Zatvoren format', FALSE)
+                        RETURNING id
+                        """)
+                .param(retailerId)
+                .query(Long.class)
+                .single();
+
+        Long nearestId = insertVerifiedStore(
+                retailerId,
+                activeFormatId,
+                "NEAREST",
+                "Najbliži objekat",
+                44.2701,
+                19.8842,
+                true
+        );
+
+        Long secondId = insertVerifiedStore(
+                retailerId,
+                activeFormatId,
+                "SECOND",
+                "Drugi objekat",
+                44.2750,
+                19.8900,
+                true
+        );
+
+        insertVerifiedStore(
+                retailerId,
+                activeFormatId,
+                "OUTSIDE",
+                "Objekat van radijusa",
+                44.3200,
+                19.9500,
+                true
+        );
+
+        insertVerifiedStore(
+                retailerId,
+                activeFormatId,
+                "INACTIVE",
+                "Neaktivan objekat",
+                44.2702,
+                19.8843,
+                false
+        );
+
+        insertVerifiedStore(
+                retailerId,
+                inactiveFormatId,
+                "INACTIVE_FORMAT",
+                "Objekat neaktivnog formata",
+                44.2703,
+                19.8844,
+                true
+        );
+
+        insertStoreWaitingForGeocoding(
+                "PK040_REVIEW",
+                "WAITING_REVIEW",
+                "Radnička 76",
+                "Valjevo"
+        );
+
+        List<NearbyStore> results = nearbyStoreService.findNearby(
+                44.2700,
+                19.8840,
+                2_000,
+                10
+        );
+
+        assertThat(results)
+                .extracting(NearbyStore::storeId)
+                .containsExactly(nearestId, secondId);
+
+        assertThat(results.getFirst().retailerCode())
+                .isEqualTo("PK040_CHAIN");
+        assertThat(results.getFirst().storeFormatCode())
+                .isEqualTo("MARKET");
+        assertThat(results.getFirst().externalCode())
+                .isEqualTo("NEAREST");
+        assertThat(results.getFirst().latitude())
+                .isEqualTo(44.2701);
+        assertThat(results.getFirst().longitude())
+                .isEqualTo(19.8842);
+        assertThat(results.getFirst().distanceMeters())
+                .isLessThan(results.get(1).distanceMeters());
+
+        assertThat(nearbyStoreService.findNearby(
+                44.2700,
+                19.8840,
+                2_000,
+                1
+        )).extracting(NearbyStore::storeId)
+                .containsExactly(nearestId);
+    }
+
+    @Test
+    void nearbyStoresRejectInvalidCoordinatesRadiusAndLimit() {
+        assertThatThrownBy(() -> nearbyStoreService.findNearby(
+                Double.NaN,
+                19.8840,
+                5_000,
+                20
+        )).isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("latitude");
+
+        assertThatThrownBy(() -> nearbyStoreService.findNearby(
+                44.2700,
+                181,
+                5_000,
+                20
+        )).isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("longitude");
+
+        assertThatThrownBy(() -> nearbyStoreService.findNearby(
+                44.2700,
+                19.8840,
+                0,
+                20
+        )).isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("radiusMeters");
+
+        assertThatThrownBy(() -> nearbyStoreService.findNearby(
+                44.2700,
+                19.8840,
+                5_000,
+                101
+        )).isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("limit");
+    }
+
     private Long insertStoreWaitingForGeocoding(
             String retailerCode,
             String externalCode,
@@ -1779,6 +1948,70 @@ class PametnaKupovinaBackendApplicationTests {
                 .param(4, externalCode + " test objekat")
                 .param(5, address)
                 .param(6, city)
+                .query(Long.class)
+                .single();
+    }
+
+    private Long insertVerifiedStore(
+            Long retailerId,
+            Long storeFormatId,
+            String externalCode,
+            String name,
+            double latitude,
+            double longitude,
+            boolean active
+    ) {
+        return jdbcClient.sql("""
+                        WITH coordinates AS (
+                            SELECT ST_SetSRID(
+                                ST_MakePoint(?, ?),
+                                4326
+                            )::geography AS location
+                        )
+                        INSERT INTO app.store (
+                            retailer_id,
+                            store_format_id,
+                            external_code,
+                            name,
+                            address,
+                            city,
+                            location,
+                            active,
+                            geocoding_candidate,
+                            geocoding_status,
+                            geocoding_query,
+                            geocoding_source,
+                            geocoding_matched_address,
+                            geocoding_confidence,
+                            geocoded_at,
+                            geocoding_review_note,
+                            geocoding_reviewed_at
+                        )
+                        SELECT ?, ?, ?, ?, ?, 'Valjevo',
+                               coordinates.location,
+                               ?,
+                               coordinates.location,
+                               'MANUALLY_VERIFIED',
+                               LOWER(? || ', Valjevo'),
+                               'PK040_TEST',
+                               ? || ', Valjevo',
+                               1.0000,
+                               NOW(),
+                               'PK-040 test koordinata',
+                               NOW()
+                        FROM coordinates
+                        RETURNING id
+                        """)
+                .param(1, longitude)
+                .param(2, latitude)
+                .param(3, retailerId)
+                .param(4, storeFormatId)
+                .param(5, externalCode)
+                .param(6, name)
+                .param(7, name + " adresa")
+                .param(8, active)
+                .param(9, name + " adresa")
+                .param(10, name + " adresa")
                 .query(Long.class)
                 .single();
     }
