@@ -33,9 +33,19 @@ class PametnaKupovinaBackendApplicationTests {
 
     private static final String CSV_CONTENT = """
             KATEGORIJA;NAZIV KATEGORIJE;Naziv proizvoda;Robna marka;Barkod proizvoda;Jedinica mere;Naziv trgovca - formata*;Redovna cena;Snižena cena;Datum cenovnika;Cena po jedinici mere;Datum početka sniženja;Datum kraja sniženja;Stopa PDV
-            MLEKO;Mlečni proizvodi;Mleko 1 l;Test brend;8600000000001;l;Test format;150;;01-03-2026;150;;;20
-            MLEKO;Mlečni proizvodi;Mleko 1 l;Test brend;8600000000001;l;Test format;160;;02-03-2026;160;;;20
-            HLEB;Pekarski proizvodi;Beli hleb;Test pekara;8600000000002;kom;Test format;80;;02-03-2026;80;;;20
+            MLEKO;Mlečni proizvodi;Mleko 1 l;Test brend;8600000000004;l;Test format;150;;01-03-2026;150;;;20
+            MLEKO;Mlečni proizvodi;Mleko 1 l;Test brend;8600000000004;l;Test format;160;;02-03-2026;160;;;20
+            HLEB;Pekarski proizvodi;Beli hleb;Test pekara;8600000000011;kom;Test format;80;;02-03-2026;80;;;20
+            """;
+
+    private static final String EXACT_EAN_A_CSV_CONTENT = """
+            KATEGORIJA;NAZIV KATEGORIJE;Naziv proizvoda;Robna marka;Barkod proizvoda;Jedinica mere;Naziv trgovca - formata*;Redovna cena;Snižena cena;Datum cenovnika;Cena po jedinici mere;Datum početka sniženja;Datum kraja sniženja;Stopa PDV
+            SOK;Sokovi;Sok od narandže 1 l;Test sok;8601234567899;l;Format A;210;;04-08-2026;210;;;20
+            """;
+
+    private static final String EXACT_EAN_B_CSV_CONTENT = """
+            KATEGORIJA;NAZIV KATEGORIJE;Naziv proizvoda;Robna marka;Barkod proizvoda;Jedinica mere;Naziv trgovca - formata*;Redovna cena;Snižena cena;Datum cenovnika;Cena po jedinici mere;Datum početka sniženja;Datum kraja sniženja;Stopa PDV
+            NAPICI;Bezalkoholna pića;Pomorandža sok 1000 ml;Test sok;8601234567899;ml;Format B;205;;04-08-2026;205;;;20
             """;
 
     @Container
@@ -81,6 +91,40 @@ class PametnaKupovinaBackendApplicationTests {
                     200,
                     responseBody.length
             );
+
+            try (OutputStream outputStream =
+                         exchange.getResponseBody()) {
+                outputStream.write(responseBody);
+            }
+        });
+
+        csvServer.createContext("/exact-ean-a.csv", exchange -> {
+            byte[] responseBody = EXACT_EAN_A_CSV_CONTENT
+                    .getBytes(StandardCharsets.UTF_8);
+
+            exchange.getResponseHeaders().set(
+                    "Content-Type",
+                    "text/csv; charset=UTF-8"
+            );
+
+            exchange.sendResponseHeaders(200, responseBody.length);
+
+            try (OutputStream outputStream =
+                         exchange.getResponseBody()) {
+                outputStream.write(responseBody);
+            }
+        });
+
+        csvServer.createContext("/exact-ean-b.csv", exchange -> {
+            byte[] responseBody = EXACT_EAN_B_CSV_CONTENT
+                    .getBytes(StandardCharsets.UTF_8);
+
+            exchange.getResponseHeaders().set(
+                    "Content-Type",
+                    "text/csv; charset=UTF-8"
+            );
+
+            exchange.sendResponseHeaders(200, responseBody.length);
 
             try (OutputStream outputStream =
                          exchange.getResponseBody()) {
@@ -296,6 +340,72 @@ class PametnaKupovinaBackendApplicationTests {
 
         assertThat(latinResults.getFirst().name())
                 .isEqualTo("Čokoladno mleko Žirafa 1 l");
+    }
+
+    @Test
+    void sameValidEanAutomaticallyLinksRetailerProducts() {
+        String serverBaseUrl = "http://127.0.0.1:"
+                + csvServer.getAddress().getPort();
+
+        jdbcClient.sql("""
+                        INSERT INTO app.retailer (
+                            code,
+                            name,
+                            dataset_url
+                        )
+                        VALUES (?, ?, ?), (?, ?, ?)
+                        """)
+                .param(1, "EXACT_EAN_A")
+                .param(2, "Exact EAN prodavnica A")
+                .param(3, serverBaseUrl + "/exact-ean-a.csv")
+                .param(4, "EXACT_EAN_B")
+                .param(5, "Exact EAN prodavnica B")
+                .param(6, serverBaseUrl + "/exact-ean-b.csv")
+                .update();
+
+        priceImportService.importPrices("EXACT_EAN_A", 100);
+        priceImportService.importPrices("EXACT_EAN_B", 100);
+
+        Long canonicalProductCount = jdbcClient.sql("""
+                        SELECT COUNT(*)
+                        FROM app.canonical_product
+                        WHERE barcode = '8601234567899'
+                        """)
+                .query(Long.class)
+                .single();
+
+        List<Long> linkedCanonicalProductIds = jdbcClient.sql("""
+                        SELECT DISTINCT product.canonical_product_id
+                        FROM app.retailer_product product
+                        JOIN app.retailer retailer
+                          ON retailer.id = product.retailer_id
+                        WHERE retailer.code IN (
+                            'EXACT_EAN_A',
+                            'EXACT_EAN_B'
+                        )
+                          AND product.barcode = '8601234567899'
+                        """)
+                .query(Long.class)
+                .list();
+
+        Long linkedRetailerProductCount = jdbcClient.sql("""
+                        SELECT COUNT(*)
+                        FROM app.retailer_product product
+                        JOIN app.retailer retailer
+                          ON retailer.id = product.retailer_id
+                        WHERE retailer.code IN (
+                            'EXACT_EAN_A',
+                            'EXACT_EAN_B'
+                        )
+                          AND product.barcode = '8601234567899'
+                          AND product.canonical_product_id IS NOT NULL
+                        """)
+                .query(Long.class)
+                .single();
+
+        assertThat(canonicalProductCount).isEqualTo(1);
+        assertThat(linkedCanonicalProductIds).hasSize(1);
+        assertThat(linkedRetailerProductCount).isEqualTo(2);
     }
 
     @Test

@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
+import rs.pametnakupovina.backend.matching.ExactEanMatcher;
 import rs.pametnakupovina.backend.matching.ParsedQuantity;
 import rs.pametnakupovina.backend.matching.ProductNameNormalizer;
 import rs.pametnakupovina.backend.matching.ProductQuantityParser;
@@ -61,6 +62,7 @@ public class PriceImportService {
     private final RetailerRepository retailerRepository;
     private final ProductNameNormalizer productNameNormalizer;
     private final ProductQuantityParser productQuantityParser;
+    private final ExactEanMatcher exactEanMatcher;
     private final HttpClient httpClient;
     private final TransactionTemplate transactionTemplate;
 
@@ -69,12 +71,14 @@ public class PriceImportService {
             RetailerRepository retailerRepository,
             ProductNameNormalizer productNameNormalizer,
             ProductQuantityParser productQuantityParser,
+            ExactEanMatcher exactEanMatcher,
             PlatformTransactionManager transactionManager
     ) {
         this.jdbcClient = jdbcClient;
         this.retailerRepository = retailerRepository;
         this.productNameNormalizer = productNameNormalizer;
         this.productQuantityParser = productQuantityParser;
+        this.exactEanMatcher = exactEanMatcher;
         this.transactionTemplate =
                 new TransactionTemplate(transactionManager);
 
@@ -367,6 +371,15 @@ public class PriceImportService {
             Long importRunId,
             PriceCsvRow row
     ) {
+        Long canonicalProductId = exactEanMatcher.matchOrCreate(
+                row.barcode(),
+                row.productName(),
+                row.normalizedProductName(),
+                row.brand(),
+                row.quantityValue(),
+                row.baseUnit()
+        ).orElse(null);
+
         Long retailerProductId = upsertProduct(
                 retailerId,
                 row.sourceProductKey(),
@@ -378,7 +391,8 @@ public class PriceImportService {
                 row.barcode(),
                 row.unitOfMeasure(),
                 row.quantityValue(),
-                row.baseUnit()
+                row.baseUnit(),
+                canonicalProductId
         );
 
         insertPriceObservation(
@@ -422,7 +436,8 @@ public class PriceImportService {
             String barcode,
             String unit,
             BigDecimal quantityValue,
-            String baseUnit
+            String baseUnit,
+            Long canonicalProductId
     ) {
         return jdbcClient.sql("""
                 INSERT INTO app.retailer_product (
@@ -436,9 +451,10 @@ public class PriceImportService {
                     barcode,
                     unit,
                     quantity_value,
-                    base_unit
+                    base_unit,
+                    canonical_product_id
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (
                     retailer_id,
                     source_product_key
@@ -452,7 +468,8 @@ public class PriceImportService {
                     barcode = EXCLUDED.barcode,
                     unit = EXCLUDED.unit,
                     quantity_value = EXCLUDED.quantity_value,
-                    base_unit = EXCLUDED.base_unit
+                    base_unit = EXCLUDED.base_unit,
+                    canonical_product_id = EXCLUDED.canonical_product_id
                 RETURNING id
                 """)
                 .param(1, retailerId)
@@ -486,6 +503,7 @@ public class PriceImportService {
                 )
                 .param(10, quantityValue, Types.NUMERIC)
                 .param(11, baseUnit, Types.VARCHAR)
+                .param(12, canonicalProductId, Types.BIGINT)
                 .query(Long.class)
                 .single();
     }
