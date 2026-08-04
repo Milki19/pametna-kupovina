@@ -15,6 +15,9 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 import rs.pametnakupovina.backend.matching.FuzzyProductCandidate;
 import rs.pametnakupovina.backend.matching.FuzzyProductCandidateService;
+import rs.pametnakupovina.backend.matching.ProductMatchDecision;
+import rs.pametnakupovina.backend.matching.ProductMatchDecisionService;
+import rs.pametnakupovina.backend.matching.ProductMatchStatus;
 import rs.pametnakupovina.backend.priceimport.PriceImportService;
 import rs.pametnakupovina.backend.product.ProductSearchResult;
 import rs.pametnakupovina.backend.product.ProductSearchService;
@@ -72,6 +75,9 @@ class PametnaKupovinaBackendApplicationTests {
 
     @Autowired
     private FuzzyProductCandidateService fuzzyCandidateService;
+
+    @Autowired
+    private ProductMatchDecisionService matchDecisionService;
 
     @Autowired
     private JdbcClient jdbcClient;
@@ -597,6 +603,116 @@ class PametnaKupovinaBackendApplicationTests {
                 .isGreaterThan(
                         candidates.get(1).score().totalScore()
                 );
+    }
+
+    @Test
+    void matchThresholdsPersistDecisionWithoutSilentlySelectingLowScore() {
+        Long automaticCandidateId = jdbcClient.sql("""
+                        INSERT INTO app.canonical_product (
+                            canonical_key,
+                            name,
+                            normalized_name,
+                            brand,
+                            quantity_value,
+                            base_unit
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?)
+                        RETURNING id
+                        """)
+                .param(1, "PK034-AUTO-CANDIDATE")
+                .param(2, "Autoaccept Imlek mleko 1 l")
+                .param(3, "autoaccept imlek mleko 1 l")
+                .param(4, "Imlek")
+                .param(5, 1000)
+                .param(6, "ml")
+                .query(Long.class)
+                .single();
+
+        Long lowScoreCandidateId = jdbcClient.sql("""
+                        INSERT INTO app.canonical_product (
+                            canonical_key,
+                            name,
+                            normalized_name,
+                            brand,
+                            quantity_value,
+                            base_unit
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?)
+                        RETURNING id
+                        """)
+                .param(1, "PK034-LOW-CANDIDATE")
+                .param(2, "Lowscore neutralni artikal 1 l")
+                .param(3, "lowscore neutralni artikal 1 l")
+                .param(4, "Drugi brend")
+                .param(5, 1500)
+                .param(6, "ml")
+                .query(Long.class)
+                .single();
+
+        ProductMatchDecision automaticDecision =
+                matchDecisionService.decide(
+                        "Autoaccept Imlek mleko 1l",
+                        3
+                );
+
+        ProductMatchDecision lowScoreDecision =
+                matchDecisionService.decide(
+                        "Lowscore neutralni artikal 1l",
+                        3
+                );
+
+        assertThat(automaticDecision.status())
+                .isEqualTo(ProductMatchStatus.AUTO_ACCEPTED);
+        assertThat(automaticDecision.matchedCanonicalProductId())
+                .isEqualTo(automaticCandidateId);
+        assertThat(automaticDecision.score())
+                .isEqualByComparingTo("1.0000");
+
+        assertThat(lowScoreDecision.status())
+                .isEqualTo(ProductMatchStatus.UNMATCHED);
+        assertThat(lowScoreDecision.matchedCanonicalProductId())
+                .isNull();
+        assertThat(lowScoreDecision.candidates().getFirst()
+                .canonicalProductId())
+                .isEqualTo(lowScoreCandidateId);
+        assertThat(lowScoreDecision.score())
+                .isEqualByComparingTo("0.4118");
+
+        Long automaticDecisionRows = jdbcClient.sql("""
+                        SELECT COUNT(*)
+                        FROM app.product_match_decision
+                        WHERE id = ?
+                          AND status = 'AUTO_ACCEPTED'
+                          AND top_candidate_id = ?
+                          AND matched_canonical_product_id = ?
+                          AND score = 1.0000
+                          AND algorithm_version =
+                              'fuzzy-name-brand-package-v1'
+                        """)
+                .param(1, automaticDecision.decisionId())
+                .param(2, automaticCandidateId)
+                .param(3, automaticCandidateId)
+                .query(Long.class)
+                .single();
+
+        Long lowScoreDecisionRows = jdbcClient.sql("""
+                        SELECT COUNT(*)
+                        FROM app.product_match_decision
+                        WHERE id = ?
+                          AND status = 'UNMATCHED'
+                          AND top_candidate_id = ?
+                          AND matched_canonical_product_id IS NULL
+                          AND score = 0.4118
+                          AND algorithm_version =
+                              'fuzzy-name-brand-package-v1'
+                        """)
+                .param(1, lowScoreDecision.decisionId())
+                .param(2, lowScoreCandidateId)
+                .query(Long.class)
+                .single();
+
+        assertThat(automaticDecisionRows).isEqualTo(1);
+        assertThat(lowScoreDecisionRows).isEqualTo(1);
     }
 
     @Test
