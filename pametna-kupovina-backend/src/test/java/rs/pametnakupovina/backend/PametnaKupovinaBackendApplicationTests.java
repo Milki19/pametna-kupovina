@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -21,6 +22,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest
 @Testcontainers
@@ -157,6 +159,212 @@ class PametnaKupovinaBackendApplicationTests {
 
         assertThat(importStatuses)
                 .containsExactly("SUCCEEDED", "SUCCEEDED");
+    }
+
+    @Test
+    void canonicalProductAcceptsValidDataAndCanBeLinkedToRetailerProduct() {
+        Long canonicalProductId = jdbcClient.sql("""
+                        INSERT INTO app.canonical_product (
+                            canonical_key,
+                            name,
+                            brand,
+                            barcode,
+                            quantity_value,
+                            base_unit
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?)
+                        RETURNING id
+                        """)
+                .param(1, "TEST-MLEKO-1L")
+                .param(2, "Test mleko 1 l")
+                .param(3, "Test brend")
+                .param(4, "8600000000100")
+                .param(5, 1)
+                .param(6, "l")
+                .query(Long.class)
+                .single();
+
+        Long retailerId = jdbcClient.sql("""
+                        INSERT INTO app.retailer (code, name)
+                        VALUES (?, ?)
+                        RETURNING id
+                        """)
+                .param(1, "CANONICAL_TEST")
+                .param(2, "Canonical test prodavnica")
+                .query(Long.class)
+                .single();
+
+        Long retailerProductId = jdbcClient.sql("""
+                        INSERT INTO app.retailer_product (
+                            retailer_id,
+                            name,
+                            canonical_product_id
+                        )
+                        VALUES (?, ?, ?)
+                        RETURNING id
+                        """)
+                .param(1, retailerId)
+                .param(2, "Test mleko")
+                .param(3, canonicalProductId)
+                .query(Long.class)
+                .single();
+
+        Long linkedCanonicalProductId = jdbcClient.sql("""
+                        SELECT canonical_product_id
+                        FROM app.retailer_product
+                        WHERE id = ?
+                        """)
+                .param(1, retailerProductId)
+                .query(Long.class)
+                .single();
+
+        assertThat(linkedCanonicalProductId)
+                .isEqualTo(canonicalProductId);
+    }
+
+    @Test
+    void canonicalProductRejectsBlankRequiredValues() {
+        assertCanonicalProductInsertFails(
+                "   ",
+                "Validan naziv",
+                null,
+                null
+        );
+
+        assertCanonicalProductInsertFails(
+                "BLANK-NAME",
+                "   ",
+                null,
+                null
+        );
+    }
+
+    @Test
+    void canonicalProductRejectsNonPositiveQuantity() {
+        assertCanonicalProductInsertFails(
+                "ZERO-QUANTITY",
+                "Nulta količina",
+                null,
+                0
+        );
+
+        assertCanonicalProductInsertFails(
+                "NEGATIVE-QUANTITY",
+                "Negativna količina",
+                null,
+                -1
+        );
+    }
+
+    @Test
+    void canonicalProductRejectsInvalidBarcode() {
+        assertCanonicalProductInsertFails(
+                "SHORT-BARCODE",
+                "Kratak barkod",
+                "1234567",
+                null
+        );
+
+        assertCanonicalProductInsertFails(
+                "NON-NUMERIC-BARCODE",
+                "Barkod sa slovom",
+                "8600000A00001",
+                null
+        );
+
+        assertCanonicalProductInsertFails(
+                "ZERO-BARCODE",
+                "Nulti barkod",
+                "00000000",
+                null
+        );
+    }
+
+    @Test
+    void canonicalProductRejectsDuplicateCanonicalKeyAndBarcode() {
+        insertCanonicalProduct(
+                "UNIQUE-PRODUCT",
+                "Jedinstveni proizvod",
+                "8600000000200",
+                1
+        );
+
+        assertCanonicalProductInsertFails(
+                "UNIQUE-PRODUCT",
+                "Drugi naziv",
+                "8600000000201",
+                1
+        );
+
+        assertCanonicalProductInsertFails(
+                "OTHER-PRODUCT",
+                "Drugi proizvod",
+                "8600000000200",
+                1
+        );
+    }
+
+    @Test
+    void retailerProductRejectsUnknownCanonicalProduct() {
+        Long retailerId = jdbcClient.sql("""
+                        INSERT INTO app.retailer (code, name)
+                        VALUES (?, ?)
+                        RETURNING id
+                        """)
+                .param(1, "FK_TEST")
+                .param(2, "Foreign key test prodavnica")
+                .query(Long.class)
+                .single();
+
+        assertThatThrownBy(() -> jdbcClient.sql("""
+                        INSERT INTO app.retailer_product (
+                            retailer_id,
+                            name,
+                            canonical_product_id
+                        )
+                        VALUES (?, ?, ?)
+                        """)
+                .param(1, retailerId)
+                .param(2, "Nepovezani proizvod")
+                .param(3, Long.MAX_VALUE)
+                .update())
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    private void assertCanonicalProductInsertFails(
+            String canonicalKey,
+            String name,
+            String barcode,
+            Number quantityValue
+    ) {
+        assertThatThrownBy(() -> insertCanonicalProduct(
+                canonicalKey,
+                name,
+                barcode,
+                quantityValue
+        )).isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    private void insertCanonicalProduct(
+            String canonicalKey,
+            String name,
+            String barcode,
+            Number quantityValue
+    ) {
+        jdbcClient.sql("""
+                        INSERT INTO app.canonical_product (
+                            canonical_key,
+                            name,
+                            barcode,
+                            quantity_value
+                        )
+                        VALUES (?, ?, ?, ?)
+                        """)
+                .param(1, canonicalKey)
+                .param(2, name)
+                .param(3, barcode)
+                .param(4, quantityValue)
+                .update();
     }
 
     private Long latestImportRunId() {
