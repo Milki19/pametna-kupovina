@@ -38,6 +38,14 @@ import rs.pametnakupovina.backend.product.ProductSearchResult;
 import rs.pametnakupovina.backend.product.ProductSearchService;
 import rs.pametnakupovina.backend.retailerlocation.RetailerLocationImportResult;
 import rs.pametnakupovina.backend.retailerlocation.RetailerLocationImportService;
+import rs.pametnakupovina.backend.shoppinglist.AddShoppingListItemRequest;
+import rs.pametnakupovina.backend.shoppinglist.CreateShoppingListRequest;
+import rs.pametnakupovina.backend.shoppinglist.ShoppingItemMatchingStatus;
+import rs.pametnakupovina.backend.shoppinglist.ShoppingItemRule;
+import rs.pametnakupovina.backend.shoppinglist.ShoppingListItemResponse;
+import rs.pametnakupovina.backend.shoppinglist.ShoppingListResponse;
+import rs.pametnakupovina.backend.shoppinglist.ShoppingListService;
+import rs.pametnakupovina.backend.shoppinglist.ShoppingListSummary;
 import rs.pametnakupovina.backend.store.NearbyStore;
 import rs.pametnakupovina.backend.store.NearbyStoreService;
 import rs.pametnakupovina.backend.store.Store;
@@ -137,12 +145,17 @@ class PametnaKupovinaBackendApplicationTests {
     private NearbyStoreService nearbyStoreService;
 
     @Autowired
+    private ShoppingListService shoppingListService;
+
+    @Autowired
     private JdbcClient jdbcClient;
 
     @BeforeEach
     void cleanBusinessData() {
         jdbcClient.sql("""
                         TRUNCATE TABLE
+                            app.shopping_list_item,
+                            app.shopping_list,
                             app.product_match_feedback,
                             app.product_match_decision,
                             app.price_observation,
@@ -1898,6 +1911,110 @@ class PametnaKupovinaBackendApplicationTests {
                 101
         )).isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("limit");
+    }
+
+    @Test
+    void shoppingItemPreservesRawInputQuantityRuleAndPendingState() {
+        ShoppingListSummary shoppingList =
+                shoppingListService.create(
+                        new CreateShoppingListRequest(
+                                "Nedeljna kupovina"
+                        )
+                );
+
+        ShoppingListItemResponse createdItem =
+                shoppingListService.addItem(
+                        shoppingList.id(),
+                        new AddShoppingListItemRequest(
+                                "Mleko 1 l",
+                                "  2 x Mleko 1 l  ",
+                                null,
+                                new BigDecimal("2"),
+                                ShoppingItemRule.FLEXIBLE_CATEGORY
+                        )
+                );
+
+        assertThat(createdItem.name())
+                .isEqualTo("Mleko 1 l");
+        assertThat(createdItem.rawInput())
+                .isEqualTo("  2 x Mleko 1 l  ");
+        assertThat(createdItem.quantity())
+                .isEqualByComparingTo("2");
+        assertThat(createdItem.matchingRule())
+                .isEqualTo(ShoppingItemRule.FLEXIBLE_CATEGORY);
+        assertThat(createdItem.matchingStatus())
+                .isEqualTo(ShoppingItemMatchingStatus.PENDING);
+        assertThat(createdItem.matchedCanonicalProductId())
+                .isNull();
+
+        ShoppingListResponse reloaded =
+                shoppingListService.findById(shoppingList.id());
+
+        assertThat(reloaded.items())
+                .singleElement()
+                .satisfies(item -> {
+                    assertThat(item.rawInput())
+                            .isEqualTo("  2 x Mleko 1 l  ");
+                    assertThat(item.matchingRule())
+                            .isEqualTo(
+                                    ShoppingItemRule.FLEXIBLE_CATEGORY
+                            );
+                    assertThat(item.matchingStatus())
+                            .isEqualTo(
+                                    ShoppingItemMatchingStatus.PENDING
+                            );
+                });
+    }
+
+    @Test
+    void selectedBarcodeLinksCanonicalProductAndStateCannotDrift() {
+        insertCanonicalProduct(
+                "PK043:8601234567899",
+                "Sok od narandže 1 l",
+                "8601234567899",
+                1
+        );
+
+        Long canonicalProductId = jdbcClient.sql("""
+                        SELECT id
+                        FROM app.canonical_product
+                        WHERE barcode = '8601234567899'
+                        """)
+                .query(Long.class)
+                .single();
+
+        ShoppingListSummary shoppingList =
+                shoppingListService.create(
+                        new CreateShoppingListRequest("Piće")
+                );
+
+        ShoppingListItemResponse item =
+                shoppingListService.addItem(
+                        shoppingList.id(),
+                        new AddShoppingListItemRequest(
+                                "Sok od narandže 1 l",
+                                null,
+                                "8601234567899",
+                                BigDecimal.ONE,
+                                ShoppingItemRule.EXACT_PRODUCT
+                        )
+                );
+
+        assertThat(item.rawInput())
+                .isEqualTo("Sok od narandže 1 l");
+        assertThat(item.matchingStatus())
+                .isEqualTo(ShoppingItemMatchingStatus.CONFIRMED);
+        assertThat(item.matchedCanonicalProductId())
+                .isEqualTo(canonicalProductId);
+
+        assertThatThrownBy(() -> jdbcClient.sql("""
+                        UPDATE app.shopping_list_item
+                        SET matched_canonical_product_id = NULL
+                        WHERE id = ?
+                        """)
+                .param(item.id())
+                .update())
+                .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     private Long insertStoreWaitingForGeocoding(

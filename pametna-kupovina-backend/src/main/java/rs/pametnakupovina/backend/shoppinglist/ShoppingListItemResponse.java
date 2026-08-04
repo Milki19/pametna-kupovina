@@ -6,8 +6,13 @@ import java.time.OffsetDateTime;
 public record ShoppingListItemResponse(
         Long id,
         String name,
+        String rawInput,
         String barcode,
         BigDecimal quantity,
-        OffsetDateTime createdAt
+        ShoppingItemRule matchingRule,
+        ShoppingItemMatchingStatus matchingStatus,
+        Long matchedCanonicalProductId,
+        OffsetDateTime createdAt,
+        OffsetDateTime updatedAt
 ) {
 }

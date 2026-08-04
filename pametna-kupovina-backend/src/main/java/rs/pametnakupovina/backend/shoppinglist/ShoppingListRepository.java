@@ -33,10 +33,25 @@ public class ShoppingListRepository {
             new ShoppingListItemResponse(
                     resultSet.getLong("id"),
                     resultSet.getString("name"),
+                    resultSet.getString("raw_input"),
                     resultSet.getString("barcode"),
                     resultSet.getBigDecimal("quantity"),
+                    ShoppingItemRule.valueOf(
+                            resultSet.getString("matching_rule")
+                    ),
+                    ShoppingItemMatchingStatus.valueOf(
+                            resultSet.getString("matching_status")
+                    ),
+                    resultSet.getObject(
+                            "matched_canonical_product_id",
+                            Long.class
+                    ),
                     resultSet.getObject(
                             "created_at",
+                            OffsetDateTime.class
+                    ),
+                    resultSet.getObject(
+                            "updated_at",
                             OffsetDateTime.class
                     )
             );
@@ -117,9 +132,14 @@ public class ShoppingListRepository {
                 jdbcClient.sql("""
                                 SELECT id,
                                        name,
+                                       raw_input,
                                        barcode,
                                        quantity,
-                                       created_at
+                                       matching_rule,
+                                       matching_status,
+                                       matched_canonical_product_id,
+                                       created_at,
+                                       updated_at
                                 FROM app.shopping_list_item
                                 WHERE shopping_list_id = ?
                                 ORDER BY created_at ASC,
@@ -158,27 +178,55 @@ public class ShoppingListRepository {
     public ShoppingListItemResponse addItem(
             Long listId,
             String name,
+            String rawInput,
             String barcode,
-            java.math.BigDecimal quantity
+            java.math.BigDecimal quantity,
+            ShoppingItemRule matchingRule
     ) {
+        Long matchedCanonicalProductId =
+                findCanonicalProductIdByBarcode(barcode)
+                        .orElse(null);
+
+        ShoppingItemMatchingStatus matchingStatus =
+                matchedCanonicalProductId == null
+                        ? ShoppingItemMatchingStatus.PENDING
+                        : ShoppingItemMatchingStatus.CONFIRMED;
+
         return jdbcClient.sql("""
                         INSERT INTO app.shopping_list_item (
                             shopping_list_id,
                             name,
+                            raw_input,
                             barcode,
-                            quantity
+                            quantity,
+                            matching_rule,
+                            matching_status,
+                            matched_canonical_product_id
                         )
-                        VALUES (?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                         RETURNING id,
                                   name,
+                                  raw_input,
                                   barcode,
                                   quantity,
-                                  created_at
+                                  matching_rule,
+                                  matching_status,
+                                  matched_canonical_product_id,
+                                  created_at,
+                                  updated_at
                         """)
                 .param(1, listId)
                 .param(2, name)
-                .param(3, barcode, Types.VARCHAR)
-                .param(4, quantity, Types.NUMERIC)
+                .param(3, rawInput)
+                .param(4, barcode, Types.VARCHAR)
+                .param(5, quantity, Types.NUMERIC)
+                .param(6, matchingRule.name())
+                .param(7, matchingStatus.name())
+                .param(
+                        8,
+                        matchedCanonicalProductId,
+                        Types.BIGINT
+                )
                 .query(ITEM_ROW_MAPPER)
                 .single();
     }
@@ -221,28 +269,74 @@ public class ShoppingListRepository {
             Long listId,
             Long itemId,
             String name,
+            String rawInput,
             String barcode,
-            java.math.BigDecimal quantity
+            java.math.BigDecimal quantity,
+            ShoppingItemRule matchingRule
     ) {
+        Long matchedCanonicalProductId =
+                findCanonicalProductIdByBarcode(barcode)
+                        .orElse(null);
+
+        ShoppingItemMatchingStatus matchingStatus =
+                matchedCanonicalProductId == null
+                        ? ShoppingItemMatchingStatus.PENDING
+                        : ShoppingItemMatchingStatus.CONFIRMED;
+
         return jdbcClient.sql("""
                     UPDATE app.shopping_list_item
                     SET name = ?,
+                        raw_input = ?,
                         barcode = ?,
-                        quantity = ?
+                        quantity = ?,
+                        matching_rule = ?,
+                        matching_status = ?,
+                        matched_canonical_product_id = ?,
+                        updated_at = NOW()
                     WHERE id = ?
                       AND shopping_list_id = ?
                     RETURNING id,
                               name,
+                              raw_input,
                               barcode,
                               quantity,
-                              created_at
+                              matching_rule,
+                              matching_status,
+                              matched_canonical_product_id,
+                              created_at,
+                              updated_at
                     """)
                 .param(1, name)
-                .param(2, barcode, Types.VARCHAR)
-                .param(3, quantity, Types.NUMERIC)
-                .param(4, itemId)
-                .param(5, listId)
+                .param(2, rawInput)
+                .param(3, barcode, Types.VARCHAR)
+                .param(4, quantity, Types.NUMERIC)
+                .param(5, matchingRule.name())
+                .param(6, matchingStatus.name())
+                .param(
+                        7,
+                        matchedCanonicalProductId,
+                        Types.BIGINT
+                )
+                .param(8, itemId)
+                .param(9, listId)
                 .query(ITEM_ROW_MAPPER)
+                .optional();
+    }
+
+    private Optional<Long> findCanonicalProductIdByBarcode(
+            String barcode
+    ) {
+        if (barcode == null) {
+            return Optional.empty();
+        }
+
+        return jdbcClient.sql("""
+                        SELECT id
+                        FROM app.canonical_product
+                        WHERE barcode = ?
+                        """)
+                .param(1, barcode)
+                .query(Long.class)
                 .optional();
     }
 

@@ -4,7 +4,23 @@ import java.math.BigDecimal;
 
 public record AddShoppingListItemRequest(
         String name,
+        String rawInput,
         String barcode,
-        BigDecimal quantity
+        BigDecimal quantity,
+        ShoppingItemRule matchingRule
 ) {
+
+    public AddShoppingListItemRequest(
+            String name,
+            String barcode,
+            BigDecimal quantity
+    ) {
+        this(
+                name,
+                null,
+                barcode,
+                quantity,
+                null
+        );
+    }
 }

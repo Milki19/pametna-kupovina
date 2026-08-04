@@ -67,6 +67,17 @@ public class ShoppingListService {
             );
         }
 
+        String rawInput = requiredRawInput(
+                request == null ? null : request.rawInput(),
+                request == null ? null : request.name()
+        );
+
+        if (rawInput.length() > 1000) {
+            throw badRequest(
+                    "Sirovi unos može imati najviše 1000 karaktera"
+            );
+        }
+
         String barcode = nullableText(
                 request == null ? null : request.barcode()
         );
@@ -88,11 +99,18 @@ public class ShoppingListService {
             );
         }
 
+        ShoppingItemRule matchingRule =
+                request == null || request.matchingRule() == null
+                        ? ShoppingItemRule.EXACT_PRODUCT
+                        : request.matchingRule();
+
         ShoppingListItemResponse item = repository.addItem(
                 listId,
                 name,
+                rawInput,
                 barcode,
-                quantity
+                quantity,
+                matchingRule
         );
 
         repository.touch(listId);
@@ -143,6 +161,17 @@ public class ShoppingListService {
             );
         }
 
+        String rawInput = requiredRawInput(
+                request == null ? null : request.rawInput(),
+                request == null ? null : request.name()
+        );
+
+        if (rawInput.length() > 1000) {
+            throw badRequest(
+                    "Sirovi unos može imati najviše 1000 karaktera"
+            );
+        }
+
         String barcode = nullableText(
                 request == null ? null : request.barcode()
         );
@@ -164,13 +193,20 @@ public class ShoppingListService {
             );
         }
 
+        ShoppingItemRule matchingRule =
+                request == null || request.matchingRule() == null
+                        ? ShoppingItemRule.EXACT_PRODUCT
+                        : request.matchingRule();
+
         ShoppingListItemResponse updatedItem =
                 repository.updateItem(
                         listId,
                         itemId,
                         name,
+                        rawInput,
                         barcode,
-                        quantity
+                        quantity,
+                        matchingRule
                 ).orElseThrow(() ->
                         new ResponseStatusException(
                                 HttpStatus.NOT_FOUND,
@@ -215,6 +251,23 @@ public class ShoppingListService {
         String normalized = value.trim();
 
         return normalized.isEmpty() ? null : normalized;
+    }
+
+    private String requiredRawInput(
+            String rawInput,
+            String fallbackName
+    ) {
+        String value = rawInput == null
+                ? fallbackName
+                : rawInput;
+
+        if (value == null || value.trim().isEmpty()) {
+            throw badRequest(
+                    "Sirovi unos artikla ne sme biti prazan"
+            );
+        }
+
+        return value;
     }
 
     private ResponseStatusException badRequest(String message) {
