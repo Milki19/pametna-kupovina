@@ -5,6 +5,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 import rs.pametnakupovina.backend.retailerlocation.RetailerLocationRepository;
 import rs.pametnakupovina.backend.retailerlocation.RetailerLocationResponse;
+import rs.pametnakupovina.backend.routing.RouteMatrix;
+import rs.pametnakupovina.backend.routing.RouteMatrixProvider;
+import rs.pametnakupovina.backend.routing.RouteWaypoint;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -18,7 +21,7 @@ import java.util.Set;
 @Service
 public class ShoppingListLocationOptimizationService {
 
-    private static final double EARTH_RADIUS_KM = 6371.0088;
+    private static final String USER_WAYPOINT_ID = "USER";
 
     private final ShoppingListOptimizationService
             optimizationService;
@@ -26,12 +29,16 @@ public class ShoppingListLocationOptimizationService {
     private final RetailerLocationRepository
             locationRepository;
 
+    private final RouteMatrixProvider routeMatrixProvider;
+
     public ShoppingListLocationOptimizationService(
             ShoppingListOptimizationService optimizationService,
-            RetailerLocationRepository locationRepository
+            RetailerLocationRepository locationRepository,
+            RouteMatrixProvider routeMatrixProvider
     ) {
         this.optimizationService = optimizationService;
         this.locationRepository = locationRepository;
+        this.routeMatrixProvider = routeMatrixProvider;
     }
 
     public LocationOptimizationResponse optimize(
@@ -61,12 +68,17 @@ public class ShoppingListLocationOptimizationService {
             );
         }
 
+        RouteMatrix routeMatrix = createRouteMatrix(
+                latitude,
+                longitude,
+                locationsByRetailer.values()
+        );
+
         PurchaseStrategyResponse multiStoreStrategy =
                 createMultiStoreStrategy(
                         priceOptimization,
                         locationsByRetailer,
-                        latitude,
-                        longitude,
+                        routeMatrix,
                         costPerKm
                 );
 
@@ -82,8 +94,7 @@ public class ShoppingListLocationOptimizationService {
                             locationsByRetailer.get(
                                     option.retailerCode()
                             ),
-                            latitude,
-                            longitude,
+                            routeMatrix,
                             costPerKm
                     )
             );
@@ -131,7 +142,7 @@ public class ShoppingListLocationOptimizationService {
                         RoundingMode.HALF_UP
                 ),
                 "RSD",
-                "STRAIGHT_LINE_ESTIMATE",
+                routeMatrix.distanceMethod(),
                 recommendation,
                 recommendedStrategy,
                 multiStoreStrategy,
@@ -143,8 +154,7 @@ public class ShoppingListLocationOptimizationService {
             ShoppingListOptimizationResponse optimization,
             Map<String, RetailerLocationResponse>
                     locationsByRetailer,
-            double userLatitude,
-            double userLongitude,
+            RouteMatrix routeMatrix,
             BigDecimal costPerKm
     ) {
         if (optimization.unmatchedItems() > 0) {
@@ -192,8 +202,7 @@ public class ShoppingListLocationOptimizationService {
         }
 
         RouteCalculation route = calculateRoute(
-                userLatitude,
-                userLongitude,
+                routeMatrix,
                 locations
         );
 
@@ -232,8 +241,7 @@ public class ShoppingListLocationOptimizationService {
     private PurchaseStrategyResponse createSingleStoreStrategy(
             RetailerBasketOption option,
             RetailerLocationResponse location,
-            double userLatitude,
-            double userLongitude,
+            RouteMatrix routeMatrix,
             BigDecimal costPerKm
     ) {
         if (!option.complete()) {
@@ -256,15 +264,17 @@ public class ShoppingListLocationOptimizationService {
             );
         }
 
-        double oneWayDistance = haversineDistance(
-                userLatitude,
-                userLongitude,
-                location.latitude(),
-                location.longitude()
+        double oneWayDistance = routeMatrix.distanceKilometers(
+                USER_WAYPOINT_ID,
+                waypointId(location)
         );
 
         double routeDistance = roundDistance(
-                oneWayDistance * 2
+                oneWayDistance
+                        + routeMatrix.distanceKilometers(
+                        waypointId(location),
+                        USER_WAYPOINT_ID
+                )
         );
 
         BigDecimal travelCost = calculateTravelCost(
@@ -305,8 +315,7 @@ public class ShoppingListLocationOptimizationService {
     }
 
     private RouteCalculation calculateRoute(
-            double userLatitude,
-            double userLongitude,
+            RouteMatrix routeMatrix,
             List<RetailerLocationResponse> locations
     ) {
         List<RetailerLocationResponse> remaining =
@@ -314,8 +323,7 @@ public class ShoppingListLocationOptimizationService {
 
         List<RouteStopResponse> stops = new ArrayList<>();
 
-        double currentLatitude = userLatitude;
-        double currentLongitude = userLongitude;
+        String currentWaypointId = USER_WAYPOINT_ID;
         double totalDistance = 0;
 
         while (!remaining.isEmpty()) {
@@ -329,11 +337,9 @@ public class ShoppingListLocationOptimizationService {
                 RetailerLocationResponse candidate =
                         remaining.get(index);
 
-                double distance = haversineDistance(
-                        currentLatitude,
-                        currentLongitude,
-                        candidate.latitude(),
-                        candidate.longitude()
+                double distance = routeMatrix.distanceKilometers(
+                        currentWaypointId,
+                        waypointId(candidate)
                 );
 
                 if (distance < nearestDistance) {
@@ -360,15 +366,12 @@ public class ShoppingListLocationOptimizationService {
                     )
             );
 
-            currentLatitude = nearest.latitude();
-            currentLongitude = nearest.longitude();
+            currentWaypointId = waypointId(nearest);
         }
 
-        totalDistance += haversineDistance(
-                currentLatitude,
-                currentLongitude,
-                userLatitude,
-                userLongitude
+        totalDistance += routeMatrix.distanceKilometers(
+                currentWaypointId,
+                USER_WAYPOINT_ID
         );
 
         return new RouteCalculation(
@@ -407,37 +410,40 @@ public class ShoppingListLocationOptimizationService {
         );
     }
 
-    private double haversineDistance(
-            double latitude1,
-            double longitude1,
-            double latitude2,
-            double longitude2
+    private RouteMatrix createRouteMatrix(
+            double userLatitude,
+            double userLongitude,
+            Iterable<RetailerLocationResponse> locations
     ) {
-        double latitudeDifference = Math.toRadians(
-                latitude2 - latitude1
+        List<RouteWaypoint> waypoints = new ArrayList<>();
+
+        waypoints.add(
+                new RouteWaypoint(
+                        USER_WAYPOINT_ID,
+                        userLatitude,
+                        userLongitude
+                )
         );
 
-        double longitudeDifference = Math.toRadians(
-                longitude2 - longitude1
-        );
+        Set<Long> storeIds = new LinkedHashSet<>();
 
-        double firstLatitude = Math.toRadians(latitude1);
-        double secondLatitude = Math.toRadians(latitude2);
+        for (RetailerLocationResponse location : locations) {
+            if (storeIds.add(location.id())) {
+                waypoints.add(
+                        new RouteWaypoint(
+                                waypointId(location),
+                                location.latitude(),
+                                location.longitude()
+                        )
+                );
+            }
+        }
 
-        double value =
-                Math.sin(latitudeDifference / 2)
-                        * Math.sin(latitudeDifference / 2)
-                        + Math.cos(firstLatitude)
-                        * Math.cos(secondLatitude)
-                        * Math.sin(longitudeDifference / 2)
-                        * Math.sin(longitudeDifference / 2);
+        return routeMatrixProvider.calculate(waypoints);
+    }
 
-        return EARTH_RADIUS_KM
-                * 2
-                * Math.atan2(
-                Math.sqrt(value),
-                Math.sqrt(1 - value)
-        );
+    private String waypointId(RetailerLocationResponse location) {
+        return "STORE:" + location.id();
     }
 
     private double roundDistance(double value) {
@@ -449,13 +455,17 @@ public class ShoppingListLocationOptimizationService {
             double longitude,
             BigDecimal costPerKm
     ) {
-        if (latitude < -90 || latitude > 90) {
+        if (!Double.isFinite(latitude)
+                || latitude < -90
+                || latitude > 90) {
             throw badRequest(
                     "Latitude mora biti između -90 i 90"
             );
         }
 
-        if (longitude < -180 || longitude > 180) {
+        if (!Double.isFinite(longitude)
+                || longitude < -180
+                || longitude > 180) {
             throw badRequest(
                     "Longitude mora biti između -180 i 180"
             );
