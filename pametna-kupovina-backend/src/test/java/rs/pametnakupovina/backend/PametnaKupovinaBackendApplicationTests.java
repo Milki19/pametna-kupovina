@@ -13,6 +13,8 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
+import rs.pametnakupovina.backend.matching.FuzzyProductCandidate;
+import rs.pametnakupovina.backend.matching.FuzzyProductCandidateService;
 import rs.pametnakupovina.backend.priceimport.PriceImportService;
 import rs.pametnakupovina.backend.product.ProductSearchResult;
 import rs.pametnakupovina.backend.product.ProductSearchService;
@@ -67,6 +69,9 @@ class PametnaKupovinaBackendApplicationTests {
 
     @Autowired
     private ProductSearchService productSearchService;
+
+    @Autowired
+    private FuzzyProductCandidateService fuzzyCandidateService;
 
     @Autowired
     private JdbcClient jdbcClient;
@@ -406,6 +411,128 @@ class PametnaKupovinaBackendApplicationTests {
         assertThat(canonicalProductCount).isEqualTo(1);
         assertThat(linkedCanonicalProductIds).hasSize(1);
         assertThat(linkedRetailerProductCount).isEqualTo(2);
+    }
+
+    @Test
+    void fuzzyMatchingReturnsRankedCandidatesForEquivalentScripts() {
+        jdbcClient.sql("""
+                        INSERT INTO app.canonical_product (
+                            canonical_key,
+                            name,
+                            normalized_name,
+                            brand,
+                            quantity_value,
+                            base_unit
+                        )
+                        VALUES
+                            (
+                                'FUZZY-IMLEK-1L',
+                                'Imlek mleko 1 l',
+                                'imlek mleko 1 l',
+                                'Imlek',
+                                1000,
+                                'ml'
+                            ),
+                            (
+                                'FUZZY-IMLEK-FRESH-1L',
+                                'Imlek sveže mleko 1 l',
+                                'imlek sveze mleko 1 l',
+                                'Imlek',
+                                1000,
+                                'ml'
+                            ),
+                            (
+                                'FUZZY-IMLEK-15L',
+                                'Imlek mleko 1,5 l',
+                                'imlek mleko 1 5 l',
+                                'Imlek',
+                                1500,
+                                'ml'
+                            ),
+                            (
+                                'FUZZY-KRAVICA-1L',
+                                'Moja Kravica mleko 1 l',
+                                'moja kravica mleko 1 l',
+                                'Moja Kravica',
+                                1000,
+                                'ml'
+                            ),
+                            (
+                                'FUZZY-IMLEK-CHOCOLATE-1L',
+                                'Imlek čokoladno mleko 1 l',
+                                'imlek cokoladno mleko 1 l',
+                                'Imlek',
+                                1000,
+                                'ml'
+                            ),
+                            (
+                                'FUZZY-BREAD-500G',
+                                'Beli hleb 500 g',
+                                'beli hleb 500 g',
+                                'Test pekara',
+                                500,
+                                'g'
+                            )
+                        """)
+                .update();
+
+        List<FuzzyProductCandidate> latinCandidates =
+                fuzzyCandidateService.findCandidates(
+                        "Imlek mleko 1l",
+                        3
+                );
+
+        List<FuzzyProductCandidate> cyrillicCandidates =
+                fuzzyCandidateService.findCandidates(
+                        "Имлек млеко 1л",
+                        3
+                );
+
+        assertThat(latinCandidates).hasSize(3);
+        assertThat(latinCandidates.getFirst().name())
+                .isEqualTo("Imlek mleko 1 l");
+        assertThat(latinCandidates.getFirst().nameSimilarity())
+                .isEqualByComparingTo("1.0000");
+
+        assertThat(latinCandidates)
+                .extracting(FuzzyProductCandidate::nameSimilarity)
+                .isSortedAccordingTo(
+                        java.util.Comparator.reverseOrder()
+                );
+
+        assertThat(cyrillicCandidates)
+                .extracting(FuzzyProductCandidate::canonicalProductId)
+                .containsExactlyElementsOf(
+                        latinCandidates.stream()
+                                .map(FuzzyProductCandidate::canonicalProductId)
+                                .toList()
+                );
+
+        assertThat(latinCandidates)
+                .extracting(FuzzyProductCandidate::name)
+                .doesNotContain("Beli hleb 500 g");
+    }
+
+    @Test
+    void fuzzyMatchingRejectsInvalidQueryAndCandidateLimit() {
+        assertThatThrownBy(() ->
+                fuzzyCandidateService.findCandidates("   ", 3)
+        ).isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Parametar query ne sme biti prazan");
+
+        assertThatThrownBy(() ->
+                fuzzyCandidateService.findCandidates("mleko", 2)
+        ).isInstanceOf(IllegalArgumentException.class)
+                .hasMessage(
+                        "Limit za matching kandidate mora biti između 3 i 5"
+                );
+
+        assertThatThrownBy(() ->
+                fuzzyCandidateService.findCandidates("mleko", 6)
+        ).isInstanceOf(IllegalArgumentException.class)
+                .hasMessage(
+                        "Limit za matching kandidate mora biti između 3 i 5"
+                );
     }
 
     @Test
