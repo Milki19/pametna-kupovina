@@ -73,6 +73,17 @@ class PametnaKupovinaBackendApplicationTests {
             PK037-IMPORT-001;Test objekat;Test adresa 1;Beograd;44.8176;20.4569;true
             """;
 
+    private static final String PILOT_STORE_CSV_CONTENT = """
+            external_code;name;address;city;store_format_code;store_format_name;active
+            radnicka;Europrom Radnička;Radnička 75;Valjevo;EUROPROM;Europrom;true
+            kolubara-mala;Europrom Kolubara mala;Vladike Nikolaja 24;Valjevo;EUROPROM;Europrom;false
+            """;
+
+    private static final String INCOMPLETE_STORE_FORMAT_CSV_CONTENT = """
+            external_code;name;address;city;store_format_code;active
+            test-001;Test objekat;Test adresa 1;Valjevo;MARKET;true
+            """;
+
     @Container
     @ServiceConnection
     static final PostgreSQLContainer POSTGRES =
@@ -1466,6 +1477,91 @@ class PametnaKupovinaBackendApplicationTests {
                 .isEqualTo("PK037-IMPORT-001");
         assertThat(stores.getFirst().storeFormatCode())
                 .isEqualTo("STANDARD");
+    }
+
+    @Test
+    void pilotStoreImportPersistsAddressFormatAndActiveStatus() {
+        jdbcClient.sql("""
+                        INSERT INTO app.retailer (code, name)
+                        VALUES ('PK038_EUROPROM', 'Europrom pilot')
+                        """)
+                .update();
+
+        RetailerLocationImportResult result =
+                retailerLocationImportService.importLocations(
+                        "PK038_EUROPROM",
+                        new ByteArrayInputStream(
+                                PILOT_STORE_CSV_CONTENT.getBytes(
+                                        StandardCharsets.UTF_8
+                                )
+                        ),
+                        100
+                );
+
+        List<StoreFormat> formats =
+                storeRepository.findFormatsByRetailerCode(
+                        "PK038_EUROPROM"
+                );
+
+        List<Store> stores =
+                storeRepository.findStoresByRetailerCode(
+                        "PK038_EUROPROM"
+                );
+
+        assertThat(result.rowsRead()).isEqualTo(2);
+        assertThat(result.rowsSaved()).isEqualTo(2);
+        assertThat(result.rowsSkipped()).isZero();
+        assertThat(result.status()).isEqualTo("SUCCEEDED");
+
+        assertThat(formats).hasSize(1);
+        assertThat(formats.getFirst().code())
+                .isEqualTo("EUROPROM");
+        assertThat(formats.getFirst().name())
+                .isEqualTo("Europrom");
+
+        assertThat(stores).hasSize(2);
+        assertThat(stores.getFirst().address())
+                .isEqualTo("Vladike Nikolaja 24");
+        assertThat(stores.getFirst().city())
+                .isEqualTo("Valjevo");
+        assertThat(stores.getFirst().storeFormatCode())
+                .isEqualTo("EUROPROM");
+        assertThat(stores.getFirst().latitude()).isNull();
+        assertThat(stores.getFirst().longitude()).isNull();
+        assertThat(stores.getFirst().active()).isFalse();
+
+        assertThat(stores.get(1).address())
+                .isEqualTo("Radnička 75");
+        assertThat(stores.get(1).city())
+                .isEqualTo("Valjevo");
+        assertThat(stores.get(1).storeFormatName())
+                .isEqualTo("Europrom");
+        assertThat(stores.get(1).latitude()).isNull();
+        assertThat(stores.get(1).longitude()).isNull();
+        assertThat(stores.get(1).active()).isTrue();
+    }
+
+    @Test
+    void storeImportRequiresFormatCodeAndNameTogether() {
+        jdbcClient.sql("""
+                        INSERT INTO app.retailer (code, name)
+                        VALUES ('PK038_FORMAT', 'Format validation')
+                        """)
+                .update();
+
+        assertThatThrownBy(() ->
+                retailerLocationImportService.importLocations(
+                        "PK038_FORMAT",
+                        new ByteArrayInputStream(
+                                INCOMPLETE_STORE_FORMAT_CSV_CONTENT.getBytes(
+                                        StandardCharsets.UTF_8
+                                )
+                        ),
+                        100
+                ))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("store_format_code")
+                .hasMessageContaining("store_format_name");
     }
 
     private void assertCanonicalProductInsertFails(

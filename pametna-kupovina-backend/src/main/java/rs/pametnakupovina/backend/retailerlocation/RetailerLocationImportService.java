@@ -45,10 +45,11 @@ public class RetailerLocationImportService {
             "name",
             "address",
             "city",
-            "latitude",
-            "longitude",
             "active"
     );
+
+    private static final String DEFAULT_FORMAT_CODE = "STANDARD";
+    private static final String DEFAULT_FORMAT_NAME = "Standardni format";
 
     private final JdbcClient jdbcClient;
     private final RetailerRepository retailerRepository;
@@ -75,9 +76,6 @@ public class RetailerLocationImportService {
                                 )
                         );
 
-        Long storeFormatId =
-                ensureDefaultStoreFormatId(retailer.id());
-
         int rowsRead = 0;
         int rowsSaved = 0;
 
@@ -85,7 +83,16 @@ public class RetailerLocationImportService {
                 Reader reader = createBomAwareReader(inputStream);
                 CSVParser parser = CSV_FORMAT.parse(reader)
         ) {
-            validateHeaders(parser);
+            ImportColumns importColumns = validateHeaders(parser);
+
+            Long defaultStoreFormatId =
+                    importColumns.hasStoreFormatColumns()
+                            ? null
+                            : ensureStoreFormatId(
+                                    retailer.id(),
+                                    DEFAULT_FORMAT_CODE,
+                                    DEFAULT_FORMAT_NAME
+                            );
 
             for (CSVRecord record : parser) {
                 if (rowsRead >= maxRows) {
@@ -97,8 +104,9 @@ public class RetailerLocationImportService {
                 try {
                     upsertLocation(
                             retailer.id(),
-                            storeFormatId,
-                            record
+                            record,
+                            importColumns,
+                            defaultStoreFormatId
                     );
 
                     rowsSaved++;
@@ -133,8 +141,9 @@ public class RetailerLocationImportService {
 
     private void upsertLocation(
             Long retailerId,
-            Long storeFormatId,
-            CSVRecord record
+            CSVRecord record,
+            ImportColumns importColumns,
+            Long defaultStoreFormatId
     ) {
         String externalCode = requiredText(
                 record,
@@ -146,32 +155,120 @@ public class RetailerLocationImportService {
                 "name"
         );
 
-        String address = nullableText(
-                record.get("address")
-        );
-
-        String city = nullableText(
-                record.get("city")
-        );
-
-        double latitude = parseCoordinate(
+        String address = requiredText(
                 record,
-                "latitude",
-                -90,
-                90
+                "address"
         );
 
-        double longitude = parseCoordinate(
+        String city = requiredText(
                 record,
-                "longitude",
-                -180,
-                180
+                "city"
+        );
+
+        Long storeFormatId = defaultStoreFormatId;
+
+        if (importColumns.hasStoreFormatColumns()) {
+            String storeFormatCode = normalizeStoreFormatCode(
+                    requiredText(record, "store_format_code")
+            );
+
+            String storeFormatName = requiredText(
+                    record,
+                    "store_format_name"
+            );
+
+            storeFormatId = ensureStoreFormatId(
+                    retailerId,
+                    storeFormatCode,
+                    storeFormatName
+            );
+        }
+
+        Coordinates coordinates = parseCoordinates(
+                record,
+                importColumns
         );
 
         boolean active = parseActive(
                 record.get("active")
         );
 
+        if (coordinates == null) {
+            upsertWithoutCoordinates(
+                    retailerId,
+                    storeFormatId,
+                    externalCode,
+                    name,
+                    address,
+                    city,
+                    active
+            );
+
+            return;
+        }
+
+        upsertWithCoordinates(
+                retailerId,
+                storeFormatId,
+                externalCode,
+                name,
+                address,
+                city,
+                coordinates,
+                active
+        );
+    }
+
+    private void upsertWithoutCoordinates(
+            Long retailerId,
+            Long storeFormatId,
+            String externalCode,
+            String name,
+            String address,
+            String city,
+            boolean active
+    ) {
+        jdbcClient.sql("""
+                    INSERT INTO app.store (
+                        retailer_id,
+                        store_format_id,
+                        external_code,
+                        name,
+                        address,
+                        city,
+                        location,
+                        active
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, NULL, ?)
+                    ON CONFLICT (retailer_id, external_code)
+                    DO UPDATE SET
+                        store_format_id = EXCLUDED.store_format_id,
+                        name = EXCLUDED.name,
+                        address = EXCLUDED.address,
+                        city = EXCLUDED.city,
+                        active = EXCLUDED.active,
+                        updated_at = NOW()
+                    """)
+                .param(1, retailerId)
+                .param(2, storeFormatId)
+                .param(3, externalCode)
+                .param(4, name)
+                .param(5, address)
+                .param(6, city)
+                .param(7, active)
+                .update();
+    }
+
+    private void upsertWithCoordinates(
+            Long retailerId,
+            Long storeFormatId,
+            String externalCode,
+            String name,
+            String address,
+            String city,
+            Coordinates coordinates,
+            boolean active
+    ) {
         jdbcClient.sql("""
                     INSERT INTO app.store (
                         retailer_id,
@@ -193,6 +290,7 @@ public class RetailerLocationImportService {
                     )
                     ON CONFLICT (retailer_id, external_code)
                     DO UPDATE SET
+                        store_format_id = EXCLUDED.store_format_id,
                         name = EXCLUDED.name,
                         address = EXCLUDED.address,
                         city = EXCLUDED.city,
@@ -206,30 +304,39 @@ public class RetailerLocationImportService {
                 .param(4, name)
                 .param(5, address, Types.VARCHAR)
                 .param(6, city, Types.VARCHAR)
-                .param(7, longitude)
-                .param(8, latitude)
+                .param(7, coordinates.longitude())
+                .param(8, coordinates.latitude())
                 .param(9, active)
                 .update();
     }
 
-    private Long ensureDefaultStoreFormatId(Long retailerId) {
+    private Long ensureStoreFormatId(
+            Long retailerId,
+            String code,
+            String name
+    ) {
         return jdbcClient.sql("""
                         INSERT INTO app.store_format (
                             retailer_id,
                             code,
                             name
                         )
-                        VALUES (?, 'STANDARD', 'Standardni format')
+                        VALUES (?, ?, ?)
                         ON CONFLICT (retailer_id, code)
-                        DO UPDATE SET code = EXCLUDED.code
+                        DO UPDATE SET
+                            name = EXCLUDED.name,
+                            active = TRUE,
+                            updated_at = NOW()
                         RETURNING id
                         """)
                 .param(retailerId)
+                .param(code)
+                .param(name)
                 .query(Long.class)
                 .single();
     }
 
-    private void validateHeaders(CSVParser parser) {
+    private ImportColumns validateHeaders(CSVParser parser) {
         Set<String> actualHeaders =
                 parser.getHeaderNames()
                         .stream()
@@ -251,19 +358,77 @@ public class RetailerLocationImportService {
                     "Nedostaju CSV kolone: " + missingHeaders
             );
         }
+
+        boolean hasLatitude = actualHeaders.contains("latitude");
+        boolean hasLongitude = actualHeaders.contains("longitude");
+
+        if (hasLatitude != hasLongitude) {
+            throw new IllegalArgumentException(
+                    "CSV mora sadržati obe kolone: latitude i longitude"
+            );
+        }
+
+        boolean hasStoreFormatCode =
+                actualHeaders.contains("store_format_code");
+        boolean hasStoreFormatName =
+                actualHeaders.contains("store_format_name");
+
+        if (hasStoreFormatCode != hasStoreFormatName) {
+            throw new IllegalArgumentException(
+                    "CSV mora sadržati obe kolone: "
+                            + "store_format_code i store_format_name"
+            );
+        }
+
+        return new ImportColumns(
+                hasStoreFormatCode,
+                hasLatitude
+        );
+    }
+
+    private Coordinates parseCoordinates(
+            CSVRecord record,
+            ImportColumns importColumns
+    ) {
+        if (!importColumns.hasCoordinateColumns()) {
+            return null;
+        }
+
+        String rawLatitude = nullableText(record.get("latitude"));
+        String rawLongitude = nullableText(record.get("longitude"));
+
+        if (rawLatitude == null && rawLongitude == null) {
+            return null;
+        }
+
+        if (rawLatitude == null || rawLongitude == null) {
+            throw new IllegalArgumentException(
+                    "Latitude i longitude moraju biti uneti zajedno"
+            );
+        }
+
+        return new Coordinates(
+                parseCoordinate(
+                        rawLatitude,
+                        "latitude",
+                        -90,
+                        90
+                ),
+                parseCoordinate(
+                        rawLongitude,
+                        "longitude",
+                        -180,
+                        180
+                )
+        );
     }
 
     private double parseCoordinate(
-            CSVRecord record,
+            String rawValue,
             String columnName,
             double minimum,
             double maximum
     ) {
-        String rawValue = requiredText(
-                record,
-                columnName
-        );
-
         String normalizedValue =
                 rawValue.replace(',', '.');
 
@@ -293,6 +458,21 @@ public class RetailerLocationImportService {
         }
 
         return value;
+    }
+
+    private String normalizeStoreFormatCode(String value) {
+        String normalizedValue = value
+                .trim()
+                .toUpperCase(Locale.ROOT)
+                .replace(' ', '_');
+
+        if (!normalizedValue.matches("[A-Z0-9][A-Z0-9_-]{0,99}")) {
+            throw new IllegalArgumentException(
+                    "Neispravan store_format_code: " + value
+            );
+        }
+
+        return normalizedValue;
     }
 
     private boolean parseActive(String value) {
@@ -371,5 +551,17 @@ public class RetailerLocationImportService {
                 completeStream,
                 StandardCharsets.UTF_8
         );
+    }
+
+    private record ImportColumns(
+            boolean hasStoreFormatColumns,
+            boolean hasCoordinateColumns
+    ) {
+    }
+
+    private record Coordinates(
+            double latitude,
+            double longitude
+    ) {
     }
 }

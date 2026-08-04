@@ -1,0 +1,5 @@
+external_code;name;address;city;store_format_code;store_format_name;active
+radnicka;Europrom Radnička;Radnička 75;Valjevo;EUROPROM;Europrom;true
+kolubara-mala;Europrom Kolubara mala;Vladike Nikolaja 24;Valjevo;EUROPROM;Europrom;true
+kod-kasarne;Europrom Kod kasarne;Vojvode Mišića 38;Valjevo;EUROPROM;Europrom;true
+brdjani;Europrom Brđani;Kneza Miloša 100;Valjevo;EUROPROM;Europrom;true
