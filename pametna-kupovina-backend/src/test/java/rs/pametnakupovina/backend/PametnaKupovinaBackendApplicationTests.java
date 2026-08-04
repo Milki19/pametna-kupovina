@@ -3,6 +3,7 @@ package rs.pametnakupovina.backend;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -19,6 +20,8 @@ import rs.pametnakupovina.backend.matching.ProductMatchDecision;
 import rs.pametnakupovina.backend.matching.ProductMatchDecisionService;
 import rs.pametnakupovina.backend.matching.ProductMatchStatus;
 import rs.pametnakupovina.backend.priceimport.PriceImportService;
+import rs.pametnakupovina.backend.product.CanonicalProductSearchPage;
+import rs.pametnakupovina.backend.product.CanonicalProductSearchService;
 import rs.pametnakupovina.backend.product.ProductSearchResult;
 import rs.pametnakupovina.backend.product.ProductSearchService;
 
@@ -74,6 +77,9 @@ class PametnaKupovinaBackendApplicationTests {
     private ProductSearchService productSearchService;
 
     @Autowired
+    private CanonicalProductSearchService canonicalProductSearchService;
+
+    @Autowired
     private FuzzyProductCandidateService fuzzyCandidateService;
 
     @Autowired
@@ -81,6 +87,22 @@ class PametnaKupovinaBackendApplicationTests {
 
     @Autowired
     private JdbcClient jdbcClient;
+
+    @BeforeEach
+    void cleanBusinessData() {
+        jdbcClient.sql("""
+                        TRUNCATE TABLE
+                            app.product_match_decision,
+                            app.price_observation,
+                            app.retailer_product,
+                            app.import_run,
+                            app.retailer_location,
+                            app.canonical_product,
+                            app.retailer
+                        RESTART IDENTITY
+                        """)
+                .update();
+    }
 
     @BeforeAll
     static void startCsvServer() throws IOException {
@@ -351,6 +373,127 @@ class PametnaKupovinaBackendApplicationTests {
 
         assertThat(latinResults.getFirst().name())
                 .isEqualTo("Čokoladno mleko Žirafa 1 l");
+    }
+
+    @Test
+    void canonicalProductSearchReturnsScoredPaginatedResults() {
+        jdbcClient.sql("""
+                        INSERT INTO app.canonical_product (
+                            canonical_key,
+                            name,
+                            normalized_name,
+                            brand,
+                            barcode,
+                            quantity_value,
+                            base_unit
+                        )
+                        VALUES
+                            (
+                                'PK035-CATALOG-MILK-1L',
+                                'Katalog Imlek mleko 1 l',
+                                'katalog imlek mleko 1 l',
+                                'Imlek',
+                                '8609999999993',
+                                1000,
+                                'ml'
+                            ),
+                            (
+                                'PK035-CATALOG-FRESH-MILK-1L',
+                                'Katalog Imlek sveže mleko 1 l',
+                                'katalog imlek sveze mleko 1 l',
+                                'Imlek',
+                                NULL,
+                                1000,
+                                'ml'
+                            ),
+                            (
+                                'PK035-CATALOG-CHOCOLATE-MILK-1L',
+                                'Katalog Imlek čokoladno mleko 1 l',
+                                'katalog imlek cokoladno mleko 1 l',
+                                'Imlek',
+                                NULL,
+                                1000,
+                                'ml'
+                            )
+                        """)
+                .update();
+
+        CanonicalProductSearchPage firstPage =
+                canonicalProductSearchService.search(
+                        "Katalog Imlek mleko 1l",
+                        0,
+                        2
+                );
+
+        CanonicalProductSearchPage secondPage =
+                canonicalProductSearchService.search(
+                        "Каталог Имлек млеко 1л",
+                        1,
+                        2
+                );
+
+        assertThat(firstPage.query())
+                .isEqualTo("Katalog Imlek mleko 1l");
+        assertThat(firstPage.page()).isZero();
+        assertThat(firstPage.limit()).isEqualTo(2);
+        assertThat(firstPage.totalElements()).isEqualTo(3);
+        assertThat(firstPage.totalPages()).isEqualTo(2);
+        assertThat(firstPage.hasNext()).isTrue();
+        assertThat(firstPage.items()).hasSize(2);
+
+        assertThat(firstPage.items().getFirst().name())
+                .isEqualTo("Katalog Imlek mleko 1 l");
+        assertThat(firstPage.items().getFirst().brand())
+                .isEqualTo("Imlek");
+        assertThat(firstPage.items().getFirst().quantityValue())
+                .isEqualByComparingTo("1000");
+        assertThat(firstPage.items().getFirst().baseUnit())
+                .isEqualTo("ml");
+        assertThat(firstPage.items().getFirst().score())
+                .isEqualByComparingTo("1.0000");
+
+        assertThat(firstPage.items())
+                .extracting(item -> item.score())
+                .isSortedAccordingTo(
+                        java.util.Comparator.reverseOrder()
+                );
+
+        assertThat(secondPage.page()).isEqualTo(1);
+        assertThat(secondPage.totalElements()).isEqualTo(3);
+        assertThat(secondPage.totalPages()).isEqualTo(2);
+        assertThat(secondPage.hasNext()).isFalse();
+        assertThat(secondPage.items()).hasSize(1);
+
+        assertThat(firstPage.items())
+                .extracting(item -> item.canonicalProductId())
+                .doesNotContainAnyElementsOf(
+                        secondPage.items().stream()
+                                .map(item -> item.canonicalProductId())
+                                .toList()
+                );
+
+        CanonicalProductSearchPage exactEanResult =
+                canonicalProductSearchService.search(
+                        "8609999999993",
+                        0,
+                        20
+                );
+
+        assertThat(exactEanResult.items()).hasSize(1);
+        assertThat(exactEanResult.items().getFirst().barcode())
+                .isEqualTo("8609999999993");
+        assertThat(exactEanResult.items().getFirst().score())
+                .isEqualByComparingTo("1.0000");
+
+        assertThatThrownBy(() ->
+                canonicalProductSearchService.search("mleko", -1, 20)
+        ).isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Broj stranice ne sme biti negativan");
+
+        assertThatThrownBy(() ->
+                canonicalProductSearchService.search("mleko", 0, 101)
+        ).isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Limit mora biti između 1 i 100");
     }
 
     @Test

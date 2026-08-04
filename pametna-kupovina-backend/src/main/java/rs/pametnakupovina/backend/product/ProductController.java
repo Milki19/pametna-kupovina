@@ -20,22 +20,48 @@ import java.util.List;
 @RequestMapping("/api/v1/products")
 public class ProductController {
 
+    private final CanonicalProductSearchService canonicalSearchService;
     private final ProductSearchService productSearchService;
     private final FuzzyProductCandidateService fuzzyCandidateService;
     private final ProductMatchDecisionService matchDecisionService;
 
     public ProductController(
+            CanonicalProductSearchService canonicalSearchService,
             ProductSearchService productSearchService,
             FuzzyProductCandidateService fuzzyCandidateService,
             ProductMatchDecisionService matchDecisionService
     ) {
+        this.canonicalSearchService = canonicalSearchService;
         this.productSearchService = productSearchService;
         this.fuzzyCandidateService = fuzzyCandidateService;
         this.matchDecisionService = matchDecisionService;
     }
 
     @GetMapping("/search")
-    public List<ProductSearchResult> search(
+    public CanonicalProductSearchPage search(
+            @RequestParam("query") String query,
+            @RequestParam(
+                    name = "page",
+                    defaultValue = "0"
+            ) int page,
+            @RequestParam(
+                    name = "limit",
+                    defaultValue = "20"
+            ) int limit
+    ) {
+        try {
+            return canonicalSearchService.search(query, page, limit);
+        } catch (IllegalArgumentException exception) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    exception.getMessage(),
+                    exception
+            );
+        }
+    }
+
+    @GetMapping("/offers/search")
+    public List<ProductSearchResult> searchOffers(
             @RequestParam("query") String query,
             @RequestParam(
                     name = "limit",

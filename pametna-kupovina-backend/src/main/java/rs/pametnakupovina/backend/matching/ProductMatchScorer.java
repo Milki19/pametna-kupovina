@@ -37,7 +37,7 @@ public class ProductMatchScorer {
         this.productNameNormalizer = productNameNormalizer;
     }
 
-    ProductMatchScore score(
+    public ProductMatchScore score(
             String normalizedQuery,
             Optional<ParsedQuantity> queryQuantity,
             BigDecimal nameSimilarity,
