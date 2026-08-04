@@ -14,9 +14,12 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 import rs.pametnakupovina.backend.priceimport.PriceImportService;
+import rs.pametnakupovina.backend.product.ProductSearchResult;
+import rs.pametnakupovina.backend.product.ProductSearchService;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.math.BigDecimal;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -51,6 +54,9 @@ class PametnaKupovinaBackendApplicationTests {
 
     @Autowired
     private PriceImportService priceImportService;
+
+    @Autowired
+    private ProductSearchService productSearchService;
 
     @Autowired
     private JdbcClient jdbcClient;
@@ -141,12 +147,48 @@ class PametnaKupovinaBackendApplicationTests {
                 .single();
 
         List<String> importStatuses = jdbcClient.sql("""
-                        SELECT status
-                        FROM app.import_run
-                        ORDER BY id
+                        SELECT run.status
+                        FROM app.import_run run
+                        JOIN app.retailer retailer
+                          ON retailer.id = run.retailer_id
+                        WHERE retailer.code = 'TEST'
+                        ORDER BY run.id
                         """)
                 .query(String.class)
                 .list();
+
+        String normalizedMilkName = jdbcClient.sql("""
+                        SELECT product.normalized_name
+                        FROM app.retailer_product product
+                        JOIN app.retailer retailer
+                          ON retailer.id = product.retailer_id
+                        WHERE retailer.code = 'TEST'
+                          AND product.name = 'Mleko 1 l'
+                        """)
+                .query(String.class)
+                .single();
+
+        BigDecimal milkQuantity = jdbcClient.sql("""
+                        SELECT product.quantity_value
+                        FROM app.retailer_product product
+                        JOIN app.retailer retailer
+                          ON retailer.id = product.retailer_id
+                        WHERE retailer.code = 'TEST'
+                          AND product.name = 'Mleko 1 l'
+                        """)
+                .query(BigDecimal.class)
+                .single();
+
+        String milkBaseUnit = jdbcClient.sql("""
+                        SELECT product.base_unit
+                        FROM app.retailer_product product
+                        JOIN app.retailer retailer
+                          ON retailer.id = product.retailer_id
+                        WHERE retailer.code = 'TEST'
+                          AND product.name = 'Mleko 1 l'
+                        """)
+                .query(String.class)
+                .single();
 
         assertThat(countAfterFirstImport).isEqualTo(2);
         assertThat(countAfterSecondImport).isEqualTo(2);
@@ -159,6 +201,101 @@ class PametnaKupovinaBackendApplicationTests {
 
         assertThat(importStatuses)
                 .containsExactly("SUCCEEDED", "SUCCEEDED");
+
+        assertThat(normalizedMilkName).isEqualTo("mleko 1 l");
+        assertThat(milkQuantity).isEqualByComparingTo("1000");
+        assertThat(milkBaseUnit).isEqualTo("ml");
+    }
+
+    @Test
+    void productSearchReturnsSameProductForLatinAndCyrillicQuery() {
+        Long retailerId = jdbcClient.sql("""
+                        INSERT INTO app.retailer (code, name)
+                        VALUES (?, ?)
+                        RETURNING id
+                        """)
+                .param(1, "SEARCH_NORMALIZATION_TEST")
+                .param(2, "Search normalization test")
+                .query(Long.class)
+                .single();
+
+        Long productId = jdbcClient.sql("""
+                        INSERT INTO app.retailer_product (
+                            retailer_id,
+                            source_product_key,
+                            name,
+                            normalized_name,
+                            brand,
+                            quantity_value,
+                            base_unit,
+                            unit
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        RETURNING id
+                        """)
+                .param(1, retailerId)
+                .param(2, "SEARCH-NORMALIZATION-PRODUCT")
+                .param(3, "Čokoladno mleko Žirafa 1 l")
+                .param(4, "cokoladno mleko zirafa 1 l")
+                .param(5, "Test brend")
+                .param(6, 1000)
+                .param(7, "ml")
+                .param(8, "l")
+                .query(Long.class)
+                .single();
+
+        Long importRunId = jdbcClient.sql("""
+                        INSERT INTO app.import_run (
+                            retailer_id,
+                            source_url,
+                            status
+                        )
+                        VALUES (?, ?, 'SUCCEEDED')
+                        RETURNING id
+                        """)
+                .param(1, retailerId)
+                .param(2, "https://example.test/search.csv")
+                .query(Long.class)
+                .single();
+
+        jdbcClient.sql("""
+                        INSERT INTO app.price_observation (
+                            retailer_product_id,
+                            import_run_id,
+                            retailer_format_name,
+                            price_date,
+                            regular_price
+                        )
+                        VALUES (?, ?, ?, DATE '2026-08-04', ?)
+                        """)
+                .param(1, productId)
+                .param(2, importRunId)
+                .param(3, "Search test format")
+                .param(4, new BigDecimal("175.50"))
+                .update();
+
+        List<ProductSearchResult> latinResults =
+                productSearchService.search(
+                        "čokoladno mleko žirafa",
+                        10
+                );
+
+        List<ProductSearchResult> cyrillicResults =
+                productSearchService.search(
+                        "чоколадно млеко жирафа",
+                        10
+                );
+
+        assertThat(latinResults)
+                .extracting(ProductSearchResult::productId)
+                .containsExactly(productId);
+
+        assertThat(cyrillicResults)
+                .extracting(ProductSearchResult::productId)
+                .containsExactly(productId);
+
+        assertThat(latinResults.getFirst().name())
+                .isEqualTo("Čokoladno mleko Žirafa 1 l");
     }
 
     @Test
@@ -179,8 +316,8 @@ class PametnaKupovinaBackendApplicationTests {
                 .param(2, "Test mleko 1 l")
                 .param(3, "Test brend")
                 .param(4, "8600000000100")
-                .param(5, 1)
-                .param(6, "l")
+                .param(5, 1000)
+                .param(6, "ml")
                 .query(Long.class)
                 .single();
 
@@ -195,15 +332,15 @@ class PametnaKupovinaBackendApplicationTests {
                 .single();
 
         Long retailerProductId = jdbcClient.sql("""
-                INSERT INTO app.retailer_product (
-                    retailer_id,
-                    source_product_key,
-                    name,
-                    canonical_product_id
-                )
-                VALUES (?, ?, ?, ?)
-                RETURNING id
-                """)
+                        INSERT INTO app.retailer_product (
+                            retailer_id,
+                            source_product_key,
+                            name,
+                            canonical_product_id
+                        )
+                        VALUES (?, ?, ?, ?)
+                        RETURNING id
+                        """)
                 .param(1, retailerId)
                 .param(2, "TEST-MLEKO-SOURCE-1")
                 .param(3, "Test mleko")
@@ -321,14 +458,16 @@ class PametnaKupovinaBackendApplicationTests {
         assertThatThrownBy(() -> jdbcClient.sql("""
                         INSERT INTO app.retailer_product (
                             retailer_id,
+                            source_product_key,
                             name,
                             canonical_product_id
                         )
-                        VALUES (?, ?, ?)
+                        VALUES (?, ?, ?, ?)
                         """)
                 .param(1, retailerId)
-                .param(2, "Nepovezani proizvod")
-                .param(3, Long.MAX_VALUE)
+                .param(2, "UNKNOWN-CANONICAL-SOURCE")
+                .param(3, "Nepovezani proizvod")
+                .param(4, Long.MAX_VALUE)
                 .update())
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
@@ -371,8 +510,11 @@ class PametnaKupovinaBackendApplicationTests {
 
     private Long latestImportRunId() {
         return jdbcClient.sql("""
-                        SELECT MAX(id)
-                        FROM app.import_run
+                        SELECT MAX(run.id)
+                        FROM app.import_run run
+                        JOIN app.retailer retailer
+                          ON retailer.id = run.retailer_id
+                        WHERE retailer.code = 'TEST'
                         """)
                 .query(Long.class)
                 .single();
@@ -381,7 +523,12 @@ class PametnaKupovinaBackendApplicationTests {
     private Long priceObservationCount() {
         return jdbcClient.sql("""
                         SELECT COUNT(*)
-                        FROM app.price_observation
+                        FROM app.price_observation observation
+                        JOIN app.retailer_product product
+                          ON product.id = observation.retailer_product_id
+                        JOIN app.retailer retailer
+                          ON retailer.id = product.retailer_id
+                        WHERE retailer.code = 'TEST'
                         """)
                 .query(Long.class)
                 .single();

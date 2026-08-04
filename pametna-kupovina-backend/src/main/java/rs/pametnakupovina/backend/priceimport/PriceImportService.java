@@ -7,6 +7,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
+import rs.pametnakupovina.backend.matching.ParsedQuantity;
+import rs.pametnakupovina.backend.matching.ProductNameNormalizer;
+import rs.pametnakupovina.backend.matching.ProductQuantityParser;
 import rs.pametnakupovina.backend.retailer.Retailer;
 import rs.pametnakupovina.backend.retailer.RetailerRepository;
 
@@ -56,16 +59,22 @@ public class PriceImportService {
 
     private final JdbcClient jdbcClient;
     private final RetailerRepository retailerRepository;
+    private final ProductNameNormalizer productNameNormalizer;
+    private final ProductQuantityParser productQuantityParser;
     private final HttpClient httpClient;
     private final TransactionTemplate transactionTemplate;
 
     public PriceImportService(
             JdbcClient jdbcClient,
             RetailerRepository retailerRepository,
+            ProductNameNormalizer productNameNormalizer,
+            ProductQuantityParser productQuantityParser,
             PlatformTransactionManager transactionManager
     ) {
         this.jdbcClient = jdbcClient;
         this.retailerRepository = retailerRepository;
+        this.productNameNormalizer = productNameNormalizer;
+        this.productQuantityParser = productQuantityParser;
         this.transactionTemplate =
                 new TransactionTemplate(transactionManager);
 
@@ -364,9 +373,12 @@ public class PriceImportService {
                 row.categoryCode(),
                 row.categoryName(),
                 row.productName(),
+                row.normalizedProductName(),
                 row.brand(),
                 row.barcode(),
-                row.unitOfMeasure()
+                row.unitOfMeasure(),
+                row.quantityValue(),
+                row.baseUnit()
         );
 
         insertPriceObservation(
@@ -405,9 +417,12 @@ public class PriceImportService {
             String categoryCode,
             String categoryName,
             String productName,
+            String normalizedProductName,
             String brand,
             String barcode,
-            String unit
+            String unit,
+            BigDecimal quantityValue,
+            String baseUnit
     ) {
         return jdbcClient.sql("""
                 INSERT INTO app.retailer_product (
@@ -416,11 +431,14 @@ public class PriceImportService {
                     category_code,
                     category_name,
                     name,
+                    normalized_name,
                     brand,
                     barcode,
-                    unit
+                    unit,
+                    quantity_value,
+                    base_unit
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (
                     retailer_id,
                     source_product_key
@@ -429,9 +447,12 @@ public class PriceImportService {
                     category_code = EXCLUDED.category_code,
                     category_name = EXCLUDED.category_name,
                     name = EXCLUDED.name,
+                    normalized_name = EXCLUDED.normalized_name,
                     brand = EXCLUDED.brand,
                     barcode = EXCLUDED.barcode,
-                    unit = EXCLUDED.unit
+                    unit = EXCLUDED.unit,
+                    quantity_value = EXCLUDED.quantity_value,
+                    base_unit = EXCLUDED.base_unit
                 RETURNING id
                 """)
                 .param(1, retailerId)
@@ -447,21 +468,24 @@ public class PriceImportService {
                         Types.VARCHAR
                 )
                 .param(5, productName)
+                .param(6, normalizedProductName)
                 .param(
-                        6,
+                        7,
                         nullableText(brand),
                         Types.VARCHAR
                 )
                 .param(
-                        7,
+                        8,
                         barcode,
                         Types.VARCHAR
                 )
                 .param(
-                        8,
+                        9,
                         nullableText(unit),
                         Types.VARCHAR
                 )
+                .param(10, quantityValue, Types.NUMERIC)
+                .param(11, baseUnit, Types.VARCHAR)
                 .query(Long.class)
                 .single();
     }
@@ -782,6 +806,21 @@ public class PriceImportService {
                 "Naziv proizvoda"
         );
 
+        String normalizedProductName =
+                productNameNormalizer.normalize(productName);
+
+        ParsedQuantity parsedQuantity =
+                productQuantityParser.parse(productName)
+                        .orElse(null);
+
+        BigDecimal quantityValue = parsedQuantity == null
+                ? null
+                : parsedQuantity.value();
+
+        String baseUnit = parsedQuantity == null
+                ? null
+                : parsedQuantity.unit().databaseValue();
+
         String brand = normalizeTextValue(
                 record.get("Robna marka")
         );
@@ -848,9 +887,12 @@ public class PriceImportService {
                 categoryCode,
                 categoryName,
                 productName,
+                normalizedProductName,
                 brand,
                 barcode,
                 unitOfMeasure,
+                quantityValue,
+                baseUnit,
                 retailerFormatName,
                 priceDate,
                 regularPrice,

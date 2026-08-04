@@ -39,9 +39,12 @@ public class ProductRepository {
 
     public List<ProductSearchResult> search(
             String searchText,
+            String normalizedSearchText,
             int limit
     ) {
         String searchPattern = "%" + searchText + "%";
+        String normalizedSearchPattern =
+                "%" + normalizedSearchText + "%";
 
         return jdbcClient.sql("""
                         SELECT rp.id AS product_id,
@@ -76,7 +79,8 @@ public class ProductRepository {
                                      po.id DESC
                             LIMIT 1
                         ) price ON TRUE
-                        WHERE rp.name ILIKE ?
+                        WHERE COALESCE(rp.normalized_name, '') LIKE ?
+                           OR rp.name ILIKE ?
                            OR COALESCE(rp.brand, '') ILIKE ?
                            OR COALESCE(rp.barcode, '') ILIKE ?
                            OR COALESCE(rp.category_name, '') ILIKE ?
@@ -84,11 +88,12 @@ public class ProductRepository {
                                  rp.name ASC
                         LIMIT ?
                         """)
-                .param(1, searchPattern)
+                .param(1, normalizedSearchPattern)
                 .param(2, searchPattern)
                 .param(3, searchPattern)
                 .param(4, searchPattern)
-                .param(5, limit)
+                .param(5, searchPattern)
+                .param(6, limit)
                 .query(PRODUCT_SEARCH_ROW_MAPPER)
                 .list();
     }
