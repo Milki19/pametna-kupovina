@@ -4,6 +4,8 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import rs.pametnakupovina.backend.privacy.PreciseLocationPolicy;
+import rs.pametnakupovina.backend.privacy.PreciseLocationPurpose;
 
 import java.util.List;
 
@@ -13,10 +15,14 @@ public class RetailerLocationController {
 
     private final RetailerLocationService service;
 
+    private final PreciseLocationPolicy preciseLocationPolicy;
+
     public RetailerLocationController(
-            RetailerLocationService service
+            RetailerLocationService service,
+            PreciseLocationPolicy preciseLocationPolicy
     ) {
         this.service = service;
+        this.preciseLocationPolicy = preciseLocationPolicy;
     }
 
     @GetMapping("/nearest")
@@ -28,10 +34,15 @@ public class RetailerLocationController {
                     defaultValue = "10"
             ) int limit
     ) {
-        return service.findNearest(
+        return preciseLocationPolicy.useForRequest(
+                PreciseLocationPurpose.NEAREST_RETAILER_LOCATIONS,
                 latitude,
                 longitude,
-                limit
+                location -> service.findNearest(
+                        location.latitude(),
+                        location.longitude(),
+                        limit
+                )
         );
     }
 }

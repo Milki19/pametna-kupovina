@@ -4,6 +4,8 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import rs.pametnakupovina.backend.privacy.PreciseLocationPolicy;
+import rs.pametnakupovina.backend.privacy.PreciseLocationPurpose;
 
 import java.util.List;
 
@@ -13,8 +15,14 @@ public class NearbyStoreController {
 
     private final NearbyStoreService service;
 
-    public NearbyStoreController(NearbyStoreService service) {
+    private final PreciseLocationPolicy preciseLocationPolicy;
+
+    public NearbyStoreController(
+            NearbyStoreService service,
+            PreciseLocationPolicy preciseLocationPolicy
+    ) {
         this.service = service;
+        this.preciseLocationPolicy = preciseLocationPolicy;
     }
 
     @GetMapping("/nearby")
@@ -30,11 +38,16 @@ public class NearbyStoreController {
                     defaultValue = "20"
             ) int limit
     ) {
-        return service.findNearby(
+        return preciseLocationPolicy.useForRequest(
+                PreciseLocationPurpose.NEARBY_STORES,
                 latitude,
                 longitude,
-                radiusMeters,
-                limit
+                location -> service.findNearby(
+                        location.latitude(),
+                        location.longitude(),
+                        radiusMeters,
+                        limit
+                )
         );
     }
 }

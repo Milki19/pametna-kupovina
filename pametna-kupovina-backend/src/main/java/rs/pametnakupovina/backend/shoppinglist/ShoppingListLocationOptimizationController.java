@@ -5,6 +5,8 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import rs.pametnakupovina.backend.privacy.PreciseLocationPolicy;
+import rs.pametnakupovina.backend.privacy.PreciseLocationPurpose;
 
 import java.math.BigDecimal;
 
@@ -14,10 +16,14 @@ public class ShoppingListLocationOptimizationController {
 
     private final ShoppingListLocationOptimizationService service;
 
+    private final PreciseLocationPolicy preciseLocationPolicy;
+
     public ShoppingListLocationOptimizationController(
-            ShoppingListLocationOptimizationService service
+            ShoppingListLocationOptimizationService service,
+            PreciseLocationPolicy preciseLocationPolicy
     ) {
         this.service = service;
+        this.preciseLocationPolicy = preciseLocationPolicy;
     }
 
     @GetMapping("/{listId}/location-optimization")
@@ -30,11 +36,16 @@ public class ShoppingListLocationOptimizationController {
                     defaultValue = "20"
             ) BigDecimal costPerKm
     ) {
-        return service.optimize(
-                listId,
+        return preciseLocationPolicy.useForRequest(
+                PreciseLocationPurpose.SHOPPING_LIST_OPTIMIZATION,
                 latitude,
                 longitude,
-                costPerKm
+                location -> service.optimize(
+                        listId,
+                        location.latitude(),
+                        location.longitude(),
+                        costPerKm
+                )
         );
     }
 }
