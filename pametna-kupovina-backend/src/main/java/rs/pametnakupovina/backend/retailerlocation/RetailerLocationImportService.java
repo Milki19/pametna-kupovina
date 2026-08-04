@@ -229,7 +229,7 @@ public class RetailerLocationImportService {
             boolean active
     ) {
         jdbcClient.sql("""
-                    INSERT INTO app.store (
+                    INSERT INTO app.store AS existing_store (
                         retailer_id,
                         store_format_id,
                         external_code,
@@ -244,6 +244,102 @@ public class RetailerLocationImportService {
                     DO UPDATE SET
                         store_format_id = EXCLUDED.store_format_id,
                         name = EXCLUDED.name,
+                        location = CASE
+                            WHEN BTRIM(existing_store.address)
+                                    = BTRIM(EXCLUDED.address)
+                             AND BTRIM(existing_store.city)
+                                    = BTRIM(EXCLUDED.city)
+                                THEN existing_store.location
+                            ELSE NULL
+                        END,
+                        geocoding_candidate = CASE
+                            WHEN BTRIM(existing_store.address)
+                                    = BTRIM(EXCLUDED.address)
+                             AND BTRIM(existing_store.city)
+                                    = BTRIM(EXCLUDED.city)
+                                THEN existing_store.geocoding_candidate
+                            ELSE NULL
+                        END,
+                        geocoding_status = CASE
+                            WHEN BTRIM(existing_store.address)
+                                    = BTRIM(EXCLUDED.address)
+                             AND BTRIM(existing_store.city)
+                                    = BTRIM(EXCLUDED.city)
+                                THEN existing_store.geocoding_status
+                            ELSE 'PENDING'
+                        END,
+                        geocoding_query = CASE
+                            WHEN BTRIM(existing_store.address)
+                                    = BTRIM(EXCLUDED.address)
+                             AND BTRIM(existing_store.city)
+                                    = BTRIM(EXCLUDED.city)
+                                THEN existing_store.geocoding_query
+                            ELSE NULL
+                        END,
+                        geocoding_source = CASE
+                            WHEN BTRIM(existing_store.address)
+                                    = BTRIM(EXCLUDED.address)
+                             AND BTRIM(existing_store.city)
+                                    = BTRIM(EXCLUDED.city)
+                                THEN existing_store.geocoding_source
+                            ELSE NULL
+                        END,
+                        geocoding_source_reference = CASE
+                            WHEN BTRIM(existing_store.address)
+                                    = BTRIM(EXCLUDED.address)
+                             AND BTRIM(existing_store.city)
+                                    = BTRIM(EXCLUDED.city)
+                                THEN existing_store.geocoding_source_reference
+                            ELSE NULL
+                        END,
+                        geocoding_matched_address = CASE
+                            WHEN BTRIM(existing_store.address)
+                                    = BTRIM(EXCLUDED.address)
+                             AND BTRIM(existing_store.city)
+                                    = BTRIM(EXCLUDED.city)
+                                THEN existing_store.geocoding_matched_address
+                            ELSE NULL
+                        END,
+                        geocoding_confidence = CASE
+                            WHEN BTRIM(existing_store.address)
+                                    = BTRIM(EXCLUDED.address)
+                             AND BTRIM(existing_store.city)
+                                    = BTRIM(EXCLUDED.city)
+                                THEN existing_store.geocoding_confidence
+                            ELSE NULL
+                        END,
+                        geocoding_suspicious_reason = CASE
+                            WHEN BTRIM(existing_store.address)
+                                    = BTRIM(EXCLUDED.address)
+                             AND BTRIM(existing_store.city)
+                                    = BTRIM(EXCLUDED.city)
+                                THEN existing_store.geocoding_suspicious_reason
+                            ELSE NULL
+                        END,
+                        geocoded_at = CASE
+                            WHEN BTRIM(existing_store.address)
+                                    = BTRIM(EXCLUDED.address)
+                             AND BTRIM(existing_store.city)
+                                    = BTRIM(EXCLUDED.city)
+                                THEN existing_store.geocoded_at
+                            ELSE NULL
+                        END,
+                        geocoding_review_note = CASE
+                            WHEN BTRIM(existing_store.address)
+                                    = BTRIM(EXCLUDED.address)
+                             AND BTRIM(existing_store.city)
+                                    = BTRIM(EXCLUDED.city)
+                                THEN existing_store.geocoding_review_note
+                            ELSE NULL
+                        END,
+                        geocoding_reviewed_at = CASE
+                            WHEN BTRIM(existing_store.address)
+                                    = BTRIM(EXCLUDED.address)
+                             AND BTRIM(existing_store.city)
+                                    = BTRIM(EXCLUDED.city)
+                                THEN existing_store.geocoding_reviewed_at
+                            ELSE NULL
+                        END,
                         address = EXCLUDED.address,
                         city = EXCLUDED.city,
                         active = EXCLUDED.active,
@@ -278,6 +374,15 @@ public class RetailerLocationImportService {
                         address,
                         city,
                         location,
+                        geocoding_candidate,
+                        geocoding_status,
+                        geocoding_query,
+                        geocoding_source,
+                        geocoding_matched_address,
+                        geocoding_confidence,
+                        geocoded_at,
+                        geocoding_review_note,
+                        geocoding_reviewed_at,
                         active
                     )
                     VALUES (
@@ -286,6 +391,18 @@ public class RetailerLocationImportService {
                             ST_MakePoint(?, ?),
                             4326
                         )::geography,
+                        ST_SetSRID(
+                            ST_MakePoint(?, ?),
+                            4326
+                        )::geography,
+                        'MANUALLY_VERIFIED',
+                        LOWER(BTRIM(?)) || ', ' || LOWER(BTRIM(?)),
+                        'LOCATION_IMPORT',
+                        BTRIM(?) || ', ' || BTRIM(?),
+                        1.0000,
+                        NOW(),
+                        'Koordinate su potvrđene kroz location import.',
+                        NOW(),
                         ?
                     )
                     ON CONFLICT (retailer_id, external_code)
@@ -295,6 +412,22 @@ public class RetailerLocationImportService {
                         address = EXCLUDED.address,
                         city = EXCLUDED.city,
                         location = EXCLUDED.location,
+                        geocoding_candidate =
+                            EXCLUDED.geocoding_candidate,
+                        geocoding_status = EXCLUDED.geocoding_status,
+                        geocoding_query = EXCLUDED.geocoding_query,
+                        geocoding_source = EXCLUDED.geocoding_source,
+                        geocoding_source_reference = NULL,
+                        geocoding_matched_address =
+                            EXCLUDED.geocoding_matched_address,
+                        geocoding_confidence =
+                            EXCLUDED.geocoding_confidence,
+                        geocoding_suspicious_reason = NULL,
+                        geocoded_at = EXCLUDED.geocoded_at,
+                        geocoding_review_note =
+                            EXCLUDED.geocoding_review_note,
+                        geocoding_reviewed_at =
+                            EXCLUDED.geocoding_reviewed_at,
                         active = EXCLUDED.active,
                         updated_at = NOW()
                     """)
@@ -306,7 +439,13 @@ public class RetailerLocationImportService {
                 .param(6, city, Types.VARCHAR)
                 .param(7, coordinates.longitude())
                 .param(8, coordinates.latitude())
-                .param(9, active)
+                .param(9, coordinates.longitude())
+                .param(10, coordinates.latitude())
+                .param(11, address)
+                .param(12, city)
+                .param(13, address)
+                .param(14, city)
+                .param(15, active)
                 .update();
     }
 

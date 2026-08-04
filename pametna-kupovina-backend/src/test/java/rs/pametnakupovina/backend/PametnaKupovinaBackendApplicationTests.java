@@ -15,6 +15,11 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
+import rs.pametnakupovina.backend.geocoding.StoreGeocodingCandidateRequest;
+import rs.pametnakupovina.backend.geocoding.StoreGeocodingResult;
+import rs.pametnakupovina.backend.geocoding.StoreGeocodingReviewRequest;
+import rs.pametnakupovina.backend.geocoding.StoreGeocodingService;
+import rs.pametnakupovina.backend.geocoding.StoreGeocodingStatus;
 import rs.pametnakupovina.backend.matching.FuzzyProductCandidate;
 import rs.pametnakupovina.backend.matching.FuzzyProductCandidateService;
 import rs.pametnakupovina.backend.matching.ProductMatchDecision;
@@ -121,6 +126,9 @@ class PametnaKupovinaBackendApplicationTests {
 
     @Autowired
     private RetailerLocationImportService retailerLocationImportService;
+
+    @Autowired
+    private StoreGeocodingService storeGeocodingService;
 
     @Autowired
     private JdbcClient jdbcClient;
@@ -1562,6 +1570,217 @@ class PametnaKupovinaBackendApplicationTests {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("store_format_code")
                 .hasMessageContaining("store_format_name");
+    }
+
+    @Test
+    void reliableStoreGeocodingIsAppliedAndReusedFromCache() {
+        Long storeId = insertStoreWaitingForGeocoding(
+                "PK039_AUTO",
+                "AUTO-001",
+                "Radnička 75",
+                "Valjevo"
+        );
+
+        StoreGeocodingCandidateRequest request =
+                new StoreGeocodingCandidateRequest(
+                        44.2701,
+                        19.8842,
+                        new BigDecimal("0.9500"),
+                        "test geocoder",
+                        "https://example.test/geocoding/auto-001",
+                        "Радничка 75, Ваљево, Србија"
+                );
+
+        StoreGeocodingResult first =
+                storeGeocodingService.recordCandidate(
+                        storeId,
+                        request
+                );
+
+        StoreGeocodingResult cached =
+                storeGeocodingService.recordCandidate(
+                        storeId,
+                        request
+                );
+
+        assertThat(first.status())
+                .isEqualTo(StoreGeocodingStatus.AUTO_VERIFIED);
+        assertThat(first.coordinatesApplied()).isTrue();
+        assertThat(first.cached()).isFalse();
+        assertThat(first.source()).isEqualTo("TEST_GEOCODER");
+        assertThat(first.confidence())
+                .isEqualByComparingTo("0.9500");
+
+        assertThat(cached.cached()).isTrue();
+        assertThat(cached.geocodedAt())
+                .isEqualTo(first.geocodedAt());
+
+        List<Double> coordinates = jdbcClient.sql("""
+                        SELECT ST_Y(location::geometry),
+                               ST_X(location::geometry)
+                        FROM app.store
+                        WHERE id = ?
+                        """)
+                .param(storeId)
+                .query((resultSet, rowNumber) -> List.of(
+                        resultSet.getDouble(1),
+                        resultSet.getDouble(2)
+                ))
+                .single();
+
+        assertThat(coordinates)
+                .containsExactly(44.2701, 19.8842);
+    }
+
+    @Test
+    void suspiciousStoreGeocodingWaitsForManualReview() {
+        Long storeId = insertStoreWaitingForGeocoding(
+                "PK039_REVIEW",
+                "REVIEW-001",
+                "Vladike Nikolaja 24",
+                "Valjevo"
+        );
+
+        StoreGeocodingCandidateRequest suspiciousRequest =
+                new StoreGeocodingCandidateRequest(
+                        44.2710,
+                        19.8850,
+                        new BigDecimal("0.6200"),
+                        "test geocoder",
+                        "https://example.test/geocoding/review-001",
+                        "Vladike Nikolaja, Beograd"
+                );
+
+        StoreGeocodingResult suspicious =
+                storeGeocodingService.recordCandidate(
+                        storeId,
+                        suspiciousRequest
+                );
+
+        List<StoreGeocodingResult> reviewQueue =
+                storeGeocodingService.findReviewQueue("Valjevo");
+
+        assertThat(suspicious.status())
+                .isEqualTo(StoreGeocodingStatus.NEEDS_REVIEW);
+        assertThat(suspicious.coordinatesApplied()).isFalse();
+        assertThat(suspicious.suspiciousReason())
+                .contains("LOW_CONFIDENCE")
+                .contains("CITY_MISMATCH")
+                .contains("HOUSE_NUMBER_MISMATCH");
+        assertThat(reviewQueue)
+                .extracting(StoreGeocodingResult::storeId)
+                .containsExactly(storeId);
+
+        Double locationBeforeReview = jdbcClient.sql("""
+                        SELECT ST_X(location::geometry)
+                        FROM app.store
+                        WHERE id = ?
+                        """)
+                .param(storeId)
+                .query(Double.class)
+                .optional()
+                .orElse(null);
+
+        assertThat(locationBeforeReview).isNull();
+
+        StoreGeocodingResult reviewed =
+                storeGeocodingService.review(
+                        storeId,
+                        new StoreGeocodingReviewRequest(
+                                true,
+                                44.2722,
+                                19.8863,
+                                "Adresa i ulaz su ručno provereni."
+                        )
+                );
+
+        assertThat(reviewed.status())
+                .isEqualTo(
+                        StoreGeocodingStatus.MANUALLY_VERIFIED
+                );
+        assertThat(reviewed.coordinatesApplied()).isTrue();
+        assertThat(reviewed.candidateLatitude())
+                .isEqualTo(44.2710);
+        assertThat(reviewed.candidateLongitude())
+                .isEqualTo(19.8850);
+        assertThat(reviewed.appliedLatitude())
+                .isEqualTo(44.2722);
+        assertThat(reviewed.appliedLongitude())
+                .isEqualTo(19.8863);
+        assertThat(reviewed.reviewNote())
+                .isEqualTo("Adresa i ulaz su ručno provereni.");
+        assertThat(reviewed.reviewedAt()).isNotNull();
+        assertThat(
+                storeGeocodingService.findReviewQueue("Valjevo")
+        ).isEmpty();
+
+        StoreGeocodingResult cachedAfterReview =
+                storeGeocodingService.recordCandidate(
+                        storeId,
+                        suspiciousRequest
+                );
+
+        assertThat(cachedAfterReview.cached()).isTrue();
+        assertThat(cachedAfterReview.status())
+                .isEqualTo(
+                        StoreGeocodingStatus.MANUALLY_VERIFIED
+                );
+        assertThat(cachedAfterReview.appliedLatitude())
+                .isEqualTo(44.2722);
+        assertThat(cachedAfterReview.appliedLongitude())
+                .isEqualTo(19.8863);
+    }
+
+    private Long insertStoreWaitingForGeocoding(
+            String retailerCode,
+            String externalCode,
+            String address,
+            String city
+    ) {
+        Long retailerId = jdbcClient.sql("""
+                        INSERT INTO app.retailer (code, name)
+                        VALUES (?, ?)
+                        RETURNING id
+                        """)
+                .param(1, retailerCode)
+                .param(2, retailerCode + " test lanac")
+                .query(Long.class)
+                .single();
+
+        Long storeFormatId = jdbcClient.sql("""
+                        INSERT INTO app.store_format (
+                            retailer_id,
+                            code,
+                            name
+                        )
+                        VALUES (?, 'PILOT', 'Pilot format')
+                        RETURNING id
+                        """)
+                .param(retailerId)
+                .query(Long.class)
+                .single();
+
+        return jdbcClient.sql("""
+                        INSERT INTO app.store (
+                            retailer_id,
+                            store_format_id,
+                            external_code,
+                            name,
+                            address,
+                            city,
+                            active
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, TRUE)
+                        RETURNING id
+                        """)
+                .param(1, retailerId)
+                .param(2, storeFormatId)
+                .param(3, externalCode)
+                .param(4, externalCode + " test objekat")
+                .param(5, address)
+                .param(6, city)
+                .query(Long.class)
+                .single();
     }
 
     private void assertCanonicalProductInsertFails(
