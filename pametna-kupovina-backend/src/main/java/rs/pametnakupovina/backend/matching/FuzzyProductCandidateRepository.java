@@ -9,9 +9,9 @@ import java.util.List;
 @Repository
 public class FuzzyProductCandidateRepository {
 
-    private static final RowMapper<FuzzyProductCandidate>
+    private static final RowMapper<FuzzyProductCandidateRow>
             CANDIDATE_ROW_MAPPER = (resultSet, rowNumber) ->
-            new FuzzyProductCandidate(
+            new FuzzyProductCandidateRow(
                     resultSet.getLong("canonical_product_id"),
                     resultSet.getString("name"),
                     resultSet.getString("brand"),
@@ -27,7 +27,7 @@ public class FuzzyProductCandidateRepository {
         this.jdbcClient = jdbcClient;
     }
 
-    public List<FuzzyProductCandidate> findByNormalizedName(
+    public List<FuzzyProductCandidateRow> findByNormalizedName(
             String normalizedName,
             int limit
     ) {

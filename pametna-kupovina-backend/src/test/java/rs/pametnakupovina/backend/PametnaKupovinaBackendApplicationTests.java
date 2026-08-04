@@ -494,8 +494,24 @@ class PametnaKupovinaBackendApplicationTests {
         assertThat(latinCandidates.getFirst().nameSimilarity())
                 .isEqualByComparingTo("1.0000");
 
+        assertThat(latinCandidates.getFirst().score().totalScore())
+                .isEqualByComparingTo("1.0000");
+
+        assertThat(latinCandidates.getFirst().score())
+                .satisfies(score -> {
+                    assertThat(score.nameContribution())
+                            .isEqualByComparingTo("0.4118");
+                    assertThat(score.brandContribution())
+                            .isEqualByComparingTo("0.2941");
+                    assertThat(score.packageContribution())
+                            .isEqualByComparingTo("0.2941");
+                    assertThat(score.reasons()).hasSize(3);
+                });
+
         assertThat(latinCandidates)
-                .extracting(FuzzyProductCandidate::nameSimilarity)
+                .extracting(candidate ->
+                        candidate.score().totalScore()
+                )
                 .isSortedAccordingTo(
                         java.util.Comparator.reverseOrder()
                 );
@@ -532,6 +548,54 @@ class PametnaKupovinaBackendApplicationTests {
         ).isInstanceOf(IllegalArgumentException.class)
                 .hasMessage(
                         "Limit za matching kandidate mora biti između 3 i 5"
+                );
+    }
+
+    @Test
+    void explainableScoreCanRerankAWeakerNameMatch() {
+        jdbcClient.sql("""
+                        INSERT INTO app.canonical_product (
+                            canonical_key,
+                            name,
+                            normalized_name,
+                            brand,
+                            quantity_value,
+                            base_unit
+                        )
+                        VALUES
+                            (
+                                'SCORE-ALFA-WRONG-15L',
+                                'Alfa jogurt 1 l',
+                                'alfa jogurt 1 l',
+                                'Beta',
+                                1500,
+                                'ml'
+                            ),
+                            (
+                                'SCORE-ALFA-RIGHT-1L',
+                                'Alfa probiotski jogurt 1 l',
+                                'alfa probiotski jogurt 1 l',
+                                'Alfa',
+                                1000,
+                                'ml'
+                            )
+                        """)
+                .update();
+
+        List<FuzzyProductCandidate> candidates =
+                fuzzyCandidateService.findCandidates(
+                        "Alfa jogurt 1l",
+                        3
+                );
+
+        assertThat(candidates).hasSize(2);
+        assertThat(candidates.getFirst().name())
+                .isEqualTo("Alfa probiotski jogurt 1 l");
+        assertThat(candidates.getFirst().nameSimilarity())
+                .isLessThan(candidates.get(1).nameSimilarity());
+        assertThat(candidates.getFirst().score().totalScore())
+                .isGreaterThan(
+                        candidates.get(1).score().totalScore()
                 );
     }
 
