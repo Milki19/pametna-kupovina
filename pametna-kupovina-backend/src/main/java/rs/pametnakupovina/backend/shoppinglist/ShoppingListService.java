@@ -11,15 +11,21 @@ import java.util.List;
 @Service
 public class ShoppingListService {
 
+    private static final int MAX_PASTED_TEXT_LENGTH = 50_000;
+    private static final int MAX_PASTED_ITEM_COUNT = 200;
+
     private final ShoppingListRepository repository;
     private final ShoppingListClientTokenPolicy clientTokenPolicy;
+    private final ShoppingListTextParser textParser;
 
     public ShoppingListService(
             ShoppingListRepository repository,
-            ShoppingListClientTokenPolicy clientTokenPolicy
+            ShoppingListClientTokenPolicy clientTokenPolicy,
+            ShoppingListTextParser textParser
     ) {
         this.repository = repository;
         this.clientTokenPolicy = clientTokenPolicy;
+        this.textParser = textParser;
     }
 
     @Transactional
@@ -160,6 +166,78 @@ public class ShoppingListService {
     }
 
     @Transactional
+    public PasteShoppingListItemsResponse addPastedItems(
+            Long listId,
+            String clientToken,
+            PasteShoppingListItemsRequest request
+    ) {
+        requireList(listId, clientToken);
+
+        String text = request == null ? null : request.text();
+
+        if (text == null || text.isBlank()) {
+            throw badRequest(
+                    "Zalepljeni spisak mora imati bar jedan neprazan red"
+            );
+        }
+
+        if (text.length() > MAX_PASTED_TEXT_LENGTH) {
+            throw badRequest(
+                    "Zalepljeni spisak može imati najviše "
+                            + MAX_PASTED_TEXT_LENGTH
+                            + " karaktera"
+            );
+        }
+
+        ParsedShoppingListText parsedText = textParser.parse(text);
+
+        if (parsedText.items().isEmpty()) {
+            throw badRequest(
+                    "Zalepljeni spisak mora imati bar jedan neprazan red"
+            );
+        }
+
+        if (parsedText.items().size() > MAX_PASTED_ITEM_COUNT) {
+            throw badRequest(
+                    "Jednim zahtevom može se dodati najviše "
+                            + MAX_PASTED_ITEM_COUNT
+                            + " stavki"
+            );
+        }
+
+        ShoppingItemRule matchingRule =
+                ShoppingItemRule.EXACT_PRODUCT;
+
+        List<ValidatedShoppingListItem> validatedItems =
+                parsedText.items().stream()
+                        .map(item -> validateParsedItem(
+                                item,
+                                matchingRule
+                        ))
+                        .toList();
+
+        List<ShoppingListItemResponse> createdItems =
+                validatedItems.stream()
+                        .map(item -> repository.addItem(
+                                listId,
+                                item.name(),
+                                item.rawInput(),
+                                null,
+                                item.quantity(),
+                                item.matchingRule()
+                        ))
+                        .toList();
+
+        repository.touch(listId);
+
+        return new PasteShoppingListItemsResponse(
+                createdItems.size(),
+                parsedText.ignoredBlankLineCount(),
+                createdItems
+        );
+    }
+
+    @Transactional
     public void deleteItem(
             Long listId,
             Long itemId,
@@ -289,6 +367,55 @@ public class ShoppingListService {
         return name;
     }
 
+    private ValidatedShoppingListItem validateParsedItem(
+            ParsedShoppingListLine item,
+            ShoppingItemRule matchingRule
+    ) {
+        String name = requiredText(item.name(), "Naziv artikla");
+
+        if (name.length() > 500) {
+            throw badRequest(
+                    "Naziv artikla može imati najviše 500 karaktera"
+            );
+        }
+
+        String rawInput = requiredRawInput(
+                item.rawInput(),
+                item.name()
+        );
+
+        if (rawInput.length() > 1000) {
+            throw badRequest(
+                    "Sirovi unos može imati najviše 1000 karaktera"
+            );
+        }
+
+        if (item.quantity().compareTo(BigDecimal.ZERO) <= 0) {
+            throw badRequest(
+                    "Količina mora biti veća od nule"
+            );
+        }
+
+        BigDecimal normalizedQuantity =
+                item.quantity().stripTrailingZeros();
+        int integerDigits = normalizedQuantity.precision()
+                - normalizedQuantity.scale();
+
+        if (normalizedQuantity.scale() > 3
+                || integerDigits > 7) {
+            throw badRequest(
+                    "Količina može imati najviše 7 celih i 3 decimalne cifre"
+            );
+        }
+
+        return new ValidatedShoppingListItem(
+                name,
+                rawInput,
+                normalizedQuantity,
+                matchingRule
+        );
+    }
+
     private ResponseStatusException listNotFound(Long listId) {
         return new ResponseStatusException(
                 HttpStatus.NOT_FOUND,
@@ -343,5 +470,13 @@ public class ShoppingListService {
                 HttpStatus.BAD_REQUEST,
                 message
         );
+    }
+
+    private record ValidatedShoppingListItem(
+            String name,
+            String rawInput,
+            BigDecimal quantity,
+            ShoppingItemRule matchingRule
+    ) {
     }
 }

@@ -78,6 +78,20 @@ public class ShoppingListController {
         return service.addItem(listId, clientToken, request);
     }
 
+    @PostMapping("/{listId}/items/paste")
+    @ResponseStatus(HttpStatus.CREATED)
+    public PasteShoppingListItemsResponse pasteItems(
+            @PathVariable("listId") Long listId,
+            @RequestHeader(CLIENT_TOKEN_HEADER) String clientToken,
+            @RequestBody PasteShoppingListItemsRequest request
+    ) {
+        return service.addPastedItems(
+                listId,
+                clientToken,
+                request
+        );
+    }
+
     @GetMapping("/{listId}/best-prices")
     public ShoppingListBestPriceResponse calculateBestPrices(
             @PathVariable("listId") Long listId,

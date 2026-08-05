@@ -40,6 +40,8 @@ import rs.pametnakupovina.backend.retailerlocation.RetailerLocationImportResult;
 import rs.pametnakupovina.backend.retailerlocation.RetailerLocationImportService;
 import rs.pametnakupovina.backend.shoppinglist.AddShoppingListItemRequest;
 import rs.pametnakupovina.backend.shoppinglist.CreateShoppingListRequest;
+import rs.pametnakupovina.backend.shoppinglist.PasteShoppingListItemsRequest;
+import rs.pametnakupovina.backend.shoppinglist.PasteShoppingListItemsResponse;
 import rs.pametnakupovina.backend.shoppinglist.ShoppingItemMatchingStatus;
 import rs.pametnakupovina.backend.shoppinglist.ShoppingItemRule;
 import rs.pametnakupovina.backend.shoppinglist.ShoppingListItemResponse;
@@ -2166,6 +2168,101 @@ class PametnaKupovinaBackendApplicationTests {
                 shoppingList.id(),
                 ownerToken
         ).name()).isEqualTo("Privatna lista");
+    }
+
+    @Test
+    void pastedShoppingListCreatesEveryNonBlankLineAndPreservesRawInput() {
+        String clientToken = "pk045-paste-owner";
+
+        ShoppingListSummary shoppingList = shoppingListService.create(
+                new CreateShoppingListRequest("Zalepljeni spisak"),
+                clientToken
+        );
+
+        PasteShoppingListItemsResponse result =
+                shoppingListService.addPastedItems(
+                        shoppingList.id(),
+                        clientToken,
+                        new PasteShoppingListItemsRequest(
+                                "  2 x Mleko 1 l  \r\n\r\nHleb\nJogurt x3"
+                        )
+                );
+
+        assertThat(result.createdCount()).isEqualTo(3);
+        assertThat(result.ignoredBlankLineCount()).isEqualTo(1);
+        assertThat(result.items())
+                .extracting(ShoppingListItemResponse::name)
+                .containsExactly(
+                        "Mleko 1 l",
+                        "Hleb",
+                        "Jogurt"
+                );
+        assertThat(result.items())
+                .extracting(ShoppingListItemResponse::quantity)
+                .usingElementComparator(BigDecimal::compareTo)
+                .containsExactly(
+                        new BigDecimal("2"),
+                        BigDecimal.ONE,
+                        new BigDecimal("3")
+                );
+        assertThat(result.items().getFirst().rawInput())
+                .isEqualTo("  2 x Mleko 1 l  ");
+        assertThat(result.items())
+                .extracting(ShoppingListItemResponse::matchingRule)
+                .containsOnly(ShoppingItemRule.EXACT_PRODUCT);
+
+        assertThat(shoppingListService.findById(
+                shoppingList.id(),
+                clientToken
+        ).items()).hasSize(3);
+    }
+
+    @Test
+    void pastedShoppingListRejectsBlankTextAndForeignClient() {
+        String ownerToken = "pk045-owner";
+
+        ShoppingListSummary shoppingList = shoppingListService.create(
+                new CreateShoppingListRequest("Privatni spisak"),
+                ownerToken
+        );
+
+        assertThatThrownBy(() ->
+                shoppingListService.addPastedItems(
+                        shoppingList.id(),
+                        ownerToken,
+                        new PasteShoppingListItemsRequest(
+                                " \n\t\r\n"
+                        )
+                )
+        ).isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("neprazan red");
+
+        assertThatThrownBy(() ->
+                shoppingListService.addPastedItems(
+                        shoppingList.id(),
+                        ownerToken,
+                        new PasteShoppingListItemsRequest(
+                                "Mleko\n0 x Hleb"
+                        )
+                )
+        ).isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("veća od nule");
+
+        assertThatThrownBy(() ->
+                shoppingListService.addPastedItems(
+                        shoppingList.id(),
+                        "pk045-foreign",
+                        new PasteShoppingListItemsRequest(
+                                "Mleko"
+                        )
+                )
+        ).isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("Spisak nije pronađen");
+
+        assertThat(shoppingListService.findById(
+                shoppingList.id(),
+                ownerToken
+        ).items()).isEmpty();
     }
 
     private Long insertStoreWaitingForGeocoding(
