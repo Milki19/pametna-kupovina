@@ -46,6 +46,7 @@ import rs.pametnakupovina.backend.shoppinglist.ShoppingListItemResponse;
 import rs.pametnakupovina.backend.shoppinglist.ShoppingListResponse;
 import rs.pametnakupovina.backend.shoppinglist.ShoppingListService;
 import rs.pametnakupovina.backend.shoppinglist.ShoppingListSummary;
+import rs.pametnakupovina.backend.shoppinglist.UpdateShoppingListRequest;
 import rs.pametnakupovina.backend.store.NearbyStore;
 import rs.pametnakupovina.backend.store.NearbyStoreService;
 import rs.pametnakupovina.backend.store.Store;
@@ -1915,16 +1916,20 @@ class PametnaKupovinaBackendApplicationTests {
 
     @Test
     void shoppingItemPreservesRawInputQuantityRuleAndPendingState() {
+        String clientToken = "pk043-pending-state";
+
         ShoppingListSummary shoppingList =
                 shoppingListService.create(
                         new CreateShoppingListRequest(
                                 "Nedeljna kupovina"
-                        )
+                        ),
+                        clientToken
                 );
 
         ShoppingListItemResponse createdItem =
                 shoppingListService.addItem(
                         shoppingList.id(),
+                        clientToken,
                         new AddShoppingListItemRequest(
                                 "Mleko 1 l",
                                 "  2 x Mleko 1 l  ",
@@ -1948,7 +1953,10 @@ class PametnaKupovinaBackendApplicationTests {
                 .isNull();
 
         ShoppingListResponse reloaded =
-                shoppingListService.findById(shoppingList.id());
+                shoppingListService.findById(
+                        shoppingList.id(),
+                        clientToken
+                );
 
         assertThat(reloaded.items())
                 .singleElement()
@@ -1968,6 +1976,8 @@ class PametnaKupovinaBackendApplicationTests {
 
     @Test
     void selectedBarcodeLinksCanonicalProductAndStateCannotDrift() {
+        String clientToken = "pk043-confirmed-state";
+
         insertCanonicalProduct(
                 "PK043:8601234567899",
                 "Sok od narandže 1 l",
@@ -1985,12 +1995,14 @@ class PametnaKupovinaBackendApplicationTests {
 
         ShoppingListSummary shoppingList =
                 shoppingListService.create(
-                        new CreateShoppingListRequest("Piće")
+                        new CreateShoppingListRequest("Piće"),
+                        clientToken
                 );
 
         ShoppingListItemResponse item =
                 shoppingListService.addItem(
                         shoppingList.id(),
+                        clientToken,
                         new AddShoppingListItemRequest(
                                 "Sok od narandže 1 l",
                                 null,
@@ -2015,6 +2027,145 @@ class PametnaKupovinaBackendApplicationTests {
                 .param(item.id())
                 .update())
                 .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void shoppingListCrudIsScopedToTemporaryClientToken() {
+        String firstClientToken = "pk044-first-client";
+        String secondClientToken = "pk044-second-client";
+
+        ShoppingListSummary firstList = shoppingListService.create(
+                new CreateShoppingListRequest("Prva lista"),
+                firstClientToken
+        );
+
+        ShoppingListSummary secondList = shoppingListService.create(
+                new CreateShoppingListRequest("Druga lista"),
+                secondClientToken
+        );
+
+        assertThat(shoppingListService.findAll(firstClientToken))
+                .extracting(ShoppingListSummary::id)
+                .containsExactly(firstList.id());
+
+        ShoppingListResponse renamed = shoppingListService.updateList(
+                firstList.id(),
+                firstClientToken,
+                new UpdateShoppingListRequest("Preimenovana lista")
+        );
+
+        assertThat(renamed.name()).isEqualTo("Preimenovana lista");
+
+        shoppingListService.addItem(
+                firstList.id(),
+                firstClientToken,
+                new AddShoppingListItemRequest(
+                        "Hleb",
+                        null,
+                        null,
+                        BigDecimal.ONE,
+                        ShoppingItemRule.EXACT_PRODUCT
+                )
+        );
+
+        assertThat(shoppingListService.findById(
+                firstList.id(),
+                firstClientToken
+        ).items()).hasSize(1);
+
+        String storedTokenHash = jdbcClient.sql("""
+                        SELECT client_token_hash
+                        FROM app.shopping_list
+                        WHERE id = ?
+                        """)
+                .param(1, firstList.id())
+                .query(String.class)
+                .single();
+
+        assertThat(storedTokenHash)
+                .hasSize(64)
+                .isNotEqualTo(firstClientToken);
+
+        shoppingListService.deleteList(
+                firstList.id(),
+                firstClientToken
+        );
+
+        assertThat(shoppingListService.findAll(firstClientToken))
+                .isEmpty();
+
+        assertThatThrownBy(() -> shoppingListService.findById(
+                firstList.id(),
+                firstClientToken
+        )).isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("Spisak nije pronađen");
+
+        assertThat(jdbcClient.sql("""
+                        SELECT active
+                        FROM app.shopping_list
+                        WHERE id = ?
+                        """)
+                .param(1, firstList.id())
+                .query(Boolean.class)
+                .single()).isFalse();
+
+        assertThat(shoppingListService.findAll(secondClientToken))
+                .extracting(ShoppingListSummary::id)
+                .containsExactly(secondList.id());
+    }
+
+    @Test
+    void shoppingListRejectsMissingOrForeignClientToken() {
+        String ownerToken = "pk044-owner";
+        String foreignToken = "pk044-foreign";
+
+        ShoppingListSummary shoppingList = shoppingListService.create(
+                new CreateShoppingListRequest("Privatna lista"),
+                ownerToken
+        );
+
+        assertThatThrownBy(() -> shoppingListService.create(
+                new CreateShoppingListRequest("Bez tokena"),
+                " "
+        )).isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("X-Client-Token");
+
+        assertThatThrownBy(() -> shoppingListService.findById(
+                shoppingList.id(),
+                foreignToken
+        )).isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("Spisak nije pronađen");
+
+        assertThatThrownBy(() -> shoppingListService.updateList(
+                shoppingList.id(),
+                foreignToken,
+                new UpdateShoppingListRequest("Tuđa izmena")
+        )).isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("Spisak nije pronađen");
+
+        assertThatThrownBy(() -> shoppingListService.addItem(
+                shoppingList.id(),
+                foreignToken,
+                new AddShoppingListItemRequest(
+                        "Tuđa stavka",
+                        null,
+                        null,
+                        BigDecimal.ONE,
+                        ShoppingItemRule.EXACT_PRODUCT
+                )
+        )).isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("Spisak nije pronađen");
+
+        assertThatThrownBy(() -> shoppingListService.deleteList(
+                shoppingList.id(),
+                foreignToken
+        )).isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("Spisak nije pronađen");
+
+        assertThat(shoppingListService.findById(
+                shoppingList.id(),
+                ownerToken
+        ).name()).isEqualTo("Privatna lista");
     }
 
     private Long insertStoreWaitingForGeocoding(

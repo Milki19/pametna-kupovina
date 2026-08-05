@@ -12,49 +12,90 @@ import java.util.List;
 public class ShoppingListService {
 
     private final ShoppingListRepository repository;
+    private final ShoppingListClientTokenPolicy clientTokenPolicy;
 
     public ShoppingListService(
-            ShoppingListRepository repository
+            ShoppingListRepository repository,
+            ShoppingListClientTokenPolicy clientTokenPolicy
     ) {
         this.repository = repository;
+        this.clientTokenPolicy = clientTokenPolicy;
     }
 
     @Transactional
     public ShoppingListSummary create(
-            CreateShoppingListRequest request
+            CreateShoppingListRequest request,
+            String clientToken
     ) {
-        String name = requiredText(
-                request == null ? null : request.name(),
-                "Naziv spiska"
+        String name = validListName(
+                request == null ? null : request.name()
         );
 
-        if (name.length() > 200) {
-            throw badRequest(
-                    "Naziv spiska može imati najviše 200 karaktera"
-            );
-        }
+        String clientTokenHash =
+                clientTokenPolicy.validateAndHash(clientToken);
 
-        return repository.create(name);
+        return repository.create(name, clientTokenHash);
     }
 
-    public List<ShoppingListSummary> findAll() {
-        return repository.findAll();
+    public List<ShoppingListSummary> findAll(String clientToken) {
+        return repository.findAll(
+                clientTokenPolicy.validateAndHash(clientToken)
+        );
     }
 
-    public ShoppingListResponse findById(Long listId) {
-        return repository.findById(listId)
+    public ShoppingListResponse findById(
+            Long listId,
+            String clientToken
+    ) {
+        String clientTokenHash =
+                clientTokenPolicy.validateAndHash(clientToken);
+
+        return repository.findById(listId, clientTokenHash)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
                         "Spisak nije pronađen: " + listId
                 ));
     }
 
+    public ShoppingListResponse requireOwnedList(
+            Long listId,
+            String clientToken
+    ) {
+        return findById(listId, clientToken);
+    }
+
+    @Transactional
+    public ShoppingListResponse updateList(
+            Long listId,
+            String clientToken,
+            UpdateShoppingListRequest request
+    ) {
+        String clientTokenHash =
+                clientTokenPolicy.validateAndHash(clientToken);
+
+        String name = validListName(
+                request == null ? null : request.name()
+        );
+
+        if (!repository.updateName(
+                listId,
+                clientTokenHash,
+                name
+        )) {
+            throw listNotFound(listId);
+        }
+
+        return repository.findById(listId, clientTokenHash)
+                .orElseThrow(() -> listNotFound(listId));
+    }
+
     @Transactional
     public ShoppingListItemResponse addItem(
             Long listId,
+            String clientToken,
             AddShoppingListItemRequest request
     ) {
-        requireList(listId);
+        requireList(listId, clientToken);
 
         String name = requiredText(
                 request == null ? null : request.name(),
@@ -119,8 +160,12 @@ public class ShoppingListService {
     }
 
     @Transactional
-    public void deleteItem(Long listId, Long itemId) {
-        requireList(listId);
+    public void deleteItem(
+            Long listId,
+            Long itemId,
+            String clientToken
+    ) {
+        requireList(listId, clientToken);
 
         if (!repository.deleteItem(listId, itemId)) {
             throw new ResponseStatusException(
@@ -133,12 +178,12 @@ public class ShoppingListService {
     }
 
     @Transactional
-    public void deleteList(Long listId) {
-        if (!repository.deleteList(listId)) {
-            throw new ResponseStatusException(
-                    HttpStatus.NOT_FOUND,
-                    "Spisak nije pronađen: " + listId
-            );
+    public void deleteList(Long listId, String clientToken) {
+        String clientTokenHash =
+                clientTokenPolicy.validateAndHash(clientToken);
+
+        if (!repository.deactivateList(listId, clientTokenHash)) {
+            throw listNotFound(listId);
         }
     }
 
@@ -146,9 +191,10 @@ public class ShoppingListService {
     public ShoppingListItemResponse updateItem(
             Long listId,
             Long itemId,
+            String clientToken,
             UpdateShoppingListItemRequest request
     ) {
-        requireList(listId);
+        requireList(listId, clientToken);
 
         String name = requiredText(
                 request == null ? null : request.name(),
@@ -219,13 +265,35 @@ public class ShoppingListService {
         return updatedItem;
     }
 
-    private void requireList(Long listId) {
-        if (!repository.existsById(listId)) {
-            throw new ResponseStatusException(
-                    HttpStatus.NOT_FOUND,
-                    "Spisak nije pronađen: " + listId
+    private void requireList(Long listId, String clientToken) {
+        String clientTokenHash =
+                clientTokenPolicy.validateAndHash(clientToken);
+
+        if (!repository.existsByIdAndClientTokenHash(
+                listId,
+                clientTokenHash
+        )) {
+            throw listNotFound(listId);
+        }
+    }
+
+    private String validListName(String value) {
+        String name = requiredText(value, "Naziv spiska");
+
+        if (name.length() > 200) {
+            throw badRequest(
+                    "Naziv spiska može imati najviše 200 karaktera"
             );
         }
+
+        return name;
+    }
+
+    private ResponseStatusException listNotFound(Long listId) {
+        return new ResponseStatusException(
+                HttpStatus.NOT_FOUND,
+                "Spisak nije pronađen: " + listId
+        );
     }
 
     private String requiredText(

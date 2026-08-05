@@ -62,10 +62,16 @@ public class ShoppingListRepository {
         this.jdbcClient = jdbcClient;
     }
 
-    public ShoppingListSummary create(String name) {
+    public ShoppingListSummary create(
+            String name,
+            String clientTokenHash
+    ) {
         return jdbcClient.sql("""
-                        INSERT INTO app.shopping_list(name)
-                        VALUES (?)
+                        INSERT INTO app.shopping_list(
+                            name,
+                            client_token_hash
+                        )
+                        VALUES (?, ?)
                         RETURNING id,
                                   name,
                                   created_at,
@@ -73,11 +79,14 @@ public class ShoppingListRepository {
                                   0 AS item_count
                         """)
                 .param(1, name)
+                .param(2, clientTokenHash)
                 .query(SUMMARY_ROW_MAPPER)
                 .single();
     }
 
-    public List<ShoppingListSummary> findAll() {
+    public List<ShoppingListSummary> findAll(
+            String clientTokenHash
+    ) {
         return jdbcClient.sql("""
                         SELECT sl.id,
                                sl.name,
@@ -87,6 +96,8 @@ public class ShoppingListRepository {
                         FROM app.shopping_list sl
                         LEFT JOIN app.shopping_list_item sli
                           ON sli.shopping_list_id = sl.id
+                        WHERE sl.client_token_hash = ?
+                          AND sl.active = TRUE
                         GROUP BY sl.id,
                                  sl.name,
                                  sl.created_at,
@@ -94,6 +105,7 @@ public class ShoppingListRepository {
                         ORDER BY sl.updated_at DESC,
                                  sl.id DESC
                         """)
+                .param(1, clientTokenHash)
                 .query(SUMMARY_ROW_MAPPER)
                 .list();
     }
@@ -107,6 +119,7 @@ public class ShoppingListRepository {
                                        updated_at
                                 FROM app.shopping_list
                                 WHERE id = ?
+                                  AND active = TRUE
                                 """)
                         .param(1, listId)
                         .query((resultSet, rowNumber) ->
@@ -124,6 +137,48 @@ public class ShoppingListRepository {
                                 ))
                         .optional();
 
+        return responseForHeader(header, listId);
+    }
+
+    public Optional<ShoppingListResponse> findById(
+            Long listId,
+            String clientTokenHash
+    ) {
+        Optional<ShoppingListHeader> header =
+                jdbcClient.sql("""
+                                SELECT id,
+                                       name,
+                                       created_at,
+                                       updated_at
+                                FROM app.shopping_list
+                                WHERE id = ?
+                                  AND client_token_hash = ?
+                                  AND active = TRUE
+                                """)
+                        .param(1, listId)
+                        .param(2, clientTokenHash)
+                        .query((resultSet, rowNumber) ->
+                                new ShoppingListHeader(
+                                        resultSet.getLong("id"),
+                                        resultSet.getString("name"),
+                                        resultSet.getObject(
+                                                "created_at",
+                                                OffsetDateTime.class
+                                        ),
+                                        resultSet.getObject(
+                                                "updated_at",
+                                                OffsetDateTime.class
+                                        )
+                                ))
+                        .optional();
+
+        return responseForHeader(header, listId);
+    }
+
+    private Optional<ShoppingListResponse> responseForHeader(
+            Optional<ShoppingListHeader> header,
+            Long listId
+    ) {
         if (header.isEmpty()) {
             return Optional.empty();
         }
@@ -162,17 +217,44 @@ public class ShoppingListRepository {
         );
     }
 
-    public boolean existsById(Long listId) {
+    public boolean existsByIdAndClientTokenHash(
+            Long listId,
+            String clientTokenHash
+    ) {
         return jdbcClient.sql("""
                         SELECT EXISTS (
                             SELECT 1
                             FROM app.shopping_list
                             WHERE id = ?
+                              AND client_token_hash = ?
+                              AND active = TRUE
                         )
                         """)
                 .param(1, listId)
+                .param(2, clientTokenHash)
                 .query(Boolean.class)
                 .single();
+    }
+
+    public boolean updateName(
+            Long listId,
+            String clientTokenHash,
+            String name
+    ) {
+        int updatedRows = jdbcClient.sql("""
+                        UPDATE app.shopping_list
+                        SET name = ?,
+                            updated_at = NOW()
+                        WHERE id = ?
+                          AND client_token_hash = ?
+                          AND active = TRUE
+                        """)
+                .param(1, name)
+                .param(2, listId)
+                .param(3, clientTokenHash)
+                .update();
+
+        return updatedRows > 0;
     }
 
     public ShoppingListItemResponse addItem(
@@ -244,15 +326,23 @@ public class ShoppingListRepository {
         return deletedRows > 0;
     }
 
-    public boolean deleteList(Long listId) {
-        int deletedRows = jdbcClient.sql("""
-                        DELETE FROM app.shopping_list
+    public boolean deactivateList(
+            Long listId,
+            String clientTokenHash
+    ) {
+        int updatedRows = jdbcClient.sql("""
+                        UPDATE app.shopping_list
+                        SET active = FALSE,
+                            updated_at = NOW()
                         WHERE id = ?
+                          AND client_token_hash = ?
+                          AND active = TRUE
                         """)
                 .param(1, listId)
+                .param(2, clientTokenHash)
                 .update();
 
-        return deletedRows > 0;
+        return updatedRows > 0;
     }
 
     public void touch(Long listId) {
@@ -260,6 +350,7 @@ public class ShoppingListRepository {
                         UPDATE app.shopping_list
                         SET updated_at = NOW()
                         WHERE id = ?
+                          AND active = TRUE
                         """)
                 .param(1, listId)
                 .update();

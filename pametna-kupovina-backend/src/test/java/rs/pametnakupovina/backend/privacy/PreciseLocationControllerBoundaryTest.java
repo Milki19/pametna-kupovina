@@ -9,6 +9,7 @@ import rs.pametnakupovina.backend.retailerlocation.RetailerLocationController;
 import rs.pametnakupovina.backend.retailerlocation.RetailerLocationService;
 import rs.pametnakupovina.backend.shoppinglist.ShoppingListLocationOptimizationController;
 import rs.pametnakupovina.backend.shoppinglist.ShoppingListLocationOptimizationService;
+import rs.pametnakupovina.backend.shoppinglist.ShoppingListService;
 import rs.pametnakupovina.backend.store.NearbyStoreController;
 import rs.pametnakupovina.backend.store.NearbyStoreService;
 
@@ -30,6 +31,9 @@ class PreciseLocationControllerBoundaryTest {
         ShoppingListLocationOptimizationService optimizationService =
                 mock(ShoppingListLocationOptimizationService.class);
 
+        ShoppingListService shoppingListService =
+                mock(ShoppingListService.class);
+
         NearbyStoreService nearbyStoreService =
                 mock(NearbyStoreService.class);
 
@@ -41,9 +45,11 @@ class PreciseLocationControllerBoundaryTest {
         try {
             new ShoppingListLocationOptimizationController(
                     optimizationService,
+                    shoppingListService,
                     policy
             ).optimize(
                     1L,
+                    "test-client-token",
                     LATITUDE,
                     LONGITUDE,
                     new BigDecimal("20.00")
@@ -73,6 +79,11 @@ class PreciseLocationControllerBoundaryTest {
                     LATITUDE,
                     LONGITUDE,
                     new BigDecimal("20.00")
+            );
+
+            verify(shoppingListService).requireOwnedList(
+                    1L,
+                    "test-client-token"
             );
 
             verify(nearbyStoreService).findNearby(
