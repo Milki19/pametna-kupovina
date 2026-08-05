@@ -7,8 +7,26 @@ public record UpdateShoppingListItemRequest(
         String rawInput,
         String barcode,
         BigDecimal quantity,
-        ShoppingItemRule matchingRule
+        ShoppingItemRule matchingRule,
+        FlexibleItemConstraints flexibleConstraints
 ) {
+
+    public UpdateShoppingListItemRequest(
+            String name,
+            String rawInput,
+            String barcode,
+            BigDecimal quantity,
+            ShoppingItemRule matchingRule
+    ) {
+        this(
+                name,
+                rawInput,
+                barcode,
+                quantity,
+                matchingRule,
+                null
+        );
+    }
 
     public UpdateShoppingListItemRequest(
             String name,
@@ -20,6 +38,7 @@ public record UpdateShoppingListItemRequest(
                 null,
                 barcode,
                 quantity,
+                null,
                 null
         );
     }

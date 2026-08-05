@@ -40,14 +40,19 @@ import rs.pametnakupovina.backend.retailerlocation.RetailerLocationImportResult;
 import rs.pametnakupovina.backend.retailerlocation.RetailerLocationImportService;
 import rs.pametnakupovina.backend.shoppinglist.AddShoppingListItemRequest;
 import rs.pametnakupovina.backend.shoppinglist.CreateShoppingListRequest;
+import rs.pametnakupovina.backend.shoppinglist.FlexibleItemConstraints;
 import rs.pametnakupovina.backend.shoppinglist.PasteShoppingListItemsRequest;
 import rs.pametnakupovina.backend.shoppinglist.PasteShoppingListItemsResponse;
 import rs.pametnakupovina.backend.shoppinglist.ShoppingItemMatchingStatus;
 import rs.pametnakupovina.backend.shoppinglist.ShoppingItemRule;
 import rs.pametnakupovina.backend.shoppinglist.ShoppingListItemResponse;
+import rs.pametnakupovina.backend.shoppinglist.ShoppingListMatchingResponse;
+import rs.pametnakupovina.backend.shoppinglist.ShoppingListMatchingService;
 import rs.pametnakupovina.backend.shoppinglist.ShoppingListResponse;
 import rs.pametnakupovina.backend.shoppinglist.ShoppingListService;
 import rs.pametnakupovina.backend.shoppinglist.ShoppingListSummary;
+import rs.pametnakupovina.backend.shoppinglist.StoreItemOffer;
+import rs.pametnakupovina.backend.shoppinglist.StoreShoppingOfferRepository;
 import rs.pametnakupovina.backend.shoppinglist.UpdateShoppingListRequest;
 import rs.pametnakupovina.backend.store.NearbyStore;
 import rs.pametnakupovina.backend.store.NearbyStoreService;
@@ -61,6 +66,7 @@ import java.io.OutputStream;
 import java.math.BigDecimal;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -149,6 +155,12 @@ class PametnaKupovinaBackendApplicationTests {
 
     @Autowired
     private ShoppingListService shoppingListService;
+
+    @Autowired
+    private ShoppingListMatchingService shoppingListMatchingService;
+
+    @Autowired
+    private StoreShoppingOfferRepository storeShoppingOfferRepository;
 
     @Autowired
     private JdbcClient jdbcClient;
@@ -2263,6 +2275,274 @@ class PametnaKupovinaBackendApplicationTests {
                 shoppingList.id(),
                 ownerToken
         ).items()).isEmpty();
+    }
+
+    @Test
+    void flexibleItemPersistsCategoryAndPackageConstraints() {
+        String clientToken = "pk047-flexible-owner";
+
+        ShoppingListSummary shoppingList = shoppingListService.create(
+                new CreateShoppingListRequest("Fleksibilna korpa"),
+                clientToken
+        );
+
+        ShoppingListItemResponse item = shoppingListService.addItem(
+                shoppingList.id(),
+                clientToken,
+                new AddShoppingListItemRequest(
+                        "Bilo koje mleko",
+                        "Bilo koje mleko 1 l",
+                        null,
+                        BigDecimal.ONE,
+                        ShoppingItemRule.FLEXIBLE_CATEGORY,
+                        new FlexibleItemConstraints(
+                                "Mleko",
+                                "Imlek",
+                                new BigDecimal("500"),
+                                new BigDecimal("1500"),
+                                "ml"
+                        )
+                )
+        );
+
+        assertThat(item.flexibleConstraints()).isNotNull();
+        assertThat(item.flexibleConstraints().category())
+                .isEqualTo("Mleko");
+        assertThat(item.flexibleConstraints().requiredBrand())
+                .isEqualTo("Imlek");
+        assertThat(item.flexibleConstraints().minPackageQuantity())
+                .isEqualByComparingTo("500");
+        assertThat(item.flexibleConstraints().maxPackageQuantity())
+                .isEqualByComparingTo("1500");
+        assertThat(item.flexibleConstraints().requiredBaseUnit())
+                .isEqualTo("ml");
+
+        assertThat(jdbcClient.sql("""
+                        SELECT flexible_category_normalized
+                        FROM app.shopping_list_item
+                        WHERE id = ?
+                        """)
+                .param(1, item.id())
+                .query(String.class)
+                .single()).isEqualTo("mleko");
+    }
+
+    @Test
+    void shoppingListMatchingAutomaticallyLinksStrongCandidate() {
+        String clientToken = "pk046-matching-owner";
+
+        Long canonicalProductId = jdbcClient.sql("""
+                        INSERT INTO app.canonical_product (
+                            canonical_key,
+                            name,
+                            normalized_name,
+                            brand,
+                            quantity_value,
+                            base_unit
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?)
+                        RETURNING id
+                        """)
+                .param(1, "PK046-AUTO-MILK")
+                .param(2, "PK046 Imlek mleko 1 l")
+                .param(3, "pk 046 imlek mleko 1 l")
+                .param(4, "Imlek")
+                .param(5, 1000)
+                .param(6, "ml")
+                .query(Long.class)
+                .single();
+
+        ShoppingListSummary shoppingList = shoppingListService.create(
+                new CreateShoppingListRequest("Matching korpa"),
+                clientToken
+        );
+
+        shoppingListService.addItem(
+                shoppingList.id(),
+                clientToken,
+                new AddShoppingListItemRequest(
+                        "PK046 Imlek mleko 1 l",
+                        null,
+                        null,
+                        BigDecimal.ONE,
+                        ShoppingItemRule.EXACT_PRODUCT
+                )
+        );
+
+        ShoppingListMatchingResponse result =
+                shoppingListMatchingService.match(
+                        shoppingList.id(),
+                        clientToken
+                );
+
+        assertThat(result.readyForOptimization()).isTrue();
+        assertThat(result.automaticallyMatchedItems()).isEqualTo(1);
+        assertThat(result.items()).singleElement().satisfies(item -> {
+            assertThat(item.matchingStatus())
+                    .isEqualTo(
+                            ShoppingItemMatchingStatus.AUTO_MATCHED
+                    );
+            assertThat(item.matchedCanonicalProductId())
+                    .isEqualTo(canonicalProductId);
+            assertThat(item.candidates()).isNotEmpty();
+        });
+    }
+
+    @Test
+    void validPriceUsesStoreScopeAndDiscountOnlyInsidePeriod() {
+        Long retailerId = jdbcClient.sql("""
+                        INSERT INTO app.retailer (code, name)
+                        VALUES ('PK049', 'PK049 lanac')
+                        RETURNING id
+                        """)
+                .query(Long.class)
+                .single();
+
+        Long formatId = jdbcClient.sql("""
+                        INSERT INTO app.store_format (
+                            retailer_id,
+                            code,
+                            name
+                        )
+                        VALUES (?, 'PILOT', 'Pilot format')
+                        RETURNING id
+                        """)
+                .param(1, retailerId)
+                .query(Long.class)
+                .single();
+
+        Long storeId = insertVerifiedStore(
+                retailerId,
+                formatId,
+                "PK049-STORE",
+                "PK049 prodavnica",
+                44.2700,
+                19.8840,
+                true
+        );
+
+        Long canonicalProductId = jdbcClient.sql("""
+                        INSERT INTO app.canonical_product (
+                            canonical_key,
+                            name,
+                            normalized_name,
+                            barcode,
+                            quantity_value,
+                            base_unit
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?)
+                        RETURNING id
+                        """)
+                .param(1, "PK049-BREAD")
+                .param(2, "PK049 hleb")
+                .param(3, "pk049 hleb")
+                .param(4, "8601234567899")
+                .param(5, 1)
+                .param(6, "piece")
+                .query(Long.class)
+                .single();
+
+        Long retailerProductId = jdbcClient.sql("""
+                        INSERT INTO app.retailer_product (
+                            retailer_id,
+                            source_product_key,
+                            name,
+                            normalized_name,
+                            barcode,
+                            quantity_value,
+                            base_unit,
+                            canonical_product_id
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        RETURNING id
+                        """)
+                .param(1, retailerId)
+                .param(2, "BARCODE:8601234567899")
+                .param(3, "PK049 hleb")
+                .param(4, "pk049 hleb")
+                .param(5, "8601234567899")
+                .param(6, 1)
+                .param(7, "piece")
+                .param(8, canonicalProductId)
+                .query(Long.class)
+                .single();
+
+        Long importRunId = jdbcClient.sql("""
+                        INSERT INTO app.import_run (
+                            retailer_id,
+                            source_url,
+                            status
+                        )
+                        VALUES (?, 'https://example.test/pk049.csv', 'SUCCEEDED')
+                        RETURNING id
+                        """)
+                .param(1, retailerId)
+                .query(Long.class)
+                .single();
+
+        jdbcClient.sql("""
+                        INSERT INTO app.price_observation (
+                            retailer_product_id,
+                            import_run_id,
+                            retailer_format_name,
+                            store_id,
+                            price_date,
+                            regular_price,
+                            discounted_price,
+                            discount_start,
+                            discount_end
+                        )
+                        VALUES
+                            (?, ?, NULL, NULL, '2026-08-01', 100, NULL, NULL, NULL),
+                            (?, ?, 'Pilot format', NULL, '2026-08-01', 90, NULL, NULL, NULL),
+                            (?, ?, NULL, ?, '2026-08-01', 80, 60, '2026-08-01', '2026-08-04')
+                        """)
+                .param(1, retailerProductId)
+                .param(2, importRunId)
+                .param(3, retailerProductId)
+                .param(4, importRunId)
+                .param(5, retailerProductId)
+                .param(6, importRunId)
+                .param(7, storeId)
+                .update();
+
+        ShoppingListSummary shoppingList = shoppingListService.create(
+                new CreateShoppingListRequest("PK049 korpa"),
+                "pk049-owner"
+        );
+
+        shoppingListService.addItem(
+                shoppingList.id(),
+                "pk049-owner",
+                new AddShoppingListItemRequest(
+                        "PK049 hleb",
+                        null,
+                        "8601234567899",
+                        BigDecimal.ONE,
+                        ShoppingItemRule.EXACT_PRODUCT
+                )
+        );
+
+        StoreItemOffer activeDiscount = storeShoppingOfferRepository
+                .findOffers(
+                        shoppingList.id(),
+                        List.of(storeId),
+                        LocalDate.of(2026, 8, 3)
+                ).getFirst();
+
+        StoreItemOffer expiredDiscount = storeShoppingOfferRepository
+                .findOffers(
+                        shoppingList.id(),
+                        List.of(storeId),
+                        LocalDate.of(2026, 8, 5)
+                ).getFirst();
+
+        assertThat(activeDiscount.priceScope()).isEqualTo("STORE");
+        assertThat(activeDiscount.effectivePrice())
+                .isEqualByComparingTo("60");
+        assertThat(expiredDiscount.priceScope()).isEqualTo("STORE");
+        assertThat(expiredDiscount.effectivePrice())
+                .isEqualByComparingTo("80");
     }
 
     private Long insertStoreWaitingForGeocoding(

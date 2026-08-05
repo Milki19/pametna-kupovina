@@ -537,7 +537,8 @@ public class PriceImportService {
                     ON CONFLICT (
                         retailer_product_id,
                         price_date,
-                        retailer_format_name
+                        retailer_format_name,
+                        store_id
                     )
                     DO UPDATE SET
                         import_run_id = EXCLUDED.import_run_id,

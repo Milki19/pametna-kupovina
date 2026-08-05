@@ -10,13 +10,17 @@ import rs.pametnakupovina.backend.retailerlocation.RetailerLocationService;
 import rs.pametnakupovina.backend.shoppinglist.ShoppingListLocationOptimizationController;
 import rs.pametnakupovina.backend.shoppinglist.ShoppingListLocationOptimizationService;
 import rs.pametnakupovina.backend.shoppinglist.ShoppingListService;
+import rs.pametnakupovina.backend.shoppinglist.ShoppingRecommendationController;
+import rs.pametnakupovina.backend.shoppinglist.ShoppingRecommendationService;
 import rs.pametnakupovina.backend.store.NearbyStoreController;
 import rs.pametnakupovina.backend.store.NearbyStoreService;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 class PreciseLocationControllerBoundaryTest {
@@ -33,6 +37,9 @@ class PreciseLocationControllerBoundaryTest {
 
         ShoppingListService shoppingListService =
                 mock(ShoppingListService.class);
+
+        ShoppingRecommendationService recommendationService =
+                mock(ShoppingRecommendationService.class);
 
         NearbyStoreService nearbyStoreService =
                 mock(NearbyStoreService.class);
@@ -74,6 +81,24 @@ class PreciseLocationControllerBoundaryTest {
                     10
             );
 
+            LocalDate recommendationDate = LocalDate.of(
+                    2026,
+                    8,
+                    5
+            );
+
+            new ShoppingRecommendationController(
+                    recommendationService,
+                    shoppingListService,
+                    policy
+            ).recommend(
+                    1L,
+                    "test-client-token",
+                    LATITUDE,
+                    LONGITUDE,
+                    recommendationDate
+            );
+
             verify(optimizationService).optimize(
                     1L,
                     LATITUDE,
@@ -81,7 +106,7 @@ class PreciseLocationControllerBoundaryTest {
                     new BigDecimal("20.00")
             );
 
-            verify(shoppingListService).requireOwnedList(
+            verify(shoppingListService, times(2)).requireOwnedList(
                     1L,
                     "test-client-token"
             );
@@ -99,9 +124,16 @@ class PreciseLocationControllerBoundaryTest {
                     10
             );
 
+            verify(recommendationService).recommend(
+                    1L,
+                    LATITUDE,
+                    LONGITUDE,
+                    recommendationDate
+            );
+
             assertThat(appender.list)
                     .extracting(ILoggingEvent::getFormattedMessage)
-                    .hasSize(3)
+                    .hasSize(4)
                     .anyMatch(message -> message.contains(
                             "SHOPPING_LIST_OPTIMIZATION"
                     ))

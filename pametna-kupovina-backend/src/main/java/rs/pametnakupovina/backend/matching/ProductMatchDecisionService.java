@@ -6,6 +6,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Predicate;
 
 @Service
 public class ProductMatchDecisionService {
@@ -63,6 +64,44 @@ public class ProductMatchDecisionService {
             int limit,
             String clientToken
     ) {
+        return decideInternal(
+                query,
+                limit,
+                clientToken,
+                candidate -> true,
+                true
+        );
+    }
+
+    @Transactional
+    public ProductMatchDecision decideWithCandidateFilter(
+            String query,
+            int limit,
+            String clientToken,
+            Predicate<FuzzyProductCandidate> candidateFilter
+    ) {
+        if (candidateFilter == null) {
+            throw new IllegalArgumentException(
+                    "Candidate filter je obavezan"
+            );
+        }
+
+        return decideInternal(
+                query,
+                limit,
+                clientToken,
+                candidateFilter,
+                false
+        );
+    }
+
+    private ProductMatchDecision decideInternal(
+            String query,
+            int limit,
+            String clientToken,
+            Predicate<FuzzyProductCandidate> candidateFilter,
+            boolean reuseFeedback
+    ) {
         validateQueryAndLimit(query, limit);
 
         String normalizedQuery = productNameNormalizer.normalize(query);
@@ -76,7 +115,7 @@ public class ProductMatchDecisionService {
         String normalizedClientToken =
                 clientTokenValidator.validateOptional(clientToken);
 
-        if (normalizedClientToken != null) {
+        if (reuseFeedback && normalizedClientToken != null) {
             Optional<ReusableProductMatch> reusableMatch =
                     feedbackRepository.findReusableFeedback(
                             normalizedClientToken,
@@ -89,7 +128,11 @@ public class ProductMatchDecisionService {
         }
 
         List<FuzzyProductCandidate> candidates =
-                candidateService.findCandidates(query, limit);
+                candidateService.findCandidates(query, MAX_LIMIT)
+                        .stream()
+                        .filter(candidateFilter)
+                        .limit(limit)
+                        .toList();
 
         Optional<FuzzyProductCandidate> topCandidate =
                 candidates.stream().findFirst();

@@ -55,6 +55,10 @@ logovanje koordinata. Pre povezivanja providera koji šalje podatke trećoj stra
 potrebna je posebna odluka o ugovoru, regionu obrade i retention pravilima tog
 providera.
 
+OSRM adapter je zato podrazumevano isključen. Njegov keš prihvata samo parove
+javnih `STORE:*` tačaka; nijedan par koji sadrži `USER` ne ulazi u keš. Precizna
+polazna lokacija se šalje provideru samo tokom aktivnog zahteva i ne loguje se.
+
 ## Provera
 
 `PreciseLocationPolicyTest` proverava da zajednička privacy granica nema

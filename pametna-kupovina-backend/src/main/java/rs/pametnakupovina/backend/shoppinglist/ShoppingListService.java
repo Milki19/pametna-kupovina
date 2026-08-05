@@ -4,28 +4,36 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import rs.pametnakupovina.backend.matching.ProductNameNormalizer;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
 @Service
 public class ShoppingListService {
 
     private static final int MAX_PASTED_TEXT_LENGTH = 50_000;
     private static final int MAX_PASTED_ITEM_COUNT = 200;
+    private static final Set<String> SUPPORTED_BASE_UNITS =
+            Set.of("g", "ml", "piece");
 
     private final ShoppingListRepository repository;
     private final ShoppingListClientTokenPolicy clientTokenPolicy;
     private final ShoppingListTextParser textParser;
+    private final ProductNameNormalizer productNameNormalizer;
 
     public ShoppingListService(
             ShoppingListRepository repository,
             ShoppingListClientTokenPolicy clientTokenPolicy,
-            ShoppingListTextParser textParser
+            ShoppingListTextParser textParser,
+            ProductNameNormalizer productNameNormalizer
     ) {
         this.repository = repository;
         this.clientTokenPolicy = clientTokenPolicy;
         this.textParser = textParser;
+        this.productNameNormalizer = productNameNormalizer;
     }
 
     @Transactional
@@ -151,13 +159,29 @@ public class ShoppingListService {
                         ? ShoppingItemRule.EXACT_PRODUCT
                         : request.matchingRule();
 
+        ValidatedFlexibleConstraints flexible =
+                validateFlexibleConstraints(
+                        name,
+                        barcode,
+                        matchingRule,
+                        request == null
+                                ? null
+                                : request.flexibleConstraints()
+                );
+
         ShoppingListItemResponse item = repository.addItem(
                 listId,
                 name,
                 rawInput,
                 barcode,
                 quantity,
-                matchingRule
+                matchingRule,
+                flexible.category(),
+                flexible.normalizedCategory(),
+                flexible.requiredBrand(),
+                flexible.minPackageQuantity(),
+                flexible.maxPackageQuantity(),
+                flexible.requiredBaseUnit()
         );
 
         repository.touch(listId);
@@ -224,7 +248,13 @@ public class ShoppingListService {
                                 item.rawInput(),
                                 null,
                                 item.quantity(),
-                                item.matchingRule()
+                                item.matchingRule(),
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
+                                null
                         ))
                         .toList();
 
@@ -322,6 +352,16 @@ public class ShoppingListService {
                         ? ShoppingItemRule.EXACT_PRODUCT
                         : request.matchingRule();
 
+        ValidatedFlexibleConstraints flexible =
+                validateFlexibleConstraints(
+                        name,
+                        barcode,
+                        matchingRule,
+                        request == null
+                                ? null
+                                : request.flexibleConstraints()
+                );
+
         ShoppingListItemResponse updatedItem =
                 repository.updateItem(
                         listId,
@@ -330,7 +370,13 @@ public class ShoppingListService {
                         rawInput,
                         barcode,
                         quantity,
-                        matchingRule
+                        matchingRule,
+                        flexible.category(),
+                        flexible.normalizedCategory(),
+                        flexible.requiredBrand(),
+                        flexible.minPackageQuantity(),
+                        flexible.maxPackageQuantity(),
+                        flexible.requiredBaseUnit()
                 ).orElseThrow(() ->
                         new ResponseStatusException(
                                 HttpStatus.NOT_FOUND,
@@ -365,6 +411,157 @@ public class ShoppingListService {
         }
 
         return name;
+    }
+
+    private ValidatedFlexibleConstraints validateFlexibleConstraints(
+            String itemName,
+            String barcode,
+            ShoppingItemRule matchingRule,
+            FlexibleItemConstraints constraints
+    ) {
+        if (matchingRule == ShoppingItemRule.EXACT_PRODUCT) {
+            if (hasConstraintValue(constraints)) {
+                throw badRequest(
+                        "Ograničenja kategorije važe samo za fleksibilnu stavku"
+                );
+            }
+
+            return ValidatedFlexibleConstraints.empty();
+        }
+
+        if (barcode != null) {
+            throw badRequest(
+                    "Fleksibilna stavka ne može imati tačan barkod"
+            );
+        }
+
+        String category = nullableText(
+                constraints == null
+                        ? null
+                        : constraints.category()
+        );
+
+        if (category == null) {
+            category = itemName;
+        }
+
+        if (category.length() > 200) {
+            throw badRequest(
+                    "Fleksibilna kategorija može imati najviše 200 karaktera"
+            );
+        }
+
+        String normalizedCategory =
+                productNameNormalizer.normalize(category);
+
+        if (normalizedCategory.isBlank()) {
+            throw badRequest(
+                    "Fleksibilna kategorija mora sadržati slovo ili broj"
+            );
+        }
+
+        String requiredBrand = nullableText(
+                constraints == null
+                        ? null
+                        : constraints.requiredBrand()
+        );
+
+        if (requiredBrand != null && requiredBrand.length() > 200) {
+            throw badRequest(
+                    "Zahtevani brend može imati najviše 200 karaktera"
+            );
+        }
+
+        BigDecimal minPackageQuantity = constraints == null
+                ? null
+                : constraints.minPackageQuantity();
+
+        BigDecimal maxPackageQuantity = constraints == null
+                ? null
+                : constraints.maxPackageQuantity();
+
+        validatePackageQuantity(
+                minPackageQuantity,
+                "Minimalna količina pakovanja"
+        );
+
+        validatePackageQuantity(
+                maxPackageQuantity,
+                "Maksimalna količina pakovanja"
+        );
+
+        if (minPackageQuantity != null
+                && maxPackageQuantity != null
+                && minPackageQuantity.compareTo(
+                maxPackageQuantity
+        ) > 0) {
+            throw badRequest(
+                    "Minimalna količina pakovanja ne može biti veća od maksimalne"
+            );
+        }
+
+        String requiredBaseUnit = nullableText(
+                constraints == null
+                        ? null
+                        : constraints.requiredBaseUnit()
+        );
+
+        if (requiredBaseUnit != null) {
+            requiredBaseUnit = requiredBaseUnit.toLowerCase(
+                    Locale.ROOT
+            );
+
+            if (!SUPPORTED_BASE_UNITS.contains(requiredBaseUnit)) {
+                throw badRequest(
+                        "Jedinica mora biti g, ml ili piece"
+                );
+            }
+        }
+
+        return new ValidatedFlexibleConstraints(
+                category,
+                normalizedCategory,
+                requiredBrand,
+                minPackageQuantity,
+                maxPackageQuantity,
+                requiredBaseUnit
+        );
+    }
+
+    private boolean hasConstraintValue(
+            FlexibleItemConstraints constraints
+    ) {
+        return constraints != null
+                && (
+                constraints.category() != null
+                        || constraints.requiredBrand() != null
+                        || constraints.minPackageQuantity() != null
+                        || constraints.maxPackageQuantity() != null
+                        || constraints.requiredBaseUnit() != null
+        );
+    }
+
+    private void validatePackageQuantity(
+            BigDecimal value,
+            String fieldName
+    ) {
+        if (value == null) {
+            return;
+        }
+
+        if (value.compareTo(BigDecimal.ZERO) <= 0) {
+            throw badRequest(fieldName + " mora biti veća od nule");
+        }
+
+        BigDecimal normalized = value.stripTrailingZeros();
+        int integerDigits = normalized.precision() - normalized.scale();
+
+        if (normalized.scale() > 4 || integerDigits > 10) {
+            throw badRequest(
+                    fieldName
+                            + " može imati najviše 10 celih i 4 decimalne cifre"
+            );
+        }
     }
 
     private ValidatedShoppingListItem validateParsedItem(
@@ -478,5 +675,25 @@ public class ShoppingListService {
             BigDecimal quantity,
             ShoppingItemRule matchingRule
     ) {
+    }
+
+    private record ValidatedFlexibleConstraints(
+            String category,
+            String normalizedCategory,
+            String requiredBrand,
+            BigDecimal minPackageQuantity,
+            BigDecimal maxPackageQuantity,
+            String requiredBaseUnit
+    ) {
+        private static ValidatedFlexibleConstraints empty() {
+            return new ValidatedFlexibleConstraints(
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null
+            );
+        }
     }
 }

@@ -12,6 +12,10 @@ public record ShoppingListItemResponse(
         ShoppingItemRule matchingRule,
         ShoppingItemMatchingStatus matchingStatus,
         Long matchedCanonicalProductId,
+        Long matchingDecisionId,
+        BigDecimal matchingScore,
+        String matchingAlgorithmVersion,
+        FlexibleItemConstraints flexibleConstraints,
         OffsetDateTime createdAt,
         OffsetDateTime updatedAt
 ) {

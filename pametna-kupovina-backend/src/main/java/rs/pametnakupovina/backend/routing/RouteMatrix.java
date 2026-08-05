@@ -85,6 +85,13 @@ public record RouteMatrix(
                 .distanceMeters() / 1000.0;
     }
 
+    public Long durationSeconds(
+            String originId,
+            String destinationId
+    ) {
+        return entry(originId, destinationId).durationSeconds();
+    }
+
     private record RouteMatrixKey(
             String originId,
             String destinationId

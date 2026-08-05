@@ -7,8 +7,26 @@ public record AddShoppingListItemRequest(
         String rawInput,
         String barcode,
         BigDecimal quantity,
-        ShoppingItemRule matchingRule
+        ShoppingItemRule matchingRule,
+        FlexibleItemConstraints flexibleConstraints
 ) {
+
+    public AddShoppingListItemRequest(
+            String name,
+            String rawInput,
+            String barcode,
+            BigDecimal quantity,
+            ShoppingItemRule matchingRule
+    ) {
+        this(
+                name,
+                rawInput,
+                barcode,
+                quantity,
+                matchingRule,
+                null
+        );
+    }
 
     public AddShoppingListItemRequest(
             String name,
@@ -20,6 +38,7 @@ public record AddShoppingListItemRequest(
                 null,
                 barcode,
                 quantity,
+                null,
                 null
         );
     }

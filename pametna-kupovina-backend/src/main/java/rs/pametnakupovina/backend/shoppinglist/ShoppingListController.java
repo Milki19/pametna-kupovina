@@ -24,15 +24,18 @@ public class ShoppingListController {
     private final ShoppingListService service;
     private final ShoppingListPricingService pricingService;
     private final ShoppingListOptimizationService optimizationService;
+    private final ShoppingListMatchingService matchingService;
 
     public ShoppingListController(
             ShoppingListService service,
             ShoppingListPricingService pricingService,
-            ShoppingListOptimizationService optimizationService
+            ShoppingListOptimizationService optimizationService,
+            ShoppingListMatchingService matchingService
     ) {
         this.service = service;
         this.pricingService = pricingService;
         this.optimizationService = optimizationService;
+        this.matchingService = matchingService;
     }
 
     @PostMapping
@@ -99,6 +102,29 @@ public class ShoppingListController {
     ) {
         service.requireOwnedList(listId, clientToken);
         return pricingService.calculateBestPrices(listId);
+    }
+
+    @PostMapping("/{listId}/matching")
+    public ShoppingListMatchingResponse matchItems(
+            @PathVariable("listId") Long listId,
+            @RequestHeader(CLIENT_TOKEN_HEADER) String clientToken
+    ) {
+        return matchingService.match(listId, clientToken);
+    }
+
+    @PutMapping("/{listId}/items/{itemId}/match")
+    public ShoppingListItemResponse resolveItemMatch(
+            @PathVariable("listId") Long listId,
+            @PathVariable("itemId") Long itemId,
+            @RequestHeader(CLIENT_TOKEN_HEADER) String clientToken,
+            @RequestBody ResolveShoppingItemMatchRequest request
+    ) {
+        return matchingService.resolve(
+                listId,
+                itemId,
+                clientToken,
+                request
+        );
     }
 
     @GetMapping("/{listId}/optimization")
