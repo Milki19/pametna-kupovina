@@ -1,0 +1,5 @@
+# Android emulator reaches the backend on the host through 10.0.2.2.
+BACKEND_BASE_URL=http://10.0.2.2:8080/
+
+# For a physical phone, use the Mac's LAN address, for example:
+# BACKEND_BASE_URL=http://192.168.1.25:8080/

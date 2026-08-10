@@ -1,0 +1,266 @@
+package rs.pametnakupovina.app.data.network
+
+import kotlinx.serialization.Serializable
+
+@Serializable
+enum class ShoppingItemRuleDto {
+    EXACT_PRODUCT,
+    FLEXIBLE_CATEGORY
+}
+
+@Serializable
+enum class ShoppingItemMatchingStatusDto {
+    PENDING,
+    AUTO_MATCHED,
+    NEEDS_CONFIRMATION,
+    CONFIRMED,
+    UNMATCHED
+}
+
+@Serializable
+enum class ShoppingItemMatchActionDto {
+    CONFIRM,
+    REJECT
+}
+
+@Serializable
+enum class RecommendationItemStatusDto {
+    AVAILABLE,
+    NEEDS_CONFIRMATION,
+    UNMATCHED,
+    NO_VALID_PRICE
+}
+
+@Serializable
+enum class RecommendationScenarioTypeDto {
+    SINGLE_STORE,
+    RECOMMENDED_BALANCE,
+    LOWEST_PRICE
+}
+
+@Serializable
+data class FlexibleItemConstraintsDto(
+    val category: String,
+    val requiredBrand: String? = null,
+    val minPackageQuantity: Double? = null,
+    val maxPackageQuantity: Double? = null,
+    val requiredBaseUnit: String? = null
+)
+
+@Serializable
+data class ShoppingListSummaryDto(
+    val id: Long,
+    val name: String,
+    val createdAt: String,
+    val updatedAt: String,
+    val itemCount: Int
+)
+
+@Serializable
+data class ShoppingListItemDto(
+    val id: Long,
+    val name: String,
+    val rawInput: String? = null,
+    val barcode: String? = null,
+    val quantity: Double,
+    val matchingRule: ShoppingItemRuleDto,
+    val matchingStatus: ShoppingItemMatchingStatusDto,
+    val matchedCanonicalProductId: Long? = null,
+    val matchingDecisionId: Long? = null,
+    val matchingScore: Double? = null,
+    val matchingAlgorithmVersion: String? = null,
+    val flexibleConstraints: FlexibleItemConstraintsDto? = null,
+    val createdAt: String,
+    val updatedAt: String
+)
+
+@Serializable
+data class ShoppingListDto(
+    val id: Long,
+    val name: String,
+    val createdAt: String,
+    val updatedAt: String,
+    val items: List<ShoppingListItemDto>
+)
+
+@Serializable
+data class CreateShoppingListRequestDto(val name: String)
+
+@Serializable
+data class AddShoppingListItemRequestDto(
+    val name: String,
+    val rawInput: String? = null,
+    val barcode: String? = null,
+    val quantity: Double,
+    val matchingRule: ShoppingItemRuleDto,
+    val flexibleConstraints: FlexibleItemConstraintsDto? = null
+)
+
+@Serializable
+data class UpdateShoppingListItemRequestDto(
+    val name: String,
+    val rawInput: String? = null,
+    val barcode: String? = null,
+    val quantity: Double,
+    val matchingRule: ShoppingItemRuleDto,
+    val flexibleConstraints: FlexibleItemConstraintsDto? = null
+)
+
+@Serializable
+data class PasteShoppingListItemsRequestDto(val text: String)
+
+@Serializable
+data class PasteShoppingListItemsResponseDto(
+    val createdCount: Int,
+    val ignoredBlankLineCount: Int,
+    val items: List<ShoppingListItemDto>
+)
+
+@Serializable
+data class ProductMatchScoreDto(
+    val totalScore: Double,
+    val nameContribution: Double,
+    val brandContribution: Double,
+    val packageContribution: Double,
+    val reasons: List<String> = emptyList()
+)
+
+@Serializable
+data class ProductCandidateDto(
+    val canonicalProductId: Long,
+    val name: String,
+    val brand: String? = null,
+    val barcode: String? = null,
+    val quantityValue: Double? = null,
+    val baseUnit: String? = null,
+    val nameSimilarity: Double,
+    val score: ProductMatchScoreDto
+)
+
+@Serializable
+data class ShoppingItemMatchResultDto(
+    val itemId: Long,
+    val requestedName: String,
+    val matchingRule: ShoppingItemRuleDto,
+    val matchingStatus: ShoppingItemMatchingStatusDto,
+    val matchedCanonicalProductId: Long? = null,
+    val decisionId: Long? = null,
+    val score: Double? = null,
+    val blocksOptimization: Boolean,
+    val explanation: String,
+    val candidates: List<ProductCandidateDto> = emptyList()
+)
+
+@Serializable
+data class ShoppingListMatchingDto(
+    val listId: Long,
+    val totalItems: Int,
+    val automaticallyMatchedItems: Int,
+    val itemsNeedingConfirmation: Int,
+    val unmatchedItems: Int,
+    val flexibleItems: Int,
+    val readyForOptimization: Boolean,
+    val blockingItemIds: List<Long> = emptyList(),
+    val items: List<ShoppingItemMatchResultDto> = emptyList()
+)
+
+@Serializable
+data class ResolveShoppingItemMatchRequestDto(
+    val action: ShoppingItemMatchActionDto,
+    val canonicalProductId: Long? = null,
+    val note: String? = null
+)
+
+@Serializable
+data class OptimizationAssumptionsDto(
+    val candidateRadiusMeters: Int,
+    val maxCandidateStores: Int,
+    val costPerKm: Double,
+    val valuePerHour: Double,
+    val costPerStop: Double,
+    val straightLineAverageSpeedKmh: Double,
+    val currency: String
+)
+
+@Serializable
+data class RecommendationStoreDto(
+    val stopOrder: Int,
+    val storeId: Long,
+    val retailerCode: String,
+    val retailerName: String,
+    val storeFormatCode: String? = null,
+    val storeFormatName: String? = null,
+    val storeName: String,
+    val address: String? = null,
+    val city: String? = null,
+    val latitude: Double,
+    val longitude: Double,
+    val distanceFromPreviousKm: Double,
+    val durationFromPreviousSeconds: Long
+)
+
+@Serializable
+data class RecommendationItemDto(
+    val itemId: Long,
+    val requestedName: String,
+    val requestedQuantity: Double,
+    val matchingRule: ShoppingItemRuleDto,
+    val matchingStatus: ShoppingItemMatchingStatusDto,
+    val resultStatus: RecommendationItemStatusDto,
+    val storeId: Long? = null,
+    val retailerCode: String? = null,
+    val retailerName: String? = null,
+    val canonicalProductId: Long? = null,
+    val retailerProductId: Long? = null,
+    val productName: String? = null,
+    val productBrand: String? = null,
+    val productBarcode: String? = null,
+    val priceDate: String? = null,
+    val effectivePrice: Double? = null,
+    val lineTotal: Double? = null,
+    val priceScope: String? = null,
+    val explanation: String
+)
+
+@Serializable
+data class OptimizationScenarioDto(
+    val type: RecommendationScenarioTypeDto,
+    val available: Boolean,
+    val complete: Boolean,
+    val explanation: String,
+    val coveredItems: Int,
+    val unmatchedItems: Int,
+    val unavailableItems: Int,
+    val stopCount: Int,
+    val basketCost: Double,
+    val routeDistanceKm: Double,
+    val routeDurationSeconds: Long,
+    val travelCost: Double,
+    val timeCost: Double,
+    val stopCost: Double,
+    val totalCost: Double? = null,
+    val savingsComparedWithSingleStore: Double? = null,
+    val routeProvider: String,
+    val distanceMethod: String,
+    val approximateRoute: Boolean,
+    val priceSources: List<String> = emptyList(),
+    val dataAsOf: String? = null,
+    val stores: List<RecommendationStoreDto> = emptyList(),
+    val items: List<RecommendationItemDto> = emptyList(),
+    val disclaimer: String
+)
+
+@Serializable
+data class ShoppingRecommendationDto(
+    val listId: Long,
+    val listName: String,
+    val requestedDate: String,
+    val candidateStoreCount: Int,
+    val evaluatedSingleStoreScenarios: Int,
+    val evaluatedTwoStoreCombinations: Int,
+    val assumptions: OptimizationAssumptionsDto,
+    val singleStore: OptimizationScenarioDto,
+    val recommendedBalance: OptimizationScenarioDto,
+    val lowestPrice: OptimizationScenarioDto,
+    val disclaimer: String
+)
