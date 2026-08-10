@@ -165,9 +165,12 @@ public class RetailerLocationImportService {
                 "city"
         );
 
+        boolean storeFormatProvided =
+                importColumns.hasStoreFormatColumns();
+
         Long storeFormatId = defaultStoreFormatId;
 
-        if (importColumns.hasStoreFormatColumns()) {
+        if (storeFormatProvided) {
             String storeFormatCode = normalizeStoreFormatCode(
                     requiredText(record, "store_format_code")
             );
@@ -201,7 +204,8 @@ public class RetailerLocationImportService {
                     name,
                     address,
                     city,
-                    active
+                    active,
+                    storeFormatProvided
             );
 
             return;
@@ -215,7 +219,8 @@ public class RetailerLocationImportService {
                 address,
                 city,
                 coordinates,
-                active
+                active,
+                storeFormatProvided
         );
     }
 
@@ -226,7 +231,8 @@ public class RetailerLocationImportService {
             String name,
             String address,
             String city,
-            boolean active
+            boolean active,
+            boolean storeFormatProvided
     ) {
         jdbcClient.sql("""
                     INSERT INTO app.store AS existing_store (
@@ -242,7 +248,10 @@ public class RetailerLocationImportService {
                     VALUES (?, ?, ?, ?, ?, ?, NULL, ?)
                     ON CONFLICT (retailer_id, external_code)
                     DO UPDATE SET
-                        store_format_id = EXCLUDED.store_format_id,
+                        store_format_id = CASE
+                        WHEN ? THEN EXCLUDED.store_format_id
+                           ELSE existing_store.store_format_id
+                           END,
                         name = EXCLUDED.name,
                         location = CASE
                             WHEN BTRIM(existing_store.address)
@@ -352,6 +361,7 @@ public class RetailerLocationImportService {
                 .param(5, address)
                 .param(6, city)
                 .param(7, active)
+                .param(8, storeFormatProvided)
                 .update();
     }
 
@@ -363,10 +373,11 @@ public class RetailerLocationImportService {
             String address,
             String city,
             Coordinates coordinates,
-            boolean active
+            boolean active,
+            boolean storeFormatProvided
     ) {
         jdbcClient.sql("""
-                    INSERT INTO app.store (
+                    INSERT INTO app.store AS existing_store (
                         retailer_id,
                         store_format_id,
                         external_code,
@@ -407,7 +418,10 @@ public class RetailerLocationImportService {
                     )
                     ON CONFLICT (retailer_id, external_code)
                     DO UPDATE SET
-                        store_format_id = EXCLUDED.store_format_id,
+                        store_format_id = CASE
+                               WHEN ? THEN EXCLUDED.store_format_id
+                               ELSE existing_store.store_format_id
+                           END,
                         name = EXCLUDED.name,
                         address = EXCLUDED.address,
                         city = EXCLUDED.city,
@@ -446,6 +460,7 @@ public class RetailerLocationImportService {
                 .param(13, address)
                 .param(14, city)
                 .param(15, active)
+                .param(16, storeFormatProvided)
                 .update();
     }
 
