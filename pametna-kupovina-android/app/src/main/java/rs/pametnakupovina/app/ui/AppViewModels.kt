@@ -187,6 +187,7 @@ class ShoppingListViewModel @Inject constructor(
             _uiState.update { it.copy(isOffline = true) }
         }
     }
+
 }
 
 data class MatchingUiState(
@@ -309,7 +310,7 @@ class RecommendationViewModel @Inject constructor(
     }
 }
 
-private fun Throwable.toUserMessage(fallback: String): String = when (this) {
+internal fun Throwable.toUserMessage(fallback: String): String = when (this) {
     is IOException -> fallback
     is HttpException -> when (code()) {
         400 -> "Proveri unesene podatke i pokušaj ponovo."

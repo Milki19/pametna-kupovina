@@ -1,5 +1,6 @@
 package rs.pametnakupovina.app
 
+import android.security.NetworkSecurityPolicy
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dagger.hilt.android.testing.HiltAndroidRule
 import dagger.hilt.android.testing.HiltAndroidTest
@@ -7,6 +8,7 @@ import javax.inject.Inject
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -36,6 +38,12 @@ class InfrastructureSmokeTest {
     @Test
     fun hiltRetrofitRoomAndDataStoreAreReady() = runBlocking {
         assertEquals(BuildConfig.BACKEND_BASE_URL, retrofit.baseUrl().toString())
+        if (!retrofit.baseUrl().isHttps) {
+            assertTrue(
+                NetworkSecurityPolicy.getInstance()
+                    .isCleartextTrafficPermitted(retrofit.baseUrl().host)
+            )
+        }
         assertNotNull(api)
         assertNotNull(database.draftItemDao().getAllItems())
 

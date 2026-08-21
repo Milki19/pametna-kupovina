@@ -21,7 +21,7 @@ private val Context.clientIdentityDataStore by preferencesDataStore(
 
 @Singleton
 class ClientIdentityStore @Inject constructor(
-    @ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context
 ) {
     private val tokenMutex = Mutex()
 

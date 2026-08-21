@@ -2,6 +2,8 @@ package rs.pametnakupovina.app.di
 
 import android.content.Context
 import androidx.room.Room
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationServices
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -18,9 +20,12 @@ import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import rs.pametnakupovina.app.BuildConfig
 import rs.pametnakupovina.app.data.local.DraftItemDao
+import rs.pametnakupovina.app.data.local.MIGRATION_1_2
 import rs.pametnakupovina.app.data.local.PametnaKupovinaDatabase
 import rs.pametnakupovina.app.data.network.ShoppingApiService
 import rs.pametnakupovina.app.data.preferences.ClientIdentityStore
+import rs.pametnakupovina.app.location.FusedLocationProvider
+import rs.pametnakupovina.app.location.LocationProvider
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -84,10 +89,30 @@ object DatabaseModule {
         context,
         PametnaKupovinaDatabase::class.java,
         "pametna-kupovina.db"
-    ).build()
+    )
+        .addMigrations(MIGRATION_1_2)
+        .build()
 
     @Provides
     fun provideDraftItemDao(
         database: PametnaKupovinaDatabase
     ): DraftItemDao = database.draftItemDao()
+}
+
+@Module
+@InstallIn(SingletonComponent::class)
+object LocationModule {
+
+    @Provides
+    @Singleton
+    fun provideFusedLocationClient(
+        @ApplicationContext context: Context
+    ): FusedLocationProviderClient =
+        LocationServices.getFusedLocationProviderClient(context)
+
+    @Provides
+    @Singleton
+    fun provideLocationProvider(
+        provider: FusedLocationProvider
+    ): LocationProvider = provider
 }

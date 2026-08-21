@@ -11,6 +11,7 @@ data class DraftItemEntity(
     val name: String,
     val rawInput: String? = null,
     val barcode: String? = null,
+    val canonicalProductId: Long? = null,
     val quantity: Double,
     val matchingRule: String,
     val matchingStatus: String = "PENDING",

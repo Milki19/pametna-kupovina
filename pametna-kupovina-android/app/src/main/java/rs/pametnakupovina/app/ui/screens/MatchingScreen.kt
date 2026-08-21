@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -21,7 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import rs.pametnakupovina.app.data.network.ProductCandidateDto
 import rs.pametnakupovina.app.data.network.ShoppingItemMatchResultDto
@@ -29,6 +30,9 @@ import rs.pametnakupovina.app.data.network.ShoppingItemMatchingStatusDto
 import rs.pametnakupovina.app.ui.MatchingViewModel
 import rs.pametnakupovina.app.ui.components.ErrorState
 import rs.pametnakupovina.app.ui.components.LoadingState
+import rs.pametnakupovina.app.ui.components.MetricRow
+import rs.pametnakupovina.app.ui.components.StatusPill
+import rs.pametnakupovina.app.ui.components.StatusTone
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -71,16 +75,25 @@ fun MatchingScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         item {
-                            Card(modifier = Modifier.fillMaxWidth()) {
+                            Card(
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
                                 Column(Modifier.padding(16.dp)) {
                                     Text(
                                         "Sažetak",
                                         style = MaterialTheme.typography.titleLarge
                                     )
-                                    Text("Automatski povezano: ${result.automaticallyMatchedItems}")
-                                    Text("Čeka potvrdu: ${result.itemsNeedingConfirmation}")
-                                    Text("Neupareno: ${result.unmatchedItems}")
-                                    Text("Fleksibilno: ${result.flexibleItems}")
+                                    MetricRow(
+                                        connectedItems(result).toString() to
+                                            "povezano",
+                                        result.itemsNeedingConfirmation.toString() to
+                                            "za potvrdu",
+                                        result.unmatchedItems.toString() to
+                                            "neupareno"
+                                    )
                                 }
                             }
                         }
@@ -139,7 +152,10 @@ private fun MatchingItemCard(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(item.requestedName, style = MaterialTheme.typography.titleMedium)
-            Text(statusText(item.matchingStatus))
+            StatusPill(
+                text = statusText(item.matchingStatus),
+                tone = statusTone(item.matchingStatus)
+            )
             Text(item.explanation, style = MaterialTheme.typography.bodySmall)
 
             if (item.matchingStatus == ShoppingItemMatchingStatusDto.NEEDS_CONFIRMATION) {
@@ -204,3 +220,15 @@ private fun statusText(status: ShoppingItemMatchingStatusDto): String = when (st
     ShoppingItemMatchingStatusDto.CONFIRMED -> "Potvrđeno"
     ShoppingItemMatchingStatusDto.UNMATCHED -> "Neupareno"
 }
+
+private fun statusTone(status: ShoppingItemMatchingStatusDto): StatusTone =
+    when (status) {
+        ShoppingItemMatchingStatusDto.AUTO_MATCHED,
+        ShoppingItemMatchingStatusDto.CONFIRMED -> StatusTone.POSITIVE
+        ShoppingItemMatchingStatusDto.PENDING,
+        ShoppingItemMatchingStatusDto.NEEDS_CONFIRMATION -> StatusTone.WARNING
+        ShoppingItemMatchingStatusDto.UNMATCHED -> StatusTone.ERROR
+    }
+
+internal fun connectedItems(result: rs.pametnakupovina.app.data.network.ShoppingListMatchingDto): Int =
+    result.automaticallyMatchedItems + result.confirmedItems

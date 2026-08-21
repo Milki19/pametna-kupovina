@@ -137,6 +137,10 @@ public class ShoppingListService {
                 request == null ? null : request.barcode()
         );
 
+        Long canonicalProductId = request == null
+                ? null
+                : request.canonicalProductId();
+
         if (barcode != null && barcode.length() > 32) {
             throw badRequest(
                     "Barkod može imati najviše 32 karaktera"
@@ -159,6 +163,12 @@ public class ShoppingListService {
                         ? ShoppingItemRule.EXACT_PRODUCT
                         : request.matchingRule();
 
+        validateCanonicalProductSelection(
+                canonicalProductId,
+                barcode,
+                matchingRule
+        );
+
         ValidatedFlexibleConstraints flexible =
                 validateFlexibleConstraints(
                         name,
@@ -174,6 +184,7 @@ public class ShoppingListService {
                 name,
                 rawInput,
                 barcode,
+                canonicalProductId,
                 quantity,
                 matchingRule,
                 flexible.category(),
@@ -246,6 +257,7 @@ public class ShoppingListService {
                                 listId,
                                 item.name(),
                                 item.rawInput(),
+                                null,
                                 null,
                                 item.quantity(),
                                 item.matchingRule(),
@@ -330,6 +342,10 @@ public class ShoppingListService {
                 request == null ? null : request.barcode()
         );
 
+        Long canonicalProductId = request == null
+                ? null
+                : request.canonicalProductId();
+
         if (barcode != null && barcode.length() > 32) {
             throw badRequest(
                     "Barkod može imati najviše 32 karaktera"
@@ -352,6 +368,12 @@ public class ShoppingListService {
                         ? ShoppingItemRule.EXACT_PRODUCT
                         : request.matchingRule();
 
+        validateCanonicalProductSelection(
+                canonicalProductId,
+                barcode,
+                matchingRule
+        );
+
         ValidatedFlexibleConstraints flexible =
                 validateFlexibleConstraints(
                         name,
@@ -369,6 +391,7 @@ public class ShoppingListService {
                         name,
                         rawInput,
                         barcode,
+                        canonicalProductId,
                         quantity,
                         matchingRule,
                         flexible.category(),
@@ -398,6 +421,40 @@ public class ShoppingListService {
                 clientTokenHash
         )) {
             throw listNotFound(listId);
+        }
+    }
+
+    private void validateCanonicalProductSelection(
+            Long canonicalProductId,
+            String barcode,
+            ShoppingItemRule matchingRule
+    ) {
+        if (canonicalProductId == null) {
+            return;
+        }
+
+        if (canonicalProductId <= 0) {
+            throw badRequest("canonicalProductId mora biti pozitivan");
+        }
+
+        if (matchingRule != ShoppingItemRule.EXACT_PRODUCT) {
+            throw badRequest(
+                    "Canonical proizvod važi samo za tačnu stavku"
+            );
+        }
+
+        CanonicalProductReference product = repository
+                .findCanonicalProductById(canonicalProductId)
+                .orElseThrow(() -> badRequest(
+                        "Canonical proizvod nije pronađen: "
+                                + canonicalProductId
+                ));
+
+        if (barcode != null
+                && !barcode.equals(product.barcode())) {
+            throw badRequest(
+                    "Barkod ne pripada izabranom canonical proizvodu"
+            );
         }
     }
 

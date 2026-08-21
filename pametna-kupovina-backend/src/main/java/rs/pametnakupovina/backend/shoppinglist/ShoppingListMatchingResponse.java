@@ -6,6 +6,7 @@ public record ShoppingListMatchingResponse(
         Long listId,
         int totalItems,
         int automaticallyMatchedItems,
+        int confirmedItems,
         int itemsNeedingConfirmation,
         int unmatchedItems,
         int flexibleItems,

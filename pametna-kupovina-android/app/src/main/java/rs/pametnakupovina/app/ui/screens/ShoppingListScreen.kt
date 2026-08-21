@@ -15,9 +15,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -34,22 +35,32 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.math.BigDecimal
 import rs.pametnakupovina.app.data.DraftItemInput
 import rs.pametnakupovina.app.data.local.DraftItemEntity
+import rs.pametnakupovina.app.data.network.CanonicalProductSearchItemDto
 import rs.pametnakupovina.app.data.network.ShoppingItemRuleDto
+import rs.pametnakupovina.app.ui.ProductSearchUiState
+import rs.pametnakupovina.app.ui.ProductSearchViewModel
 import rs.pametnakupovina.app.ui.ShoppingListViewModel
 import rs.pametnakupovina.app.ui.components.LoadingState
+import rs.pametnakupovina.app.ui.components.StatusPill
+import rs.pametnakupovina.app.ui.components.StatusTone
+import rs.pametnakupovina.app.ui.components.canonicalProductPicker
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ShoppingListScreen(
     onOpenMatching: (Long) -> Unit,
-    viewModel: ShoppingListViewModel = hiltViewModel()
+    onOpenProduct: (Long) -> Unit,
+    viewModel: ShoppingListViewModel = hiltViewModel(),
+    productSearchViewModel: ProductSearchViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val productSearchState by productSearchViewModel.uiState
+        .collectAsStateWithLifecycle()
     var editedItem by remember { mutableStateOf<DraftItemEntity?>(null) }
     var showItemEditor by rememberSaveable { mutableStateOf(false) }
     var showPasteDialog by rememberSaveable { mutableStateOf(false) }
@@ -75,13 +86,14 @@ fun ShoppingListScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
+            ExtendedFloatingActionButton(
                 onClick = {
+                    productSearchViewModel.clear()
                     editedItem = null
                     showItemEditor = true
                 }
             ) {
-                Text("+")
+                Text("+ Dodaj stavku")
             }
         }
     ) { padding ->
@@ -173,10 +185,18 @@ fun ShoppingListScreen(
                     DraftItemCard(
                         item = item,
                         onEdit = {
+                            productSearchViewModel.clear()
+                            if (
+                                item.matchingRule ==
+                                ShoppingItemRuleDto.EXACT_PRODUCT.name
+                            ) {
+                                productSearchViewModel.updateQuery(item.name)
+                            }
                             editedItem = item
                             showItemEditor = true
                         },
-                        onDelete = { viewModel.deleteItem(item) }
+                        onDelete = { viewModel.deleteItem(item) },
+                        onOpenProduct = onOpenProduct
                     )
                 }
             }
@@ -186,13 +206,25 @@ fun ShoppingListScreen(
     if (showItemEditor) {
         ItemEditorDialog(
             item = editedItem,
-            onDismiss = { showItemEditor = false },
+            productSearchState = productSearchState,
+            onSearchQueryChange = productSearchViewModel::updateQuery,
+            onClearProductSearch = productSearchViewModel::clear,
+            onRetryProductSearch = productSearchViewModel::retry,
+            onLoadMoreProducts = productSearchViewModel::loadNextPage,
+            onDismiss = {
+                productSearchViewModel.clear()
+                showItemEditor = false
+            },
             onSave = { input ->
                 val current = editedItem
                 if (current == null) {
-                    viewModel.addItem(input) { showItemEditor = false }
+                    viewModel.addItem(input) {
+                        productSearchViewModel.clear()
+                        showItemEditor = false
+                    }
                 } else {
                     viewModel.updateItem(current, input) {
+                        productSearchViewModel.clear()
                         showItemEditor = false
                     }
                 }
@@ -214,9 +246,15 @@ fun ShoppingListScreen(
 private fun DraftItemCard(
     item: DraftItemEntity,
     onEdit: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onOpenProduct: (Long) -> Unit
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        ),
+        modifier = Modifier.fillMaxWidth()
+    ) {
         Column(Modifier.padding(16.dp)) {
             Text(item.name, style = MaterialTheme.typography.titleMedium)
             Text("Količina: ${formatQuantity(item.quantity)}")
@@ -228,22 +266,44 @@ private fun DraftItemCard(
                 },
                 style = MaterialTheme.typography.bodySmall
             )
-            if (item.syncState != "SYNCED") {
-                Text(
-                    "Čeka sinhronizaciju",
-                    color = MaterialTheme.colorScheme.tertiary,
-                    style = MaterialTheme.typography.labelMedium
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                StatusPill(
+                    text = matchingStatusText(item.matchingStatus),
+                    tone = matchingStatusTone(item.matchingStatus)
                 )
+                if (item.syncState != "SYNCED") {
+                    StatusPill("Čeka sinhronizaciju", StatusTone.WARNING)
+                }
             }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End
             ) {
+                item.canonicalProductId?.let { canonicalProductId ->
+                    TextButton(
+                        onClick = { onOpenProduct(canonicalProductId) }
+                    ) { Text("Cene") }
+                }
                 TextButton(onClick = onEdit) { Text("Izmeni") }
                 TextButton(onClick = onDelete) { Text("Obriši") }
             }
         }
     }
+}
+
+private fun matchingStatusText(status: String): String = when (status) {
+    "AUTO_MATCHED" -> "Automatski povezano"
+    "NEEDS_CONFIRMATION" -> "Potrebna potvrda"
+    "CONFIRMED" -> "Potvrđeno"
+    "UNMATCHED" -> "Neupareno"
+    else -> "Čeka proveru"
+}
+
+private fun matchingStatusTone(status: String): StatusTone = when (status) {
+    "AUTO_MATCHED", "CONFIRMED" -> StatusTone.POSITIVE
+    "NEEDS_CONFIRMATION", "PENDING" -> StatusTone.WARNING
+    "UNMATCHED" -> StatusTone.ERROR
+    else -> StatusTone.NEUTRAL
 }
 
 @Composable
@@ -271,6 +331,11 @@ private fun MessageCard(
 @Composable
 private fun ItemEditorDialog(
     item: DraftItemEntity?,
+    productSearchState: ProductSearchUiState,
+    onSearchQueryChange: (String) -> Unit,
+    onClearProductSearch: () -> Unit,
+    onRetryProductSearch: () -> Unit,
+    onLoadMoreProducts: () -> Unit,
     onDismiss: () -> Unit,
     onSave: (DraftItemInput) -> Unit
 ) {
@@ -302,6 +367,12 @@ private fun ItemEditorDialog(
     var baseUnit by rememberSaveable(item?.localId) {
         mutableStateOf(item?.requiredBaseUnit.orEmpty())
     }
+    var selectedProduct by remember(item?.localId) {
+        mutableStateOf<CanonicalProductSearchItemDto?>(null)
+    }
+    var selectedProductRawInput by remember(item?.localId) {
+        mutableStateOf<String?>(null)
+    }
 
     val parsedQuantity = quantity.replace(',', '.').toDoubleOrNull()
     val valid = name.isNotBlank() &&
@@ -314,14 +385,41 @@ private fun ItemEditorDialog(
         title = { Text(if (item == null) "Dodaj stavku" else "Izmeni stavku") },
         text = {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                item {
-                    OutlinedTextField(
-                        value = name,
-                        onValueChange = { name = it },
-                        label = { Text("Naziv") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
+                if (rule == ShoppingItemRuleDto.EXACT_PRODUCT) {
+                    canonicalProductPicker(
+                        query = name,
+                        selectedProduct = selectedProduct,
+                        searchState = productSearchState,
+                        onQueryChange = { value ->
+                            name = value
+                            selectedProduct = null
+                            selectedProductRawInput = null
+                            onSearchQueryChange(value)
+                        },
+                        onSelectProduct = { product ->
+                            selectedProductRawInput = name.trim()
+                            selectedProduct = product
+                            name = product.name
+                            onClearProductSearch()
+                        },
+                        onClearSelection = {
+                            selectedProduct = null
+                            selectedProductRawInput = null
+                            onSearchQueryChange(name)
+                        },
+                        onRetry = onRetryProductSearch,
+                        onLoadMore = onLoadMoreProducts
                     )
+                } else {
+                    item(key = "flexible-item-name") {
+                        OutlinedTextField(
+                            value = name,
+                            onValueChange = { name = it },
+                            label = { Text("Naziv stavke") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                 }
                 item {
                     OutlinedTextField(
@@ -339,13 +437,21 @@ private fun ItemEditorDialog(
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilterChip(
                             selected = rule == ShoppingItemRuleDto.EXACT_PRODUCT,
-                            onClick = { rule = ShoppingItemRuleDto.EXACT_PRODUCT },
+                            onClick = {
+                                rule = ShoppingItemRuleDto.EXACT_PRODUCT
+                                selectedProduct = null
+                                selectedProductRawInput = null
+                                onSearchQueryChange(name)
+                            },
                             label = { Text("Tačan proizvod") }
                         )
                         FilterChip(
                             selected = rule == ShoppingItemRuleDto.FLEXIBLE_CATEGORY,
                             onClick = {
                                 rule = ShoppingItemRuleDto.FLEXIBLE_CATEGORY
+                                selectedProduct = null
+                                selectedProductRawInput = null
+                                onClearProductSearch()
                             },
                             label = { Text("Fleksibilna") }
                         )
@@ -408,19 +514,52 @@ private fun ItemEditorDialog(
                     onSave(
                         DraftItemInput(
                             name = name,
-                            rawInput = item?.rawInput,
-                            barcode = item?.barcode,
+                            rawInput = when {
+                                selectedProduct != null ->
+                                    selectedProductRawInput
+                                item != null &&
+                                    item.name.trim() == name.trim() ->
+                                    item.rawInput
+                                else -> name.trim()
+                            },
+                            barcode = resolveDraftBarcode(
+                                item = item,
+                                enteredName = name,
+                                rule = rule,
+                                selectedProduct = selectedProduct
+                            ),
+                            canonicalProductId =
+                                resolveDraftCanonicalProductId(
+                                    item = item,
+                                    enteredName = name,
+                                    rule = rule,
+                                    selectedProduct = selectedProduct
+                                ),
                             quantity = requireNotNull(parsedQuantity),
                             matchingRule = rule,
-                            category = category,
-                            requiredBrand = brand,
+                            category = category.takeIf {
+                                rule == ShoppingItemRuleDto.FLEXIBLE_CATEGORY
+                            },
+                            requiredBrand = brand.takeIf {
+                                rule == ShoppingItemRuleDto.FLEXIBLE_CATEGORY
+                            },
                             minPackageQuantity = minPackage
                                 .replace(',', '.')
-                                .toDoubleOrNull(),
+                                .toDoubleOrNull()
+                                ?.takeIf {
+                                    rule ==
+                                        ShoppingItemRuleDto.FLEXIBLE_CATEGORY
+                                },
                             maxPackageQuantity = maxPackage
                                 .replace(',', '.')
-                                .toDoubleOrNull(),
-                            requiredBaseUnit = baseUnit
+                                .toDoubleOrNull()
+                                ?.takeIf {
+                                    rule ==
+                                        ShoppingItemRuleDto.FLEXIBLE_CATEGORY
+                                },
+                            requiredBaseUnit = baseUnit.takeIf {
+                                rule == ShoppingItemRuleDto.FLEXIBLE_CATEGORY
+                            }
                         )
                     )
                 }
@@ -430,6 +569,34 @@ private fun ItemEditorDialog(
             TextButton(onClick = onDismiss) { Text("Otkaži") }
         }
     )
+}
+
+internal fun resolveDraftBarcode(
+    item: DraftItemEntity?,
+    enteredName: String,
+    rule: ShoppingItemRuleDto,
+    selectedProduct: CanonicalProductSearchItemDto?
+): String? = when {
+    rule != ShoppingItemRuleDto.EXACT_PRODUCT -> null
+    selectedProduct != null -> selectedProduct.barcode
+    item != null &&
+        item.matchingRule == ShoppingItemRuleDto.EXACT_PRODUCT.name &&
+        item.name.trim() == enteredName.trim() -> item.barcode
+    else -> null
+}
+
+internal fun resolveDraftCanonicalProductId(
+    item: DraftItemEntity?,
+    enteredName: String,
+    rule: ShoppingItemRuleDto,
+    selectedProduct: CanonicalProductSearchItemDto?
+): Long? = when {
+    rule != ShoppingItemRuleDto.EXACT_PRODUCT -> null
+    selectedProduct != null -> selectedProduct.canonicalProductId
+    item != null &&
+        item.matchingRule == ShoppingItemRuleDto.EXACT_PRODUCT.name &&
+        item.name.trim() == enteredName.trim() -> item.canonicalProductId
+    else -> null
 }
 
 @Composable
@@ -466,5 +633,5 @@ private fun PasteItemsDialog(
     )
 }
 
-private fun formatQuantity(value: Double): String =
+internal fun formatQuantity(value: Double): String =
     BigDecimal.valueOf(value).stripTrailingZeros().toPlainString()

@@ -64,20 +64,25 @@ public class ShoppingListMatchingService {
                 .map(ShoppingItemMatchResult::itemId)
                 .toList();
 
-        int automaticallyMatched = (int) results.stream()
-                .filter(result -> result.matchingStatus()
-                        == ShoppingItemMatchingStatus.AUTO_MATCHED)
-                .count();
+        int automaticallyMatched = countItemsWithStatus(
+                results,
+                ShoppingItemMatchingStatus.AUTO_MATCHED
+        );
 
-        int needsConfirmation = (int) results.stream()
-                .filter(result -> result.matchingStatus()
-                        == ShoppingItemMatchingStatus.NEEDS_CONFIRMATION)
-                .count();
+        int confirmed = countItemsWithStatus(
+                results,
+                ShoppingItemMatchingStatus.CONFIRMED
+        );
 
-        int unmatched = (int) results.stream()
-                .filter(result -> result.matchingStatus()
-                        == ShoppingItemMatchingStatus.UNMATCHED)
-                .count();
+        int needsConfirmation = countItemsWithStatus(
+                results,
+                ShoppingItemMatchingStatus.NEEDS_CONFIRMATION
+        );
+
+        int unmatched = countItemsWithStatus(
+                results,
+                ShoppingItemMatchingStatus.UNMATCHED
+        );
 
         int flexible = (int) results.stream()
                 .filter(result -> result.matchingRule()
@@ -90,6 +95,7 @@ public class ShoppingListMatchingService {
                 listId,
                 results.size(),
                 automaticallyMatched,
+                confirmed,
                 needsConfirmation,
                 unmatched,
                 flexible,
@@ -97,6 +103,15 @@ public class ShoppingListMatchingService {
                 blockingItemIds,
                 results
         );
+    }
+
+    static int countItemsWithStatus(
+            List<ShoppingItemMatchResult> results,
+            ShoppingItemMatchingStatus status
+    ) {
+        return (int) results.stream()
+                .filter(result -> result.matchingStatus() == status)
+                .count();
     }
 
     @Transactional

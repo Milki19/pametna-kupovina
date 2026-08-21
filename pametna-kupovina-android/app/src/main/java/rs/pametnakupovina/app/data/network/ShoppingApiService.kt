@@ -11,6 +11,20 @@ import retrofit2.http.Query
 
 interface ShoppingApiService {
 
+    @GET("api/v1/products/search")
+    suspend fun searchProducts(
+        @Query("query") query: String,
+        @Query("page") page: Int = 0,
+        @Query("limit") limit: Int = 10
+    ): CanonicalProductSearchPageDto
+
+    @GET("api/v1/products/{canonicalProductId}")
+    suspend fun getProductDetails(
+        @Path("canonicalProductId") canonicalProductId: Long,
+        @Query("date") date: String? = null,
+        @Query("historyLimit") historyLimit: Int = 30
+    ): CanonicalProductDetailsDto
+
     @POST("api/v1/shopping-lists")
     suspend fun createShoppingList(
         @Body request: CreateShoppingListRequestDto

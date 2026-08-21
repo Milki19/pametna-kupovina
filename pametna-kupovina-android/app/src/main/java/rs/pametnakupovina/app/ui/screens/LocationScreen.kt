@@ -1,15 +1,6 @@
 package rs.pametnakupovina.app.ui.screens
 
 import android.Manifest
-import android.annotation.SuppressLint
-import android.content.Context
-import android.content.pm.PackageManager
-import android.location.Location
-import android.location.LocationListener
-import android.location.LocationManager
-import android.os.Build
-import android.os.Bundle
-import android.os.Looper
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -32,6 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,40 +32,27 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
-import java.util.function.Consumer
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import rs.pametnakupovina.app.location.hasLocationPermission
+import rs.pametnakupovina.app.ui.LocationViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LocationScreen(
     onBack: () -> Unit,
-    onCalculate: (Double, Double) -> Unit
+    onCalculate: (Double, Double) -> Unit,
+    viewModel: LocationViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
     var latitudeText by remember { mutableStateOf("") }
     var longitudeText by remember { mutableStateOf("") }
-    var isResolving by remember { mutableStateOf(false) }
-    var locationMessage by remember { mutableStateOf<String?>(null) }
 
-    val useResolvedLocation: (Double, Double) -> Unit = { latitude, longitude ->
-        latitudeText = latitude.toString()
-        longitudeText = longitude.toString()
-        isResolving = false
-        locationMessage = "Lokacija je pronađena. Proveri je i pokreni računanje."
-    }
-
-    val resolveLocation = remember(context) {
-        {
-            isResolving = true
-            locationMessage = null
-            requestCurrentLocation(
-                context = context,
-                onSuccess = useResolvedLocation,
-                onError = { message ->
-                    isResolving = false
-                    locationMessage = message
-                }
-            )
+    LaunchedEffect(state.coordinates) {
+        state.coordinates?.let { coordinates ->
+            latitudeText = coordinates.latitude.toString()
+            longitudeText = coordinates.longitude.toString()
         }
     }
 
@@ -83,18 +62,15 @@ fun LocationScreen(
         val granted = result[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
             result[Manifest.permission.ACCESS_COARSE_LOCATION] == true
         if (granted) {
-            resolveLocation()
+            viewModel.resolveCurrentLocation()
         } else {
-            isResolving = false
-            locationMessage =
-                "Dozvola nije odobrena. Unesi latitude i longitude ručno."
+            viewModel.permissionDenied()
         }
     }
 
     val latitude = latitudeText.replace(',', '.').toDoubleOrNull()
     val longitude = longitudeText.replace(',', '.').toDoubleOrNull()
-    val coordinatesValid = latitude != null && latitude in -90.0..90.0 &&
-        longitude != null && longitude in -180.0..180.0
+    val coordinatesValid = coordinatesAreValid(latitude, longitude)
 
     Scaffold(
         topBar = {
@@ -129,12 +105,11 @@ fun LocationScreen(
             }
 
             OutlinedButton(
-                enabled = !isResolving,
+                enabled = !state.isResolving,
                 onClick = {
                     if (hasLocationPermission(context)) {
-                        resolveLocation()
+                        viewModel.resolveCurrentLocation()
                     } else {
-                        isResolving = true
                         permissionLauncher.launch(
                             arrayOf(
                                 Manifest.permission.ACCESS_FINE_LOCATION,
@@ -145,49 +120,50 @@ fun LocationScreen(
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                if (isResolving) {
+                if (state.isResolving) {
                     CircularProgressIndicator(strokeWidth = 2.dp)
                 } else {
                     Text("Koristi trenutnu lokaciju")
                 }
             }
 
-            Text(
-                "Ručni unos",
-                style = MaterialTheme.typography.titleMedium
-            )
+            Text("Ručni unos", style = MaterialTheme.typography.titleMedium)
             OutlinedTextField(
                 value = latitudeText,
                 onValueChange = { latitudeText = it },
-                label = { Text("Latitude, npr. 44.7866") },
+                label = { Text("Latitude, npr. 44.2740") },
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Decimal
                 ),
+                isError = latitudeText.isNotBlank() &&
+                    (latitude == null || latitude !in -90.0..90.0),
                 modifier = Modifier.fillMaxWidth()
             )
             OutlinedTextField(
                 value = longitudeText,
                 onValueChange = { longitudeText = it },
-                label = { Text("Longitude, npr. 20.4489") },
+                label = { Text("Longitude, npr. 19.8800") },
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Decimal
                 ),
+                isError = longitudeText.isNotBlank() &&
+                    (longitude == null || longitude !in -180.0..180.0),
                 modifier = Modifier.fillMaxWidth()
             )
 
-            locationMessage?.let { message ->
+            state.message?.let { message ->
                 Text(
                     message,
-                    color = if (coordinatesValid) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
+                    color = if (state.isError) {
                         MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.primary
                     }
                 )
             }
 
             Button(
-                enabled = coordinatesValid && !isResolving,
+                enabled = coordinatesValid && !state.isResolving,
                 onClick = {
                     onCalculate(
                         requireNotNull(latitude),
@@ -202,71 +178,8 @@ fun LocationScreen(
     }
 }
 
-private fun hasLocationPermission(context: Context): Boolean =
-    ContextCompat.checkSelfPermission(
-        context,
-        Manifest.permission.ACCESS_FINE_LOCATION
-    ) == PackageManager.PERMISSION_GRANTED ||
-        ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.ACCESS_COARSE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-
-@SuppressLint("MissingPermission")
-private fun requestCurrentLocation(
-    context: Context,
-    onSuccess: (Double, Double) -> Unit,
-    onError: (String) -> Unit
-) {
-    if (!hasLocationPermission(context)) {
-        onError("Dozvola za lokaciju nije odobrena.")
-        return
-    }
-
-    val manager = context.getSystemService(LocationManager::class.java)
-    val provider = when {
-        manager.isProviderEnabled(LocationManager.NETWORK_PROVIDER) ->
-            LocationManager.NETWORK_PROVIDER
-        manager.isProviderEnabled(LocationManager.GPS_PROVIDER) ->
-            LocationManager.GPS_PROVIDER
-        else -> {
-            onError("Lokacijske usluge nisu uključene. Unesi koordinate ručno.")
-            return
-        }
-    }
-
-    val handle: (Location?) -> Unit = { location ->
-        if (location == null) {
-            onError("Lokacija nije pronađena. Unesi koordinate ručno.")
-        } else {
-            onSuccess(location.latitude, location.longitude)
-        }
-    }
-
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-        manager.getCurrentLocation(
-            provider,
-            null,
-            context.mainExecutor,
-            Consumer(handle)
-        )
-    } else {
-        @Suppress("DEPRECATION")
-        manager.requestSingleUpdate(
-            provider,
-            object : LocationListener {
-                override fun onLocationChanged(location: Location) {
-                    handle(location)
-                }
-
-                @Deprecated("Deprecated by Android")
-                override fun onStatusChanged(
-                    provider: String?,
-                    status: Int,
-                    extras: Bundle?
-                ) = Unit
-            },
-            Looper.getMainLooper()
-        )
-    }
-}
+internal fun coordinatesAreValid(
+    latitude: Double?,
+    longitude: Double?
+): Boolean = latitude != null && latitude in -90.0..90.0 &&
+    longitude != null && longitude in -180.0..180.0

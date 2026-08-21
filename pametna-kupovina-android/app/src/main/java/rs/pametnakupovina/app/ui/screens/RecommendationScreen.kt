@@ -24,7 +24,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -197,9 +197,6 @@ private fun RecommendationContent(result: ShoppingRecommendationDto) {
                     Text(
                         selected.disclaimer.ifBlank { result.disclaimer }
                     )
-                    Text(
-                        "Zalihe i konačna cena na kasi nisu garantovane."
-                    )
                 }
             }
         }
@@ -305,7 +302,14 @@ private fun StoreAllocationCard(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(item.requestedName)
-                            item.productName?.let {
+                            item.productName
+                                ?.takeUnless {
+                                    it.equals(item.requestedName, ignoreCase = true)
+                                }
+                                ?.let {
+                                Text(it, style = MaterialTheme.typography.bodySmall)
+                            }
+                            itemPriceBreakdown(item)?.let {
                                 Text(it, style = MaterialTheme.typography.bodySmall)
                             }
                         }
@@ -382,6 +386,14 @@ private fun money(value: Double): String =
     BigDecimal.valueOf(value)
         .setScale(2, RoundingMode.HALF_UP)
         .toPlainString() + " RSD"
+
+internal fun itemPriceBreakdown(item: RecommendationItemDto): String? {
+    val unitPrice = item.effectivePrice ?: return null
+    val quantity = BigDecimal.valueOf(item.requestedQuantity)
+        .stripTrailingZeros()
+        .toPlainString()
+    return "$quantity × ${money(unitPrice)}"
+}
 
 private fun distance(value: Double): String =
     BigDecimal.valueOf(value)

@@ -91,6 +91,7 @@ data class AddShoppingListItemRequestDto(
     val name: String,
     val rawInput: String? = null,
     val barcode: String? = null,
+    val canonicalProductId: Long? = null,
     val quantity: Double,
     val matchingRule: ShoppingItemRuleDto,
     val flexibleConstraints: FlexibleItemConstraintsDto? = null
@@ -101,6 +102,7 @@ data class UpdateShoppingListItemRequestDto(
     val name: String,
     val rawInput: String? = null,
     val barcode: String? = null,
+    val canonicalProductId: Long? = null,
     val quantity: Double,
     val matchingRule: ShoppingItemRuleDto,
     val flexibleConstraints: FlexibleItemConstraintsDto? = null
@@ -114,6 +116,74 @@ data class PasteShoppingListItemsResponseDto(
     val createdCount: Int,
     val ignoredBlankLineCount: Int,
     val items: List<ShoppingListItemDto>
+)
+
+@Serializable
+data class CanonicalProductSearchItemDto(
+    val canonicalProductId: Long,
+    val name: String,
+    val brand: String? = null,
+    val barcode: String? = null,
+    val quantityValue: Double? = null,
+    val baseUnit: String? = null,
+    val score: Double
+)
+
+@Serializable
+data class CanonicalProductSearchPageDto(
+    val query: String,
+    val page: Int,
+    val limit: Int,
+    val totalElements: Long,
+    val totalPages: Int,
+    val hasNext: Boolean,
+    val items: List<CanonicalProductSearchItemDto> = emptyList()
+)
+
+@Serializable
+data class CanonicalProductOfferDto(
+    val retailerProductId: Long,
+    val retailerCode: String,
+    val retailerName: String,
+    val storeId: Long? = null,
+    val storeName: String? = null,
+    val storeFormatCode: String? = null,
+    val storeFormatName: String? = null,
+    val priceDate: String,
+    val regularPrice: Double? = null,
+    val discountedPrice: Double? = null,
+    val effectivePrice: Double,
+    val unitPrice: Double? = null,
+    val priceScope: String
+)
+
+@Serializable
+data class CanonicalProductPricePointDto(
+    val retailerProductId: Long,
+    val retailerCode: String,
+    val retailerName: String,
+    val storeId: Long? = null,
+    val storeName: String? = null,
+    val storeFormatName: String? = null,
+    val priceDate: String,
+    val regularPrice: Double? = null,
+    val discountedPrice: Double? = null,
+    val effectivePrice: Double,
+    val priceScope: String
+)
+
+@Serializable
+data class CanonicalProductDetailsDto(
+    val canonicalProductId: Long,
+    val name: String,
+    val brand: String? = null,
+    val barcode: String? = null,
+    val quantityValue: Double? = null,
+    val baseUnit: String? = null,
+    val requestedDate: String,
+    val latestPriceDate: String? = null,
+    val offers: List<CanonicalProductOfferDto> = emptyList(),
+    val priceHistory: List<CanonicalProductPricePointDto> = emptyList()
 )
 
 @Serializable
@@ -156,6 +226,7 @@ data class ShoppingListMatchingDto(
     val listId: Long,
     val totalItems: Int,
     val automaticallyMatchedItems: Int,
+    val confirmedItems: Int = 0,
     val itemsNeedingConfirmation: Int,
     val unmatchedItems: Int,
     val flexibleItems: Int,

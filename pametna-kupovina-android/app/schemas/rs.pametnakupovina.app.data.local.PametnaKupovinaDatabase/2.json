@@ -1,0 +1,112 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 2,
+    "identityHash": "22412e16c4a713dcbd9345129681cfa0",
+    "entities": [
+      {
+        "tableName": "draft_items",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`localId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `remoteId` INTEGER, `name` TEXT NOT NULL, `rawInput` TEXT, `barcode` TEXT, `canonicalProductId` INTEGER, `quantity` REAL NOT NULL, `matchingRule` TEXT NOT NULL, `matchingStatus` TEXT NOT NULL, `category` TEXT, `requiredBrand` TEXT, `minPackageQuantity` REAL, `maxPackageQuantity` REAL, `requiredBaseUnit` TEXT, `syncState` TEXT NOT NULL, `updatedAtEpochMillis` INTEGER NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "localId",
+            "columnName": "localId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "remoteId",
+            "columnName": "remoteId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rawInput",
+            "columnName": "rawInput",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "barcode",
+            "columnName": "barcode",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "canonicalProductId",
+            "columnName": "canonicalProductId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "quantity",
+            "columnName": "quantity",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "matchingRule",
+            "columnName": "matchingRule",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "matchingStatus",
+            "columnName": "matchingStatus",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "category",
+            "columnName": "category",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "requiredBrand",
+            "columnName": "requiredBrand",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "minPackageQuantity",
+            "columnName": "minPackageQuantity",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "maxPackageQuantity",
+            "columnName": "maxPackageQuantity",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "requiredBaseUnit",
+            "columnName": "requiredBaseUnit",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "syncState",
+            "columnName": "syncState",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtEpochMillis",
+            "columnName": "updatedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "localId"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '22412e16c4a713dcbd9345129681cfa0')"
+    ]
+  }
+}

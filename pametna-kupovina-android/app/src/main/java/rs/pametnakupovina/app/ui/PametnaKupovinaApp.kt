@@ -7,10 +7,11 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import rs.pametnakupovina.app.ui.screens.LocationScreen
 import rs.pametnakupovina.app.ui.screens.MatchingScreen
+import rs.pametnakupovina.app.ui.screens.ProductDetailsScreen
 import rs.pametnakupovina.app.ui.screens.RecommendationScreen
 import rs.pametnakupovina.app.ui.screens.ShoppingListScreen
 
@@ -19,10 +20,13 @@ private object Route {
     const val MATCHING = "matching/{listId}"
     const val LOCATION = "location/{listId}"
     const val RECOMMENDATION = "recommendation/{listId}"
+    const val PRODUCT_DETAILS = "product/{canonicalProductId}"
 
     fun matching(listId: Long) = "matching/$listId"
     fun location(listId: Long) = "location/$listId"
     fun recommendation(listId: Long) = "recommendation/$listId"
+    fun productDetails(canonicalProductId: Long) =
+        "product/$canonicalProductId"
 }
 
 @Composable
@@ -40,8 +44,24 @@ fun PametnaKupovinaApp() {
             ShoppingListScreen(
                 onOpenMatching = { listId ->
                     navController.navigate(Route.matching(listId))
+                },
+                onOpenProduct = { canonicalProductId ->
+                    navController.navigate(
+                        Route.productDetails(canonicalProductId)
+                    )
                 }
             )
+        }
+
+        composable(
+            route = Route.PRODUCT_DETAILS,
+            arguments = listOf(
+                navArgument("canonicalProductId") {
+                    type = NavType.LongType
+                }
+            )
+        ) {
+            ProductDetailsScreen(onBack = navController::popBackStack)
         }
 
         composable(

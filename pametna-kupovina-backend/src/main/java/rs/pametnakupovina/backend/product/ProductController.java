@@ -29,19 +29,53 @@ public class ProductController {
     private final FuzzyProductCandidateService fuzzyCandidateService;
     private final ProductMatchDecisionService matchDecisionService;
     private final ProductMatchFeedbackService matchFeedbackService;
+    private final CanonicalProductDetailsService productDetailsService;
 
     public ProductController(
             CanonicalProductSearchService canonicalSearchService,
             ProductSearchService productSearchService,
             FuzzyProductCandidateService fuzzyCandidateService,
             ProductMatchDecisionService matchDecisionService,
-            ProductMatchFeedbackService matchFeedbackService
+            ProductMatchFeedbackService matchFeedbackService,
+            CanonicalProductDetailsService productDetailsService
     ) {
         this.canonicalSearchService = canonicalSearchService;
         this.productSearchService = productSearchService;
         this.fuzzyCandidateService = fuzzyCandidateService;
         this.matchDecisionService = matchDecisionService;
         this.matchFeedbackService = matchFeedbackService;
+        this.productDetailsService = productDetailsService;
+    }
+
+    @GetMapping("/{canonicalProductId}")
+    public CanonicalProductDetailsResponse details(
+            @PathVariable("canonicalProductId") Long canonicalProductId,
+            @RequestParam(
+                    name = "date",
+                    required = false
+            ) java.time.LocalDate date,
+            @RequestParam(
+                    name = "historyLimit",
+                    defaultValue = "30"
+            ) int historyLimit
+    ) {
+        try {
+            return productDetailsService.find(
+                    canonicalProductId,
+                    date,
+                    historyLimit
+            ).orElseThrow(() -> new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "Canonical proizvod nije pronađen: "
+                            + canonicalProductId
+            ));
+        } catch (IllegalArgumentException exception) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    exception.getMessage(),
+                    exception
+            );
+        }
     }
 
     @GetMapping("/search")

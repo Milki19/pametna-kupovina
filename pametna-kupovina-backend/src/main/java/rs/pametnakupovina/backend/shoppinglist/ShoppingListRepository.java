@@ -297,6 +297,7 @@ public class ShoppingListRepository {
             String name,
             String rawInput,
             String barcode,
+            Long selectedCanonicalProductId,
             java.math.BigDecimal quantity,
             ShoppingItemRule matchingRule,
             String flexibleCategory,
@@ -307,8 +308,10 @@ public class ShoppingListRepository {
             String requiredBaseUnit
     ) {
         Long matchedCanonicalProductId =
-                findCanonicalProductIdByBarcode(barcode)
-                        .orElse(null);
+                selectedCanonicalProductId != null
+                        ? selectedCanonicalProductId
+                        : findCanonicalProductIdByBarcode(barcode)
+                                .orElse(null);
 
         ShoppingItemMatchingStatus matchingStatus =
                 matchedCanonicalProductId == null
@@ -427,6 +430,7 @@ public class ShoppingListRepository {
             String name,
             String rawInput,
             String barcode,
+            Long selectedCanonicalProductId,
             java.math.BigDecimal quantity,
             ShoppingItemRule matchingRule,
             String flexibleCategory,
@@ -437,8 +441,10 @@ public class ShoppingListRepository {
             String requiredBaseUnit
     ) {
         Long matchedCanonicalProductId =
-                findCanonicalProductIdByBarcode(barcode)
-                        .orElse(null);
+                selectedCanonicalProductId != null
+                        ? selectedCanonicalProductId
+                        : findCanonicalProductIdByBarcode(barcode)
+                                .orElse(null);
 
         ShoppingItemMatchingStatus matchingStatus =
                 matchedCanonicalProductId == null
@@ -616,6 +622,28 @@ public class ShoppingListRepository {
                         """)
                 .param(1, barcode)
                 .query(Long.class)
+                .optional();
+    }
+
+    public Optional<CanonicalProductReference> findCanonicalProductById(
+            Long canonicalProductId
+    ) {
+        if (canonicalProductId == null) {
+            return Optional.empty();
+        }
+
+        return jdbcClient.sql("""
+                        SELECT id, barcode
+                        FROM app.canonical_product
+                        WHERE id = ?
+                        """)
+                .param(1, canonicalProductId)
+                .query((resultSet, rowNumber) ->
+                        new CanonicalProductReference(
+                                resultSet.getLong("id"),
+                                resultSet.getString("barcode")
+                        )
+                )
                 .optional();
     }
 

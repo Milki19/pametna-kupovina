@@ -10,6 +10,8 @@ import rs.pametnakupovina.app.data.local.DraftItemDao
 import rs.pametnakupovina.app.data.local.DraftItemEntity
 import rs.pametnakupovina.app.data.local.SyncState
 import rs.pametnakupovina.app.data.network.AddShoppingListItemRequestDto
+import rs.pametnakupovina.app.data.network.CanonicalProductSearchPageDto
+import rs.pametnakupovina.app.data.network.CanonicalProductDetailsDto
 import rs.pametnakupovina.app.data.network.CreateShoppingListRequestDto
 import rs.pametnakupovina.app.data.network.FlexibleItemConstraintsDto
 import rs.pametnakupovina.app.data.network.ResolveShoppingItemMatchRequestDto
@@ -26,6 +28,7 @@ data class DraftItemInput(
     val name: String,
     val rawInput: String? = null,
     val barcode: String? = null,
+    val canonicalProductId: Long? = null,
     val quantity: Double,
     val matchingRule: ShoppingItemRuleDto,
     val category: String? = null,
@@ -40,6 +43,9 @@ data class DraftItemInput(
             "Količina mora biti veća od nule."
         }
         if (matchingRule == ShoppingItemRuleDto.FLEXIBLE_CATEGORY) {
+            require(canonicalProductId == null) {
+                "Fleksibilna stavka ne može imati canonical proizvod."
+            }
             require(!category.isNullOrBlank()) {
                 "Za fleksibilnu stavku izaberi kategoriju."
             }
@@ -89,6 +95,26 @@ class ShoppingRepository @Inject constructor(
     private val syncMutex = Mutex()
 
     val draftItems: Flow<List<DraftItemEntity>> = dao.observeVisibleItems()
+
+    suspend fun searchProducts(
+        query: String,
+        page: Int = 0,
+        limit: Int = 10
+    ): CanonicalProductSearchPageDto = api.searchProducts(
+        query = query.trim(),
+        page = page,
+        limit = limit
+    )
+
+    suspend fun getProductDetails(
+        canonicalProductId: Long,
+        date: String? = null,
+        historyLimit: Int = 30
+    ): CanonicalProductDetailsDto = api.getProductDetails(
+        canonicalProductId = canonicalProductId,
+        date = date,
+        historyLimit = historyLimit
+    )
 
     suspend fun addItem(input: DraftItemInput) {
         val value = input.validated()
@@ -294,6 +320,7 @@ private fun DraftItemInput.toEntity(
     name = name,
     rawInput = rawInput,
     barcode = barcode,
+    canonicalProductId = canonicalProductId,
     quantity = quantity,
     matchingRule = matchingRule.name,
     matchingStatus = matchingStatus,
@@ -320,6 +347,7 @@ private fun DraftItemEntity.toAddRequest() = AddShoppingListItemRequestDto(
     name = name,
     rawInput = rawInput,
     barcode = barcode,
+    canonicalProductId = canonicalProductId,
     quantity = quantity,
     matchingRule = ShoppingItemRuleDto.valueOf(matchingRule),
     flexibleConstraints = constraints()
@@ -330,6 +358,7 @@ private fun DraftItemEntity.toUpdateRequest() =
         name = name,
         rawInput = rawInput,
         barcode = barcode,
+        canonicalProductId = canonicalProductId,
         quantity = quantity,
         matchingRule = ShoppingItemRuleDto.valueOf(matchingRule),
         flexibleConstraints = constraints()
@@ -343,6 +372,7 @@ private fun ShoppingListItemDto.toEntity(
     name = name,
     rawInput = rawInput,
     barcode = barcode,
+    canonicalProductId = matchedCanonicalProductId,
     quantity = quantity,
     matchingRule = matchingRule.name,
     matchingStatus = matchingStatus.name,
