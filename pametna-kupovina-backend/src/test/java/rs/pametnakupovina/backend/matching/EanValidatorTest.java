@@ -9,9 +9,11 @@ class EanValidatorTest {
     private final EanValidator validator = new EanValidator();
 
     @Test
-    void acceptsValidEan8AndEan13() {
+    void acceptsValidGtinLengths() {
         assertThat(validator.isValid("96385074")).isTrue();
+        assertThat(validator.isValid("036000291452")).isTrue();
         assertThat(validator.isValid("8601234567899")).isTrue();
+        assertThat(validator.isValid("10012345678902")).isTrue();
     }
 
     @Test
@@ -23,7 +25,7 @@ class EanValidatorTest {
     @Test
     void rejectsUnsupportedLengthAndNonDigits() {
         assertThat(validator.isValid("1234567")).isFalse();
-        assertThat(validator.isValid("123456789012")).isFalse();
+        assertThat(validator.isValid("1234567890")).isFalse();
         assertThat(validator.isValid("860123456789A")).isFalse();
     }
 
@@ -38,6 +40,8 @@ class EanValidatorTest {
         assertThat(validator.isValid(null)).isFalse();
         assertThat(validator.isValid("   ")).isFalse();
         assertThat(validator.isValid("00000000")).isFalse();
+        assertThat(validator.isValid("000000000000")).isFalse();
         assertThat(validator.isValid("0000000000000")).isFalse();
+        assertThat(validator.isValid("00000000000000")).isFalse();
     }
 }

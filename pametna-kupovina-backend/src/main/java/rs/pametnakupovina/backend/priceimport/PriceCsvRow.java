@@ -21,6 +21,7 @@ record PriceCsvRow(
         BigDecimal discountedPrice,
         LocalDate discountStartDate,
         LocalDate discountEndDate,
-        BigDecimal vatRate
+        BigDecimal vatRate,
+        Long storeId
 ) {
 }

@@ -64,6 +64,10 @@ public class ShoppingListRepository {
                             Long.class
                     ),
                     resultSet.getObject(
+                            "matched_product_family_id",
+                            Long.class
+                    ),
+                    resultSet.getObject(
                             "matching_decision_id",
                             Long.class
                     ),
@@ -220,6 +224,7 @@ public class ShoppingListRepository {
                                        matching_rule,
                                        matching_status,
                                        matched_canonical_product_id,
+                                       matched_product_family_id,
                                        matching_decision_id,
                                        matching_score,
                                        matching_algorithm_version,
@@ -298,6 +303,7 @@ public class ShoppingListRepository {
             String rawInput,
             String barcode,
             Long selectedCanonicalProductId,
+            Long selectedProductFamilyId,
             java.math.BigDecimal quantity,
             ShoppingItemRule matchingRule,
             String flexibleCategory,
@@ -308,13 +314,19 @@ public class ShoppingListRepository {
             String requiredBaseUnit
     ) {
         Long matchedCanonicalProductId =
-                selectedCanonicalProductId != null
+                matchingRule == ShoppingItemRule.EXACT_PRODUCT
+                        && selectedCanonicalProductId != null
                         ? selectedCanonicalProductId
-                        : findCanonicalProductIdByBarcode(barcode)
-                                .orElse(null);
+                        : matchingRule == ShoppingItemRule.EXACT_PRODUCT
+                        ? findCanonicalProductIdByBarcode(barcode)
+                                .orElse(null)
+                        : null;
 
         ShoppingItemMatchingStatus matchingStatus =
-                matchedCanonicalProductId == null
+                matchingRule == ShoppingItemRule.PRODUCT_FAMILY
+                        && selectedProductFamilyId != null
+                        ? ShoppingItemMatchingStatus.CONFIRMED
+                        : matchedCanonicalProductId == null
                         ? ShoppingItemMatchingStatus.PENDING
                         : ShoppingItemMatchingStatus.CONFIRMED;
 
@@ -328,6 +340,7 @@ public class ShoppingListRepository {
                             matching_rule,
                             matching_status,
                             matched_canonical_product_id,
+                            matched_product_family_id,
                             flexible_category,
                             flexible_category_normalized,
                             required_brand,
@@ -335,7 +348,7 @@ public class ShoppingListRepository {
                             max_package_quantity,
                             required_base_unit
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         RETURNING id,
                                   name,
                                   raw_input,
@@ -344,6 +357,7 @@ public class ShoppingListRepository {
                                   matching_rule,
                                   matching_status,
                                   matched_canonical_product_id,
+                                  matched_product_family_id,
                                   matching_decision_id,
                                   matching_score,
                                   matching_algorithm_version,
@@ -367,16 +381,17 @@ public class ShoppingListRepository {
                         matchedCanonicalProductId,
                         Types.BIGINT
                 )
-                .param(9, flexibleCategory, Types.VARCHAR)
+                .param(9, selectedProductFamilyId, Types.BIGINT)
+                .param(10, flexibleCategory, Types.VARCHAR)
                 .param(
-                        10,
+                        11,
                         flexibleCategoryNormalized,
                         Types.VARCHAR
                 )
-                .param(11, requiredBrand, Types.VARCHAR)
-                .param(12, minPackageQuantity, Types.NUMERIC)
-                .param(13, maxPackageQuantity, Types.NUMERIC)
-                .param(14, requiredBaseUnit, Types.VARCHAR)
+                .param(12, requiredBrand, Types.VARCHAR)
+                .param(13, minPackageQuantity, Types.NUMERIC)
+                .param(14, maxPackageQuantity, Types.NUMERIC)
+                .param(15, requiredBaseUnit, Types.VARCHAR)
                 .query(ITEM_ROW_MAPPER)
                 .single();
     }
@@ -431,6 +446,7 @@ public class ShoppingListRepository {
             String rawInput,
             String barcode,
             Long selectedCanonicalProductId,
+            Long selectedProductFamilyId,
             java.math.BigDecimal quantity,
             ShoppingItemRule matchingRule,
             String flexibleCategory,
@@ -441,13 +457,19 @@ public class ShoppingListRepository {
             String requiredBaseUnit
     ) {
         Long matchedCanonicalProductId =
-                selectedCanonicalProductId != null
+                matchingRule == ShoppingItemRule.EXACT_PRODUCT
+                        && selectedCanonicalProductId != null
                         ? selectedCanonicalProductId
-                        : findCanonicalProductIdByBarcode(barcode)
-                                .orElse(null);
+                        : matchingRule == ShoppingItemRule.EXACT_PRODUCT
+                        ? findCanonicalProductIdByBarcode(barcode)
+                                .orElse(null)
+                        : null;
 
         ShoppingItemMatchingStatus matchingStatus =
-                matchedCanonicalProductId == null
+                matchingRule == ShoppingItemRule.PRODUCT_FAMILY
+                        && selectedProductFamilyId != null
+                        ? ShoppingItemMatchingStatus.CONFIRMED
+                        : matchedCanonicalProductId == null
                         ? ShoppingItemMatchingStatus.PENDING
                         : ShoppingItemMatchingStatus.CONFIRMED;
 
@@ -460,6 +482,7 @@ public class ShoppingListRepository {
                         matching_rule = ?,
                         matching_status = ?,
                         matched_canonical_product_id = ?,
+                        matched_product_family_id = ?,
                         matching_decision_id = NULL,
                         matching_score = NULL,
                         matching_algorithm_version = NULL,
@@ -480,6 +503,7 @@ public class ShoppingListRepository {
                               matching_rule,
                               matching_status,
                               matched_canonical_product_id,
+                              matched_product_family_id,
                               matching_decision_id,
                               matching_score,
                               matching_algorithm_version,
@@ -502,18 +526,19 @@ public class ShoppingListRepository {
                         matchedCanonicalProductId,
                         Types.BIGINT
                 )
-                .param(8, flexibleCategory, Types.VARCHAR)
+                .param(8, selectedProductFamilyId, Types.BIGINT)
+                .param(9, flexibleCategory, Types.VARCHAR)
                 .param(
-                        9,
+                        10,
                         flexibleCategoryNormalized,
                         Types.VARCHAR
                 )
-                .param(10, requiredBrand, Types.VARCHAR)
-                .param(11, minPackageQuantity, Types.NUMERIC)
-                .param(12, maxPackageQuantity, Types.NUMERIC)
-                .param(13, requiredBaseUnit, Types.VARCHAR)
-                .param(14, itemId)
-                .param(15, listId)
+                .param(11, requiredBrand, Types.VARCHAR)
+                .param(12, minPackageQuantity, Types.NUMERIC)
+                .param(13, maxPackageQuantity, Types.NUMERIC)
+                .param(14, requiredBaseUnit, Types.VARCHAR)
+                .param(15, itemId)
+                .param(16, listId)
                 .query(ITEM_ROW_MAPPER)
                 .optional();
     }
@@ -531,6 +556,7 @@ public class ShoppingListRepository {
                                matching_rule,
                                matching_status,
                                matched_canonical_product_id,
+                               matched_product_family_id,
                                matching_decision_id,
                                matching_score,
                                matching_algorithm_version,
@@ -578,6 +604,7 @@ public class ShoppingListRepository {
                                   matching_rule,
                                   matching_status,
                                   matched_canonical_product_id,
+                                  matched_product_family_id,
                                   matching_decision_id,
                                   matching_score,
                                   matching_algorithm_version,
@@ -645,6 +672,24 @@ public class ShoppingListRepository {
                         )
                 )
                 .optional();
+    }
+
+    public boolean productFamilyExists(Long productFamilyId) {
+        if (productFamilyId == null) {
+            return false;
+        }
+
+        return jdbcClient.sql("""
+                        SELECT EXISTS (
+                            SELECT 1
+                            FROM app.product_family
+                            WHERE id = ?
+                              AND review_status <> 'REJECTED'
+                        )
+                        """)
+                .param(1, productFamilyId)
+                .query(Boolean.class)
+                .single();
     }
 
     private record ShoppingListHeader(

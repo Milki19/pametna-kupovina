@@ -99,7 +99,7 @@ public class CanonicalProductDetailsRepository {
                                    COALESCE(
                                        CASE
                                            WHEN observation.discounted_price
-                                                    IS NOT NULL
+                                                    > 0
                                             AND (
                                                 observation.discount_start IS NULL
                                                 OR observation.discount_start <= :asOfDate
@@ -110,7 +110,10 @@ public class CanonicalProductDetailsRepository {
                                             )
                                            THEN observation.discounted_price
                                        END,
-                                       observation.regular_price
+                                       CASE
+                                           WHEN observation.regular_price > 0
+                                               THEN observation.regular_price
+                                       END
                                    ) AS effective_price,
                                    observation.unit_price,
                                    CASE
@@ -132,12 +135,61 @@ public class CanonicalProductDetailsRepository {
                                                         ''
                                                     )
                                        ORDER BY observation.price_date DESC,
+                                                observation.source_priority ASC,
                                                 observation.id DESC
                                    ) AS rank_number
                             FROM app.retailer_product AS retailer_product
                             JOIN app.retailer AS retailer
                               ON retailer.id = retailer_product.retailer_id
-                            JOIN app.price_observation AS observation
+                            JOIN (
+                                SELECT current_offer.id,
+                                       current_offer.retailer_product_id,
+                                       current_offer.retailer_format_name,
+                                       current_offer.store_id,
+                                       current_offer.price_date,
+                                       current_offer.regular_price,
+                                       current_offer.unit_price,
+                                       current_offer.discounted_price,
+                                       current_offer.discount_start,
+                                       current_offer.discount_end,
+                                       0 AS source_priority
+                                FROM app.current_price_offer AS current_offer
+                                UNION ALL
+                                SELECT history.id,
+                                       history.retailer_product_id,
+                                       history.retailer_format_name,
+                                       history.store_id,
+                                       history.price_date,
+                                       history.regular_price,
+                                       history.unit_price,
+                                       history.discounted_price,
+                                       history.discount_start,
+                                       history.discount_end,
+                                       1 AS source_priority
+                                FROM app.price_observation AS history
+                                WHERE NOT EXISTS (
+                                    SELECT 1
+                                    FROM app.current_price_offer
+                                        AS available_current
+                                    WHERE available_current.retailer_product_id =
+                                          history.retailer_product_id
+                                      AND available_current.price_date <=
+                                          :asOfDate
+                                      AND available_current.scope_key = CASE
+                                          WHEN history.store_id IS NOT NULL
+                                              THEN 'STORE:' ||
+                                                   history.store_id::TEXT
+                                          WHEN NULLIF(BTRIM(
+                                              history.retailer_format_name
+                                          ), '') IS NOT NULL
+                                              THEN 'STORE_FORMAT:' ||
+                                                   LOWER(BTRIM(
+                                                       history.retailer_format_name
+                                                   ))
+                                          ELSE 'RETAILER'
+                                      END
+                                )
+                            ) AS observation
                               ON observation.retailer_product_id =
                                   retailer_product.id
                             LEFT JOIN app.store AS store
@@ -181,7 +233,7 @@ public class CanonicalProductDetailsRepository {
                                price_scope
                         FROM ranked
                         WHERE rank_number = 1
-                          AND effective_price IS NOT NULL
+                          AND effective_price > 0
                         ORDER BY effective_price ASC,
                                  retailer_name ASC,
                                  price_scope ASC
@@ -215,7 +267,7 @@ public class CanonicalProductDetailsRepository {
                                COALESCE(
                                    CASE
                                        WHEN observation.discounted_price
-                                                IS NOT NULL
+                                                > 0
                                         AND (
                                             observation.discount_start IS NULL
                                             OR observation.discount_start <=
@@ -228,7 +280,10 @@ public class CanonicalProductDetailsRepository {
                                         )
                                        THEN observation.discounted_price
                                    END,
-                                   observation.regular_price
+                                   CASE
+                                       WHEN observation.regular_price > 0
+                                           THEN observation.regular_price
+                                   END
                                ) AS effective_price,
                                CASE
                                    WHEN observation.store_id IS NOT NULL
@@ -270,6 +325,10 @@ public class CanonicalProductDetailsRepository {
                         WHERE retailer_product.canonical_product_id =
                               :productId
                           AND observation.price_date <= :asOfDate
+                          AND (
+                              observation.discounted_price > 0
+                              OR observation.regular_price > 0
+                          )
                         ORDER BY observation.price_date DESC,
                                  observation.id DESC
                         LIMIT :historyLimit

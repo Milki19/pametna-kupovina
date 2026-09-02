@@ -10,7 +10,9 @@ import rs.pametnakupovina.backend.matching.ProductQuantityParser;
 import java.math.BigDecimal;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 public class CanonicalProductSearchService {
@@ -92,10 +94,34 @@ public class CanonicalProductSearchService {
         int fromIndex = (int) Math.min(offset, totalElements);
         int toIndex = (int) Math.min(offset + limit, totalElements);
 
-        List<CanonicalProductSearchItem> items = scoredRows
-                .subList(fromIndex, toIndex)
-                .stream()
-                .map(this::toItem)
+        List<ScoredRow> pageRows = scoredRows.subList(fromIndex, toIndex);
+        Map<Long, List<ProductRetailerAvailability>> availabilityByFamily =
+                searchRepository.findAvailability(
+                                pageRows.stream()
+                                        .map(row -> row.source()
+                                                .productFamilyId())
+                                        .toList()
+                        ).stream()
+                        .collect(Collectors.groupingBy(
+                                CanonicalProductSearchRepository
+                                        .ProductAvailabilityRow
+                                        ::productFamilyId,
+                                Collectors.mapping(
+                                        CanonicalProductSearchRepository
+                                                .ProductAvailabilityRow
+                                                ::availability,
+                                        Collectors.toList()
+                                )
+                        ));
+
+        List<CanonicalProductSearchItem> items = pageRows.stream()
+                .map(row -> toItem(
+                        row,
+                        availabilityByFamily.getOrDefault(
+                                row.source().productFamilyId(),
+                                List.of()
+                        )
+                ))
                 .toList();
 
         int totalPages = totalElements == 0
@@ -160,16 +186,24 @@ public class CanonicalProductSearchService {
         return new ScoredRow(row, score);
     }
 
-    private CanonicalProductSearchItem toItem(ScoredRow scoredRow) {
+    private CanonicalProductSearchItem toItem(
+            ScoredRow scoredRow,
+            List<ProductRetailerAvailability> availability
+    ) {
         CanonicalProductSearchRow row = scoredRow.source();
 
         return new CanonicalProductSearchItem(
+                row.productFamilyId(),
                 row.canonicalProductId(),
                 row.name(),
                 row.brand(),
                 row.barcode(),
                 row.quantityValue(),
                 row.baseUnit(),
+                row.categoryCode(),
+                row.categoryName(),
+                row.variantCount(),
+                availability,
                 scoredRow.score()
         );
     }

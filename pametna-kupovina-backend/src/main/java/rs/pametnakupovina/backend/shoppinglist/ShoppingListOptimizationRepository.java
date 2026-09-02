@@ -85,9 +85,37 @@ public class ShoppingListOptimizationRepository {
                                        po.regular_price,
                                        po.discounted_price
                                    ) AS effective_price
-                            FROM app.price_observation po
+                            FROM (
+                                SELECT current_offer.id,
+                                       current_offer.retailer_product_id,
+                                       current_offer.price_date,
+                                       current_offer.regular_price,
+                                       current_offer.discounted_price,
+                                       current_offer.discount_start,
+                                       current_offer.discount_end,
+                                       0 AS source_priority
+                                FROM app.current_price_offer AS current_offer
+                                UNION ALL
+                                SELECT history.id,
+                                       history.retailer_product_id,
+                                       history.price_date,
+                                       history.regular_price,
+                                       history.discounted_price,
+                                       history.discount_start,
+                                       history.discount_end,
+                                       1 AS source_priority
+                                FROM app.price_observation AS history
+                                WHERE NOT EXISTS (
+                                    SELECT 1
+                                    FROM app.current_price_offer
+                                        AS available_current
+                                    WHERE available_current.retailer_product_id =
+                                          history.retailer_product_id
+                                )
+                            ) po
                             WHERE po.retailer_product_id = rp.id
                             ORDER BY po.price_date DESC,
+                                     po.source_priority ASC,
                                      po.id DESC
                             LIMIT 1
                         ) latest_price ON rp.id IS NOT NULL

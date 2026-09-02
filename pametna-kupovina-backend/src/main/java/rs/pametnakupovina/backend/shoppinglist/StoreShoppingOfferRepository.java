@@ -126,13 +126,80 @@ public class StoreShoppingOfferRepository {
                                        priced.effective_price,
                                        priced.price_scope
                                 FROM (
+                                    SELECT current_offer.price_date,
+                                           current_offer.regular_price,
+                                           current_offer.discounted_price,
+                                           COALESCE(
+                                               CASE
+                                                   WHEN current_offer.discounted_price
+                                                            > 0
+                                                    AND (
+                                                        current_offer.discount_start
+                                                            IS NULL
+                                                        OR current_offer.discount_start
+                                                            <= :asOfDate
+                                                    )
+                                                    AND (
+                                                        current_offer.discount_end
+                                                            IS NULL
+                                                        OR current_offer.discount_end
+                                                            >= :asOfDate
+                                                    )
+                                                   THEN current_offer.discounted_price
+                                               END,
+                                               CASE
+                                                   WHEN current_offer.regular_price
+                                                            > 0
+                                                       THEN current_offer.regular_price
+                                               END
+                                           ) AS effective_price,
+                                           current_offer.scope_type AS price_scope,
+                                           CASE
+                                               WHEN current_offer.store_id = store.id
+                                                   THEN 1
+                                               WHEN current_offer.scope_type =
+                                                    'STORE_FORMAT'
+                                                AND (
+                                                    LOWER(BTRIM(
+                                                        current_offer.retailer_format_name
+                                                    )) = LOWER(format.name)
+                                                    OR LOWER(BTRIM(
+                                                        current_offer.retailer_format_name
+                                                    )) = LOWER(format.code)
+                                                )
+                                                   THEN 2
+                                               ELSE 3
+                                           END AS scope_priority,
+                                           0 AS source_priority,
+                                           current_offer.id
+                                    FROM app.current_price_offer AS current_offer
+                                    WHERE current_offer.retailer_product_id =
+                                            product.id
+                                      AND current_offer.price_date <= :asOfDate
+                                      AND (
+                                          current_offer.store_id = store.id
+                                          OR (
+                                              current_offer.scope_type =
+                                                  'STORE_FORMAT'
+                                              AND (
+                                                  LOWER(BTRIM(
+                                                      current_offer.retailer_format_name
+                                                  )) = LOWER(format.name)
+                                                  OR LOWER(BTRIM(
+                                                      current_offer.retailer_format_name
+                                                  )) = LOWER(format.code)
+                                              )
+                                          )
+                                          OR current_offer.scope_type = 'RETAILER'
+                                      )
+                                    UNION ALL
                                     SELECT observation.price_date,
                                            observation.regular_price,
                                            observation.discounted_price,
                                            COALESCE(
                                                CASE
                                                    WHEN observation.discounted_price
-                                                            IS NOT NULL
+                                                            > 0
                                                     AND (
                                                         observation.discount_start
                                                             IS NULL
@@ -147,16 +214,18 @@ public class StoreShoppingOfferRepository {
                                                     )
                                                    THEN observation.discounted_price
                                                END,
-                                               observation.regular_price
+                                               CASE
+                                                   WHEN observation.regular_price
+                                                            > 0
+                                                       THEN observation.regular_price
+                                               END
                                            ) AS effective_price,
                                            CASE
                                                WHEN observation.store_id = store.id
                                                    THEN 'STORE'
-                                               WHEN observation.retailer_format_name
-                                                        IS NOT NULL
-                                                AND BTRIM(
-                                                    observation.retailer_format_name
-                                                ) <> ''
+                                               WHEN NULLIF(BTRIM(
+                                                   observation.retailer_format_name
+                                               ), '') IS NOT NULL
                                                    THEN 'STORE_FORMAT'
                                                ELSE 'RETAILER'
                                            END AS price_scope,
@@ -164,11 +233,9 @@ public class StoreShoppingOfferRepository {
                                                WHEN observation.store_id = store.id
                                                    THEN 1
                                                WHEN observation.store_id IS NULL
-                                                AND observation.retailer_format_name
-                                                        IS NOT NULL
-                                                AND BTRIM(
+                                                AND NULLIF(BTRIM(
                                                     observation.retailer_format_name
-                                                ) <> ''
+                                                ), '') IS NOT NULL
                                                 AND (
                                                     LOWER(BTRIM(
                                                         observation.retailer_format_name
@@ -180,20 +247,43 @@ public class StoreShoppingOfferRepository {
                                                    THEN 2
                                                ELSE 3
                                            END AS scope_priority,
+                                           1 AS source_priority,
                                            observation.id
                                     FROM app.price_observation AS observation
                                     WHERE observation.retailer_product_id =
                                             product.id
                                       AND observation.price_date <= :asOfDate
+                                      AND NOT EXISTS (
+                                          SELECT 1
+                                          FROM app.current_price_offer
+                                              AS available_current
+                                          WHERE available_current.retailer_product_id =
+                                                observation.retailer_product_id
+                                            AND available_current.price_date <=
+                                                :asOfDate
+                                            AND available_current.scope_key =
+                                                CASE
+                                                    WHEN observation.store_id
+                                                            IS NOT NULL
+                                                        THEN 'STORE:' ||
+                                                             observation.store_id::TEXT
+                                                    WHEN NULLIF(BTRIM(
+                                                        observation.retailer_format_name
+                                                    ), '') IS NOT NULL
+                                                        THEN 'STORE_FORMAT:' ||
+                                                             LOWER(BTRIM(
+                                                                 observation.retailer_format_name
+                                                             ))
+                                                    ELSE 'RETAILER'
+                                                END
+                                      )
                                       AND (
                                           observation.store_id = store.id
                                           OR (
                                               observation.store_id IS NULL
-                                              AND observation.retailer_format_name
-                                                    IS NOT NULL
-                                              AND BTRIM(
+                                              AND NULLIF(BTRIM(
                                                   observation.retailer_format_name
-                                              ) <> ''
+                                              ), '') IS NOT NULL
                                               AND (
                                                   LOWER(BTRIM(
                                                       observation.retailer_format_name
@@ -211,9 +301,10 @@ public class StoreShoppingOfferRepository {
                                           )
                                       )
                                 ) AS priced
-                                WHERE priced.effective_price IS NOT NULL
+                                WHERE priced.effective_price > 0
                                 ORDER BY priced.scope_priority ASC,
                                          priced.price_date DESC,
+                                         priced.source_priority ASC,
                                          priced.id DESC
                                 LIMIT 1
                             ) AS selected_price ON TRUE
@@ -236,23 +327,49 @@ public class StoreShoppingOfferRepository {
                                   )
                                   OR
                                   (
+                                      item.matching_rule = 'PRODUCT_FAMILY'
+                                      AND item.matching_status = 'CONFIRMED'
+                                      AND product.product_family_id =
+                                          item.matched_product_family_id
+                                  )
+                                  OR
+                                  (
                                       item.matching_rule = 'FLEXIBLE_CATEGORY'
                                       AND (
-                                          COALESCE(
-                                              canonical.normalized_name,
-                                              product.normalized_name,
-                                              LOWER(product.name)
-                                          ) LIKE '%'
-                                              || item.flexible_category_normalized
-                                              || '%'
-                                          OR public.similarity(
-                                              COALESCE(
-                                                  canonical.normalized_name,
-                                                  product.normalized_name,
-                                                  LOWER(product.name)
-                                              ),
-                                              item.flexible_category_normalized
-                                          ) >= 0.3500
+                                          EXISTS (
+                                              SELECT 1
+                                              FROM app.product_category_alias
+                                                  AS requested_alias
+                                              JOIN app.retailer_product_category
+                                                  AS assignment
+                                                ON assignment.product_category_id =
+                                                   requested_alias.product_category_id
+                                               AND assignment.retailer_product_id =
+                                                   product.id
+                                              WHERE requested_alias.normalized_alias =
+                                                    item.flexible_category_normalized
+                                          )
+                                          OR (
+                                              NOT EXISTS (
+                                                  SELECT 1
+                                                  FROM app.retailer_product_category
+                                                      AS known_assignment
+                                                  WHERE known_assignment.retailer_product_id =
+                                                        product.id
+                                              )
+                                              AND (
+                                                  COALESCE(
+                                                      product.normalized_name,
+                                                      LOWER(product.name)
+                                                  ) = item.flexible_category_normalized
+                                                  OR COALESCE(
+                                                      product.normalized_name,
+                                                      LOWER(product.name)
+                                                  ) LIKE
+                                                      item.flexible_category_normalized
+                                                      || ' %'
+                                              )
+                                          )
                                       )
                                       AND (
                                           item.required_brand IS NULL

@@ -31,13 +31,19 @@ import rs.pametnakupovina.backend.matching.ProductMatchFeedbackAction;
 import rs.pametnakupovina.backend.matching.ProductMatchFeedbackRequest;
 import rs.pametnakupovina.backend.matching.ProductMatchFeedbackService;
 import rs.pametnakupovina.backend.matching.ProductMatchStatus;
+import rs.pametnakupovina.backend.priceimport.ImportResult;
+import rs.pametnakupovina.backend.priceimport.ImportWorkerHeartbeat;
+import rs.pametnakupovina.backend.priceimport.ImportWorkerStatusRepository;
 import rs.pametnakupovina.backend.priceimport.PriceImportService;
+import rs.pametnakupovina.backend.priceimport.RetailerDataSourceRepository;
 import rs.pametnakupovina.backend.product.CanonicalProductSearchPage;
 import rs.pametnakupovina.backend.product.CanonicalProductSearchService;
 import rs.pametnakupovina.backend.product.ProductSearchResult;
 import rs.pametnakupovina.backend.product.ProductSearchService;
 import rs.pametnakupovina.backend.retailerlocation.RetailerLocationImportResult;
 import rs.pametnakupovina.backend.retailerlocation.RetailerLocationImportService;
+import rs.pametnakupovina.backend.retailerlocation.RetailerLocationSource;
+import rs.pametnakupovina.backend.retailerlocation.VerifiedRetailerLocation;
 import rs.pametnakupovina.backend.shoppinglist.AddShoppingListItemRequest;
 import rs.pametnakupovina.backend.shoppinglist.CreateShoppingListRequest;
 import rs.pametnakupovina.backend.shoppinglist.FlexibleItemConstraints;
@@ -67,6 +73,7 @@ import java.math.BigDecimal;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.time.Duration;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -88,9 +95,52 @@ class PametnaKupovinaBackendApplicationTests {
             SOK;Sokovi;Sok od narandže 1 l;Test sok;8601234567899;l;Format A;210;;04-08-2026;210;;;20
             """;
 
+    private static final String NEXT_DAY_CSV_CONTENT = """
+            KATEGORIJA;NAZIV KATEGORIJE;Naziv proizvoda;Robna marka;Barkod proizvoda;Jedinica mere;Naziv trgovca - formata*;Redovna cena;Snižena cena;Datum cenovnika;Cena po jedinici mere;Datum početka sniženja;Datum kraja sniženja;Stopa PDV
+            MLEKO;Mlečni proizvodi;Mleko 1 l;Test brend;8600000000004;l;Test format;160;;03-03-2026;160;;;20
+            HLEB;Pekarski proizvodi;Beli hleb;Test pekara;8600000000011;kom;Test format;90;;03-03-2026;90;;;20
+            """;
+
     private static final String EXACT_EAN_B_CSV_CONTENT = """
             KATEGORIJA;NAZIV KATEGORIJE;Naziv proizvoda;Robna marka;Barkod proizvoda;Jedinica mere;Naziv trgovca - formata*;Redovna cena;Snižena cena;Datum cenovnika;Cena po jedinici mere;Datum početka sniženja;Datum kraja sniženja;Stopa PDV
             NAPICI;Bezalkoholna pića;Pomorandža sok 1000 ml;Test sok;8601234567899;ml;Format B;205;;04-08-2026;205;;;20
+            """;
+
+    private static final String UTF16_ALIAS_CSV_CONTENT = """
+            KATEGORIJA;NAZIV KATEGORIJE;Naziv proizvoda;Robna marka;Barkod proizvoda;Jedinimere;Naziv trgovca - formata*;Datum cenovnika;Redovna cena;Cena po jedinici mere;Snižena cena;Datum početka sniženja;Datum kraja sniženja;stopa PDV
+            VODA;Voda;Test voda 1 l;Test brend;8601234500001;kom;Test UTF16 format;21-08-2026;99.99;99.99;;;;20
+            """;
+
+    private static final String PRAVILNIK_LIDL_CSV_CONTENT = """
+            "KATEGORIJA";"NAZIV KATEGORIJE";"Naziv proizvoda";"Robna marka";"Barkod proizvoda";"Jedinica mere";"Naziv trgovca – formata";"Datum cenovnika";"Redovna cena";"Cena po jedinici mere";"Snizena cena";"Datum pocetka snizenja";"Datum kraja snizenja";"Stopa PDV";"VRSTA_CENOVNIKA"
+            1;Mleko;Lidl test mleko 1l;Pilos;4056489000001;kom;Lidl Srbija KD;01-08-2026;129.99;129.99;;;;10;MESECNI_PRESEK
+            1;Mleko;Lidl test mleko 1l;Pilos;4056489000001;kom;Lidl Srbija KD;01-09-2026;139.99;139.99;;;;10;MESECNI_PRESEK
+            1;Mleko;Lidl test mleko 1l;Pilos;4056489000001;kom;Lidl Srbija KD;01-09-2026;149.99;149.99;;;;10;VAZECI_CENOVNIK
+            """;
+
+    private static final String PRAVILNIK_EUROPROM_CSV_CONTENT = """
+            KATEGORIJA;NAZIV KATEGORIJE;Naziv proizvoda;Robna marka;Barkod proizvoda;Jedinica mere;Naziv trgovca – formata;Datum cenovnika;Redovna cena;Cena po jedinici mere;Snižena cena;Datum početka sniženja;Datum kraja sniženja;Stopa PDV;VRSTA_CENOVNIKA
+            1;Mleko;Europrom test jogurt 1kg;Test brend;8601234500100;kom;Europrom;01-09-2026;179.90;179.90;;;;10;MESECNI_PRESEK
+            1;Mleko;Europrom test jogurt 1kg;Test brend;8601234500100;kom;Europrom;01-09-2026;189.90;189.90;;;;10;VAZECI_CENOVNIK
+            """;
+
+    private static final String PRAVILNIK_UNIVEREXPORT_CSV_CONTENT = """
+            KATEGORIJA;NAZIV KATEGORIJE;Naziv proizvoda;Robna marka;Barkod proizvoda;Jedinica mere;Naziv trgovca - formata;Datum cenovnika;Redovna cena;Cena po jedinici mere;Snižena cena;Datum početka sniženja;Datum kraja sniženja;Stopa PDV;VRSTA_CENOVNIKA
+            3;Hleb;Univerexport test hleb 500g;Test pekara;8601234500209;kom;UNIVEREXPORT - C1-MC1;31-08-2026;79.99;159.98;;;;10;VAZECI_CENOVNIK
+            3;Hleb;Univerexport test hleb 500g;Test pekara;8601234500209;kom;UNIVEREXPORT - C3-MC3;31-08-2026;89.99;179.98;;;;10;VAZECI_CENOVNIK
+            """;
+
+    private static final String PRAVILNIK_IDEA_CSV_CONTENT = """
+            KATEGORIJA;NAZIV KATEGORIJE;Naziv proizvoda;Robna marka;Barkod proizvoda;Jedinica mere;Naziv trgovca - formata;Datum cenovnika;Redovna cena;Cena po jedinici mere;Snižena cena;Datum početka sniženja;Datum kraja sniženja;Stopa PDV;VRSTA_CENOVNIKA
+            11;Slatkiši;Idea test keks 150g;Test brend;8601234500308;KOM;IDEA MARKETI_Cenovnik I0;01-08-2026;145.80;972.00;129.99;01-08-2026;15-08-2026;20;MESECNI_PRESEK
+            11;Slatkiši;Idea test keks 150g;Test brend;8601234500308;KOM;IDEA MARKETI_Cenovnik I0;01-08-2026;155.80;1038.67;139.99;20-08-2026;05-09-2026;20;VAZECI_CENOVNIK
+            10;Grickalice;Idea test flips 150g;Test brend;8601234500407;KOM;IDEA MARKETI_Cenovnik I0;01-08-2026;127.72;851.47
+            """;
+
+    private static final String MAXI_STORE_CSV_CONTENT = """
+            BARKOD PROIZVODA;NAZIV PROIZVODA;REDOVNA CENA;CENA PO JEDINICI MERE;SNIZENA CENA
+            8600000000004;Test voda 1 l;149.99 rsd;149.99 rsd/kom;99.99 rsd
+            8600000000011;Test hleb 500 g;79.90 rsd;79.90 rsd/kom;0.00 rsd
             """;
 
     private static final String RETAILER_LOCATION_CSV_CONTENT = """
@@ -125,6 +175,9 @@ class PametnaKupovinaBackendApplicationTests {
 
     @Autowired
     private PriceImportService priceImportService;
+
+    @Autowired
+    private RetailerDataSourceRepository retailerDataSourceRepository;
 
     @Autowired
     private ProductSearchService productSearchService;
@@ -173,16 +226,27 @@ class PametnaKupovinaBackendApplicationTests {
                             app.shopping_list,
                             app.product_match_feedback,
                             app.product_match_decision,
+                            app.import_worker_heartbeat,
+                            app.product_identity_candidate,
+                            app.product_retailer_presence,
+                            app.product_family_member,
+                            app.retailer_product_category,
+                            app.current_price_offer,
                             app.price_observation,
                             app.retailer_product,
+                            app.product_family,
                             app.import_run,
                             app.store,
                             app.store_format,
                             app.canonical_product,
-                            app.retailer
+                            app.brand_alias,
+                            app.brand,
+                            app.retailer_data_source
                         RESTART IDENTITY
                         """)
                 .update();
+
+        jdbcClient.sql("DELETE FROM app.retailer").update();
     }
 
     @BeforeAll
@@ -229,6 +293,23 @@ class PametnaKupovinaBackendApplicationTests {
             }
         });
 
+        csvServer.createContext("/prices-next-day.csv", exchange -> {
+            byte[] responseBody = NEXT_DAY_CSV_CONTENT
+                    .getBytes(StandardCharsets.UTF_8);
+
+            exchange.getResponseHeaders().set(
+                    "Content-Type",
+                    "text/csv; charset=UTF-8"
+            );
+
+            exchange.sendResponseHeaders(200, responseBody.length);
+
+            try (OutputStream outputStream =
+                         exchange.getResponseBody()) {
+                outputStream.write(responseBody);
+            }
+        });
+
         csvServer.createContext("/exact-ean-b.csv", exchange -> {
             byte[] responseBody = EXACT_EAN_B_CSV_CONTENT
                     .getBytes(StandardCharsets.UTF_8);
@@ -245,6 +326,168 @@ class PametnaKupovinaBackendApplicationTests {
                 outputStream.write(responseBody);
             }
         });
+
+        csvServer.createContext("/utf16-alias.csv", exchange -> {
+            byte[] content = UTF16_ALIAS_CSV_CONTENT
+                    .getBytes(StandardCharsets.UTF_16LE);
+            byte[] responseBody = new byte[content.length + 2];
+            responseBody[0] = (byte) 0xFF;
+            responseBody[1] = (byte) 0xFE;
+            System.arraycopy(
+                    content,
+                    0,
+                    responseBody,
+                    2,
+                    content.length
+            );
+
+            exchange.getResponseHeaders().set(
+                    "Content-Type",
+                    "text/csv; charset=UTF-16LE"
+            );
+
+            exchange.sendResponseHeaders(200, responseBody.length);
+
+            try (OutputStream outputStream =
+                         exchange.getResponseBody()) {
+                outputStream.write(responseBody);
+            }
+        });
+
+        csvServer.createContext("/pravilnik-lidl.csv", exchange -> {
+            byte[] responseBody = PRAVILNIK_LIDL_CSV_CONTENT
+                    .getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().set(
+                    "Content-Type",
+                    "text/csv; charset=UTF-8"
+            );
+            exchange.sendResponseHeaders(200, responseBody.length);
+
+            try (OutputStream outputStream =
+                         exchange.getResponseBody()) {
+                outputStream.write(responseBody);
+            }
+        });
+
+        csvServer.createContext("/pravilnik-europrom.csv", exchange -> {
+            byte[] content = PRAVILNIK_EUROPROM_CSV_CONTENT
+                    .getBytes(StandardCharsets.UTF_8);
+            byte[] responseBody = new byte[content.length + 3];
+            responseBody[0] = (byte) 0xEF;
+            responseBody[1] = (byte) 0xBB;
+            responseBody[2] = (byte) 0xBF;
+            System.arraycopy(
+                    content,
+                    0,
+                    responseBody,
+                    3,
+                    content.length
+            );
+            exchange.getResponseHeaders().set(
+                    "Content-Type",
+                    "text/csv; charset=UTF-8"
+            );
+            exchange.sendResponseHeaders(200, responseBody.length);
+
+            try (OutputStream outputStream =
+                         exchange.getResponseBody()) {
+                outputStream.write(responseBody);
+            }
+        });
+
+        csvServer.createContext("/pravilnik-univerexport.csv", exchange -> {
+            byte[] responseBody = PRAVILNIK_UNIVEREXPORT_CSV_CONTENT
+                    .getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().set(
+                    "Content-Type",
+                    "text/csv; charset=UTF-8"
+            );
+            exchange.sendResponseHeaders(200, responseBody.length);
+
+            try (OutputStream outputStream =
+                         exchange.getResponseBody()) {
+                outputStream.write(responseBody);
+            }
+        });
+
+        csvServer.createContext("/pravilnik-idea.csv", exchange -> {
+            byte[] content = PRAVILNIK_IDEA_CSV_CONTENT
+                    .getBytes(StandardCharsets.UTF_16LE);
+            byte[] responseBody = new byte[content.length + 2];
+            responseBody[0] = (byte) 0xFF;
+            responseBody[1] = (byte) 0xFE;
+            System.arraycopy(
+                    content,
+                    0,
+                    responseBody,
+                    2,
+                    content.length
+            );
+            exchange.getResponseHeaders().set(
+                    "Content-Type",
+                    "text/csv; charset=UTF-16LE"
+            );
+            exchange.sendResponseHeaders(200, responseBody.length);
+
+            try (OutputStream outputStream =
+                         exchange.getResponseBody()) {
+                outputStream.write(responseBody);
+            }
+        });
+
+        csvServer.createContext("/maxi-store.csv", exchange -> {
+            byte[] responseBody = MAXI_STORE_CSV_CONTENT
+                    .getBytes(StandardCharsets.UTF_8);
+
+            exchange.getResponseHeaders().set(
+                    "Content-Type",
+                    "text/csv; charset=UTF-8"
+            );
+
+            exchange.sendResponseHeaders(200, responseBody.length);
+
+            try (OutputStream outputStream =
+                         exchange.getResponseBody()) {
+                outputStream.write(responseBody);
+            }
+        });
+
+        csvServer.createContext(
+                "/api/1/datasets/discovery-test/",
+                exchange -> {
+                    String baseUrl = "http://127.0.0.1:"
+                            + csvServer.getAddress().getPort();
+                    byte[] responseBody = ("""
+                            {
+                              "resources": [
+                                {
+                                  "format": "xlsx",
+                                  "url": "%s/locations.xlsx",
+                                  "last_modified": "2026-08-26T05:00:00Z"
+                                },
+                                {
+                                  "format": "csv",
+                                  "title": "cene-proizvoda-test.csv",
+                                  "url": "%s/prices-next-day.csv",
+                                  "last_modified": "2026-08-26T04:00:00Z"
+                                }
+                              ]
+                            }
+                            """).formatted(baseUrl, baseUrl)
+                            .getBytes(StandardCharsets.UTF_8);
+
+                    exchange.getResponseHeaders().set(
+                            "Content-Type",
+                            "application/json; charset=UTF-8"
+                    );
+                    exchange.sendResponseHeaders(200, responseBody.length);
+
+                    try (OutputStream outputStream =
+                                 exchange.getResponseBody()) {
+                        outputStream.write(responseBody);
+                    }
+                }
+        );
 
         csvServer.start();
     }
@@ -304,6 +547,15 @@ class PametnaKupovinaBackendApplicationTests {
                 .query(Long.class)
                 .single();
 
+        Long currentRowsPointingToSecondImport = jdbcClient.sql("""
+                        SELECT COUNT(*)
+                        FROM app.current_price_offer
+                        WHERE import_run_id = ?
+                        """)
+                .param(1, secondImportRunId)
+                .query(Long.class)
+                .single();
+
         List<String> importStatuses = jdbcClient.sql("""
                         SELECT run.status
                         FROM app.import_run run
@@ -354,8 +606,9 @@ class PametnaKupovinaBackendApplicationTests {
         assertThat(secondImportRunId)
                 .isGreaterThan(firstImportRunId);
 
-        assertThat(rowsPointingToFirstImport).isZero();
-        assertThat(rowsPointingToSecondImport).isEqualTo(2);
+        assertThat(rowsPointingToFirstImport).isEqualTo(2);
+        assertThat(rowsPointingToSecondImport).isZero();
+        assertThat(currentRowsPointingToSecondImport).isEqualTo(2);
 
         assertThat(importStatuses)
                 .containsExactly("SUCCEEDED", "SUCCEEDED");
@@ -363,6 +616,530 @@ class PametnaKupovinaBackendApplicationTests {
         assertThat(normalizedMilkName).isEqualTo("mleko 1 l");
         assertThat(milkQuantity).isEqualByComparingTo("1000");
         assertThat(milkBaseUnit).isEqualTo("ml");
+    }
+
+    @Test
+    void currentOffersAdvanceDailyButHistoryStoresOnlyChanges() {
+        String firstDatasetUrl =
+                "http://127.0.0.1:"
+                        + csvServer.getAddress().getPort()
+                        + "/prices.csv";
+        String nextDatasetUrl =
+                "http://127.0.0.1:"
+                        + csvServer.getAddress().getPort()
+                        + "/prices-next-day.csv";
+
+        jdbcClient.sql("""
+                        INSERT INTO app.retailer (
+                            code,
+                            name,
+                            dataset_url
+                        )
+                        VALUES ('PRICE_CHANGE_TEST', 'Price change test', ?)
+                        """)
+                .param(1, firstDatasetUrl)
+                .update();
+
+        priceImportService.importPrices("PRICE_CHANGE_TEST");
+
+        jdbcClient.sql("""
+                    UPDATE app.retailer
+                    SET dataset_url = ?
+                    WHERE code = 'PRICE_CHANGE_TEST'
+                    """)
+                .param(1, nextDatasetUrl)
+                .update();
+
+        priceImportService.importPrices("PRICE_CHANGE_TEST");
+
+        Long currentCount = jdbcClient.sql("""
+                        SELECT COUNT(*)
+                        FROM app.current_price_offer AS current_offer
+                        JOIN app.retailer_product AS product
+                          ON product.id = current_offer.retailer_product_id
+                        JOIN app.retailer AS retailer
+                          ON retailer.id = product.retailer_id
+                        WHERE retailer.code = 'PRICE_CHANGE_TEST'
+                        """)
+                .query(Long.class)
+                .single();
+
+        Long historyCount = jdbcClient.sql("""
+                        SELECT COUNT(*)
+                        FROM app.price_observation AS history
+                        JOIN app.retailer_product AS product
+                          ON product.id = history.retailer_product_id
+                        JOIN app.retailer AS retailer
+                          ON retailer.id = product.retailer_id
+                        WHERE retailer.code = 'PRICE_CHANGE_TEST'
+                        """)
+                .query(Long.class)
+                .single();
+
+        List<String> seenRanges = jdbcClient.sql("""
+                        SELECT product.name || ':' ||
+                               current_offer.first_seen_date || ':' ||
+                               current_offer.last_seen_date
+                        FROM app.current_price_offer AS current_offer
+                        JOIN app.retailer_product AS product
+                          ON product.id = current_offer.retailer_product_id
+                        JOIN app.retailer AS retailer
+                          ON retailer.id = product.retailer_id
+                        WHERE retailer.code = 'PRICE_CHANGE_TEST'
+                        ORDER BY product.name
+                        """)
+                .query(String.class)
+                .list();
+
+        Long controlledAssignments = jdbcClient.sql("""
+                        SELECT COUNT(*)
+                        FROM app.retailer_product_category AS assignment
+                        JOIN app.retailer_product AS product
+                          ON product.id = assignment.retailer_product_id
+                        JOIN app.retailer AS retailer
+                          ON retailer.id = product.retailer_id
+                        WHERE retailer.code = 'PRICE_CHANGE_TEST'
+                        """)
+                .query(Long.class)
+                .single();
+
+        assertThat(currentCount).isEqualTo(2);
+        assertThat(historyCount).isEqualTo(3);
+        assertThat(seenRanges).containsExactly(
+                "Beli hleb:2026-03-03:2026-03-03",
+                "Mleko 1 l:2026-03-02:2026-03-03"
+        );
+        assertThat(controlledAssignments).isEqualTo(2);
+    }
+
+    @Test
+    void importWorkerHeartbeatReportsHealthyInstance() {
+        new ImportWorkerHeartbeat(jdbcClient, "integration-worker")
+                .heartbeat();
+
+        var status = new ImportWorkerStatusRepository(jdbcClient)
+                .latestStatus(Duration.ofMinutes(2));
+
+        assertThat(status.instanceId()).isEqualTo("integration-worker");
+        assertThat(status.heartbeatAt()).isNotNull();
+        assertThat(status.healthy()).isTrue();
+    }
+
+    @Test
+    void registeredPriceSourceRejectsConcurrentImport() {
+        Long retailerId = jdbcClient.sql("""
+                        INSERT INTO app.retailer (code, name)
+                        VALUES ('IMPORT_LOCK_TEST', 'Import lock test')
+                        RETURNING id
+                        """)
+                .query(Long.class)
+                .single();
+
+        Long sourceId = jdbcClient.sql("""
+                        INSERT INTO app.retailer_data_source (
+                            retailer_id,
+                            code,
+                            source_type,
+                            parser_profile,
+                            source_url,
+                            price_scope,
+                            active
+                        )
+                        VALUES (
+                            ?,
+                            'PRIMARY_PRICE_CATALOG',
+                            'PRICE_CATALOG',
+                            'GOV_RS_SEMICOLON_CSV',
+                            'http://127.0.0.1/prices.csv',
+                            'RETAILER_OR_FORMAT',
+                            TRUE
+                        )
+                        RETURNING id
+                        """)
+                .param(1, retailerId)
+                .query(Long.class)
+                .single();
+
+        assertThat(
+                retailerDataSourceRepository.tryMarkRunning(sourceId)
+        ).isTrue();
+        assertThat(
+                retailerDataSourceRepository.tryMarkRunning(sourceId)
+        ).isFalse();
+
+        jdbcClient.sql("""
+                    UPDATE app.retailer_data_source
+                    SET last_started_at = NOW() - INTERVAL '7 hours'
+                    WHERE id = ?
+                    """)
+                .param(1, sourceId)
+                .update();
+
+        assertThat(
+                retailerDataSourceRepository.tryMarkRunning(sourceId)
+        ).isTrue();
+    }
+
+    @Test
+    void importDiscoversLatestGovernmentCsvBeforeDownload() {
+        String baseUrl = "http://127.0.0.1:"
+                + csvServer.getAddress().getPort();
+
+        Long retailerId = jdbcClient.sql("""
+                        INSERT INTO app.retailer (
+                            code,
+                            name,
+                            dataset_url
+                        )
+                        VALUES (?, ?, ?)
+                        RETURNING id
+                        """)
+                .param(1, "DISCOVERY_TEST")
+                .param(2, "Discovery test")
+                .param(3, baseUrl + "/prices.csv")
+                .query(Long.class)
+                .single();
+
+        jdbcClient.sql("""
+                    INSERT INTO app.retailer_data_source (
+                        retailer_id,
+                        code,
+                        source_type,
+                        parser_profile,
+                        source_url,
+                        discovery_url,
+                        price_scope,
+                        active
+                    )
+                    VALUES (?, ?, 'PRICE_CATALOG', ?, ?, ?, ?, TRUE)
+                    """)
+                .param(1, retailerId)
+                .param(2, "PRIMARY_PRICE_CATALOG")
+                .param(3, "GOV_RS_SEMICOLON_CSV")
+                .param(4, baseUrl + "/prices.csv")
+                .param(
+                        5,
+                        baseUrl + "/sr/datasets/discovery-test/"
+                )
+                .param(6, "RETAILER_OR_FORMAT")
+                .update();
+
+        ImportResult result = priceImportService.importPrices(
+                "DISCOVERY_TEST"
+        );
+
+        String resolvedUrl = jdbcClient.sql("""
+                        SELECT source_url
+                        FROM app.retailer_data_source
+                        WHERE retailer_id = ?
+                        """)
+                .param(1, retailerId)
+                .query(String.class)
+                .single();
+
+        assertThat(result.snapshotDate()).isEqualTo(
+                LocalDate.of(2026, 3, 3)
+        );
+        assertThat(resolvedUrl).isEqualTo(
+                baseUrl + "/prices-next-day.csv"
+        );
+    }
+
+    @Test
+    void importSupportsUtf16AndKnownHeaderAliases() {
+        String datasetUrl =
+                "http://127.0.0.1:"
+                        + csvServer.getAddress().getPort()
+                        + "/utf16-alias.csv";
+
+        jdbcClient.sql("""
+                        INSERT INTO app.retailer (
+                            code,
+                            name,
+                            dataset_url
+                        )
+                        VALUES (?, ?, ?)
+                        """)
+                .param(1, "UTF16_ALIAS")
+                .param(2, "UTF16 alias prodavnica")
+                .param(3, datasetUrl)
+                .update();
+
+        ImportResult result = priceImportService.importPrices(
+                "UTF16_ALIAS"
+        );
+
+        String importedUnit = jdbcClient.sql("""
+                        SELECT product.unit
+                        FROM app.retailer_product product
+                        JOIN app.retailer retailer
+                          ON retailer.id = product.retailer_id
+                        WHERE retailer.code = 'UTF16_ALIAS'
+                        """)
+                .query(String.class)
+                .single();
+
+        assertThat(result.status()).isEqualTo("SUCCEEDED");
+        assertThat(result.snapshotDate())
+                .isEqualTo(LocalDate.of(2026, 8, 21));
+        assertThat(result.rowsRead()).isEqualTo(1);
+        assertThat(result.rowsSelected()).isEqualTo(1);
+        assertThat(result.rowsSaved()).isEqualTo(1);
+        assertThat(importedUnit).isEqualTo("kom");
+    }
+
+    @Test
+    void importsLidlPravilnikCatalogWithoutMonthlyDuplicates() {
+        registerPriceTestRetailer(
+                "PRAVILNIK_LIDL",
+                "/pravilnik-lidl.csv"
+        );
+
+        ImportResult result = priceImportService.importPrices(
+                "PRAVILNIK_LIDL"
+        );
+
+        assertThat(result.status()).isEqualTo("SUCCEEDED");
+        assertThat(result.snapshotDate())
+                .isEqualTo(LocalDate.of(2026, 9, 1));
+        assertThat(result.rowsRead()).isEqualTo(3);
+        assertThat(result.rowsSelected()).isEqualTo(1);
+        assertThat(result.rowsSaved()).isEqualTo(1);
+        assertThat(currentRegularPrice(
+                "PRAVILNIK_LIDL",
+                "4056489000001",
+                "Lidl Srbija KD"
+        )).isEqualByComparingTo("149.99");
+    }
+
+    @Test
+    void importsEuropromPravilnikCatalogWithUtf8Bom() {
+        registerPriceTestRetailer(
+                "PRAVILNIK_EUROPROM",
+                "/pravilnik-europrom.csv"
+        );
+
+        ImportResult result = priceImportService.importPrices(
+                "PRAVILNIK_EUROPROM"
+        );
+
+        assertThat(result.status()).isEqualTo("SUCCEEDED");
+        assertThat(result.rowsRead()).isEqualTo(2);
+        assertThat(result.rowsSelected()).isEqualTo(1);
+        assertThat(currentRegularPrice(
+                "PRAVILNIK_EUROPROM",
+                "8601234500100",
+                "Europrom"
+        )).isEqualByComparingTo("189.90");
+    }
+
+    @Test
+    void importsAllCurrentUniverexportFormats() {
+        registerPriceTestRetailer(
+                "PRAVILNIK_UNIVEREXPORT",
+                "/pravilnik-univerexport.csv"
+        );
+
+        ImportResult result = priceImportService.importPrices(
+                "PRAVILNIK_UNIVEREXPORT"
+        );
+
+        List<String> offers = jdbcClient.sql("""
+                        SELECT offer.retailer_format_name
+                               || ':' || offer.regular_price
+                        FROM app.current_price_offer AS offer
+                        JOIN app.retailer_product AS product
+                          ON product.id = offer.retailer_product_id
+                        JOIN app.retailer AS retailer
+                          ON retailer.id = product.retailer_id
+                        WHERE retailer.code = 'PRAVILNIK_UNIVEREXPORT'
+                        ORDER BY offer.retailer_format_name
+                        """)
+                .query(String.class)
+                .list();
+
+        assertThat(result.status()).isEqualTo("SUCCEEDED");
+        assertThat(result.rowsSelected()).isEqualTo(2);
+        assertThat(result.rowsSaved()).isEqualTo(2);
+        assertThat(offers).containsExactly(
+                "UNIVEREXPORT - C1-MC1:79.99",
+                "UNIVEREXPORT - C3-MC3:89.99"
+        );
+    }
+
+    @Test
+    void importsUtf16IdeaCatalogWithTruncatedOptionalColumns() {
+        registerPriceTestRetailer(
+                "PRAVILNIK_IDEA",
+                "/pravilnik-idea.csv"
+        );
+
+        ImportResult result = priceImportService.importPrices(
+                "PRAVILNIK_IDEA"
+        );
+
+        List<String> offers = jdbcClient.sql("""
+                        SELECT product.barcode || ':'
+                               || offer.regular_price || ':'
+                               || COALESCE(offer.vat_rate::TEXT, 'NULL')
+                        FROM app.current_price_offer AS offer
+                        JOIN app.retailer_product AS product
+                          ON product.id = offer.retailer_product_id
+                        JOIN app.retailer AS retailer
+                          ON retailer.id = product.retailer_id
+                        WHERE retailer.code = 'PRAVILNIK_IDEA'
+                        ORDER BY product.barcode
+                        """)
+                .query(String.class)
+                .list();
+
+        assertThat(result.status()).isEqualTo("SUCCEEDED");
+        assertThat(result.rowsRead()).isEqualTo(3);
+        assertThat(result.rowsSelected()).isEqualTo(2);
+        assertThat(result.rowsSaved()).isEqualTo(2);
+        assertThat(offers).containsExactly(
+                "8601234500308:155.80:20.00",
+                "8601234500407:127.72:NULL"
+        );
+    }
+
+    @Test
+    void importsStoreScopedMaxiPrices() {
+        String datasetUrl =
+                "http://127.0.0.1:"
+                        + csvServer.getAddress().getPort()
+                        + "/maxi-store.csv";
+
+        Long retailerId = jdbcClient.sql("""
+                        INSERT INTO app.retailer (code, name)
+                        VALUES ('MAXI', 'Maxi')
+                        RETURNING id
+                        """)
+                .query(Long.class)
+                .single();
+
+        Long formatId = jdbcClient.sql("""
+                        INSERT INTO app.store_format (
+                            retailer_id,
+                            code,
+                            name
+                        )
+                        VALUES (?, 'MAXI', 'Maxi')
+                        RETURNING id
+                        """)
+                .param(1, retailerId)
+                .query(Long.class)
+                .single();
+
+        Long storeId = jdbcClient.sql("""
+                        INSERT INTO app.store (
+                            retailer_id,
+                            external_code,
+                            name,
+                            address,
+                            city,
+                            location,
+                            store_format_id
+                        )
+                        VALUES (
+                            ?,
+                            '508',
+                            'Maxi 508',
+                            'Kneza Mihaila 84-86',
+                            'Valjevo',
+                            ST_SetSRID(
+                                ST_MakePoint(19.891145, 44.263836),
+                                4326
+                            )::geography,
+                            ?
+                        )
+                        RETURNING id
+                        """)
+                .param(1, retailerId)
+                .param(2, formatId)
+                .query(Long.class)
+                .single();
+
+        ImportResult result = priceImportService.importStorePrices(
+                "maxi",
+                "508",
+                datasetUrl,
+                LocalDate.of(2026, 8, 21)
+        );
+
+        Long scopedObservationCount = jdbcClient.sql("""
+                        SELECT COUNT(*)
+                        FROM app.price_observation
+                        WHERE store_id = ?
+                        """)
+                .param(1, storeId)
+                .query(Long.class)
+                .single();
+
+        BigDecimal discountedPrice = jdbcClient.sql("""
+                        SELECT observation.discounted_price
+                        FROM app.price_observation AS observation
+                        JOIN app.retailer_product AS product
+                          ON product.id = observation.retailer_product_id
+                        WHERE observation.store_id = ?
+                          AND product.barcode = '8600000000004'
+                        """)
+                .param(1, storeId)
+                .query(BigDecimal.class)
+                .single();
+
+        Long canonicalProductCount = jdbcClient.sql("""
+                        SELECT COUNT(*)
+                        FROM app.retailer_product
+                        WHERE retailer_id = ?
+                          AND canonical_product_id IS NOT NULL
+                        """)
+                .param(1, retailerId)
+                .query(Long.class)
+                .single();
+
+        List<String> categoryAssignments = jdbcClient.sql("""
+                        SELECT product.name || ':' || category.code
+                        FROM app.retailer_product AS product
+                        JOIN app.retailer_product_category AS assignment
+                          ON assignment.retailer_product_id = product.id
+                        JOIN app.product_category AS category
+                          ON category.id = assignment.product_category_id
+                        WHERE product.retailer_id = ?
+                        ORDER BY product.name
+                        """)
+                .param(1, retailerId)
+                .query(String.class)
+                .list();
+
+        BigDecimal breadMinimumPrice = jdbcClient.sql("""
+                        SELECT presence.minimum_effective_price
+                        FROM app.product_retailer_presence AS presence
+                        JOIN app.retailer_product AS product
+                          ON product.product_family_id =
+                             presence.product_family_id
+                         AND product.retailer_id = presence.retailer_id
+                        WHERE product.retailer_id = ?
+                          AND product.barcode = '8600000000011'
+                        """)
+                .param(1, retailerId)
+                .query(BigDecimal.class)
+                .single();
+
+        assertThat(result.status()).isEqualTo("SUCCEEDED");
+        assertThat(result.snapshotDate())
+                .isEqualTo(LocalDate.of(2026, 8, 21));
+        assertThat(result.rowsRead()).isEqualTo(2);
+        assertThat(result.rowsSelected()).isEqualTo(2);
+        assertThat(result.rowsSaved()).isEqualTo(2);
+        assertThat(scopedObservationCount).isEqualTo(2);
+        assertThat(discountedPrice).isEqualByComparingTo("99.99");
+        assertThat(canonicalProductCount).isEqualTo(2);
+        assertThat(categoryAssignments).containsExactly(
+                "Test hleb 500 g:BREAD",
+                "Test voda 1 l:WATER"
+        );
+        assertThat(breadMinimumPrice).isEqualByComparingTo("79.90");
     }
 
     @Test
@@ -496,6 +1273,65 @@ class PametnaKupovinaBackendApplicationTests {
                                 1000,
                                 'ml'
                             )
+                        """)
+                .update();
+
+        jdbcClient.sql("""
+                        INSERT INTO app.brand (
+                            normalized_name,
+                            display_name
+                        )
+                        VALUES ('imlek', 'Imlek')
+                        ON CONFLICT (normalized_name) DO NOTHING
+                        """)
+                .update();
+
+        jdbcClient.sql("""
+                        UPDATE app.canonical_product
+                        SET brand_id = (
+                            SELECT id
+                            FROM app.brand
+                            WHERE normalized_name = 'imlek'
+                        )
+                        WHERE canonical_key LIKE 'PK035-CATALOG-%'
+                        """)
+                .update();
+
+        jdbcClient.sql("""
+                        INSERT INTO app.product_family (
+                            family_key,
+                            display_name,
+                            normalized_name,
+                            brand_id,
+                            quantity_value,
+                            base_unit
+                        )
+                        SELECT 'TEST:' || product.id,
+                               product.name,
+                               product.normalized_name,
+                               product.brand_id,
+                               product.quantity_value,
+                               product.base_unit
+                        FROM app.canonical_product AS product
+                        WHERE product.canonical_key LIKE 'PK035-CATALOG-%'
+                        """)
+                .update();
+
+        jdbcClient.sql("""
+                        INSERT INTO app.product_family_member (
+                            family_id,
+                            canonical_product_id,
+                            relation_type,
+                            confidence
+                        )
+                        SELECT family.id,
+                               product.id,
+                               'SINGLE_GTIN',
+                               1.0000
+                        FROM app.canonical_product AS product
+                        JOIN app.product_family AS family
+                          ON family.family_key = 'TEST:' || product.id
+                        WHERE product.canonical_key LIKE 'PK035-CATALOG-%'
                         """)
                 .update();
 
@@ -1522,6 +2358,88 @@ class PametnaKupovinaBackendApplicationTests {
     }
 
     @Test
+    void verifiedLocationSyncStoresProvenanceAndDeactivatesMissingRows() {
+        jdbcClient.sql("""
+                    INSERT INTO app.retailer (code, name)
+                    VALUES ('OFFICIAL_LOCATION_TEST', 'Official locations')
+                    """)
+                .update();
+
+        RetailerLocationSource source = new RetailerLocationSource(
+                "OFFICIAL_LOCATION_API",
+                "TEST_LOCATION_JSON",
+                "https://example.test/locations",
+                "OFFICIAL_RETAILER_API"
+        );
+        VerifiedRetailerLocation first = new VerifiedRetailerLocation(
+                "001",
+                "Prvi objekat",
+                "Prva 1",
+                "Valjevo",
+                "STANDARD",
+                "Standard",
+                44.274,
+                19.880,
+                true
+        );
+        VerifiedRetailerLocation second = new VerifiedRetailerLocation(
+                "002",
+                "Drugi objekat",
+                "Druga 2",
+                "Valjevo",
+                "STANDARD",
+                "Standard",
+                44.275,
+                19.881,
+                true
+        );
+
+        retailerLocationImportService.importVerifiedLocations(
+                "OFFICIAL_LOCATION_TEST",
+                List.of(first, second),
+                source
+        );
+        RetailerLocationImportResult secondSync =
+                retailerLocationImportService.importVerifiedLocations(
+                        "OFFICIAL_LOCATION_TEST",
+                        List.of(second),
+                        source
+                );
+
+        List<String> storeStates = jdbcClient.sql("""
+                        SELECT store.external_code || ':' ||
+                               store.active || ':' ||
+                               store.geocoding_source || ':' ||
+                               store.geocoding_source_reference
+                        FROM app.store AS store
+                        JOIN app.retailer AS retailer
+                          ON retailer.id = store.retailer_id
+                        WHERE retailer.code = 'OFFICIAL_LOCATION_TEST'
+                        ORDER BY store.external_code
+                        """)
+                .query(String.class)
+                .list();
+        String registeredSourceUrl = jdbcClient.sql("""
+                        SELECT source.source_url
+                        FROM app.retailer_data_source AS source
+                        JOIN app.retailer AS retailer
+                          ON retailer.id = source.retailer_id
+                        WHERE retailer.code = 'OFFICIAL_LOCATION_TEST'
+                          AND source.code = 'OFFICIAL_LOCATION_API'
+                        """)
+                .query(String.class)
+                .single();
+
+        assertThat(secondSync.status()).isEqualTo("SUCCEEDED");
+        assertThat(storeStates).containsExactly(
+                "001:false:OFFICIAL_RETAILER_API:https://example.test/locations",
+                "002:true:OFFICIAL_RETAILER_API:https://example.test/locations"
+        );
+        assertThat(registeredSourceUrl)
+                .isEqualTo("https://example.test/locations");
+    }
+
+    @Test
     void pilotStoreImportPersistsAddressFormatAndActiveStatus() {
         jdbcClient.sql("""
                         INSERT INTO app.retailer (code, name)
@@ -2545,6 +3463,166 @@ class PametnaKupovinaBackendApplicationTests {
                 .isEqualByComparingTo("80");
     }
 
+    @Test
+    void flexibleOfferRejectsCheapProductsThatOnlyMentionCategoryLater() {
+        Long retailerId = jdbcClient.sql("""
+                        INSERT INTO app.retailer (code, name)
+                        VALUES ('PK050', 'PK050 lanac')
+                        RETURNING id
+                        """)
+                .query(Long.class)
+                .single();
+
+        Long formatId = jdbcClient.sql("""
+                        INSERT INTO app.store_format (
+                            retailer_id,
+                            code,
+                            name
+                        )
+                        VALUES (?, 'PILOT', 'Pilot format')
+                        RETURNING id
+                        """)
+                .param(retailerId)
+                .query(Long.class)
+                .single();
+
+        Long storeId = insertVerifiedStore(
+                retailerId,
+                formatId,
+                "PK050-STORE",
+                "PK050 prodavnica",
+                44.2700,
+                19.8840,
+                true
+        );
+
+        Long importRunId = jdbcClient.sql("""
+                        INSERT INTO app.import_run (
+                            retailer_id,
+                            source_url,
+                            status
+                        )
+                        VALUES (?, 'https://example.test/pk050.csv', 'SUCCEEDED')
+                        RETURNING id
+                        """)
+                .param(retailerId)
+                .query(Long.class)
+                .single();
+
+        jdbcClient.sql("""
+                        INSERT INTO app.retailer_product (
+                            retailer_id,
+                            source_product_key,
+                            category_name,
+                            name,
+                            normalized_name
+                        )
+                        VALUES
+                            (?, 'BAD-WATER', 'Bezalkoholna pića, kafa, čaj',
+                             'LOPTA GUMENA VODA VODA VODICA',
+                             'lopta gumena voda voda vodica'),
+                            (?, 'GOOD-WATER', 'Bezalkoholna pića, kafa, čaj',
+                             'VODA MINERALNA 1L', 'voda mineralna 1 l'),
+                            (?, 'BAD-WINE', 'Papirna i kuhinjska galanterija',
+                             'KESA RUČICA PANE I VINO',
+                             'kesa rucica pane i vino'),
+                            (?, 'GOOD-WINE', NULL,
+                             'VINO CRNO 0.75L', 'vino crno 0 75 l'),
+                            (?, 'BAD-BREAD', 'Hleb i peciva',
+                             'STAPIĆ SA BELIM LUKOM 45G HLEB&KIFL',
+                             'stapic sa belim lukom 45 g hleb kifl'),
+                            (?, 'GOOD-BREAD', 'Hleb i peciva',
+                             'HLEB BELI 500G', 'hleb beli 500 g')
+                        """)
+                .params(
+                        retailerId,
+                        retailerId,
+                        retailerId,
+                        retailerId,
+                        retailerId,
+                        retailerId
+                )
+                .update();
+
+        jdbcClient.sql("""
+                        INSERT INTO app.price_observation (
+                            retailer_product_id,
+                            import_run_id,
+                            price_date,
+                            regular_price
+                        )
+                        SELECT product.id,
+                               ?,
+                               '2026-08-21',
+                               CASE product.source_product_key
+                                   WHEN 'BAD-WATER' THEN 1.06
+                                   WHEN 'GOOD-WATER' THEN 60
+                                   WHEN 'BAD-WINE' THEN 6.85
+                                   WHEN 'GOOD-WINE' THEN 250
+                                   WHEN 'BAD-BREAD' THEN 23.78
+                                   ELSE 80
+                               END
+                        FROM app.retailer_product AS product
+                        WHERE product.retailer_id = ?
+                        """)
+                .param(1, importRunId)
+                .param(2, retailerId)
+                .update();
+
+        String clientToken = "pk050-flexible-prefix";
+        ShoppingListSummary shoppingList = shoppingListService.create(
+                new CreateShoppingListRequest("Fleksibilna korpa"),
+                clientToken
+        );
+
+        for (String category : List.of("voda", "vino", "hleb")) {
+            shoppingListService.addItem(
+                    shoppingList.id(),
+                    clientToken,
+                    new AddShoppingListItemRequest(
+                            category,
+                            category,
+                            null,
+                            BigDecimal.ONE,
+                            ShoppingItemRule.FLEXIBLE_CATEGORY,
+                            new FlexibleItemConstraints(
+                                    category,
+                                    null,
+                                    null,
+                                    null,
+                                    null
+                            )
+                    )
+            );
+        }
+
+        List<StoreItemOffer> offers = storeShoppingOfferRepository.findOffers(
+                shoppingList.id(),
+                List.of(storeId),
+                LocalDate.of(2026, 8, 22)
+        );
+
+        assertThat(offers)
+                .extracting(
+                        StoreItemOffer::requestedName,
+                        StoreItemOffer::productName
+                )
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple(
+                                "voda",
+                                "VODA MINERALNA 1L"
+                        ),
+                        org.assertj.core.groups.Tuple.tuple(
+                                "vino",
+                                "VINO CRNO 0.75L"
+                        ),
+                        org.assertj.core.groups.Tuple.tuple(
+                                "hleb",
+                                "HLEB BELI 500G"
+                        )
+                );
+    }
+
     private Long insertStoreWaitingForGeocoding(
             String retailerCode,
             String externalCode,
@@ -2695,6 +3773,51 @@ class PametnaKupovinaBackendApplicationTests {
                 .param(3, barcode)
                 .param(4, quantityValue)
                 .update();
+    }
+
+    private void registerPriceTestRetailer(
+            String retailerCode,
+            String csvPath
+    ) {
+        String datasetUrl = "http://127.0.0.1:"
+                + csvServer.getAddress().getPort()
+                + csvPath;
+
+        jdbcClient.sql("""
+                        INSERT INTO app.retailer (
+                            code,
+                            name,
+                            dataset_url
+                        )
+                        VALUES (?, ?, ?)
+                        """)
+                .param(1, retailerCode)
+                .param(2, retailerCode + " test")
+                .param(3, datasetUrl)
+                .update();
+    }
+
+    private BigDecimal currentRegularPrice(
+            String retailerCode,
+            String barcode,
+            String retailerFormatName
+    ) {
+        return jdbcClient.sql("""
+                        SELECT offer.regular_price
+                        FROM app.current_price_offer AS offer
+                        JOIN app.retailer_product AS product
+                          ON product.id = offer.retailer_product_id
+                        JOIN app.retailer AS retailer
+                          ON retailer.id = product.retailer_id
+                        WHERE retailer.code = ?
+                          AND product.barcode = ?
+                          AND offer.retailer_format_name = ?
+                        """)
+                .param(1, retailerCode)
+                .param(2, barcode)
+                .param(3, retailerFormatName)
+                .query(BigDecimal.class)
+                .single();
     }
 
     private Long latestImportRunId() {

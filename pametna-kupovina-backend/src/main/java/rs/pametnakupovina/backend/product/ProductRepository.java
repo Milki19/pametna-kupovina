@@ -61,8 +61,14 @@ public class ProductRepository {
                                price.discounted_price,
                                price.unit_price,
                                COALESCE(
-                                   price.discounted_price,
-                                   price.regular_price
+                                   CASE
+                                       WHEN price.discounted_price > 0
+                                           THEN price.discounted_price
+                                   END,
+                                   CASE
+                                       WHEN price.regular_price > 0
+                                           THEN price.regular_price
+                                   END
                                ) AS effective_price
                         FROM app.retailer_product rp
                         JOIN app.retailer r
@@ -75,6 +81,10 @@ public class ProductRepository {
                                    po.unit_price
                             FROM app.price_observation po
                             WHERE po.retailer_product_id = rp.id
+                              AND (
+                                  po.discounted_price > 0
+                                  OR po.regular_price > 0
+                              )
                             ORDER BY po.price_date DESC,
                                      po.id DESC
                             LIMIT 1
