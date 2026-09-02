@@ -140,6 +140,9 @@ public class ShoppingListService {
         Long canonicalProductId = request == null
                 ? null
                 : request.canonicalProductId();
+        Long productFamilyId = request == null
+                ? null
+                : request.productFamilyId();
 
         if (barcode != null && barcode.length() > 32) {
             throw badRequest(
@@ -163,8 +166,9 @@ public class ShoppingListService {
                         ? ShoppingItemRule.EXACT_PRODUCT
                         : request.matchingRule();
 
-        validateCanonicalProductSelection(
+        validateProductSelection(
                 canonicalProductId,
+                productFamilyId,
                 barcode,
                 matchingRule
         );
@@ -185,6 +189,7 @@ public class ShoppingListService {
                 rawInput,
                 barcode,
                 canonicalProductId,
+                productFamilyId,
                 quantity,
                 matchingRule,
                 flexible.category(),
@@ -257,6 +262,7 @@ public class ShoppingListService {
                                 listId,
                                 item.name(),
                                 item.rawInput(),
+                                null,
                                 null,
                                 null,
                                 item.quantity(),
@@ -345,6 +351,9 @@ public class ShoppingListService {
         Long canonicalProductId = request == null
                 ? null
                 : request.canonicalProductId();
+        Long productFamilyId = request == null
+                ? null
+                : request.productFamilyId();
 
         if (barcode != null && barcode.length() > 32) {
             throw badRequest(
@@ -368,8 +377,9 @@ public class ShoppingListService {
                         ? ShoppingItemRule.EXACT_PRODUCT
                         : request.matchingRule();
 
-        validateCanonicalProductSelection(
+        validateProductSelection(
                 canonicalProductId,
+                productFamilyId,
                 barcode,
                 matchingRule
         );
@@ -392,6 +402,7 @@ public class ShoppingListService {
                         rawInput,
                         barcode,
                         canonicalProductId,
+                        productFamilyId,
                         quantity,
                         matchingRule,
                         flexible.category(),
@@ -424,11 +435,42 @@ public class ShoppingListService {
         }
     }
 
-    private void validateCanonicalProductSelection(
+    private void validateProductSelection(
             Long canonicalProductId,
+            Long productFamilyId,
             String barcode,
             ShoppingItemRule matchingRule
     ) {
+        if (matchingRule == ShoppingItemRule.PRODUCT_FAMILY) {
+            if (canonicalProductId != null || barcode != null) {
+                throw badRequest(
+                        "Porodica proizvoda ne može imati tačan barkod "
+                                + "ili canonical proizvod"
+                );
+            }
+
+            if (productFamilyId == null || productFamilyId <= 0) {
+                throw badRequest(
+                        "productFamilyId je obavezan i mora biti pozitivan"
+                );
+            }
+
+            if (!repository.productFamilyExists(productFamilyId)) {
+                throw badRequest(
+                        "Porodica proizvoda nije pronađena: "
+                                + productFamilyId
+                );
+            }
+
+            return;
+        }
+
+        if (productFamilyId != null) {
+            throw badRequest(
+                    "productFamilyId važi samo za porodičnu stavku"
+            );
+        }
+
         if (canonicalProductId == null) {
             return;
         }
@@ -476,7 +518,8 @@ public class ShoppingListService {
             ShoppingItemRule matchingRule,
             FlexibleItemConstraints constraints
     ) {
-        if (matchingRule == ShoppingItemRule.EXACT_PRODUCT) {
+        if (matchingRule == ShoppingItemRule.EXACT_PRODUCT
+                || matchingRule == ShoppingItemRule.PRODUCT_FAMILY) {
             if (hasConstraintValue(constraints)) {
                 throw badRequest(
                         "Ograničenja kategorije važe samo za fleksibilnu stavku"

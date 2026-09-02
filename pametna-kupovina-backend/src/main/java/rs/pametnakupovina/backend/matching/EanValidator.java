@@ -8,7 +8,9 @@ import java.util.Optional;
 public class EanValidator {
 
     private static final int EAN_8_LENGTH = 8;
+    private static final int UPC_A_LENGTH = 12;
     private static final int EAN_13_LENGTH = 13;
+    private static final int GTIN_14_LENGTH = 14;
 
     public Optional<String> normalize(String value) {
         if (value == null) {
@@ -33,7 +35,9 @@ public class EanValidator {
 
     private boolean hasSupportedLength(String value) {
         return value.length() == EAN_8_LENGTH
-                || value.length() == EAN_13_LENGTH;
+                || value.length() == UPC_A_LENGTH
+                || value.length() == EAN_13_LENGTH
+                || value.length() == GTIN_14_LENGTH;
     }
 
     private boolean containsOnlyDigits(String value) {

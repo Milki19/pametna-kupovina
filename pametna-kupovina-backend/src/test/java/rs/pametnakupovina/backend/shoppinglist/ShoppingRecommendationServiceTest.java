@@ -280,6 +280,97 @@ class ShoppingRecommendationServiceTest {
                 );
     }
 
+    @Test
+    void freshOfferWinsOverCheaperStaleOffer() {
+        StoreItemOffer fresh = datedOffer(1L, 10L, 120, DATE.minusDays(2));
+        StoreItemOffer stale = datedOffer(2L, 10L, 20, DATE.minusDays(60));
+
+        assertThat(ShoppingRecommendationService.preferFreshOffers(
+                List.of(stale, fresh),
+                DATE,
+                30
+        )).containsExactly(fresh);
+    }
+
+    @Test
+    void staleOfferRemainsWhenNoFreshPriceExistsForItem() {
+        StoreItemOffer stale = datedOffer(1L, 10L, 20, DATE.minusDays(60));
+
+        assertThat(ShoppingRecommendationService.preferFreshOffers(
+                List.of(stale),
+                DATE,
+                30
+        )).containsExactly(stale);
+    }
+
+    @Test
+    void completePlanIsNotComparedWithIncompleteSingleStorePlan() {
+        ShoppingListRepository listRepository =
+                mock(ShoppingListRepository.class);
+        NearbyStoreRepository nearbyRepository =
+                mock(NearbyStoreRepository.class);
+        StoreShoppingOfferRepository offerRepository =
+                mock(StoreShoppingOfferRepository.class);
+        RouteMatrixProvider routeProvider =
+                mock(RouteMatrixProvider.class);
+
+        ShoppingListItemResponse firstItem = item(21L, "Mleko", 201L);
+        ShoppingListItemResponse secondItem = item(22L, "Sok", 202L);
+        NearbyStore firstStore = store(1L, "A");
+        NearbyStore secondStore = store(2L, "B");
+
+        when(listRepository.findById(20L)).thenReturn(Optional.of(
+                new ShoppingListResponse(
+                        20L,
+                        "Podeljena korpa",
+                        OffsetDateTime.now(),
+                        OffsetDateTime.now(),
+                        List.of(firstItem, secondItem)
+                )
+        ));
+        when(nearbyRepository.findNearby(
+                44.0,
+                19.0,
+                15_000,
+                20
+        )).thenReturn(List.of(firstStore, secondStore));
+        when(offerRepository.findOffers(
+                20L,
+                List.of(1L, 2L),
+                DATE
+        )).thenReturn(List.of(
+                offer(firstStore, firstItem, 100, 2101L),
+                offer(secondStore, secondItem, 50, 2201L)
+        ));
+        when(routeProvider.calculate(anyList()))
+                .thenReturn(routeMatrix());
+
+        ShoppingRecommendationResponse response =
+                new ShoppingRecommendationService(
+                        listRepository,
+                        nearbyRepository,
+                        offerRepository,
+                        routeProvider,
+                        new ShoppingOptimizationProperties()
+                ).recommend(20L, 44.0, 19.0, DATE);
+
+        assertThat(response.singleStore().complete()).isFalse();
+        assertThat(response.singleStore().coveredItems()).isEqualTo(1);
+        assertThat(response.singleStore().items())
+                .filteredOn(item -> item.resultStatus()
+                        == RecommendationItemStatus.NO_VALID_PRICE)
+                .singleElement()
+                .extracting(RecommendationItemResponse::explanation)
+                .asString()
+                .contains("drugom razmatranom scenariju");
+
+        assertThat(response.recommendedBalance().complete()).isTrue();
+        assertThat(response.recommendedBalance().coveredItems())
+                .isEqualTo(2);
+        assertThat(response.recommendedBalance()
+                .savingsComparedWithSingleStore()).isNull();
+    }
+
     private ShoppingListItemResponse item(
             Long itemId,
             String name,
@@ -351,6 +442,44 @@ class ShoppingRecommendationServiceTest {
                 "Test brend",
                 null,
                 DATE,
+                value,
+                null,
+                value,
+                value,
+                "RETAILER"
+        );
+    }
+
+    private StoreItemOffer datedOffer(
+            Long storeId,
+            Long itemId,
+            int price,
+            LocalDate priceDate
+    ) {
+        BigDecimal value = BigDecimal.valueOf(price).setScale(2);
+
+        return new StoreItemOffer(
+                storeId,
+                "TEST",
+                "Test retailer",
+                "STANDARD",
+                "Standard",
+                "Store " + storeId,
+                "Adresa",
+                "Valjevo",
+                44.0,
+                19.0,
+                itemId,
+                "voda",
+                BigDecimal.ONE,
+                ShoppingItemRule.FLEXIBLE_CATEGORY,
+                ShoppingItemMatchingStatus.UNMATCHED,
+                storeId * 100,
+                null,
+                "Voda mineralna 1 l",
+                null,
+                null,
+                priceDate,
                 value,
                 null,
                 value,

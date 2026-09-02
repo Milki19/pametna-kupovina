@@ -30,6 +30,7 @@ public class ProductController {
     private final ProductMatchDecisionService matchDecisionService;
     private final ProductMatchFeedbackService matchFeedbackService;
     private final CanonicalProductDetailsService productDetailsService;
+    private final ProductFamilyDetailsService familyDetailsService;
 
     public ProductController(
             CanonicalProductSearchService canonicalSearchService,
@@ -37,7 +38,8 @@ public class ProductController {
             FuzzyProductCandidateService fuzzyCandidateService,
             ProductMatchDecisionService matchDecisionService,
             ProductMatchFeedbackService matchFeedbackService,
-            CanonicalProductDetailsService productDetailsService
+            CanonicalProductDetailsService productDetailsService,
+            ProductFamilyDetailsService familyDetailsService
     ) {
         this.canonicalSearchService = canonicalSearchService;
         this.productSearchService = productSearchService;
@@ -45,6 +47,27 @@ public class ProductController {
         this.matchDecisionService = matchDecisionService;
         this.matchFeedbackService = matchFeedbackService;
         this.productDetailsService = productDetailsService;
+        this.familyDetailsService = familyDetailsService;
+    }
+
+    @GetMapping("/families/{productFamilyId}")
+    public ProductFamilyDetailsResponse familyDetails(
+            @PathVariable("productFamilyId") Long productFamilyId
+    ) {
+        try {
+            return familyDetailsService.find(productFamilyId)
+                    .orElseThrow(() -> new ResponseStatusException(
+                            HttpStatus.NOT_FOUND,
+                            "Porodica proizvoda nije pronađena: "
+                                    + productFamilyId
+                    ));
+        } catch (IllegalArgumentException exception) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    exception.getMessage(),
+                    exception
+            );
+        }
     }
 
     @GetMapping("/{canonicalProductId}")

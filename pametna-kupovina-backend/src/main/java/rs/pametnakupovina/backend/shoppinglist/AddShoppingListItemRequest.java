@@ -7,10 +7,32 @@ public record AddShoppingListItemRequest(
         String rawInput,
         String barcode,
         Long canonicalProductId,
+        Long productFamilyId,
         BigDecimal quantity,
         ShoppingItemRule matchingRule,
         FlexibleItemConstraints flexibleConstraints
 ) {
+
+    public AddShoppingListItemRequest(
+            String name,
+            String rawInput,
+            String barcode,
+            Long canonicalProductId,
+            BigDecimal quantity,
+            ShoppingItemRule matchingRule,
+            FlexibleItemConstraints flexibleConstraints
+    ) {
+        this(
+                name,
+                rawInput,
+                barcode,
+                canonicalProductId,
+                null,
+                quantity,
+                matchingRule,
+                flexibleConstraints
+        );
+    }
 
     public AddShoppingListItemRequest(
             String name,
@@ -23,6 +45,7 @@ public record AddShoppingListItemRequest(
                 name,
                 rawInput,
                 barcode,
+                null,
                 null,
                 quantity,
                 matchingRule,
@@ -39,6 +62,7 @@ public record AddShoppingListItemRequest(
                 name,
                 null,
                 barcode,
+                null,
                 null,
                 quantity,
                 null,
@@ -58,6 +82,7 @@ public record AddShoppingListItemRequest(
                 name,
                 rawInput,
                 barcode,
+                null,
                 null,
                 quantity,
                 matchingRule,

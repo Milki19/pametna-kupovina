@@ -102,8 +102,19 @@ public class ShoppingRecommendationService {
                 asOfDate
         );
 
+        offerRows = preferFreshOffers(
+                offerRows,
+                asOfDate,
+                properties.getMaxPriceAgeDays()
+        );
+
         Map<Long, Map<Long, StoreItemOffer>> offersByStore =
                 groupOffersByStore(offerRows);
+
+        Set<Long> itemsWithAnyNearbyOffer = offerRows.stream()
+                .filter(StoreItemOffer::available)
+                .map(StoreItemOffer::itemId)
+                .collect(java.util.stream.Collectors.toSet());
 
         List<CandidatePlan> singleStorePlans = new ArrayList<>();
 
@@ -168,6 +179,7 @@ public class ShoppingRecommendationService {
                 bestSingle,
                 bestSingle,
                 shoppingList.items(),
+                itemsWithAnyNearbyOffer,
                 routeMatrix
         );
 
@@ -176,6 +188,7 @@ public class ShoppingRecommendationService {
                 recommended,
                 bestSingle,
                 shoppingList.items(),
+                itemsWithAnyNearbyOffer,
                 routeMatrix
         );
 
@@ -184,6 +197,7 @@ public class ShoppingRecommendationService {
                 lowestPrice,
                 bestSingle,
                 shoppingList.items(),
+                itemsWithAnyNearbyOffer,
                 routeMatrix
         );
 
@@ -216,6 +230,36 @@ public class ShoppingRecommendationService {
         }
 
         return grouped;
+    }
+
+    static List<StoreItemOffer> preferFreshOffers(
+            List<StoreItemOffer> offers,
+            LocalDate asOfDate,
+            int maxPriceAgeDays
+    ) {
+        LocalDate oldestFreshDate = asOfDate.minusDays(
+                Math.max(0, maxPriceAgeDays)
+        );
+
+        Set<Long> itemsWithFreshOffer = offers.stream()
+                .filter(StoreItemOffer::available)
+                .filter(offer -> offer.priceDate() != null)
+                .filter(offer -> !offer.priceDate().isBefore(
+                        oldestFreshDate
+                ))
+                .map(StoreItemOffer::itemId)
+                .collect(java.util.stream.Collectors.toSet());
+
+        return offers.stream()
+                .filter(offer -> !offer.available()
+                        || !itemsWithFreshOffer.contains(offer.itemId())
+                        || (
+                        offer.priceDate() != null
+                                && !offer.priceDate().isBefore(
+                                oldestFreshDate
+                        )
+                ))
+                .toList();
     }
 
     private CandidatePlan createPlan(
@@ -517,6 +561,7 @@ public class ShoppingRecommendationService {
             EvaluatedPlan evaluated,
             EvaluatedPlan bestSingle,
             List<ShoppingListItemResponse> shoppingItems,
+            Set<Long> itemsWithAnyNearbyOffer,
             RouteMatrix routeMatrix
     ) {
         Map<Long, StoreItemOffer> assignments = evaluated == null
@@ -556,8 +601,11 @@ public class ShoppingRecommendationService {
                 unmatchedItems++;
             } else {
                 status = RecommendationItemStatus.NO_VALID_PRICE;
-                explanation =
-                        "Nema važeće cene u izabranim prodavnicama za traženi datum.";
+                explanation = itemsWithAnyNearbyOffer.contains(item.id())
+                        ? "Stavka nema cenu u prodavnicama ovog scenarija, "
+                        + "ali je dostupna u drugom razmatranom scenariju."
+                        : "Nema važeće cene ni u jednoj razmatranoj "
+                        + "obližnjoj prodavnici za traženi datum.";
                 unavailableItems++;
             }
 
@@ -592,7 +640,14 @@ public class ShoppingRecommendationService {
 
         BigDecimal savings = null;
 
-        if (available && bestSingle != null) {
+        boolean comparableWithSingleStore = type
+                != RecommendationScenarioType.SINGLE_STORE
+                && available
+                && bestSingle != null
+                && evaluated.plan().coveredItems()
+                == bestSingle.plan().coveredItems();
+
+        if (comparableWithSingleStore) {
             savings = money(
                     bestSingle.totalCost().subtract(
                             evaluated.totalCost()
@@ -714,7 +769,11 @@ public class ShoppingRecommendationService {
             int unavailableItems
     ) {
         if (!available) {
-            return "Scenario nije dostupan jer nema važećih ponuda u radijusu.";
+            return "Scenario nije dostupan: "
+                    + unmatchedItems
+                    + " stavki nije upareno, a za "
+                    + unavailableItems
+                    + " stavki nema važeće cene u prodavnicama u radijusu.";
         }
 
         String base = switch (type) {
@@ -774,6 +833,7 @@ public class ShoppingRecommendationService {
         return new OptimizationAssumptions(
                 properties.getCandidateRadiusMeters(),
                 properties.getMaxCandidateStores(),
+                properties.getMaxPriceAgeDays(),
                 money(properties.getCostPerKm()),
                 money(properties.getValuePerHour()),
                 money(properties.getCostPerStop()),

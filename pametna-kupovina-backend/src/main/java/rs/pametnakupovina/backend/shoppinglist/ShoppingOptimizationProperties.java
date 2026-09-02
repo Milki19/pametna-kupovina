@@ -11,6 +11,7 @@ public class ShoppingOptimizationProperties {
 
     private int candidateRadiusMeters = 15_000;
     private int maxCandidateStores = 20;
+    private int maxPriceAgeDays = 30;
     private BigDecimal costPerKm = new BigDecimal("20.00");
     private BigDecimal valuePerHour = new BigDecimal("400.00");
     private BigDecimal costPerStop = new BigDecimal("80.00");
@@ -31,6 +32,14 @@ public class ShoppingOptimizationProperties {
 
     public void setMaxCandidateStores(int maxCandidateStores) {
         this.maxCandidateStores = maxCandidateStores;
+    }
+
+    public int getMaxPriceAgeDays() {
+        return maxPriceAgeDays;
+    }
+
+    public void setMaxPriceAgeDays(int maxPriceAgeDays) {
+        this.maxPriceAgeDays = maxPriceAgeDays;
     }
 
     public BigDecimal getCostPerKm() {

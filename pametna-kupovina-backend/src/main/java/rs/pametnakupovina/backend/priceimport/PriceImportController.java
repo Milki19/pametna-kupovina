@@ -1,40 +1,44 @@
 package rs.pametnakupovina.backend.priceimport;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import rs.pametnakupovina.backend.product.ProductCatalogMaintenanceService;
+import rs.pametnakupovina.backend.product.ProductCatalogRefreshResult;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/imports")
+@ConditionalOnProperty(
+        name = "price-import.http-endpoints.enabled",
+        havingValue = "true",
+        matchIfMissing = true
+)
 public class PriceImportController {
 
     private final PriceImportService priceImportService;
+    private final ProductCatalogMaintenanceService catalogMaintenanceService;
 
     public PriceImportController(
-            PriceImportService priceImportService
+            PriceImportService priceImportService,
+            ProductCatalogMaintenanceService catalogMaintenanceService
     ) {
         this.priceImportService = priceImportService;
+        this.catalogMaintenanceService = catalogMaintenanceService;
     }
 
     @PostMapping("/retailers/{retailerCode}")
     public ImportResult importRetailerPrices(
-            @PathVariable("retailerCode") String retailerCode,
-            @RequestParam(
-                    name = "maxRows",
-                    defaultValue = "1000"
-            ) int maxRows
+            @PathVariable("retailerCode") String retailerCode
     ) {
-        if (maxRows < 1 || maxRows > 10_000) {
-            throw new IllegalArgumentException(
-                    "maxRows mora biti između 1 i 10000"
-            );
-        }
+        return priceImportService.importPrices(retailerCode);
+    }
 
-        return priceImportService.importPrices(
-                retailerCode,
-                maxRows
-        );
+    @PostMapping("/catalog/rebuild")
+    public List<ProductCatalogRefreshResult> rebuildCatalog() {
+        return catalogMaintenanceService.refreshAll();
     }
 }

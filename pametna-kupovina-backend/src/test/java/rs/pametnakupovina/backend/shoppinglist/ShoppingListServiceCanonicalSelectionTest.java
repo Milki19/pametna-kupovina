@@ -72,6 +72,7 @@ class ShoppingListServiceCanonicalSelectionTest {
                 eq("unos korisnika"),
                 isNull(),
                 eq(42L),
+                isNull(),
                 eq(BigDecimal.ONE),
                 eq(ShoppingItemRule.EXACT_PRODUCT),
                 isNull(),
@@ -158,5 +159,65 @@ class ShoppingListServiceCanonicalSelectionTest {
                 .hasMessageContaining(
                         "Canonical proizvod važi samo za tačnu stavku"
                 );
+    }
+
+    @Test
+    void selectedProductFamilyIsConfirmedWithoutCanonicalBarcode() {
+        when(repository.productFamilyExists(77L)).thenReturn(true);
+
+        service.addItem(
+                7L,
+                "client-token",
+                new AddShoppingListItemRequest(
+                        "Grčki jogurt Pilos 400 g",
+                        "grcki jogurt",
+                        null,
+                        null,
+                        77L,
+                        BigDecimal.ONE,
+                        ShoppingItemRule.PRODUCT_FAMILY,
+                        null
+                )
+        );
+
+        verify(repository).addItem(
+                eq(7L),
+                eq("Grčki jogurt Pilos 400 g"),
+                eq("grcki jogurt"),
+                isNull(),
+                isNull(),
+                eq(77L),
+                eq(BigDecimal.ONE),
+                eq(ShoppingItemRule.PRODUCT_FAMILY),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull()
+        );
+    }
+
+    @Test
+    void unknownProductFamilyIsRejectedBeforeInsert() {
+        when(repository.productFamilyExists(999L)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.addItem(
+                7L,
+                "client-token",
+                new AddShoppingListItemRequest(
+                        "Nepostojeća porodica",
+                        null,
+                        null,
+                        null,
+                        999L,
+                        BigDecimal.ONE,
+                        ShoppingItemRule.PRODUCT_FAMILY,
+                        null
+                )
+        )).isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("Porodica proizvoda nije pronađena");
+
+        verify(repository, never()).touch(7L);
     }
 }

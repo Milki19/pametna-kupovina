@@ -17,6 +17,8 @@ import java.io.InputStreamReader;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.sql.Types;
+import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -93,6 +95,7 @@ public class RetailerLocationImportService {
                                     DEFAULT_FORMAT_CODE,
                                     DEFAULT_FORMAT_NAME
                             );
+            Long dataSourceId = ensureLocationDataSourceId(retailer.id());
 
             for (CSVRecord record : parser) {
                 if (rowsRead >= maxRows) {
@@ -106,7 +109,8 @@ public class RetailerLocationImportService {
                             retailer.id(),
                             record,
                             importColumns,
-                            defaultStoreFormatId
+                            defaultStoreFormatId,
+                            dataSourceId
                     );
 
                     rowsSaved++;
@@ -139,11 +143,127 @@ public class RetailerLocationImportService {
         );
     }
 
+    public RetailerLocationImportResult importVerifiedLocations(
+            String retailerCode,
+            List<VerifiedRetailerLocation> locations,
+            RetailerLocationSource source
+    ) {
+        Retailer retailer = retailerRepository.findByCode(retailerCode)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Prodavnica nije pronađena: " + retailerCode
+                ));
+
+        if (locations == null || locations.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "Zvanični izvor nije vratio nijednu lokaciju."
+            );
+        }
+
+        RetailerLocationSource requiredSource = requiredSource(source);
+        Long dataSourceId = ensureLocationDataSourceId(
+                retailer.id(),
+                requiredSource
+        );
+        OffsetDateTime syncStartedAt = jdbcClient.sql("SELECT NOW()")
+                .query(OffsetDateTime.class)
+                .single();
+
+        int rowsSaved = 0;
+
+        for (VerifiedRetailerLocation location : locations) {
+            try {
+                String externalCode = requiredText(
+                        location.externalCode(),
+                        "externalCode"
+                );
+                String name = requiredText(location.name(), "name");
+                String address = requiredText(
+                        location.address(),
+                        "address"
+                );
+                String city = requiredText(location.city(), "city");
+                String storeFormatCode = normalizeStoreFormatCode(
+                        requiredText(
+                                location.storeFormatCode(),
+                                "storeFormatCode"
+                        )
+                );
+                String storeFormatName = requiredText(
+                        location.storeFormatName(),
+                        "storeFormatName"
+                );
+                Coordinates coordinates = new Coordinates(
+                        coordinate(
+                                location.latitude(),
+                                "latitude",
+                                -90,
+                                90
+                        ),
+                        coordinate(
+                                location.longitude(),
+                                "longitude",
+                                -180,
+                                180
+                        )
+                );
+                Long storeFormatId = ensureStoreFormatId(
+                        retailer.id(),
+                        storeFormatCode,
+                        storeFormatName
+                );
+
+                upsertWithCoordinates(
+                        retailer.id(),
+                        storeFormatId,
+                        externalCode,
+                        name,
+                        address,
+                        city,
+                        coordinates,
+                        location.active(),
+                        true,
+                        requiredSource.geocodingSource(),
+                        requiredSource.sourceUrl()
+                );
+                markLocationSource(
+                        retailer.id(),
+                        externalCode,
+                        dataSourceId,
+                        true
+                );
+                rowsSaved++;
+            } catch (RuntimeException exception) {
+                log.warn(
+                        "Preskočena zvanična lokacija {}: {}",
+                        location == null ? null : location.externalCode(),
+                        exception.getMessage()
+                );
+            }
+        }
+
+        if (rowsSaved == locations.size()) {
+            deactivateMissingLocations(dataSourceId, syncStartedAt);
+        }
+
+        String status = rowsSaved == locations.size()
+                ? "SUCCEEDED"
+                : "SUCCEEDED_WITH_ERRORS";
+
+        return new RetailerLocationImportResult(
+                retailer.code(),
+                locations.size(),
+                rowsSaved,
+                locations.size() - rowsSaved,
+                status
+        );
+    }
+
     private void upsertLocation(
             Long retailerId,
             CSVRecord record,
             ImportColumns importColumns,
-            Long defaultStoreFormatId
+            Long defaultStoreFormatId,
+            Long dataSourceId
     ) {
         String externalCode = requiredText(
                 record,
@@ -208,6 +328,13 @@ public class RetailerLocationImportService {
                     storeFormatProvided
             );
 
+            markLocationSource(
+                    retailerId,
+                    externalCode,
+                    dataSourceId,
+                    false
+            );
+
             return;
         }
 
@@ -220,8 +347,116 @@ public class RetailerLocationImportService {
                 city,
                 coordinates,
                 active,
-                storeFormatProvided
+                storeFormatProvided,
+                "LOCATION_IMPORT",
+                null
         );
+
+        markLocationSource(
+                retailerId,
+                externalCode,
+                dataSourceId,
+                true
+        );
+    }
+
+    private Long ensureLocationDataSourceId(Long retailerId) {
+        return ensureLocationDataSourceId(
+                retailerId,
+                new RetailerLocationSource(
+                        "MANUAL_LOCATION_CSV",
+                        "STANDARD_STORE_CSV",
+                        null,
+                        "LOCATION_IMPORT"
+                )
+        );
+    }
+
+    private Long ensureLocationDataSourceId(
+            Long retailerId,
+            RetailerLocationSource source
+    ) {
+        return jdbcClient.sql("""
+                        INSERT INTO app.retailer_data_source (
+                            retailer_id,
+                            code,
+                            source_type,
+                            parser_profile,
+                            source_url,
+                            encoding,
+                            delimiter,
+                            active
+                        )
+                        VALUES (
+                            ?,
+                            ?,
+                            'STORE_LOCATIONS',
+                            ?,
+                            ?,
+                            'UTF-8',
+                            ';',
+                            TRUE
+                        )
+                        ON CONFLICT (retailer_id, code)
+                        DO UPDATE SET
+                            parser_profile = EXCLUDED.parser_profile,
+                            source_url = EXCLUDED.source_url,
+                            active = TRUE,
+                            updated_at = NOW()
+                        RETURNING id
+                        """)
+                .param(1, retailerId)
+                .param(2, source.code())
+                .param(3, source.parserProfile())
+                .param(4, source.sourceUrl(), Types.VARCHAR)
+                .query(Long.class)
+                .single();
+    }
+
+    private void deactivateMissingLocations(
+            Long dataSourceId,
+            OffsetDateTime syncStartedAt
+    ) {
+        jdbcClient.sql("""
+                    UPDATE app.store
+                    SET active = FALSE,
+                        updated_at = NOW()
+                    WHERE data_source_id = ?
+                      AND active = TRUE
+                      AND (
+                          source_last_seen_at IS NULL
+                          OR source_last_seen_at < ?
+                      )
+                    """)
+                .param(1, dataSourceId)
+                .param(2, syncStartedAt)
+                .update();
+    }
+
+    private void markLocationSource(
+            Long retailerId,
+            String externalCode,
+            Long dataSourceId,
+            boolean verified
+    ) {
+        jdbcClient.sql("""
+                    UPDATE app.store
+                    SET data_source_id = ?,
+                        source_record_key = external_code,
+                        source_last_seen_at = NOW(),
+                        verified_at = CASE
+                            WHEN ? THEN NOW()
+                            ELSE verified_at
+                        END,
+                        updated_at = NOW()
+                    WHERE retailer_id = ?
+                      AND external_code = ?
+                    """)
+                .param(1, dataSourceId)
+                .param(2, verified)
+                .param(3, retailerId)
+                .param(4, externalCode)
+                .update();
     }
 
     private void upsertWithoutCoordinates(
@@ -374,7 +609,9 @@ public class RetailerLocationImportService {
             String city,
             Coordinates coordinates,
             boolean active,
-            boolean storeFormatProvided
+            boolean storeFormatProvided,
+            String geocodingSource,
+            String sourceReference
     ) {
         jdbcClient.sql("""
                     INSERT INTO app.store AS existing_store (
@@ -389,6 +626,7 @@ public class RetailerLocationImportService {
                         geocoding_status,
                         geocoding_query,
                         geocoding_source,
+                        geocoding_source_reference,
                         geocoding_matched_address,
                         geocoding_confidence,
                         geocoded_at,
@@ -408,7 +646,8 @@ public class RetailerLocationImportService {
                         )::geography,
                         'MANUALLY_VERIFIED',
                         LOWER(BTRIM(?)) || ', ' || LOWER(BTRIM(?)),
-                        'LOCATION_IMPORT',
+                        ?,
+                        ?,
                         BTRIM(?) || ', ' || BTRIM(?),
                         1.0000,
                         NOW(),
@@ -431,7 +670,8 @@ public class RetailerLocationImportService {
                         geocoding_status = EXCLUDED.geocoding_status,
                         geocoding_query = EXCLUDED.geocoding_query,
                         geocoding_source = EXCLUDED.geocoding_source,
-                        geocoding_source_reference = NULL,
+                        geocoding_source_reference =
+                            EXCLUDED.geocoding_source_reference,
                         geocoding_matched_address =
                             EXCLUDED.geocoding_matched_address,
                         geocoding_confidence =
@@ -457,10 +697,12 @@ public class RetailerLocationImportService {
                 .param(10, coordinates.latitude())
                 .param(11, address)
                 .param(12, city)
-                .param(13, address)
-                .param(14, city)
-                .param(15, active)
-                .param(16, storeFormatProvided)
+                .param(13, geocodingSource)
+                .param(14, sourceReference, Types.VARCHAR)
+                .param(15, address)
+                .param(16, city)
+                .param(17, active)
+                .param(18, storeFormatProvided)
                 .update();
     }
 
@@ -614,6 +856,54 @@ public class RetailerLocationImportService {
         return value;
     }
 
+    private double coordinate(
+            double value,
+            String fieldName,
+            double minimum,
+            double maximum
+    ) {
+        if (!Double.isFinite(value)
+                || value < minimum
+                || value > maximum) {
+            throw new IllegalArgumentException(
+                    fieldName
+                            + " mora biti između "
+                            + minimum
+                            + " i "
+                            + maximum
+            );
+        }
+
+        return value;
+    }
+
+    private RetailerLocationSource requiredSource(
+            RetailerLocationSource source
+    ) {
+        if (source == null) {
+            throw new IllegalArgumentException(
+                    "Poreklo zvaničnih lokacija je obavezno."
+            );
+        }
+
+        return new RetailerLocationSource(
+                normalizeStoreFormatCode(
+                        requiredText(source.code(), "source.code")
+                ),
+                requiredText(
+                        source.parserProfile(),
+                        "source.parserProfile"
+                ),
+                requiredText(source.sourceUrl(), "source.sourceUrl"),
+                normalizeStoreFormatCode(
+                        requiredText(
+                                source.geocodingSource(),
+                                "source.geocodingSource"
+                        )
+                )
+        );
+    }
+
     private String normalizeStoreFormatCode(String value) {
         String normalizedValue = value
                 .trim()
@@ -664,6 +954,18 @@ public class RetailerLocationImportService {
         }
 
         return value;
+    }
+
+    private String requiredText(String value, String fieldName) {
+        String requiredValue = nullableText(value);
+
+        if (requiredValue == null) {
+            throw new IllegalArgumentException(
+                    "Obavezno polje je prazno: " + fieldName
+            );
+        }
+
+        return requiredValue;
     }
 
     private String nullableText(String value) {
