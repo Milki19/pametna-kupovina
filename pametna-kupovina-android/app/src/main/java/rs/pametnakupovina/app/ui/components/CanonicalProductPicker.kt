@@ -89,7 +89,9 @@ internal fun LazyListScope.canonicalProductPicker(
 
     items(
         items = searchState.results,
-        key = { it.canonicalProductId }
+        key = {
+            it.productFamilyId ?: it.canonicalProductId ?: it.name
+        }
     ) { product ->
         ProductSearchResultCard(
             product = product,
@@ -127,7 +129,7 @@ private fun ProductSearchResultCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .testTag("product-result-${product.canonicalProductId}")
+            .testTag("product-result-${product.resultId()}")
     ) {
         Column(
             modifier = Modifier.padding(12.dp),
@@ -143,6 +145,26 @@ private fun ProductSearchResultCard(
                     style = MaterialTheme.typography.bodySmall
                 )
             }
+            product.categoryName?.let { category ->
+                Text(
+                    "Kategorija: $category",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            if (product.variantCount > 1) {
+                Text(
+                    "${product.variantCount} barkod varijante",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            if (product.availability.isNotEmpty()) {
+                Text(
+                    "Trgovci: " + product.availability.joinToString {
+                        it.retailerName
+                    },
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
             Text(
                 "Poklapanje: ${(product.score * 100).toInt()}%",
                 style = MaterialTheme.typography.labelMedium
@@ -151,7 +173,7 @@ private fun ProductSearchResultCard(
                 onClick = onChoose,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .testTag("product-choose-${product.canonicalProductId}")
+                    .testTag("product-choose-${product.resultId()}")
             ) {
                 Text("Izaberi")
             }
@@ -170,7 +192,11 @@ private fun SelectedProductCard(
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Text(
-                "Izabran canonical proizvod",
+                if (product.productFamilyId != null) {
+                    "Izabran proizvod"
+                } else {
+                    "Izabran canonical proizvod"
+                },
                 style = MaterialTheme.typography.labelMedium
             )
             Text(product.name, style = MaterialTheme.typography.titleSmall)
@@ -180,6 +206,14 @@ private fun SelectedProductCard(
             product.barcode?.let { barcode ->
                 Text(
                     "Barkod: $barcode",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            if (product.availability.isNotEmpty()) {
+                Text(
+                    "Dostupno kod: " + product.availability.joinToString {
+                        it.retailerName
+                    },
                     style = MaterialTheme.typography.bodySmall
                 )
             }
@@ -195,3 +229,7 @@ private fun productDetails(product: CanonicalProductSearchItemDto): String =
             "${formatQuantity(quantity)} ${product.baseUnit.orEmpty()}".trim()
         }
     ).joinToString(" • ")
+
+private fun CanonicalProductSearchItemDto.resultId(): String =
+    (productFamilyId ?: canonicalProductId)?.toString()
+        ?: name.hashCode().toString()

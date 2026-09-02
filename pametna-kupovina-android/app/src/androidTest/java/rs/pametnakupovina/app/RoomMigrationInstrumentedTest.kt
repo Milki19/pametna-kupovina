@@ -9,6 +9,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import rs.pametnakupovina.app.data.local.MIGRATION_1_2
+import rs.pametnakupovina.app.data.local.MIGRATION_2_3
 
 @RunWith(AndroidJUnit4::class)
 @Suppress("DEPRECATION")
@@ -57,8 +58,46 @@ class RoomMigrationInstrumentedTest {
         }
     }
 
+    @Test
+    fun migrationFrom2To3PreservesItemsAndAddsProductFamily() {
+        helper.createDatabase(DATABASE_NAME_V3, 2).apply {
+            execSQL(
+                """
+                INSERT INTO draft_items (
+                    remoteId, name, rawInput, barcode, canonicalProductId,
+                    quantity, matchingRule, matchingStatus, category,
+                    requiredBrand, minPackageQuantity, maxPackageQuantity,
+                    requiredBaseUnit, syncState, updatedAtEpochMillis
+                ) VALUES (
+                    NULL, 'Donat', 'DONAT', '3838600041300', 42,
+                    1.0, 'EXACT_PRODUCT', 'CONFIRMED', NULL,
+                    NULL, NULL, NULL, NULL, 'SYNCED', 1
+                )
+                """.trimIndent()
+            )
+            close()
+        }
+
+        helper.runMigrationsAndValidate(
+            DATABASE_NAME_V3,
+            3,
+            true,
+            MIGRATION_2_3
+        ).use { database ->
+            database.query(
+                "SELECT canonicalProductId, productFamilyId " +
+                    "FROM draft_items"
+            ).use { cursor ->
+                cursor.moveToFirst()
+                assertEquals(42L, cursor.getLong(0))
+                assertEquals(true, cursor.isNull(1))
+            }
+        }
+    }
+
     private companion object {
         const val DATABASE_NAME = "migration-test"
+        const val DATABASE_NAME_V3 = "migration-test-v3"
         const val SCHEMA_FOLDER =
             "rs.pametnakupovina.app.data.local.PametnaKupovinaDatabase"
     }

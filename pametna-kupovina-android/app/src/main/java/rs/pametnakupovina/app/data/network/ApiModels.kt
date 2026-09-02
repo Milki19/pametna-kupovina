@@ -5,6 +5,7 @@ import kotlinx.serialization.Serializable
 @Serializable
 enum class ShoppingItemRuleDto {
     EXACT_PRODUCT,
+    PRODUCT_FAMILY,
     FLEXIBLE_CATEGORY
 }
 
@@ -66,6 +67,7 @@ data class ShoppingListItemDto(
     val matchingRule: ShoppingItemRuleDto,
     val matchingStatus: ShoppingItemMatchingStatusDto,
     val matchedCanonicalProductId: Long? = null,
+    val matchedProductFamilyId: Long? = null,
     val matchingDecisionId: Long? = null,
     val matchingScore: Double? = null,
     val matchingAlgorithmVersion: String? = null,
@@ -92,6 +94,7 @@ data class AddShoppingListItemRequestDto(
     val rawInput: String? = null,
     val barcode: String? = null,
     val canonicalProductId: Long? = null,
+    val productFamilyId: Long? = null,
     val quantity: Double,
     val matchingRule: ShoppingItemRuleDto,
     val flexibleConstraints: FlexibleItemConstraintsDto? = null
@@ -103,6 +106,7 @@ data class UpdateShoppingListItemRequestDto(
     val rawInput: String? = null,
     val barcode: String? = null,
     val canonicalProductId: Long? = null,
+    val productFamilyId: Long? = null,
     val quantity: Double,
     val matchingRule: ShoppingItemRuleDto,
     val flexibleConstraints: FlexibleItemConstraintsDto? = null
@@ -120,13 +124,28 @@ data class PasteShoppingListItemsResponseDto(
 
 @Serializable
 data class CanonicalProductSearchItemDto(
-    val canonicalProductId: Long,
+    val productFamilyId: Long? = null,
+    val canonicalProductId: Long? = null,
     val name: String,
     val brand: String? = null,
     val barcode: String? = null,
     val quantityValue: Double? = null,
     val baseUnit: String? = null,
+    val categoryCode: String? = null,
+    val categoryName: String? = null,
+    val variantCount: Int = 1,
+    val availability: List<ProductRetailerAvailabilityDto> = emptyList(),
     val score: Double
+)
+
+@Serializable
+data class ProductRetailerAvailabilityDto(
+    val retailerCode: String,
+    val retailerName: String,
+    val latestPriceDate: String,
+    val storeCount: Int = 0,
+    val formatCount: Int = 0,
+    val minimumEffectivePrice: Double? = null
 )
 
 @Serializable
@@ -246,6 +265,7 @@ data class ResolveShoppingItemMatchRequestDto(
 data class OptimizationAssumptionsDto(
     val candidateRadiusMeters: Int,
     val maxCandidateStores: Int,
+    val maxPriceAgeDays: Int = 30,
     val costPerKm: Double,
     val valuePerHour: Double,
     val costPerStop: Double,

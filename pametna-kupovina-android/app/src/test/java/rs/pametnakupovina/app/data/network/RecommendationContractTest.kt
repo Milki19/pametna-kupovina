@@ -22,6 +22,7 @@ class RecommendationContractTest {
               "assumptions": {
                 "candidateRadiusMeters": 10000,
                 "maxCandidateStores": 20,
+                "maxPriceAgeDays": 14,
                 "costPerKm": 20.0,
                 "valuePerHour": 300.0,
                 "costPerStop": 50.0,
@@ -43,6 +44,7 @@ class RecommendationContractTest {
             result.recommendedBalance.type
         )
         assertEquals(RecommendationScenarioTypeDto.LOWEST_PRICE, result.lowestPrice.type)
+        assertEquals(14, result.assumptions.maxPriceAgeDays)
         assertFalse(result.recommendedBalance.complete)
         assertEquals(
             RecommendationItemStatusDto.UNMATCHED,

@@ -187,8 +187,8 @@ fun ShoppingListScreen(
                         onEdit = {
                             productSearchViewModel.clear()
                             if (
-                                item.matchingRule ==
-                                ShoppingItemRuleDto.EXACT_PRODUCT.name
+                                item.matchingRule !=
+                                ShoppingItemRuleDto.FLEXIBLE_CATEGORY.name
                             ) {
                                 productSearchViewModel.updateQuery(item.name)
                             }
@@ -259,10 +259,12 @@ private fun DraftItemCard(
             Text(item.name, style = MaterialTheme.typography.titleMedium)
             Text("Količina: ${formatQuantity(item.quantity)}")
             Text(
-                if (item.matchingRule == ShoppingItemRuleDto.EXACT_PRODUCT.name) {
-                    "Tačan proizvod"
-                } else {
-                    "Fleksibilno: ${item.category.orEmpty()}"
+                when (item.matchingRule) {
+                    ShoppingItemRuleDto.EXACT_PRODUCT.name ->
+                        "Tačan barkod"
+                    ShoppingItemRuleDto.PRODUCT_FAMILY.name ->
+                        "Isti proizvod • sve poznate varijante"
+                    else -> "Fleksibilno: ${item.category.orEmpty()}"
                 },
                 style = MaterialTheme.typography.bodySmall
             )
@@ -349,7 +351,7 @@ private fun ItemEditorDialog(
         mutableStateOf(
             item?.matchingRule
                 ?.let(ShoppingItemRuleDto::valueOf)
-                ?: ShoppingItemRuleDto.EXACT_PRODUCT
+                ?: ShoppingItemRuleDto.PRODUCT_FAMILY
         )
     }
     var category by rememberSaveable(item?.localId) {
@@ -375,17 +377,33 @@ private fun ItemEditorDialog(
     }
 
     val parsedQuantity = quantity.replace(',', '.').toDoubleOrNull()
+    val exactSelection = resolveDraftCanonicalProductId(
+        item = item,
+        enteredName = name,
+        rule = rule,
+        selectedProduct = selectedProduct
+    )
+    val familySelection = resolveDraftProductFamilyId(
+        item = item,
+        enteredName = name,
+        rule = rule,
+        selectedProduct = selectedProduct
+    )
     val valid = name.isNotBlank() &&
         parsedQuantity != null &&
         parsedQuantity > 0 &&
-        (rule == ShoppingItemRuleDto.EXACT_PRODUCT || category.isNotBlank())
+        when (rule) {
+            ShoppingItemRuleDto.EXACT_PRODUCT -> exactSelection != null
+            ShoppingItemRuleDto.PRODUCT_FAMILY -> familySelection != null
+            ShoppingItemRuleDto.FLEXIBLE_CATEGORY -> category.isNotBlank()
+        }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (item == null) "Dodaj stavku" else "Izmeni stavku") },
         text = {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (rule == ShoppingItemRuleDto.EXACT_PRODUCT) {
+                if (rule != ShoppingItemRuleDto.FLEXIBLE_CATEGORY) {
                     canonicalProductPicker(
                         query = name,
                         selectedProduct = selectedProduct,
@@ -400,6 +418,12 @@ private fun ItemEditorDialog(
                             selectedProductRawInput = name.trim()
                             selectedProduct = product
                             name = product.name
+                            if (
+                                rule == ShoppingItemRuleDto.EXACT_PRODUCT &&
+                                product.canonicalProductId == null
+                            ) {
+                                rule = ShoppingItemRuleDto.PRODUCT_FAMILY
+                            }
                             onClearProductSearch()
                         },
                         onClearSelection = {
@@ -410,11 +434,29 @@ private fun ItemEditorDialog(
                         onRetry = onRetryProductSearch,
                         onLoadMore = onLoadMoreProducts
                     )
+                    item(key = "product-mode-help") {
+                        Text(
+                            if (rule == ShoppingItemRuleDto.PRODUCT_FAMILY) {
+                                "Isti proizvod obuhvata sve poznate barkod varijante i ponude prikazanih trgovaca."
+                            } else {
+                                "Tačan barkod zaključava stavku na izabranu GTIN varijantu."
+                            },
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                 } else {
                     item(key = "flexible-item-name") {
                         OutlinedTextField(
                             value = name,
-                            onValueChange = { name = it },
+                            onValueChange = { value ->
+                                if (
+                                    category.isBlank() ||
+                                    category.trim() == name.trim()
+                                ) {
+                                    category = value
+                                }
+                                name = value
+                            },
                             label = { Text("Naziv stavke") },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
@@ -434,26 +476,46 @@ private fun ItemEditorDialog(
                     )
                 }
                 item {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            FilterChip(
+                                selected = rule ==
+                                    ShoppingItemRuleDto.PRODUCT_FAMILY,
+                                onClick = {
+                                    rule = ShoppingItemRuleDto.PRODUCT_FAMILY
+                                    selectedProduct = null
+                                    selectedProductRawInput = null
+                                    onSearchQueryChange(name)
+                                },
+                                label = { Text("Isti proizvod") }
+                            )
+                            FilterChip(
+                                selected = rule ==
+                                    ShoppingItemRuleDto.EXACT_PRODUCT,
+                                onClick = {
+                                    rule = ShoppingItemRuleDto.EXACT_PRODUCT
+                                    selectedProduct = null
+                                    selectedProductRawInput = null
+                                    onSearchQueryChange(name)
+                                },
+                                label = { Text("Tačan barkod") }
+                            )
+                        }
                         FilterChip(
-                            selected = rule == ShoppingItemRuleDto.EXACT_PRODUCT,
-                            onClick = {
-                                rule = ShoppingItemRuleDto.EXACT_PRODUCT
-                                selectedProduct = null
-                                selectedProductRawInput = null
-                                onSearchQueryChange(name)
-                            },
-                            label = { Text("Tačan proizvod") }
-                        )
-                        FilterChip(
-                            selected = rule == ShoppingItemRuleDto.FLEXIBLE_CATEGORY,
+                            selected = rule ==
+                                ShoppingItemRuleDto.FLEXIBLE_CATEGORY,
                             onClick = {
                                 rule = ShoppingItemRuleDto.FLEXIBLE_CATEGORY
+                                if (category.isBlank()) {
+                                    category = name.trim()
+                                }
                                 selectedProduct = null
                                 selectedProductRawInput = null
                                 onClearProductSearch()
                             },
-                            label = { Text("Fleksibilna") }
+                            label = { Text("Fleksibilna kategorija") }
                         )
                     }
                 }
@@ -528,13 +590,8 @@ private fun ItemEditorDialog(
                                 rule = rule,
                                 selectedProduct = selectedProduct
                             ),
-                            canonicalProductId =
-                                resolveDraftCanonicalProductId(
-                                    item = item,
-                                    enteredName = name,
-                                    rule = rule,
-                                    selectedProduct = selectedProduct
-                                ),
+                            canonicalProductId = exactSelection,
+                            productFamilyId = familySelection,
                             quantity = requireNotNull(parsedQuantity),
                             matchingRule = rule,
                             category = category.takeIf {
@@ -599,6 +656,20 @@ internal fun resolveDraftCanonicalProductId(
     else -> null
 }
 
+internal fun resolveDraftProductFamilyId(
+    item: DraftItemEntity?,
+    enteredName: String,
+    rule: ShoppingItemRuleDto,
+    selectedProduct: CanonicalProductSearchItemDto?
+): Long? = when {
+    rule != ShoppingItemRuleDto.PRODUCT_FAMILY -> null
+    selectedProduct != null -> selectedProduct.productFamilyId
+    item != null &&
+        item.matchingRule == ShoppingItemRuleDto.PRODUCT_FAMILY.name &&
+        item.name.trim() == enteredName.trim() -> item.productFamilyId
+    else -> null
+}
+
 @Composable
 private fun PasteItemsDialog(
     onDismiss: () -> Unit,
@@ -610,7 +681,9 @@ private fun PasteItemsDialog(
         title = { Text("Nalepi spisak") },
         text = {
             Column {
-                Text("Svaki neprazan red postaće posebna stavka.")
+                Text(
+                    "Svaki neprazan red postaće fleksibilna stavka, pa aplikacija može da izabere najpovoljniji odgovarajući proizvod. Za tačan brend ili pakovanje koristi Dodaj stavku."
+                )
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     value = text,

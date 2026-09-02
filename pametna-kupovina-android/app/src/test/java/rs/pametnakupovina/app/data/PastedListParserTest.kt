@@ -2,6 +2,7 @@ package rs.pametnakupovina.app.data
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import rs.pametnakupovina.app.data.network.ShoppingItemRuleDto
 
 class PastedListParserTest {
 
@@ -40,5 +41,16 @@ class PastedListParserTest {
 
         assertEquals(1.5, result.single().quantity, 0.0)
         assertEquals("paradajz", result.single().name)
+    }
+
+    @Test
+    fun `nalepljena stavka se cuva kao fleksibilna kategorija`() {
+        val input = PastedListParser.parse("2x hleb")
+            .single()
+            .toFlexibleDraftInput()
+
+        assertEquals(ShoppingItemRuleDto.FLEXIBLE_CATEGORY, input.matchingRule)
+        assertEquals("hleb", input.category)
+        assertEquals(2.0, input.quantity, 0.0)
     }
 }

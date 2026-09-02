@@ -20,10 +20,17 @@ if (localPropertiesFile.exists()) {
 fun String.asBuildConfigString(): String =
     "\"${replace("\\", "\\\\").replace("\"", "\\\"")}\""
 
-val mapsApiKey = localProperties.getProperty("MAPS_API_KEY", "")
+fun configuredValue(name: String, defaultValue: String = ""): String =
+    providers.gradleProperty(name).orNull
+        ?: providers.environmentVariable(name).orNull
+        ?: localProperties.getProperty(name, defaultValue)
 
-val backendBaseUrl = localProperties
-    .getProperty("BACKEND_BASE_URL", "http://10.0.2.2:8080/")
+val mapsApiKey = configuredValue("MAPS_API_KEY")
+
+val backendBaseUrl = configuredValue(
+    "BACKEND_BASE_URL",
+    "http://10.0.2.2:8080/"
+)
     .let { if (it.endsWith('/')) it else "$it/" }
 
 android {

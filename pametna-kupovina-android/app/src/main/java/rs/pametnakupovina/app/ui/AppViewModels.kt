@@ -261,6 +261,31 @@ class MatchingViewModel @Inject constructor(
             }
         }
     }
+
+    fun useAsFlexible(item: ShoppingItemMatchResultDto) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isResolving = true, errorMessage = null) }
+            try {
+                val refreshed = repository.convertToFlexible(
+                    itemId = item.itemId,
+                    category = item.requestedName
+                )
+                _uiState.value = MatchingUiState(
+                    isLoading = false,
+                    result = refreshed
+                )
+            } catch (error: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isResolving = false,
+                        errorMessage = error.toUserMessage(
+                            "Stavka nije pretvorena u fleksibilnu."
+                        )
+                    )
+                }
+            }
+        }
+    }
 }
 
 data class RecommendationUiState(

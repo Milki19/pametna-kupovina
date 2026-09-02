@@ -29,6 +29,7 @@ data class DraftItemInput(
     val rawInput: String? = null,
     val barcode: String? = null,
     val canonicalProductId: Long? = null,
+    val productFamilyId: Long? = null,
     val quantity: Double,
     val matchingRule: ShoppingItemRuleDto,
     val category: String? = null,
@@ -42,23 +43,43 @@ data class DraftItemInput(
         require(quantity.isFinite() && quantity > 0) {
             "Količina mora biti veća od nule."
         }
-        if (matchingRule == ShoppingItemRuleDto.FLEXIBLE_CATEGORY) {
-            require(canonicalProductId == null) {
-                "Fleksibilna stavka ne može imati canonical proizvod."
-            }
-            require(!category.isNullOrBlank()) {
-                "Za fleksibilnu stavku izaberi kategoriju."
-            }
-            if (minPackageQuantity != null && maxPackageQuantity != null) {
-                require(minPackageQuantity <= maxPackageQuantity) {
-                    "Minimalno pakovanje ne može biti veće od maksimalnog."
+        when (matchingRule) {
+            ShoppingItemRuleDto.EXACT_PRODUCT -> {
+                require(productFamilyId == null) {
+                    "Tačna stavka ne može imati porodicu proizvoda."
                 }
             }
-            require(minPackageQuantity == null || minPackageQuantity > 0) {
-                "Minimalno pakovanje mora biti veće od nule."
+
+            ShoppingItemRuleDto.PRODUCT_FAMILY -> {
+                require(productFamilyId != null && productFamilyId > 0) {
+                    "Za isti proizvod izaberi porodicu proizvoda."
+                }
+                require(canonicalProductId == null && barcode == null) {
+                    "Porodična stavka ne može imati tačan barkod."
+                }
             }
-            require(maxPackageQuantity == null || maxPackageQuantity > 0) {
-                "Maksimalno pakovanje mora biti veće od nule."
+
+            ShoppingItemRuleDto.FLEXIBLE_CATEGORY -> {
+                require(canonicalProductId == null && productFamilyId == null) {
+                    "Fleksibilna stavka ne može imati izabran proizvod."
+                }
+                require(!category.isNullOrBlank()) {
+                    "Za fleksibilnu stavku izaberi kategoriju."
+                }
+                if (
+                    minPackageQuantity != null &&
+                    maxPackageQuantity != null
+                ) {
+                    require(minPackageQuantity <= maxPackageQuantity) {
+                        "Minimalno pakovanje ne može biti veće od maksimalnog."
+                    }
+                }
+                require(minPackageQuantity == null || minPackageQuantity > 0) {
+                    "Minimalno pakovanje mora biti veće od nule."
+                }
+                require(maxPackageQuantity == null || maxPackageQuantity > 0) {
+                    "Maksimalno pakovanje mora biti veće od nule."
+                }
             }
         }
         return copy(
@@ -126,16 +147,36 @@ class ShoppingRepository @Inject constructor(
         require(parsed.isNotEmpty()) { "Unesi bar jednu nepraznu stavku." }
 
         parsed.forEach { line ->
-            dao.insert(
-                DraftItemInput(
-                    name = line.name,
-                    rawInput = line.rawInput,
-                    quantity = line.quantity,
-                    matchingRule = ShoppingItemRuleDto.EXACT_PRODUCT
-                ).toEntity()
-            )
+            dao.insert(line.toFlexibleDraftInput().toEntity())
         }
         return parsed.size
+    }
+
+    suspend fun convertToFlexible(
+        itemId: Long,
+        category: String
+    ): ShoppingListMatchingDto {
+        var local = dao.findByRemoteId(itemId)
+        if (local == null) {
+            synchronizeAndRefresh()
+            local = dao.findByRemoteId(itemId)
+        }
+        val item = requireNotNull(local) {
+            "Stavka više nije dostupna na lokalnom spisku."
+        }
+        val flexibleCategory = category.trim().ifBlank { item.name.trim() }
+
+        updateItem(
+            item = item,
+            input = DraftItemInput(
+                name = item.name,
+                rawInput = item.rawInput,
+                quantity = item.quantity,
+                matchingRule = ShoppingItemRuleDto.FLEXIBLE_CATEGORY,
+                category = flexibleCategory
+            )
+        )
+        return matchItems()
     }
 
     suspend fun updateItem(
@@ -236,12 +277,22 @@ class ShoppingRepository @Inject constructor(
         latitude: Double,
         longitude: Double,
         date: String? = null
-    ): ShoppingRecommendationDto = api.getRecommendations(
-        listId = listId,
-        latitude = latitude,
-        longitude = longitude,
-        date = date
-    )
+    ): ShoppingRecommendationDto {
+        // Pre računanja guramo sve lokalne izmene. Ako je server u međuvremenu
+        // obrisao spisak, synchronizePending kreira novi i vraća njegov ID.
+        val synchronizedListId = synchronizePending()
+        val recommendationListId = if (synchronizedListId == listId) {
+            listId
+        } else {
+            synchronizedListId
+        }
+        return api.getRecommendations(
+            listId = recommendationListId,
+            latitude = latitude,
+            longitude = longitude,
+            date = date
+        )
+    }
 
     private suspend fun ensureActiveList(): Long {
         val existing = clientIdentityStore.getActiveListId()
@@ -309,6 +360,14 @@ class ShoppingRepository @Inject constructor(
     }
 }
 
+internal fun ParsedDraftLine.toFlexibleDraftInput() = DraftItemInput(
+    name = name,
+    rawInput = rawInput,
+    quantity = quantity,
+    matchingRule = ShoppingItemRuleDto.FLEXIBLE_CATEGORY,
+    category = name
+)
+
 private fun DraftItemInput.toEntity(
     localId: Long = 0,
     remoteId: Long? = null,
@@ -321,6 +380,7 @@ private fun DraftItemInput.toEntity(
     rawInput = rawInput,
     barcode = barcode,
     canonicalProductId = canonicalProductId,
+    productFamilyId = productFamilyId,
     quantity = quantity,
     matchingRule = matchingRule.name,
     matchingStatus = matchingStatus,
@@ -348,6 +408,7 @@ private fun DraftItemEntity.toAddRequest() = AddShoppingListItemRequestDto(
     rawInput = rawInput,
     barcode = barcode,
     canonicalProductId = canonicalProductId,
+    productFamilyId = productFamilyId,
     quantity = quantity,
     matchingRule = ShoppingItemRuleDto.valueOf(matchingRule),
     flexibleConstraints = constraints()
@@ -359,6 +420,7 @@ private fun DraftItemEntity.toUpdateRequest() =
         rawInput = rawInput,
         barcode = barcode,
         canonicalProductId = canonicalProductId,
+        productFamilyId = productFamilyId,
         quantity = quantity,
         matchingRule = ShoppingItemRuleDto.valueOf(matchingRule),
         flexibleConstraints = constraints()
@@ -373,6 +435,7 @@ private fun ShoppingListItemDto.toEntity(
     rawInput = rawInput,
     barcode = barcode,
     canonicalProductId = matchedCanonicalProductId,
+    productFamilyId = matchedProductFamilyId,
     quantity = quantity,
     matchingRule = matchingRule.name,
     matchingStatus = matchingStatus.name,
