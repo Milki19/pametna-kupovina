@@ -27,6 +27,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import rs.pametnakupovina.app.data.network.ProductCandidateDto
 import rs.pametnakupovina.app.data.network.ShoppingItemMatchResultDto
 import rs.pametnakupovina.app.data.network.ShoppingItemMatchingStatusDto
+import rs.pametnakupovina.app.data.network.ShoppingItemRuleDto
 import rs.pametnakupovina.app.ui.MatchingViewModel
 import rs.pametnakupovina.app.ui.components.ErrorState
 import rs.pametnakupovina.app.ui.components.LoadingState
@@ -113,6 +114,9 @@ fun MatchingScreen(
                                 enabled = !state.isResolving,
                                 onChoose = { candidate ->
                                     viewModel.confirm(item, candidate)
+                                },
+                                onUseAsFlexible = {
+                                    viewModel.useAsFlexible(item)
                                 }
                             )
                         }
@@ -144,7 +148,8 @@ fun MatchingScreen(
 private fun MatchingItemCard(
     item: ShoppingItemMatchResultDto,
     enabled: Boolean,
-    onChoose: (ProductCandidateDto?) -> Unit
+    onChoose: (ProductCandidateDto?) -> Unit,
+    onUseAsFlexible: () -> Unit
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
@@ -171,6 +176,20 @@ private fun MatchingItemCard(
                     onClick = { onChoose(null) }
                 ) {
                     Text("Nijedan — ostavi neupareno")
+                }
+            }
+
+            if (canUseAsFlexible(item)) {
+                Text(
+                    "Ako ti nije važan brend ili tačno pakovanje, dozvoli aplikaciji da izabere najpovoljniju odgovarajuću ponudu.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Button(
+                    enabled = enabled,
+                    onClick = onUseAsFlexible,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Koristi kao fleksibilnu stavku")
                 }
             }
         }
@@ -232,3 +251,7 @@ private fun statusTone(status: ShoppingItemMatchingStatusDto): StatusTone =
 
 internal fun connectedItems(result: rs.pametnakupovina.app.data.network.ShoppingListMatchingDto): Int =
     result.automaticallyMatchedItems + result.confirmedItems
+
+internal fun canUseAsFlexible(item: ShoppingItemMatchResultDto): Boolean =
+    item.matchingRule == ShoppingItemRuleDto.EXACT_PRODUCT &&
+        item.matchingStatus == ShoppingItemMatchingStatusDto.UNMATCHED

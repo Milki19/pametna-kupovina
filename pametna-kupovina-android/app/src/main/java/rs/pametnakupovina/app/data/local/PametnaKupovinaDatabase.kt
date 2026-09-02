@@ -6,7 +6,7 @@ import androidx.room.migration.Migration
 
 @Database(
     entities = [DraftItemEntity::class],
-    version = 2,
+    version = 3,
     exportSchema = true
 )
 abstract class PametnaKupovinaDatabase : RoomDatabase() {
@@ -16,5 +16,11 @@ abstract class PametnaKupovinaDatabase : RoomDatabase() {
 val MIGRATION_1_2 = Migration(1, 2) { database ->
     database.execSQL(
         "ALTER TABLE draft_items ADD COLUMN canonicalProductId INTEGER"
+    )
+}
+
+val MIGRATION_2_3 = Migration(2, 3) { database ->
+    database.execSQL(
+        "ALTER TABLE draft_items ADD COLUMN productFamilyId INTEGER"
     )
 }

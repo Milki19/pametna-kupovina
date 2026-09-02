@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -22,7 +23,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -34,6 +37,9 @@ import rs.pametnakupovina.app.data.network.RecommendationItemStatusDto
 import rs.pametnakupovina.app.data.network.RecommendationScenarioTypeDto
 import rs.pametnakupovina.app.data.network.RecommendationStoreDto
 import rs.pametnakupovina.app.data.network.ShoppingRecommendationDto
+import rs.pametnakupovina.app.navigation.NavigationPoint
+import rs.pametnakupovina.app.navigation.googleMapsDirectionsUrl
+import rs.pametnakupovina.app.navigation.launchGoogleMapsDirections
 import rs.pametnakupovina.app.ui.RecommendationViewModel
 import rs.pametnakupovina.app.ui.components.ErrorState
 import rs.pametnakupovina.app.ui.components.LoadingState
@@ -89,7 +95,8 @@ fun RecommendationScreen(
                     }
                 )
                 state.result != null -> RecommendationContent(
-                    result = requireNotNull(state.result)
+                    result = requireNotNull(state.result),
+                    origin = requireNotNull(location)
                 )
             }
         }
@@ -97,7 +104,11 @@ fun RecommendationScreen(
 }
 
 @Composable
-private fun RecommendationContent(result: ShoppingRecommendationDto) {
+private fun RecommendationContent(
+    result: ShoppingRecommendationDto,
+    origin: Pair<Double, Double>
+) {
+    val context = LocalContext.current
     var selectedTypeName by rememberSaveable {
         mutableStateOf(RecommendationScenarioTypeDto.RECOMMENDED_BALANCE.name)
     }
@@ -109,6 +120,10 @@ private fun RecommendationContent(result: ShoppingRecommendationDto) {
     val selected = scenarios.firstOrNull {
         it.type.name == selectedTypeName
     } ?: result.recommendedBalance
+    val unresolved = selected.items.filter {
+        it.resultStatus != RecommendationItemStatusDto.AVAILABLE
+    }
+    val orderedStores = selected.stores.sortedBy { it.stopOrder }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -138,6 +153,12 @@ private fun RecommendationContent(result: ShoppingRecommendationDto) {
                 "Plan kupovine — ${scenarioTitle(selected.type)}",
                 style = MaterialTheme.typography.titleLarge
             )
+            Text(
+                "Pokriveno ${selected.coveredItems}/${selected.items.size} stavki; " +
+                    "bez cene ${selected.unavailableItems}; " +
+                    "neupareno ${selected.unmatchedItems}.",
+                style = MaterialTheme.typography.bodyMedium
+            )
         }
 
         if (!selected.available) {
@@ -149,8 +170,36 @@ private fun RecommendationContent(result: ShoppingRecommendationDto) {
                     )
                 }
             }
+            if (unresolved.isNotEmpty()) {
+                item {
+                    UnresolvedItemsCard(unresolved)
+                }
+            }
         } else {
-            selected.stores.sortedBy { it.stopOrder }.forEach { store ->
+            if (orderedStores.isNotEmpty()) {
+                item(key = "navigation-${selected.type}") {
+                    RouteNavigationCard(
+                        stopCount = orderedStores.size,
+                        onClick = {
+                            val url = googleMapsDirectionsUrl(
+                                origin = NavigationPoint(
+                                    latitude = origin.first,
+                                    longitude = origin.second
+                                ),
+                                orderedStops = orderedStores.map { store ->
+                                    NavigationPoint(
+                                        latitude = store.latitude,
+                                        longitude = store.longitude
+                                    )
+                                }
+                            )
+                            launchGoogleMapsDirections(context, url)
+                        }
+                    )
+                }
+            }
+
+            orderedStores.forEach { store ->
                 item(key = "store-${selected.type}-${store.storeId}") {
                     StoreAllocationCard(
                         store = store,
@@ -159,9 +208,6 @@ private fun RecommendationContent(result: ShoppingRecommendationDto) {
                 }
             }
 
-            val unresolved = selected.items.filter {
-                it.resultStatus != RecommendationItemStatusDto.AVAILABLE
-            }
             if (unresolved.isNotEmpty()) {
                 item {
                     UnresolvedItemsCard(unresolved)
@@ -208,6 +254,50 @@ private fun RecommendationContent(result: ShoppingRecommendationDto) {
 }
 
 @Composable
+internal fun RouteNavigationCard(
+    stopCount: Int,
+    onClick: () -> Unit
+) {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer
+        ),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                "Ruta je spremna",
+                style = MaterialTheme.typography.titleMedium
+            )
+            Text(
+                if (stopCount == 1) {
+                    "Google Maps će te voditi do prodavnice iz izabranog plana."
+                } else {
+                    "Google Maps će otvoriti svih $stopCount stajanja redom iz plana."
+                }
+            )
+            Button(
+                onClick = onClick,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("open-google-maps")
+            ) {
+                Text(
+                    if (stopCount == 1) {
+                        "Navigacija do prodavnice"
+                    } else {
+                        "Navigacija kroz $stopCount prodavnice"
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun ScenarioSummaryCard(
     scenario: OptimizationScenarioDto,
     selected: Boolean,
@@ -234,6 +324,9 @@ private fun ScenarioSummaryCard(
             )
             Text(scenario.explanation)
             if (scenario.available) {
+                Text(
+                    "Pokriveno: ${scenario.coveredItems}/${scenario.items.size} stavki"
+                )
                 Text("Cena korpe: ${money(scenario.basketCost)}")
                 Text(
                     "Put: ${distance(scenario.routeDistanceKm)} • " +
@@ -245,7 +338,16 @@ private fun ScenarioSummaryCard(
                     style = MaterialTheme.typography.titleMedium
                 )
                 scenario.savingsComparedWithSingleStore?.let { savings ->
-                    Text("Ušteda prema jednoj prodavnici: ${money(savings)}")
+                    if (savings >= 0.0) {
+                        Text(
+                            "Ušteda prema jednoj prodavnici: ${money(savings)}"
+                        )
+                    } else {
+                        Text(
+                            "Dodatni ukupan trošak prema jednoj prodavnici: " +
+                                money(-savings)
+                        )
+                    }
                 }
                 if (scenario.approximateRoute) {
                     Text(
@@ -368,6 +470,9 @@ private fun AssumptionsCard(result: ShoppingRecommendationDto) {
         ) {
             Text("Pretpostavke obračuna", style = MaterialTheme.typography.titleMedium)
             Text("Radijus: ${assumptions.candidateRadiusMeters / 1000.0} km")
+            Text(
+                "Sveže cene imaju prednost do ${assumptions.maxPriceAgeDays} dana"
+            )
             Text("Trošak po km: ${money(assumptions.costPerKm)}")
             Text("Vrednost vremena: ${money(assumptions.valuePerHour)} / h")
             Text("Trošak stajanja: ${money(assumptions.costPerStop)}")

@@ -115,4 +115,35 @@ class ShoppingListScreenTest {
             )
         )
     }
+
+    @Test
+    fun `izabrana porodica salje product family id`() {
+        val family = selectedProduct.copy(productFamilyId = 77)
+
+        assertEquals(
+            77L,
+            resolveDraftProductFamilyId(
+                item = null,
+                enteredName = family.name,
+                rule = ShoppingItemRuleDto.PRODUCT_FAMILY,
+                selectedProduct = family
+            )
+        )
+        assertNull(
+            resolveDraftCanonicalProductId(
+                item = null,
+                enteredName = family.name,
+                rule = ShoppingItemRuleDto.PRODUCT_FAMILY,
+                selectedProduct = family
+            )
+        )
+        assertNull(
+            resolveDraftBarcode(
+                item = null,
+                enteredName = family.name,
+                rule = ShoppingItemRuleDto.PRODUCT_FAMILY,
+                selectedProduct = family
+            )
+        )
+    }
 }

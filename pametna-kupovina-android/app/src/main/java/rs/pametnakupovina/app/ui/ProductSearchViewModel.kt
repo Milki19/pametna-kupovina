@@ -118,7 +118,9 @@ class ProductSearchViewModel @Inject constructor(
                 page = response.page,
                 results = if (append) {
                     (_uiState.value.results + response.items)
-                        .distinctBy { it.canonicalProductId }
+                        .distinctBy {
+                            it.productFamilyId ?: it.canonicalProductId
+                        }
                 } else {
                     response.items
                 },

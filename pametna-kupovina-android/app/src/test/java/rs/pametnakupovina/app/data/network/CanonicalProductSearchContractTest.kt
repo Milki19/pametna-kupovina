@@ -29,12 +29,26 @@ class CanonicalProductSearchContractTest {
               "hasNext": false,
               "items": [
                 {
+                  "productFamilyId": 71,
                   "canonicalProductId": 1,
                   "name": "VODA DONAT 1/1-PALANACKI-300",
                   "brand": "DONAT",
                   "barcode": "3838600041300",
                   "quantityValue": 1000.0,
                   "baseUnit": "ml",
+                  "categoryCode": "WATER",
+                  "categoryName": "Voda",
+                  "variantCount": 2,
+                  "availability": [
+                    {
+                      "retailerCode": "LIDL",
+                      "retailerName": "Lidl",
+                      "latestPriceDate": "2026-03-02",
+                      "storeCount": 0,
+                      "formatCount": 1,
+                      "minimumEffectivePrice": 239.0
+                    }
+                  ],
                   "score": 1.0
                 },
                 {
@@ -55,6 +69,9 @@ class CanonicalProductSearchContractTest {
         assertFalse(result.hasNext)
         assertEquals(2, result.items.size)
         assertEquals("3838600041300", result.items.first().barcode)
+        assertEquals(71L, result.items.first().productFamilyId)
+        assertEquals(2, result.items.first().variantCount)
+        assertEquals("LIDL", result.items.first().availability.first().retailerCode)
         assertEquals(1000.0, result.items.first().quantityValue ?: 0.0, 0.0)
         assertNull(result.items.last().barcode)
     }
@@ -95,5 +112,23 @@ class CanonicalProductSearchContractTest {
         assertTrue(encoded.contains("\"barcode\":\"3838600041300\""))
         assertTrue(encoded.contains("\"canonicalProductId\":1"))
         assertTrue(encoded.contains("\"matchingRule\":\"EXACT_PRODUCT\""))
+    }
+
+    @Test
+    fun `izabrana porodica salje family id bez tacnog barkoda`() {
+        val request = AddShoppingListItemRequestDto(
+            name = "Grčki jogurt Pilos 400 g",
+            rawInput = "grcki jogurt",
+            productFamilyId = 77,
+            quantity = 1.0,
+            matchingRule = ShoppingItemRuleDto.PRODUCT_FAMILY
+        )
+
+        val encoded = json.encodeToString(request)
+
+        assertTrue(encoded.contains("\"productFamilyId\":77"))
+        assertTrue(encoded.contains("\"matchingRule\":\"PRODUCT_FAMILY\""))
+        assertFalse(encoded.contains("canonicalProductId"))
+        assertFalse(encoded.contains("barcode"))
     }
 }
