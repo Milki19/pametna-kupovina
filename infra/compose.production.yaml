@@ -1,0 +1,138 @@
+services:
+  postgres:
+    image: ghcr.io/baosystems/postgis:16-3.5
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - pametna_kupovina_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ../pametna-kupovina-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      DB_USERNAME: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      ADMIN_API_KEY_REQUIRED: "true"
+      ADMIN_API_KEY: ${ADMIN_API_KEY:?ADMIN_API_KEY is required}
+      SHOPPING_MAX_PRICE_AGE_DAYS: ${SHOPPING_MAX_PRICE_AGE_DAYS:-30}
+      PRICE_IMPORT_HTTP_ENDPOINTS_ENABLED: "false"
+      PRICE_IMPORT_SCHEDULE_ENABLED: "false"
+      MAXI_PRICE_IMPORT_SCHEDULE_ENABLED: "false"
+      VERIFIED_LOCATION_IMPORT_SCHEDULE_ENABLED: "false"
+      MAXI_PRICE_IMPORT_STORE_CODES: ${MAXI_PRICE_IMPORT_STORE_CODES:-508,538,512,513,541,544}
+      MAXI_PRICE_IMPORT_STORE_FILE_PREFIXES: ${MAXI_PRICE_IMPORT_STORE_FILE_PREFIXES:-508=MAXI_508_KNEZA_MIHAJLA_84_86_VALJEVO_,538=MAXI_538_KARADJORDJEVA_92_VALJEVO_,512=PRODAVNICA_512_OBRENA_NIKOLICA_3_VALJEVO_,513=PRODAVNICA_513_NASELJE_ZBRATIMLJENI_GRADOVI_BB_VALJEVO_,541=MAXI_541_GODJEVACKA_2_DIVCIBARE_VALJEVO_,544=MAXI_544_KARADJORDJEVA_2_VALJEVO_}
+      MAXI_PRICE_IMPORT_LOOKBACK_DAYS: ${MAXI_PRICE_IMPORT_LOOKBACK_DAYS:-7}
+      JVM_TOOL_OPTIONS: ${JVM_TOOL_OPTIONS:--Xms256m -Xmx1536m}
+      HEALTH_SHOW_DETAILS: never
+    expose:
+      - "8080"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://127.0.0.1:8080/actuator/health | grep -q '\"status\":\"UP\"'"
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  import-worker:
+    build:
+      context: ../pametna-kupovina-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      DB_USERNAME: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      SPRING_MAIN_WEB_APPLICATION_TYPE: none
+      SPRING_FLYWAY_ENABLED: "false"
+      PRICE_IMPORT_HTTP_ENDPOINTS_ENABLED: "false"
+      PRICE_IMPORT_WORKER_ENABLED: "true"
+      PRICE_IMPORT_WORKER_INSTANCE_ID: ${PRICE_IMPORT_WORKER_INSTANCE_ID:-import-worker-1}
+      PRICE_IMPORT_ARCHIVE_DIRECTORY: /data/import-archive
+      PRICE_IMPORT_SCHEDULE_ENABLED: ${PRICE_IMPORT_SCHEDULE_ENABLED:-true}
+      PRICE_IMPORT_SCHEDULE_RETAILERS: ${PRICE_IMPORT_SCHEDULE_RETAILERS:-EUROPROM,LIDL,IDEA_RODA,UNIVEREXPORT,DIS}
+      PRICE_IMPORT_SCHEDULE_CRON: ${PRICE_IMPORT_SCHEDULE_CRON:-0 0 3 * * *}
+      MAXI_PRICE_IMPORT_SCHEDULE_ENABLED: ${MAXI_PRICE_IMPORT_SCHEDULE_ENABLED:-true}
+      MAXI_PRICE_IMPORT_SCHEDULE_CRON: ${MAXI_PRICE_IMPORT_SCHEDULE_CRON:-0 0 4 * * *}
+      MAXI_PRICE_IMPORT_STORE_CODES: ${MAXI_PRICE_IMPORT_STORE_CODES:-508,538,512,513,541,544}
+      MAXI_PRICE_IMPORT_STORE_FILE_PREFIXES: ${MAXI_PRICE_IMPORT_STORE_FILE_PREFIXES:-508=MAXI_508_KNEZA_MIHAJLA_84_86_VALJEVO_,538=MAXI_538_KARADJORDJEVA_92_VALJEVO_,512=PRODAVNICA_512_OBRENA_NIKOLICA_3_VALJEVO_,513=PRODAVNICA_513_NASELJE_ZBRATIMLJENI_GRADOVI_BB_VALJEVO_,541=MAXI_541_GODJEVACKA_2_DIVCIBARE_VALJEVO_,544=MAXI_544_KARADJORDJEVA_2_VALJEVO_}
+      MAXI_PRICE_IMPORT_LOOKBACK_DAYS: ${MAXI_PRICE_IMPORT_LOOKBACK_DAYS:-7}
+      VERIFIED_LOCATION_IMPORT_SCHEDULE_ENABLED: ${VERIFIED_LOCATION_IMPORT_SCHEDULE_ENABLED:-true}
+      VERIFIED_LOCATION_IMPORT_SCHEDULE_CRON: ${VERIFIED_LOCATION_IMPORT_SCHEDULE_CRON:-0 0 2 * * SUN}
+      LIDL_LOCATION_IMPORT_API_KEY: ${LIDL_LOCATION_IMPORT_API_KEY:-16QaHsGX3Uc3JLhNlS2ZG1CmosbzVPs2}
+      JVM_TOOL_OPTIONS: ${IMPORT_WORKER_JVM_TOOL_OPTIONS:--Xms256m -Xmx2048m}
+    volumes:
+      - price_import_archive:/data/import-archive
+
+  database-backup:
+    image: postgres:16-alpine
+    profiles:
+      - operations
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGDATABASE: ${POSTGRES_DB}
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./backups:/backups
+    entrypoint:
+      - /bin/sh
+      - -ec
+    command:
+      - |
+        umask 077
+        backup_file="/backups/pametna-kupovina-$$(date -u +%Y%m%dT%H%M%SZ).dump"
+        pg_dump --format=custom --compress=9 --file="$${backup_file}"
+        pg_restore --list "$${backup_file}" >/dev/null
+        echo "Backup verified: $${backup_file}"
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?APP_DOMAIN is required}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  pametna_kupovina_postgres_data:
+  caddy_data:
+  caddy_config:
+  price_import_archive:
