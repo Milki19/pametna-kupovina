@@ -100,7 +100,26 @@ public class StoreShoppingOfferRepository {
                           ON retailer.id = store.retailer_id
                         JOIN app.store_format AS format
                           ON format.id = store.store_format_id
+                        LEFT JOIN app.store_price_format_mapping
+                            AS price_mapping
+                          ON price_mapping.retailer_id =
+                             store.retailer_id
+                         AND price_mapping.store_external_code =
+                             store.external_code
+                        AND price_mapping.active = TRUE
+                         AND price_mapping.verification_status = 'VERIFIED'
                         CROSS JOIN app.shopping_list_item AS item
+                        LEFT JOIN LATERAL (
+                            SELECT intent.id AS shopping_intent_id,
+                                   intent.default_min_package_quantity,
+                                   intent.default_max_package_quantity,
+                                   intent.default_base_unit
+                            FROM app.shopping_intent AS intent
+                            WHERE item.matching_rule =
+                                  'FLEXIBLE_CATEGORY'
+                              AND intent.id = item.shopping_intent_id
+                              AND intent.active = TRUE
+                        ) AS requested_intent ON TRUE
                         LEFT JOIN LATERAL (
                             SELECT product.id AS retailer_product_id,
                                    product.canonical_product_id,
@@ -162,10 +181,18 @@ public class StoreShoppingOfferRepository {
                                                 AND (
                                                     LOWER(BTRIM(
                                                         current_offer.retailer_format_name
-                                                    )) = LOWER(format.name)
-                                                    OR LOWER(BTRIM(
+                                                    )) = LOWER(BTRIM(COALESCE(
+                                                        price_mapping.retailer_format_name,
+                                                        format.name
+                                                    )))
+                                                    OR (
+                                                        price_mapping.id IS NULL
+                                                        AND LOWER(BTRIM(
                                                         current_offer.retailer_format_name
-                                                    )) = LOWER(format.code)
+                                                        )) = LOWER(BTRIM(
+                                                            format.code
+                                                        ))
+                                                    )
                                                 )
                                                    THEN 2
                                                ELSE 3
@@ -181,14 +208,22 @@ public class StoreShoppingOfferRepository {
                                           OR (
                                               current_offer.scope_type =
                                                   'STORE_FORMAT'
-                                              AND (
-                                                  LOWER(BTRIM(
-                                                      current_offer.retailer_format_name
-                                                  )) = LOWER(format.name)
-                                                  OR LOWER(BTRIM(
-                                                      current_offer.retailer_format_name
-                                                  )) = LOWER(format.code)
-                                              )
+                                                  AND (
+                                                      LOWER(BTRIM(
+                                                          current_offer.retailer_format_name
+                                                      )) = LOWER(BTRIM(COALESCE(
+                                                          price_mapping.retailer_format_name,
+                                                          format.name
+                                                      )))
+                                                      OR (
+                                                          price_mapping.id IS NULL
+                                                          AND LOWER(BTRIM(
+                                                          current_offer.retailer_format_name
+                                                          )) = LOWER(BTRIM(
+                                                              format.code
+                                                          ))
+                                                      )
+                                                  )
                                           )
                                           OR current_offer.scope_type = 'RETAILER'
                                       )
@@ -239,10 +274,18 @@ public class StoreShoppingOfferRepository {
                                                 AND (
                                                     LOWER(BTRIM(
                                                         observation.retailer_format_name
-                                                    )) = LOWER(format.name)
-                                                    OR LOWER(BTRIM(
+                                                    )) = LOWER(BTRIM(COALESCE(
+                                                        price_mapping.retailer_format_name,
+                                                        format.name
+                                                    )))
+                                                    OR (
+                                                        price_mapping.id IS NULL
+                                                        AND LOWER(BTRIM(
                                                         observation.retailer_format_name
-                                                    )) = LOWER(format.code)
+                                                        )) = LOWER(BTRIM(
+                                                            format.code
+                                                        ))
+                                                    )
                                                 )
                                                    THEN 2
                                                ELSE 3
@@ -287,10 +330,18 @@ public class StoreShoppingOfferRepository {
                                               AND (
                                                   LOWER(BTRIM(
                                                       observation.retailer_format_name
-                                                  )) = LOWER(format.name)
-                                                  OR LOWER(BTRIM(
+                                                  )) = LOWER(BTRIM(COALESCE(
+                                                      price_mapping.retailer_format_name,
+                                                      format.name
+                                                  )))
+                                                  OR (
+                                                      price_mapping.id IS NULL
+                                                      AND LOWER(BTRIM(
                                                       observation.retailer_format_name
-                                                  )) = LOWER(format.code)
+                                                      )) = LOWER(BTRIM(
+                                                          format.code
+                                                      ))
+                                                  )
                                               )
                                           )
                                           OR (
@@ -338,23 +389,28 @@ public class StoreShoppingOfferRepository {
                                       AND (
                                           EXISTS (
                                               SELECT 1
-                                              FROM app.product_category_alias
-                                                  AS requested_alias
-                                              JOIN app.retailer_product_category
+                                              FROM app.retailer_product_type
                                                   AS assignment
-                                                ON assignment.product_category_id =
-                                                   requested_alias.product_category_id
-                                               AND assignment.retailer_product_id =
-                                                   product.id
-                                              WHERE requested_alias.normalized_alias =
-                                                    item.flexible_category_normalized
+                                              JOIN app.shopping_intent_product_type
+                                                  AS allowed_type
+                                                ON allowed_type.product_type_id =
+                                                   assignment.product_type_id
+                                              WHERE assignment.retailer_product_id =
+                                                    product.id
+                                                AND allowed_type.shopping_intent_id =
+                                                    requested_intent.shopping_intent_id
+                                                AND allowed_type.enabled_by_default =
+                                                    TRUE
                                           )
                                           OR (
+                                              requested_intent.shopping_intent_id
+                                                  IS NULL
+                                              AND
                                               NOT EXISTS (
                                                   SELECT 1
-                                                  FROM app.retailer_product_category
-                                                      AS known_assignment
-                                                  WHERE known_assignment.retailer_product_id =
+                                                  FROM app.retailer_product_type
+                                                      AS known_type
+                                                  WHERE known_type.retailer_product_id =
                                                         product.id
                                               )
                                               AND (
@@ -371,7 +427,12 @@ public class StoreShoppingOfferRepository {
                                               )
                                           )
                                       )
-                                      AND (
+                                  )
+                              )
+                              AND (
+                                  item.matching_rule <> 'FLEXIBLE_CATEGORY'
+                                  OR (
+                                      (
                                           item.required_brand IS NULL
                                           OR LOWER(BTRIM(COALESCE(
                                               canonical.brand,
@@ -404,12 +465,35 @@ public class StoreShoppingOfferRepository {
                                       )
                                   )
                               )
-                            ORDER BY selected_price.effective_price ASC,
+                            ORDER BY CASE
+                                         WHEN item.matching_rule =
+                                              'FLEXIBLE_CATEGORY'
+                                         THEN COALESCE((
+                                             SELECT MIN(
+                                                 allowed_type.match_priority
+                                             )
+                                             FROM app.retailer_product_type
+                                                 AS assignment
+                                             JOIN app.shopping_intent_product_type
+                                                 AS allowed_type
+                                               ON allowed_type.product_type_id =
+                                                  assignment.product_type_id
+                                             WHERE assignment.retailer_product_id =
+                                                   product.id
+                                               AND allowed_type.shopping_intent_id =
+                                                   requested_intent.shopping_intent_id
+                                               AND allowed_type.enabled_by_default =
+                                                   TRUE
+                                         ), 32767)
+                                         ELSE 0
+                                     END ASC,
+                                     selected_price.effective_price ASC,
                                      product.id ASC
                             LIMIT 1
                         ) AS offer ON TRUE
                         WHERE item.shopping_list_id = :listId
                           AND store.id IN (:storeIds)
+                          AND store.pricing_eligible = TRUE
                         ORDER BY store.id ASC,
                                  item.created_at ASC,
                                  item.id ASC

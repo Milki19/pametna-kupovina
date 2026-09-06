@@ -26,6 +26,8 @@ class ShoppingListServiceCanonicalSelectionTest {
             mock(ShoppingListTextParser.class);
     private final ProductNameNormalizer normalizer =
             mock(ProductNameNormalizer.class);
+    private final ShoppingIntentResolver intentResolver =
+            mock(ShoppingIntentResolver.class);
 
     private ShoppingListService service;
 
@@ -35,7 +37,8 @@ class ShoppingListServiceCanonicalSelectionTest {
                 repository,
                 tokenPolicy,
                 textParser,
-                normalizer
+                normalizer,
+                intentResolver
         );
         when(tokenPolicy.validateAndHash("client-token"))
                 .thenReturn("client-token-hash");
@@ -75,6 +78,7 @@ class ShoppingListServiceCanonicalSelectionTest {
                 isNull(),
                 eq(BigDecimal.ONE),
                 eq(ShoppingItemRule.EXACT_PRODUCT),
+                isNull(),
                 isNull(),
                 isNull(),
                 isNull(),
@@ -189,6 +193,7 @@ class ShoppingListServiceCanonicalSelectionTest {
                 eq(77L),
                 eq(BigDecimal.ONE),
                 eq(ShoppingItemRule.PRODUCT_FAMILY),
+                isNull(),
                 isNull(),
                 isNull(),
                 isNull(),

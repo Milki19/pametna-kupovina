@@ -6,7 +6,11 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import rs.pametnakupovina.backend.retailerlocation.dis.DisLocationImportService;
+import rs.pametnakupovina.backend.retailerlocation.europrom.EuropromLocationImportService;
+import rs.pametnakupovina.backend.retailerlocation.idearoda.IdeaRodaLocationImportService;
 import rs.pametnakupovina.backend.retailerlocation.lidl.LidlLocationImportService;
+import rs.pametnakupovina.backend.retailerlocation.maxi.MaxiLocationImportService;
+import rs.pametnakupovina.backend.retailerlocation.univerexport.UniverexportLocationImportService;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
@@ -23,15 +27,27 @@ public class VerifiedLocationImportScheduler {
     );
 
     private final DisLocationImportService disImportService;
+    private final EuropromLocationImportService europromImportService;
     private final LidlLocationImportService lidlImportService;
+    private final MaxiLocationImportService maxiImportService;
+    private final IdeaRodaLocationImportService ideaRodaImportService;
+    private final UniverexportLocationImportService univerexportImportService;
     private final AtomicBoolean running = new AtomicBoolean(false);
 
     public VerifiedLocationImportScheduler(
             DisLocationImportService disImportService,
-            LidlLocationImportService lidlImportService
+            EuropromLocationImportService europromImportService,
+            LidlLocationImportService lidlImportService,
+            MaxiLocationImportService maxiImportService,
+            IdeaRodaLocationImportService ideaRodaImportService,
+            UniverexportLocationImportService univerexportImportService
     ) {
         this.disImportService = disImportService;
+        this.europromImportService = europromImportService;
         this.lidlImportService = lidlImportService;
+        this.maxiImportService = maxiImportService;
+        this.ideaRodaImportService = ideaRodaImportService;
+        this.univerexportImportService = univerexportImportService;
     }
 
     @Scheduled(
@@ -48,7 +64,20 @@ public class VerifiedLocationImportScheduler {
 
         try {
             importRetailer("DIS", disImportService::importLatest);
+            importRetailer(
+                    "EUROPROM",
+                    europromImportService::importLatest
+            );
             importRetailer("LIDL", lidlImportService::importLatest);
+            importRetailer("MAXI", maxiImportService::importLatest);
+            importRetailer(
+                    "IDEA_RODA",
+                    ideaRodaImportService::importLatest
+            );
+            importRetailer(
+                    "UNIVEREXPORT",
+                    univerexportImportService::importLatest
+            );
         } finally {
             running.set(false);
         }

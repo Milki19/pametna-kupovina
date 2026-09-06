@@ -85,7 +85,7 @@ public class ShoppingRecommendationService {
         }
 
         List<NearbyStore> nearbyStores =
-                nearbyStoreRepository.findNearby(
+                nearbyStoreRepository.findPricingEligibleNearby(
                         latitude,
                         longitude,
                         properties.getCandidateRadiusMeters(),

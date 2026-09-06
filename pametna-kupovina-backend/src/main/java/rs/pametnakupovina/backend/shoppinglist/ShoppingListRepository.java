@@ -308,6 +308,7 @@ public class ShoppingListRepository {
             ShoppingItemRule matchingRule,
             String flexibleCategory,
             String flexibleCategoryNormalized,
+            Long shoppingIntentId,
             String requiredBrand,
             java.math.BigDecimal minPackageQuantity,
             java.math.BigDecimal maxPackageQuantity,
@@ -326,6 +327,9 @@ public class ShoppingListRepository {
                 matchingRule == ShoppingItemRule.PRODUCT_FAMILY
                         && selectedProductFamilyId != null
                         ? ShoppingItemMatchingStatus.CONFIRMED
+                        : matchingRule == ShoppingItemRule.FLEXIBLE_CATEGORY
+                        && shoppingIntentId != null
+                        ? ShoppingItemMatchingStatus.CONFIRMED
                         : matchedCanonicalProductId == null
                         ? ShoppingItemMatchingStatus.PENDING
                         : ShoppingItemMatchingStatus.CONFIRMED;
@@ -343,12 +347,13 @@ public class ShoppingListRepository {
                             matched_product_family_id,
                             flexible_category,
                             flexible_category_normalized,
+                            shopping_intent_id,
                             required_brand,
                             min_package_quantity,
                             max_package_quantity,
                             required_base_unit
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         RETURNING id,
                                   name,
                                   raw_input,
@@ -388,10 +393,11 @@ public class ShoppingListRepository {
                         flexibleCategoryNormalized,
                         Types.VARCHAR
                 )
-                .param(12, requiredBrand, Types.VARCHAR)
-                .param(13, minPackageQuantity, Types.NUMERIC)
-                .param(14, maxPackageQuantity, Types.NUMERIC)
-                .param(15, requiredBaseUnit, Types.VARCHAR)
+                .param(12, shoppingIntentId, Types.BIGINT)
+                .param(13, requiredBrand, Types.VARCHAR)
+                .param(14, minPackageQuantity, Types.NUMERIC)
+                .param(15, maxPackageQuantity, Types.NUMERIC)
+                .param(16, requiredBaseUnit, Types.VARCHAR)
                 .query(ITEM_ROW_MAPPER)
                 .single();
     }
@@ -451,6 +457,7 @@ public class ShoppingListRepository {
             ShoppingItemRule matchingRule,
             String flexibleCategory,
             String flexibleCategoryNormalized,
+            Long shoppingIntentId,
             String requiredBrand,
             java.math.BigDecimal minPackageQuantity,
             java.math.BigDecimal maxPackageQuantity,
@@ -468,6 +475,9 @@ public class ShoppingListRepository {
         ShoppingItemMatchingStatus matchingStatus =
                 matchingRule == ShoppingItemRule.PRODUCT_FAMILY
                         && selectedProductFamilyId != null
+                        ? ShoppingItemMatchingStatus.CONFIRMED
+                        : matchingRule == ShoppingItemRule.FLEXIBLE_CATEGORY
+                        && shoppingIntentId != null
                         ? ShoppingItemMatchingStatus.CONFIRMED
                         : matchedCanonicalProductId == null
                         ? ShoppingItemMatchingStatus.PENDING
@@ -488,6 +498,7 @@ public class ShoppingListRepository {
                         matching_algorithm_version = NULL,
                         flexible_category = ?,
                         flexible_category_normalized = ?,
+                        shopping_intent_id = ?,
                         required_brand = ?,
                         min_package_quantity = ?,
                         max_package_quantity = ?,
@@ -533,12 +544,13 @@ public class ShoppingListRepository {
                         flexibleCategoryNormalized,
                         Types.VARCHAR
                 )
-                .param(11, requiredBrand, Types.VARCHAR)
-                .param(12, minPackageQuantity, Types.NUMERIC)
-                .param(13, maxPackageQuantity, Types.NUMERIC)
-                .param(14, requiredBaseUnit, Types.VARCHAR)
-                .param(15, itemId)
-                .param(16, listId)
+                .param(11, shoppingIntentId, Types.BIGINT)
+                .param(12, requiredBrand, Types.VARCHAR)
+                .param(13, minPackageQuantity, Types.NUMERIC)
+                .param(14, maxPackageQuantity, Types.NUMERIC)
+                .param(15, requiredBaseUnit, Types.VARCHAR)
+                .param(16, itemId)
+                .param(17, listId)
                 .query(ITEM_ROW_MAPPER)
                 .optional();
     }

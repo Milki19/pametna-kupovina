@@ -47,7 +47,9 @@ public class DisLocationImportService {
                         "OFFICIAL_DIS_LOCATION_API",
                         "DIS_LOCATION_JSON",
                         sourceUrl,
-                        "OFFICIAL_RETAILER_API"
+                        "OFFICIAL_RETAILER_API",
+                        true,
+                        null
                 )
         );
     }
