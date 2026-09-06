@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
+import rs.pametnakupovina.backend.priceimport.RetailerDataSourceRepository;
 import rs.pametnakupovina.backend.retailer.Retailer;
 import rs.pametnakupovina.backend.retailer.RetailerRepository;
 
@@ -15,11 +16,14 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.sql.Types;
 import java.time.OffsetDateTime;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -55,13 +59,16 @@ public class RetailerLocationImportService {
 
     private final JdbcClient jdbcClient;
     private final RetailerRepository retailerRepository;
+    private final RetailerDataSourceRepository dataSourceRepository;
 
     public RetailerLocationImportService(
             JdbcClient jdbcClient,
-            RetailerRepository retailerRepository
+            RetailerRepository retailerRepository,
+            RetailerDataSourceRepository dataSourceRepository
     ) {
         this.jdbcClient = jdbcClient;
         this.retailerRepository = retailerRepository;
+        this.dataSourceRepository = dataSourceRepository;
     }
 
     public RetailerLocationImportResult importLocations(
@@ -80,6 +87,13 @@ public class RetailerLocationImportService {
 
         int rowsRead = 0;
         int rowsSaved = 0;
+        Long dataSourceId = ensureLocationDataSourceId(retailer.id());
+
+        if (!dataSourceRepository.tryMarkRunning(dataSourceId)) {
+            throw new IllegalStateException(
+                    "Import lokacija za ovaj izvor je već u toku."
+            );
+        }
 
         try (
                 Reader reader = createBomAwareReader(inputStream);
@@ -95,8 +109,6 @@ public class RetailerLocationImportService {
                                     DEFAULT_FORMAT_CODE,
                                     DEFAULT_FORMAT_NAME
                             );
-            Long dataSourceId = ensureLocationDataSourceId(retailer.id());
-
             for (CSVRecord record : parser) {
                 if (rowsRead >= maxRows) {
                     break;
@@ -114,7 +126,7 @@ public class RetailerLocationImportService {
                     );
 
                     rowsSaved++;
-                } catch (RuntimeException exception) {
+                } catch (IllegalArgumentException exception) {
                     log.warn(
                             "Preskočena lokacija u CSV redu {}: {}",
                             record.getRecordNumber(),
@@ -123,16 +135,36 @@ public class RetailerLocationImportService {
                 }
             }
         } catch (IOException exception) {
+            dataSourceRepository.markFailed(
+                    dataSourceId,
+                    "Čitanje CSV fajla sa poslovnicama nije uspelo: "
+                            + exception.getMessage()
+            );
             throw new IllegalStateException(
                     "Čitanje CSV fajla sa poslovnicama nije uspelo.",
                     exception
             );
+        } catch (RuntimeException exception) {
+            dataSourceRepository.markFailed(
+                    dataSourceId,
+                    exception.getMessage()
+            );
+            throw exception;
         }
 
         String status =
                 rowsRead == rowsSaved
                         ? "SUCCEEDED"
                         : "SUCCEEDED_WITH_ERRORS";
+
+        dataSourceRepository.markSucceeded(
+                dataSourceId,
+                status,
+                null,
+                null,
+                rowsRead,
+                rowsSaved
+        );
 
         return new RetailerLocationImportResult(
                 retailer.code(),
@@ -164,14 +196,24 @@ public class RetailerLocationImportService {
                 retailer.id(),
                 requiredSource
         );
-        OffsetDateTime syncStartedAt = jdbcClient.sql("SELECT NOW()")
-                .query(OffsetDateTime.class)
-                .single();
 
-        int rowsSaved = 0;
+        if (!dataSourceRepository.tryMarkRunning(dataSourceId)) {
+            throw new IllegalStateException(
+                    "Import lokacija za ovaj izvor je već u toku."
+            );
+        }
 
-        for (VerifiedRetailerLocation location : locations) {
-            try {
+        try {
+            OffsetDateTime syncStartedAt = jdbcClient.sql("SELECT NOW()")
+                    .query(OffsetDateTime.class)
+                    .single();
+            Set<CoordinateKey> duplicateCoordinates =
+                    findDuplicateCoordinates(locations);
+
+            int rowsSaved = 0;
+
+            for (VerifiedRetailerLocation location : locations) {
+                try {
                 String externalCode = requiredText(
                         location.externalCode(),
                         "externalCode"
@@ -206,6 +248,9 @@ public class RetailerLocationImportService {
                                 180
                         )
                 );
+                boolean duplicateCoordinate = duplicateCoordinates.contains(
+                        CoordinateKey.of(coordinates)
+                );
                 Long storeFormatId = ensureStoreFormatId(
                         retailer.id(),
                         storeFormatCode,
@@ -223,7 +268,14 @@ public class RetailerLocationImportService {
                         location.active(),
                         true,
                         requiredSource.geocodingSource(),
-                        requiredSource.sourceUrl()
+                        requiredSource.sourceUrl(),
+                        requiredSource.pricingEligible()
+                                && !duplicateCoordinate,
+                        duplicateCoordinate
+                                ? "DUPLICATE_OFFICIAL_COORDINATES"
+                                : requiredSource
+                                .pricingIneligibilityReason(),
+                        duplicateCoordinate
                 );
                 markLocationSource(
                         retailer.id(),
@@ -232,30 +284,46 @@ public class RetailerLocationImportService {
                         true
                 );
                 rowsSaved++;
-            } catch (RuntimeException exception) {
-                log.warn(
-                        "Preskočena zvanična lokacija {}: {}",
-                        location == null ? null : location.externalCode(),
-                        exception.getMessage()
-                );
+                } catch (IllegalArgumentException exception) {
+                    log.warn(
+                            "Preskočena zvanična lokacija {}: {}",
+                            location == null ? null : location.externalCode(),
+                            exception.getMessage()
+                    );
+                }
             }
+
+            if (rowsSaved == locations.size()) {
+                deactivateMissingLocations(dataSourceId, syncStartedAt);
+            }
+
+            String status = rowsSaved == locations.size()
+                    ? "SUCCEEDED"
+                    : "SUCCEEDED_WITH_ERRORS";
+
+            dataSourceRepository.markSucceeded(
+                    dataSourceId,
+                    status,
+                    null,
+                    null,
+                    locations.size(),
+                    rowsSaved
+            );
+
+            return new RetailerLocationImportResult(
+                    retailer.code(),
+                    locations.size(),
+                    rowsSaved,
+                    locations.size() - rowsSaved,
+                    status
+            );
+        } catch (RuntimeException exception) {
+            dataSourceRepository.markFailed(
+                    dataSourceId,
+                    exception.getMessage()
+            );
+            throw exception;
         }
-
-        if (rowsSaved == locations.size()) {
-            deactivateMissingLocations(dataSourceId, syncStartedAt);
-        }
-
-        String status = rowsSaved == locations.size()
-                ? "SUCCEEDED"
-                : "SUCCEEDED_WITH_ERRORS";
-
-        return new RetailerLocationImportResult(
-                retailer.code(),
-                locations.size(),
-                rowsSaved,
-                locations.size() - rowsSaved,
-                status
-        );
     }
 
     private void upsertLocation(
@@ -349,7 +417,10 @@ public class RetailerLocationImportService {
                 active,
                 storeFormatProvided,
                 "LOCATION_IMPORT",
-                null
+                null,
+                false,
+                "MANUAL_FORMAT_NOT_VERIFIED",
+                false
         );
 
         markLocationSource(
@@ -367,7 +438,9 @@ public class RetailerLocationImportService {
                         "MANUAL_LOCATION_CSV",
                         "STANDARD_STORE_CSV",
                         null,
-                        "LOCATION_IMPORT"
+                        "LOCATION_IMPORT",
+                        false,
+                        "MANUAL_FORMAT_NOT_VERIFIED"
                 )
         );
     }
@@ -376,6 +449,7 @@ public class RetailerLocationImportService {
             Long retailerId,
             RetailerLocationSource source
     ) {
+        SourceHealthPolicy policy = sourceHealthPolicy(source.code());
         return jdbcClient.sql("""
                         INSERT INTO app.retailer_data_source (
                             retailer_id,
@@ -385,6 +459,9 @@ public class RetailerLocationImportService {
                             source_url,
                             encoding,
                             delimiter,
+                            expected_min_rows_saved,
+                            max_success_age_hours,
+                            minimum_volume_ratio,
                             active
                         )
                         VALUES (
@@ -395,12 +472,21 @@ public class RetailerLocationImportService {
                             ?,
                             'UTF-8',
                             ';',
+                            ?,
+                            ?,
+                            ?,
                             TRUE
                         )
                         ON CONFLICT (retailer_id, code)
                         DO UPDATE SET
                             parser_profile = EXCLUDED.parser_profile,
                             source_url = EXCLUDED.source_url,
+                            expected_min_rows_saved =
+                                EXCLUDED.expected_min_rows_saved,
+                            max_success_age_hours =
+                                EXCLUDED.max_success_age_hours,
+                            minimum_volume_ratio =
+                                EXCLUDED.minimum_volume_ratio,
                             active = TRUE,
                             updated_at = NOW()
                         RETURNING id
@@ -409,8 +495,33 @@ public class RetailerLocationImportService {
                 .param(2, source.code())
                 .param(3, source.parserProfile())
                 .param(4, source.sourceUrl(), Types.VARCHAR)
+                .param(5, policy.expectedMinimumRows(), Types.INTEGER)
+                .param(6, policy.maximumAgeHours(), Types.INTEGER)
+                .param(7, policy.minimumVolumeRatio())
                 .query(Long.class)
                 .single();
+    }
+
+    private SourceHealthPolicy sourceHealthPolicy(String sourceCode) {
+        return switch (sourceCode) {
+            case "OFFICIAL_LIDL_LOCATION_API" ->
+                    new SourceHealthPolicy(80, 192, new BigDecimal("0.8000"));
+            case "OFFICIAL_DIS_LOCATION_API" ->
+                    new SourceHealthPolicy(45, 192, new BigDecimal("0.8000"));
+            case "OFFICIAL_MAXI_STORE_LOCATOR" ->
+                    new SourceHealthPolicy(500, 192, new BigDecimal("0.8000"));
+            case "OFFICIAL_IDEA_RODA_STORE_LOCATORS" ->
+                    new SourceHealthPolicy(220, 192, new BigDecimal("0.8000"));
+            case "OFFICIAL_UNIVEREXPORT_LOCATION_API" ->
+                    new SourceHealthPolicy(180, 192, new BigDecimal("0.8000"));
+            case "OFFICIAL_EUROPROM_STORE_PAGE" ->
+                    new SourceHealthPolicy(40, 192, new BigDecimal("0.8000"));
+            default -> new SourceHealthPolicy(
+                    null,
+                    null,
+                    new BigDecimal("0.6000")
+            );
+        };
     }
 
     private void deactivateMissingLocations(
@@ -420,9 +531,10 @@ public class RetailerLocationImportService {
         jdbcClient.sql("""
                     UPDATE app.store
                     SET active = FALSE,
+                        pricing_eligible = FALSE,
+                        pricing_ineligibility_reason = 'INACTIVE',
                         updated_at = NOW()
                     WHERE data_source_id = ?
-                      AND active = TRUE
                       AND (
                           source_last_seen_at IS NULL
                           OR source_last_seen_at < ?
@@ -478,9 +590,14 @@ public class RetailerLocationImportService {
                         address,
                         city,
                         location,
-                        active
+                        active,
+                        pricing_eligible,
+                        pricing_ineligibility_reason
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, NULL, ?)
+                    VALUES (
+                        ?, ?, ?, ?, ?, ?, NULL, ?,
+                        FALSE, 'MISSING_COORDINATES'
+                    )
                     ON CONFLICT (retailer_id, external_code)
                     DO UPDATE SET
                         store_format_id = CASE
@@ -587,6 +704,9 @@ public class RetailerLocationImportService {
                         address = EXCLUDED.address,
                         city = EXCLUDED.city,
                         active = EXCLUDED.active,
+                        pricing_eligible = FALSE,
+                        pricing_ineligibility_reason =
+                            'MISSING_COORDINATES',
                         updated_at = NOW()
                     """)
                 .param(1, retailerId)
@@ -611,7 +731,10 @@ public class RetailerLocationImportService {
             boolean active,
             boolean storeFormatProvided,
             String geocodingSource,
-            String sourceReference
+            String sourceReference,
+            boolean pricingEligible,
+            String pricingIneligibilityReason,
+            boolean forcePricingIneligible
     ) {
         jdbcClient.sql("""
                     INSERT INTO app.store AS existing_store (
@@ -632,7 +755,9 @@ public class RetailerLocationImportService {
                         geocoded_at,
                         geocoding_review_note,
                         geocoding_reviewed_at,
-                        active
+                        active,
+                        pricing_eligible,
+                        pricing_ineligibility_reason
                     )
                     VALUES (
                         ?, ?, ?, ?, ?, ?,
@@ -653,7 +778,7 @@ public class RetailerLocationImportService {
                         NOW(),
                         'Koordinate su potvrđene kroz location import.',
                         NOW(),
-                        ?
+                        ?, ?, ?
                     )
                     ON CONFLICT (retailer_id, external_code)
                     DO UPDATE SET
@@ -683,6 +808,27 @@ public class RetailerLocationImportService {
                         geocoding_reviewed_at =
                             EXCLUDED.geocoding_reviewed_at,
                         active = EXCLUDED.active,
+                        pricing_eligible = CASE
+                            WHEN ? THEN FALSE
+                            WHEN EXISTS (
+                                SELECT 1
+                                FROM app.current_price_offer AS offer
+                                WHERE offer.store_id = existing_store.id
+                                  AND offer.scope_type = 'STORE'
+                            ) THEN TRUE
+                            ELSE EXCLUDED.pricing_eligible
+                        END,
+                        pricing_ineligibility_reason = CASE
+                            WHEN ?
+                                THEN EXCLUDED.pricing_ineligibility_reason
+                            WHEN EXISTS (
+                                SELECT 1
+                                FROM app.current_price_offer AS offer
+                                WHERE offer.store_id = existing_store.id
+                                  AND offer.scope_type = 'STORE'
+                            ) THEN NULL
+                            ELSE EXCLUDED.pricing_ineligibility_reason
+                        END,
                         updated_at = NOW()
                     """)
                 .param(1, retailerId)
@@ -702,8 +848,40 @@ public class RetailerLocationImportService {
                 .param(15, address)
                 .param(16, city)
                 .param(17, active)
-                .param(18, storeFormatProvided)
+                .param(18, pricingEligible)
+                .param(19, pricingIneligibilityReason, Types.VARCHAR)
+                .param(20, storeFormatProvided)
+                .param(21, forcePricingIneligible)
+                .param(22, forcePricingIneligible)
                 .update();
+    }
+
+    private Set<CoordinateKey> findDuplicateCoordinates(
+            List<VerifiedRetailerLocation> locations
+    ) {
+        Map<CoordinateKey, Integer> counts = new HashMap<>();
+
+        for (VerifiedRetailerLocation location : locations) {
+            if (location == null
+                    || !Double.isFinite(location.latitude())
+                    || !Double.isFinite(location.longitude())) {
+                continue;
+            }
+
+            counts.merge(
+                    CoordinateKey.of(
+                            location.latitude(),
+                            location.longitude()
+                    ),
+                    1,
+                    Integer::sum
+            );
+        }
+
+        return counts.entrySet().stream()
+                .filter(entry -> entry.getValue() > 1)
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toUnmodifiableSet());
     }
 
     private Long ensureStoreFormatId(
@@ -900,8 +1078,29 @@ public class RetailerLocationImportService {
                                 source.geocodingSource(),
                                 "source.geocodingSource"
                         )
-                )
+                ),
+                source.pricingEligible(),
+                validatePricingIneligibilityReason(source)
         );
+    }
+
+    private String validatePricingIneligibilityReason(
+            RetailerLocationSource source
+    ) {
+        if (source.pricingEligible()) {
+            if (source.pricingIneligibilityReason() != null) {
+                throw new IllegalArgumentException(
+                        "Izvor podoban za cene ne sme imati razlog zabrane."
+                );
+            }
+
+            return null;
+        }
+
+        return normalizeStoreFormatCode(requiredText(
+                source.pricingIneligibilityReason(),
+                "source.pricingIneligibilityReason"
+        ));
     }
 
     private String normalizeStoreFormatCode(String value) {
@@ -1018,6 +1217,29 @@ public class RetailerLocationImportService {
     private record Coordinates(
             double latitude,
             double longitude
+    ) {
+    }
+
+    private record CoordinateKey(long latitude, long longitude) {
+
+        private static final double PRECISION = 1_000_000D;
+
+        static CoordinateKey of(Coordinates coordinates) {
+            return of(coordinates.latitude(), coordinates.longitude());
+        }
+
+        static CoordinateKey of(double latitude, double longitude) {
+            return new CoordinateKey(
+                    Math.round(latitude * PRECISION),
+                    Math.round(longitude * PRECISION)
+            );
+        }
+    }
+
+    private record SourceHealthPolicy(
+            Integer expectedMinimumRows,
+            Integer maximumAgeHours,
+            BigDecimal minimumVolumeRatio
     ) {
     }
 }

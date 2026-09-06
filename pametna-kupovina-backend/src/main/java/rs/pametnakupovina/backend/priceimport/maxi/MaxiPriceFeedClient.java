@@ -52,6 +52,7 @@ public class MaxiPriceFeedClient {
     private final String staticBaseUrl;
     private final Set<String> storeCodes;
     private final Map<String, String> requiredFilePrefixes;
+    private final Map<String, String> storeLocationCodes;
     private final int lookbackDays;
 
     @Autowired
@@ -64,6 +65,8 @@ public class MaxiPriceFeedClient {
             String configuredStoreCodes,
             @Value("${maxi.price-import.store-file-prefixes:508=MAXI_508_KNEZA_MIHAJLA_84_86_VALJEVO_,538=MAXI_538_KARADJORDJEVA_92_VALJEVO_,512=PRODAVNICA_512_OBRENA_NIKOLICA_3_VALJEVO_,513=PRODAVNICA_513_NASELJE_ZBRATIMLJENI_GRADOVI_BB_VALJEVO_,541=MAXI_541_GODJEVACKA_2_DIVCIBARE_VALJEVO_,544=MAXI_544_KARADJORDJEVA_2_VALJEVO_}")
             String configuredFilePrefixes,
+            @Value("${maxi.price-import.store-location-codes:508=S841,538=S538,512=S512,513=S513,541=S541,544=S927}")
+            String configuredStoreLocationCodes,
             @Value("${maxi.price-import.lookback-days:7}")
             int lookbackDays
     ) {
@@ -78,6 +81,7 @@ public class MaxiPriceFeedClient {
                 staticBaseUrl,
                 configuredStoreCodes,
                 configuredFilePrefixes,
+                configuredStoreLocationCodes,
                 lookbackDays
         );
     }
@@ -88,6 +92,7 @@ public class MaxiPriceFeedClient {
             String staticBaseUrl,
             String configuredStoreCodes,
             String configuredFilePrefixes,
+            String configuredStoreLocationCodes,
             int lookbackDays
     ) {
         this.restClient = restClient;
@@ -97,11 +102,16 @@ public class MaxiPriceFeedClient {
         this.requiredFilePrefixes = parseFilePrefixes(
                 configuredFilePrefixes
         );
+        this.storeLocationCodes = parseMapping(
+                configuredStoreLocationCodes,
+                "šifra lokacije"
+        );
 
-        if (!requiredFilePrefixes.keySet().containsAll(storeCodes)) {
+        if (!requiredFilePrefixes.keySet().containsAll(storeCodes)
+                || !storeLocationCodes.keySet().containsAll(storeCodes)) {
             throw new IllegalArgumentException(
-                    "Svaka Maxi prodavnica mora imati jedinstveni "
-                            + "prefiks cenovnika."
+                    "Svaka Maxi prodavnica mora imati prefiks cenovnika "
+                            + "i zvaničnu šifru lokacije."
             );
         }
 
@@ -232,7 +242,7 @@ public class MaxiPriceFeedClient {
         filesByStore.putIfAbsent(
                 storeCode,
                 new MaxiPriceFile(
-                        storeCode,
+                        storeLocationCodes.get(storeCode),
                         name,
                         buildStaticUrl(path),
                         snapshotDate
@@ -272,9 +282,16 @@ public class MaxiPriceFeedClient {
     private Map<String, String> parseFilePrefixes(
             String configuredFilePrefixes
     ) {
-        Map<String, String> parsedPrefixes = new LinkedHashMap<>();
+        return parseMapping(configuredFilePrefixes, "prefiks cenovnika");
+    }
 
-        for (String mapping : configuredFilePrefixes.split(",")) {
+    private Map<String, String> parseMapping(
+            String configuredMappings,
+            String mappingName
+    ) {
+        Map<String, String> parsedMappings = new LinkedHashMap<>();
+
+        for (String mapping : configuredMappings.split(",")) {
             String normalizedMapping = nullableText(mapping);
 
             if (normalizedMapping == null) {
@@ -286,7 +303,7 @@ public class MaxiPriceFeedClient {
             if (separatorIndex <= 0
                     || separatorIndex == normalizedMapping.length() - 1) {
                 throw new IllegalArgumentException(
-                        "Neispravan Maxi prefiks cenovnika: "
+                        "Neispravan Maxi " + mappingName + ": "
                                 + normalizedMapping
                 );
             }
@@ -295,15 +312,15 @@ public class MaxiPriceFeedClient {
                     .substring(0, separatorIndex)
                     .strip()
                     .toUpperCase(Locale.ROOT);
-            String prefix = normalizedMapping
+            String mappedValue = normalizedMapping
                     .substring(separatorIndex + 1)
                     .strip()
                     .toUpperCase(Locale.ROOT);
 
-            parsedPrefixes.put(storeCode, prefix);
+            parsedMappings.put(storeCode, mappedValue);
         }
 
-        return Map.copyOf(parsedPrefixes);
+        return Map.copyOf(parsedMappings);
     }
 
     private String nullableText(String value) {

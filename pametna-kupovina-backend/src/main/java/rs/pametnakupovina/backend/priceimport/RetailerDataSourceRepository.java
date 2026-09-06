@@ -106,7 +106,9 @@ public class RetailerDataSourceRepository {
             Long dataSourceId,
             String status,
             LocalDate snapshotDate,
-            String checksum
+            String checksum,
+            int rowsRead,
+            int rowsSaved
     ) {
         if (dataSourceId == null) {
             return;
@@ -118,6 +120,14 @@ public class RetailerDataSourceRepository {
                         last_success_at = NOW(),
                         last_snapshot_date = ?,
                         last_checksum = ?,
+                        last_rows_read = ?,
+                        last_rows_saved = ?,
+                        consecutive_success_count = CASE
+                            WHEN ? = 'SUCCEEDED'
+                                THEN consecutive_success_count + 1
+                            ELSE 0
+                        END,
+                        consecutive_failure_count = 0,
                         last_error = NULL,
                         updated_at = NOW()
                     WHERE id = ?
@@ -125,7 +135,10 @@ public class RetailerDataSourceRepository {
                 .param(1, status)
                 .param(2, snapshotDate, Types.DATE)
                 .param(3, checksum, Types.VARCHAR)
-                .param(4, dataSourceId)
+                .param(4, rowsRead)
+                .param(5, rowsSaved)
+                .param(6, status)
+                .param(7, dataSourceId)
                 .update();
     }
 
@@ -137,6 +150,9 @@ public class RetailerDataSourceRepository {
         jdbcClient.sql("""
                     UPDATE app.retailer_data_source
                     SET last_status = 'FAILED',
+                        consecutive_success_count = 0,
+                        consecutive_failure_count =
+                            consecutive_failure_count + 1,
                         last_error = ?,
                         updated_at = NOW()
                     WHERE id = ?

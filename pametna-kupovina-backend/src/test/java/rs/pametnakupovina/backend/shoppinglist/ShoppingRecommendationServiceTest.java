@@ -77,7 +77,7 @@ class ShoppingRecommendationServiceTest {
         when(listRepository.findById(10L))
                 .thenReturn(Optional.of(shoppingList));
 
-        when(nearbyRepository.findNearby(
+        when(nearbyRepository.findPricingEligibleNearby(
                 44.0,
                 19.0,
                 15_000,
@@ -234,7 +234,7 @@ class ShoppingRecommendationServiceTest {
                 )
         ));
 
-        when(nearbyRepository.findNearby(
+        when(nearbyRepository.findPricingEligibleNearby(
                 44.0,
                 19.0,
                 15_000,
@@ -328,7 +328,7 @@ class ShoppingRecommendationServiceTest {
                         List.of(firstItem, secondItem)
                 )
         ));
-        when(nearbyRepository.findNearby(
+        when(nearbyRepository.findPricingEligibleNearby(
                 44.0,
                 19.0,
                 15_000,

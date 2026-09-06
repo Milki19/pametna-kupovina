@@ -15,6 +15,7 @@ import rs.pametnakupovina.backend.matching.ProductQuantityParser;
 import rs.pametnakupovina.backend.product.ProductCatalogMaintenanceService;
 import rs.pametnakupovina.backend.retailer.Retailer;
 import rs.pametnakupovina.backend.retailer.RetailerRepository;
+import rs.pametnakupovina.backend.storepricing.StorePriceFormatMappingRepository;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -27,6 +28,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.HttpTimeoutException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -36,11 +38,19 @@ import java.sql.Types;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeFormatterBuilder;
+import java.time.format.DateTimeParseException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.text.Normalizer;
 import java.util.HexFormat;
 import java.util.Locale;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -54,6 +64,11 @@ public class PriceImportService {
 
     private static final DateTimeFormatter DATE_FORMAT =
             DateTimeFormatter.ofPattern("dd-MM-uuuu");
+    private static final DateTimeFormatter MAXI_PROMOTION_DATE_FORMAT =
+            new DateTimeFormatterBuilder()
+                    .parseCaseInsensitive()
+                    .appendPattern("dd-MMM-yy")
+                    .toFormatter(Locale.ENGLISH);
 
     private static final CSVFormat CSV_FORMAT = CSVFormat.DEFAULT.builder()
             .setDelimiter(';')
@@ -66,6 +81,7 @@ public class PriceImportService {
             .get();
     private static final int WRITE_BATCH_SIZE = 500;
     private static final int MAX_DETAILED_PARSE_ERROR_LOGS = 20;
+    private static final long DOWNLOAD_PROGRESS_STEP_BYTES = 10L * 1024 * 1024;
 
     private final JdbcClient jdbcClient;
     private final RetailerRepository retailerRepository;
@@ -75,6 +91,8 @@ public class PriceImportService {
     private final ProductQuantityParser productQuantityParser;
     private final ExactEanMatcher exactEanMatcher;
     private final ProductCatalogMaintenanceService catalogMaintenanceService;
+    private final StorePriceFormatMappingRepository
+            storePriceFormatMappingRepository;
     private final HttpClient httpClient;
     private final TransactionTemplate transactionTemplate;
     private final Duration requestTimeout;
@@ -90,6 +108,8 @@ public class PriceImportService {
             ProductQuantityParser productQuantityParser,
             ExactEanMatcher exactEanMatcher,
             ProductCatalogMaintenanceService catalogMaintenanceService,
+            StorePriceFormatMappingRepository
+                    storePriceFormatMappingRepository,
             PlatformTransactionManager transactionManager,
             @Value("${price-import.http.connect-timeout-seconds:20}")
             long connectTimeoutSeconds,
@@ -108,6 +128,8 @@ public class PriceImportService {
         this.productQuantityParser = productQuantityParser;
         this.exactEanMatcher = exactEanMatcher;
         this.catalogMaintenanceService = catalogMaintenanceService;
+        this.storePriceFormatMappingRepository =
+                storePriceFormatMappingRepository;
         this.transactionTemplate =
                 new TransactionTemplate(transactionManager);
         this.requestTimeout = Duration.ofSeconds(requestTimeoutSeconds);
@@ -169,12 +191,14 @@ public class PriceImportService {
 
         try {
             DownloadedCsv downloadedCsv = downloadCsv(
-                    resolvedSourceUrl
+                    resolvedSourceUrl,
+                    importRunId
             );
 
             downloadedFile = downloadedCsv.path();
             updateImportChecksum(importRunId, downloadedCsv.checksum());
 
+            updateImportStage(importRunId, "SCANNING");
             SnapshotScanResult scanResult = scanLatestSnapshot(
                     downloadedFile
             );
@@ -203,6 +227,7 @@ public class PriceImportService {
                 );
             }
 
+            updateImportStage(importRunId, "WRITING");
             SnapshotWriteResult writeResult = importLatestSnapshot(
                     retailer.id(),
                     importRunId,
@@ -223,7 +248,11 @@ public class PriceImportService {
                     ? "SUCCEEDED"
                     : "SUCCEEDED_WITH_ERRORS";
 
+            updateImportStage(importRunId, "REFRESHING_CATALOG");
             catalogMaintenanceService.refreshRetailer(retailer.id());
+            storePriceFormatMappingRepository.refreshEligibility(
+                    retailer.id()
+            );
 
             completeImport(
                     importRunId,
@@ -234,7 +263,6 @@ public class PriceImportService {
                     rowsSkipped,
                     status
             );
-
             return new ImportResult(
                     importRunId,
                     snapshotDate,
@@ -359,7 +387,10 @@ public class PriceImportService {
         Path downloadedFile = null;
 
         try {
-            DownloadedCsv downloadedCsv = downloadCsv(sourceUrl);
+            DownloadedCsv downloadedCsv = downloadCsv(
+                    sourceUrl,
+                    importRunId
+            );
             downloadedFile = downloadedCsv.path();
             updateImportChecksum(importRunId, downloadedCsv.checksum());
             archiveDownloadedCsv(
@@ -368,6 +399,7 @@ public class PriceImportService {
                     downloadedCsv
             );
 
+            updateImportStage(importRunId, "WRITING");
             StoreSnapshotWriteResult writeResult = importStoreSnapshot(
                     target,
                     importRunId,
@@ -385,6 +417,7 @@ public class PriceImportService {
                     ? "SUCCEEDED"
                     : "SUCCEEDED_WITH_ERRORS";
 
+            updateImportStage(importRunId, "REFRESHING_CATALOG");
             catalogMaintenanceService.refreshRetailer(
                     target.retailerId()
             );
@@ -398,6 +431,7 @@ public class PriceImportService {
                     rowsSkipped,
                     status
             );
+            markStorePricingEligible(target.storeId());
 
             return new ImportResult(
                     importRunId,
@@ -478,6 +512,24 @@ public class PriceImportService {
                                 + "/"
                                 + storeExternalCode
                 ));
+    }
+
+    private void markStorePricingEligible(long storeId) {
+        jdbcClient.sql("""
+                    UPDATE app.store
+                    SET pricing_eligible = TRUE,
+                        pricing_ineligibility_reason = NULL,
+                        updated_at = NOW()
+                    WHERE id = ?
+                      AND active = TRUE
+                      AND location IS NOT NULL
+                      AND geocoding_status IN (
+                          'AUTO_VERIFIED',
+                          'MANUALLY_VERIFIED'
+                      )
+                    """)
+                .param(1, storeId)
+                .update();
     }
 
     private StoreSnapshotWriteResult importStoreSnapshot(
@@ -570,12 +622,23 @@ public class PriceImportService {
         String barcode = normalizeBarcode(
                 column(record, "BARKOD PROIZVODA")
         );
+        String brand = normalizeTextValue(
+                optionalColumn(record, "ROBNA MARKA")
+        );
         BigDecimal regularPrice = positiveOrNull(
-                parseCurrencyAmount(column(record, "REDOVNA CENA"))
+                parseCurrencyAmount(column(
+                        record,
+                        "REDOVNA CENA",
+                        "PRODAJNA CENA"
+                ))
         );
         BigDecimal discountedPrice = positiveOrNull(
                 parseCurrencyAmount(
-                        column(record, "SNIZENA CENA", "SNIŽENA CENA")
+                        optionalColumn(
+                                record,
+                                "SNIZENA CENA",
+                                "SNIŽENA CENA"
+                        )
                 )
         );
 
@@ -601,9 +664,22 @@ public class PriceImportService {
         String sourceProductKey = createSourceProductKey(
                 barcode,
                 productName,
-                null,
+                brand,
                 unitOfMeasure,
                 null
+        );
+        LocalDate discountStartDate = parseStoreDate(
+                optionalColumn(
+                        record,
+                        "DATUM POCETKA PROMOCIJE",
+                        "DATUM POČETKA PROMOCIJE"
+                )
+        );
+        LocalDate discountEndDate = parseStoreDate(
+                optionalColumn(
+                        record,
+                        "DATUM KRAJA PROMOCIJE"
+                )
         );
 
         return new PriceCsvRow(
@@ -612,7 +688,7 @@ public class PriceImportService {
                 null,
                 productName,
                 normalizedProductName,
-                null,
+                brand,
                 barcode,
                 unitOfMeasure,
                 quantityValue,
@@ -622,11 +698,36 @@ public class PriceImportService {
                 regularPrice,
                 unitPrice,
                 discountedPrice,
-                null,
-                null,
+                discountStartDate,
+                discountEndDate,
                 null,
                 target.storeId()
         );
+    }
+
+    private LocalDate parseStoreDate(String value) {
+        String normalized = nullableText(value);
+        if (normalized == null) {
+            return null;
+        }
+
+        try {
+            return LocalDate.parse(normalized, DATE_FORMAT);
+        } catch (DateTimeParseException ignored) {
+            try {
+                return LocalDate.parse(
+                        normalized,
+                        MAXI_PROMOTION_DATE_FORMAT
+                );
+            } catch (DateTimeParseException exception) {
+                throw new IllegalArgumentException(
+                        "Neispravan datum promocije: '"
+                                + normalized
+                                + "'",
+                        exception
+                );
+            }
+        }
     }
 
     private BigDecimal parseCurrencyAmount(String value) {
@@ -668,9 +769,15 @@ public class PriceImportService {
         );
     }
 
-    private DownloadedCsv downloadCsv(String sourceUrl)
+    private DownloadedCsv downloadCsv(
+            String sourceUrl,
+            Long importRunId
+    )
             throws IOException, InterruptedException {
         URI sourceUri = validateSourceUri(sourceUrl);
+        long deadlineNanos = System.nanoTime() + requestTimeout.toNanos();
+
+        updateImportStage(importRunId, "DOWNLOADING");
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(sourceUri)
@@ -714,30 +821,42 @@ public class PriceImportService {
         );
 
         MessageDigest digest = newSha256Digest();
-        long downloadedBytes = 0;
+        long downloadedBytes;
 
         try (
+                ExecutorService executor =
+                        Executors.newVirtualThreadPerTaskExecutor();
                 InputStream inputStream = response.body();
                 OutputStream outputStream = Files.newOutputStream(
                         temporaryFile
                 )
         ) {
-            byte[] buffer = new byte[64 * 1024];
-            int bytesRead;
+            Future<Long> copy = executor.submit(() -> copyResponseBody(
+                    importRunId,
+                    inputStream,
+                    outputStream,
+                    digest
+            ));
+            long remainingNanos = deadlineNanos - System.nanoTime();
 
-            while ((bytesRead = inputStream.read(buffer)) != -1) {
-                downloadedBytes += bytesRead;
+            if (remainingNanos <= 0) {
+                inputStream.close();
+                copy.cancel(true);
+                throw downloadTimeout(sourceUri);
+            }
 
-                if (downloadedBytes > maxDownloadBytes) {
-                    throw new IllegalStateException(
-                            "CSV fajl je tokom preuzimanja prešao limit od "
-                                    + maxDownloadBytes
-                                    + " bajtova."
-                    );
-                }
-
-                digest.update(buffer, 0, bytesRead);
-                outputStream.write(buffer, 0, bytesRead);
+            try {
+                downloadedBytes = copy.get(
+                        remainingNanos,
+                        TimeUnit.NANOSECONDS
+                );
+            } catch (TimeoutException exception) {
+                inputStream.close();
+                copy.cancel(true);
+                throw downloadTimeout(sourceUri);
+            } catch (ExecutionException exception) {
+                throwDownloadFailure(exception.getCause());
+                throw new IllegalStateException("Nedostižan kod.");
             }
         } catch (IOException | RuntimeException exception) {
             Files.deleteIfExists(temporaryFile);
@@ -757,8 +876,68 @@ public class PriceImportService {
 
         return new DownloadedCsv(
                 temporaryFile,
-                HexFormat.of().formatHex(digest.digest())
+                HexFormat.of().formatHex(digest.digest()),
+                downloadedBytes
         );
+    }
+
+    private long copyResponseBody(
+            Long importRunId,
+            InputStream inputStream,
+            OutputStream outputStream,
+            MessageDigest digest
+    ) throws IOException {
+        byte[] buffer = new byte[64 * 1024];
+        long downloadedBytes = 0;
+        long nextProgressUpdate = DOWNLOAD_PROGRESS_STEP_BYTES;
+        int bytesRead;
+
+        while ((bytesRead = inputStream.read(buffer)) != -1) {
+            downloadedBytes += bytesRead;
+
+            if (downloadedBytes > maxDownloadBytes) {
+                throw new IllegalStateException(
+                        "CSV fajl je tokom preuzimanja prešao limit od "
+                                + maxDownloadBytes
+                                + " bajtova."
+                );
+            }
+
+            digest.update(buffer, 0, bytesRead);
+            outputStream.write(buffer, 0, bytesRead);
+
+            if (downloadedBytes >= nextProgressUpdate) {
+                updateDownloadedBytes(importRunId, downloadedBytes);
+                nextProgressUpdate = downloadedBytes
+                        + DOWNLOAD_PROGRESS_STEP_BYTES;
+            }
+        }
+
+        updateDownloadedBytes(importRunId, downloadedBytes);
+        return downloadedBytes;
+    }
+
+    private HttpTimeoutException downloadTimeout(URI sourceUri) {
+        return new HttpTimeoutException(
+                "Preuzimanje CSV fajla je prekoračilo rok od "
+                        + requestTimeout.toSeconds()
+                        + " sekundi: "
+                        + sourceUri
+        );
+    }
+
+    private void throwDownloadFailure(Throwable failure) throws IOException {
+        if (failure instanceof IOException ioException) {
+            throw ioException;
+        }
+        if (failure instanceof RuntimeException runtimeException) {
+            throw runtimeException;
+        }
+        if (failure instanceof Error error) {
+            throw error;
+        }
+
+        throw new IOException("Preuzimanje CSV fajla nije uspelo.", failure);
     }
 
     private void archiveDownloadedCsv(
@@ -1191,6 +1370,35 @@ public class PriceImportService {
         }
     }
 
+    private void updateImportStage(Long importRunId, String stage) {
+        jdbcClient.sql("""
+                    UPDATE app.import_run
+                    SET stage = ?,
+                        last_progress_at = NOW()
+                    WHERE id = ?
+                      AND status = 'RUNNING'
+                    """)
+                .param(1, stage)
+                .param(2, importRunId)
+                .update();
+    }
+
+    private void updateDownloadedBytes(
+            Long importRunId,
+            long downloadedBytes
+    ) {
+        jdbcClient.sql("""
+                    UPDATE app.import_run
+                    SET downloaded_bytes = ?,
+                        last_progress_at = NOW()
+                    WHERE id = ?
+                      AND status = 'RUNNING'
+                    """)
+                .param(1, downloadedBytes)
+                .param(2, importRunId)
+                .update();
+    }
+
     private Long upsertProduct(
             Long retailerId,
             String sourceProductKey,
@@ -1570,6 +1778,7 @@ public class PriceImportService {
         jdbcClient.sql("""
                     UPDATE app.import_run
                     SET status = ?,
+                        stage = 'COMPLETED',
                         finished_at = NOW(),
                         snapshot_date = ?,
                         rows_read = ?,
@@ -1593,7 +1802,9 @@ public class PriceImportService {
                 sourceState.dataSourceId(),
                 status,
                 snapshotDate,
-                sourceState.checksum()
+                sourceState.checksum(),
+                rowsRead,
+                rowsSaved
         );
     }
 
@@ -1609,6 +1820,7 @@ public class PriceImportService {
         jdbcClient.sql("""
                     UPDATE app.import_run
                     SET status = 'FAILED',
+                        stage = 'FAILED',
                         finished_at = NOW(),
                         snapshot_date = ?,
                         rows_read = ?,
@@ -1715,17 +1927,17 @@ public class PriceImportService {
     }
 
     private String column(CSVRecord record, String... aliases) {
-        for (String alias : aliases) {
-            if (record.isMapped(alias)) {
-                if (!record.isSet(alias)) {
-                    throw new IllegalArgumentException(
-                            "CSV red nema vrednost za očekivanu kolonu: "
-                                    + alias
-                    );
-                }
+        String mappedHeader = resolveMappedHeader(record, aliases);
 
-                return record.get(alias);
+        if (mappedHeader != null) {
+            if (!record.isSet(mappedHeader)) {
+                throw new IllegalArgumentException(
+                        "CSV red nema vrednost za očekivanu kolonu: "
+                                + mappedHeader
+                );
             }
+
+            return record.get(mappedHeader);
         }
 
         throw new IllegalArgumentException(
@@ -1738,15 +1950,55 @@ public class PriceImportService {
             CSVRecord record,
             String... aliases
     ) {
+        String mappedHeader = resolveMappedHeader(record, aliases);
+
+        if (mappedHeader != null) {
+            return record.isSet(mappedHeader)
+                    ? record.get(mappedHeader)
+                    : null;
+        }
+
+        return null;
+    }
+
+    private String resolveMappedHeader(
+            CSVRecord record,
+            String... aliases
+    ) {
         for (String alias : aliases) {
             if (record.isMapped(alias)) {
-                return record.isSet(alias)
-                        ? record.get(alias)
-                        : null;
+                return alias;
+            }
+        }
+
+        for (String actualHeader
+                : record.getParser().getHeaderMap().keySet()) {
+            String normalizedActual = normalizeHeader(actualHeader);
+
+            for (String alias : aliases) {
+                if (normalizedActual.equals(normalizeHeader(alias))) {
+                    return actualHeader;
+                }
             }
         }
 
         return null;
+    }
+
+    private String normalizeHeader(String value) {
+        String normalized = Normalizer.normalize(
+                        value == null ? "" : value,
+                        Normalizer.Form.NFD
+                )
+                .replaceAll("\\p{M}+", "")
+                .toUpperCase(Locale.ROOT)
+                .replace("DATIM CENOVNIKA", "DATUM CENOVNIKA")
+                .replace("JEDINIMERE", "JEDINICA MERE")
+                .replaceAll("[^A-Z0-9]+", " ")
+                .strip()
+                .replaceAll("\\s+", " ");
+
+        return normalized;
     }
 
     private boolean isMonthlySnapshot(CSVRecord record) {
@@ -2152,7 +2404,8 @@ public class PriceImportService {
 
     private record DownloadedCsv(
             Path path,
-            String checksum
+            String checksum,
+            long downloadedBytes
     ) {
     }
 

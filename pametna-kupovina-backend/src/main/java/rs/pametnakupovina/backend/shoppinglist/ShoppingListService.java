@@ -23,17 +23,20 @@ public class ShoppingListService {
     private final ShoppingListClientTokenPolicy clientTokenPolicy;
     private final ShoppingListTextParser textParser;
     private final ProductNameNormalizer productNameNormalizer;
+    private final ShoppingIntentResolver shoppingIntentResolver;
 
     public ShoppingListService(
             ShoppingListRepository repository,
             ShoppingListClientTokenPolicy clientTokenPolicy,
             ShoppingListTextParser textParser,
-            ProductNameNormalizer productNameNormalizer
+            ProductNameNormalizer productNameNormalizer,
+            ShoppingIntentResolver shoppingIntentResolver
     ) {
         this.repository = repository;
         this.clientTokenPolicy = clientTokenPolicy;
         this.textParser = textParser;
         this.productNameNormalizer = productNameNormalizer;
+        this.shoppingIntentResolver = shoppingIntentResolver;
     }
 
     @Transactional
@@ -194,6 +197,7 @@ public class ShoppingListService {
                 matchingRule,
                 flexible.category(),
                 flexible.normalizedCategory(),
+                flexible.shoppingIntentId(),
                 flexible.requiredBrand(),
                 flexible.minPackageQuantity(),
                 flexible.maxPackageQuantity(),
@@ -245,15 +249,9 @@ public class ShoppingListService {
             );
         }
 
-        ShoppingItemRule matchingRule =
-                ShoppingItemRule.EXACT_PRODUCT;
-
         List<ValidatedShoppingListItem> validatedItems =
                 parsedText.items().stream()
-                        .map(item -> validateParsedItem(
-                                item,
-                                matchingRule
-                        ))
+                        .map(this::validateParsedItem)
                         .toList();
 
         List<ShoppingListItemResponse> createdItems =
@@ -267,8 +265,9 @@ public class ShoppingListService {
                                 null,
                                 item.quantity(),
                                 item.matchingRule(),
-                                null,
-                                null,
+                                item.flexibleCategory(),
+                                item.flexibleCategoryNormalized(),
+                                item.shoppingIntentId(),
                                 null,
                                 null,
                                 null,
@@ -407,6 +406,7 @@ public class ShoppingListService {
                         matchingRule,
                         flexible.category(),
                         flexible.normalizedCategory(),
+                        flexible.shoppingIntentId(),
                         flexible.requiredBrand(),
                         flexible.minPackageQuantity(),
                         flexible.maxPackageQuantity(),
@@ -560,6 +560,13 @@ public class ShoppingListService {
             );
         }
 
+        ShoppingIntentResolver.ResolvedShoppingIntent resolvedIntent =
+                shoppingIntentResolver.resolve(category).orElse(null);
+
+        if (resolvedIntent != null) {
+            normalizedCategory = resolvedIntent.normalizedAlias();
+        }
+
         String requiredBrand = nullableText(
                 constraints == null
                         ? null
@@ -621,6 +628,9 @@ public class ShoppingListService {
         return new ValidatedFlexibleConstraints(
                 category,
                 normalizedCategory,
+                resolvedIntent == null
+                        ? null
+                        : resolvedIntent.shoppingIntentId(),
                 requiredBrand,
                 minPackageQuantity,
                 maxPackageQuantity,
@@ -665,8 +675,7 @@ public class ShoppingListService {
     }
 
     private ValidatedShoppingListItem validateParsedItem(
-            ParsedShoppingListLine item,
-            ShoppingItemRule matchingRule
+            ParsedShoppingListLine item
     ) {
         String name = requiredText(item.name(), "Naziv artikla");
 
@@ -705,11 +714,24 @@ public class ShoppingListService {
             );
         }
 
+        ShoppingIntentResolver.ResolvedShoppingIntent intent =
+                shoppingIntentResolver.resolve(name)
+                        .filter(ShoppingIntentResolver
+                                .ResolvedShoppingIntent::exactAlias)
+                        .orElse(null);
+
+        ShoppingItemRule matchingRule = intent == null
+                ? ShoppingItemRule.EXACT_PRODUCT
+                : ShoppingItemRule.FLEXIBLE_CATEGORY;
+
         return new ValidatedShoppingListItem(
                 name,
                 rawInput,
                 normalizedQuantity,
-                matchingRule
+                matchingRule,
+                intent == null ? null : name,
+                intent == null ? null : intent.normalizedAlias(),
+                intent == null ? null : intent.shoppingIntentId()
         );
     }
 
@@ -773,13 +795,17 @@ public class ShoppingListService {
             String name,
             String rawInput,
             BigDecimal quantity,
-            ShoppingItemRule matchingRule
+            ShoppingItemRule matchingRule,
+            String flexibleCategory,
+            String flexibleCategoryNormalized,
+            Long shoppingIntentId
     ) {
     }
 
     private record ValidatedFlexibleConstraints(
             String category,
             String normalizedCategory,
+            Long shoppingIntentId,
             String requiredBrand,
             BigDecimal minPackageQuantity,
             BigDecimal maxPackageQuantity,
@@ -787,6 +813,7 @@ public class ShoppingListService {
     ) {
         private static ValidatedFlexibleConstraints empty() {
             return new ValidatedFlexibleConstraints(
+                    null,
                     null,
                     null,
                     null,

@@ -4,6 +4,8 @@ public record RetailerLocationSource(
         String code,
         String parserProfile,
         String sourceUrl,
-        String geocodingSource
+        String geocodingSource,
+        boolean pricingEligible,
+        String pricingIneligibilityReason
 ) {
 }

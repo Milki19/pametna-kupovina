@@ -33,6 +33,9 @@ public class ProductCatalogMaintenanceService {
         synchronizeFamilies(retailerId);
         synchronizeProductCategories(retailerId);
         synchronizeFamilyCategories(retailerId);
+        synchronizeProductTypes(retailerId);
+        synchronizeFamilyProductTypes(retailerId);
+        synchronizeProductAttributes(retailerId);
         synchronizeIdentityCandidates(retailerId);
         synchronizePresence(retailerId);
 
@@ -539,6 +542,350 @@ public class ProductCatalogMaintenanceService {
                         updated_at = NOW()
                     FROM category_choice AS choice
                     WHERE choice.product_family_id = family.id
+                    """)
+                .param(1, retailerId)
+                .update();
+    }
+
+    private void synchronizeProductTypes(long retailerId) {
+        jdbcClient.sql("""
+                    DELETE FROM app.retailer_product_type AS assignment
+                    USING app.retailer_product AS product
+                    WHERE assignment.retailer_product_id = product.id
+                      AND product.retailer_id = ?
+                      AND assignment.reviewed = FALSE
+                    """)
+                .param(1, retailerId)
+                .update();
+
+        jdbcClient.sql("""
+                    DELETE FROM app.product_type_candidate AS candidate
+                    USING app.retailer_product AS product
+                    WHERE candidate.retailer_product_id = product.id
+                      AND product.retailer_id = ?
+                      AND candidate.status = 'PENDING'
+                      AND candidate.algorithm_version = 'taxonomy-v2'
+                    """)
+                .param(1, retailerId)
+                .update();
+
+        jdbcClient.sql("""
+                    INSERT INTO app.product_type_candidate (
+                        retailer_product_id,
+                        product_type_id,
+                        confidence,
+                        prediction_source,
+                        evidence,
+                        algorithm_version
+                    )
+                    SELECT prediction.retailer_product_id,
+                           prediction.product_type_id,
+                           prediction.confidence,
+                           prediction.prediction_source,
+                           prediction.evidence,
+                           prediction.algorithm_version
+                    FROM app.product_type_prediction AS prediction
+                    JOIN app.retailer_product AS product
+                      ON product.id = prediction.retailer_product_id
+                    WHERE product.retailer_id = ?
+                      AND prediction.confidence >= 0.7500
+                      AND prediction.confidence < 0.9500
+                      AND NOT EXISTS (
+                          SELECT 1
+                          FROM app.retailer_product_type AS assignment
+                          WHERE assignment.retailer_product_id = product.id
+                            AND assignment.reviewed = TRUE
+                      )
+                    ON CONFLICT (
+                        retailer_product_id,
+                        product_type_id,
+                        algorithm_version
+                    ) DO UPDATE SET
+                        confidence = EXCLUDED.confidence,
+                        prediction_source = EXCLUDED.prediction_source,
+                        evidence = EXCLUDED.evidence,
+                        updated_at = NOW()
+                    WHERE product_type_candidate.status = 'PENDING'
+                    """)
+                .param(1, retailerId)
+                .update();
+
+        jdbcClient.sql("""
+                    INSERT INTO app.retailer_product_type (
+                        retailer_product_id,
+                        product_type_id,
+                        confidence,
+                        assignment_source,
+                        evidence,
+                        algorithm_version
+                    )
+                    SELECT prediction.retailer_product_id,
+                           prediction.product_type_id,
+                           prediction.confidence,
+                           prediction.prediction_source,
+                           prediction.evidence,
+                           prediction.algorithm_version
+                    FROM app.product_type_prediction AS prediction
+                    JOIN app.retailer_product AS product
+                      ON product.id = prediction.retailer_product_id
+                    WHERE product.retailer_id = ?
+                      AND prediction.confidence >= 0.9500
+                    ON CONFLICT (retailer_product_id) DO NOTHING
+                    """)
+                .param(1, retailerId)
+                .update();
+    }
+
+    private void synchronizeProductAttributes(long retailerId) {
+        jdbcClient.sql("""
+                    DELETE FROM app.retailer_product_attribute AS assignment
+                    USING app.retailer_product AS product
+                    WHERE assignment.retailer_product_id = product.id
+                      AND product.retailer_id = ?
+                      AND assignment.reviewed = FALSE
+                      AND assignment.assignment_source = 'NAME_EXTRACTION'
+                    """)
+                .param(1, retailerId)
+                .update();
+
+        jdbcClient.sql("""
+                    INSERT INTO app.retailer_product_attribute (
+                        retailer_product_id,
+                        attribute_definition_id,
+                        numeric_value,
+                        unit,
+                        confidence,
+                        assignment_source,
+                        evidence
+                    )
+                    SELECT product.id,
+                           definition.id,
+                           parsed.value,
+                           'percent',
+                           0.9700,
+                           'NAME_EXTRACTION',
+                           'PATTERN:FAT_PERCENT'
+                    FROM app.retailer_product AS product
+                    JOIN app.retailer_product_type AS type_assignment
+                      ON type_assignment.retailer_product_id = product.id
+                    JOIN app.product_type AS type
+                      ON type.id = type_assignment.product_type_id
+                     AND type.code IN (
+                         'MILK', 'SOUR_MILK', 'FLAVORED_MILK',
+                         'YOGURT', 'CHEESE', 'BUTTER', 'CREAM'
+                     )
+                    JOIN app.product_attribute_definition AS definition
+                      ON definition.code = 'FAT_PERCENT'
+                    CROSS JOIN LATERAL (
+                        SELECT REPLACE(match[1], ',', '.')::NUMERIC
+                                   AS value
+                        FROM REGEXP_MATCH(
+                            product.normalized_name,
+                            '([0-9]+([.,][0-9]+)?) ?%'
+                        ) AS match
+                    ) AS parsed
+                    WHERE product.retailer_id = ?
+                      AND parsed.value > 0
+                      AND parsed.value <= 100
+                    ON CONFLICT (
+                        retailer_product_id,
+                        attribute_definition_id
+                    ) DO NOTHING
+                    """)
+                .param(1, retailerId)
+                .update();
+
+        synchronizeTextAttribute(
+                retailerId,
+                "MILK_SOURCE",
+                """
+                CASE
+                    WHEN product.normalized_name ~ '(^| )kozj[a-z]*( |$)'
+                        THEN 'GOAT'
+                    WHEN product.normalized_name ~ '(^| )ovcij[a-z]*( |$)'
+                        THEN 'SHEEP'
+                    WHEN product.normalized_name ~ '(^| )kravlj[a-z]*( |$)'
+                        THEN 'COW'
+                    WHEN product.normalized_name
+                        ~ '(^| )(badem|soj[a-z]*|ovas|ovsen[a-z]*|kokos)( |$)'
+                        THEN 'PLANT'
+                    ELSE NULL
+                END
+                """,
+                "PATTERN:MILK_SOURCE",
+                List.of(
+                        "MILK",
+                        "SOUR_MILK",
+                        "FLAVORED_MILK",
+                        "POWDERED_MILK",
+                        "PLANT_DRINK",
+                        "YOGURT",
+                        "CHEESE",
+                        "BUTTER",
+                        "CREAM"
+                )
+        );
+
+        synchronizeTextAttribute(
+                retailerId,
+                "PROCESSING",
+                """
+                CASE
+                    WHEN product.normalized_name
+                        ~ '(^| )(uht|sterilizovan[a-z]*)( |$)'
+                        THEN 'UHT'
+                    WHEN product.normalized_name
+                        ~ '(^| )pasterizovan[a-z]*( |$)'
+                        THEN 'PASTEURIZED'
+                    WHEN product.normalized_name
+                        ~ '(^| )fermentisan[a-z]*( |$)'
+                        THEN 'FERMENTED'
+                    ELSE NULL
+                END
+                """,
+                "PATTERN:PROCESSING",
+                List.of(
+                        "MILK",
+                        "SOUR_MILK",
+                        "FLAVORED_MILK",
+                        "POWDERED_MILK",
+                        "PLANT_DRINK",
+                        "YOGURT",
+                        "CHEESE",
+                        "BUTTER",
+                        "CREAM",
+                        "JUICE"
+                )
+        );
+
+        synchronizeTextAttribute(
+                retailerId,
+                "PACKAGING_FORM",
+                """
+                CASE
+                    WHEN product.normalized_name ~ '(^| )pet( |$)'
+                        THEN 'PET'
+                    WHEN product.normalized_name
+                        ~ '(^| )(tetra ?pak|tetrapak)( |$)'
+                        THEN 'CARTON'
+                    WHEN product.normalized_name
+                        ~ '(^| )(limenka|can)( |$)'
+                        THEN 'CAN'
+                    WHEN product.normalized_name
+                        ~ '(^| )(staklo|staklena)( |$)'
+                        THEN 'GLASS'
+                    ELSE NULL
+                END
+                """,
+                "PATTERN:PACKAGING_FORM",
+                null
+        );
+    }
+
+    private void synchronizeTextAttribute(
+            long retailerId,
+            String attributeCode,
+            String valueExpression,
+            String evidence,
+            List<String> applicableTypeCodes
+    ) {
+        String typeFilter = applicableTypeCodes == null
+                ? ""
+                : """
+                  AND EXISTS (
+                      SELECT 1
+                      FROM app.retailer_product_type AS type_assignment
+                      JOIN app.product_type AS product_type
+                        ON product_type.id = type_assignment.product_type_id
+                      WHERE type_assignment.retailer_product_id = product.id
+                        AND product_type.code IN (:applicableTypeCodes)
+                  )
+                  """;
+
+        JdbcClient.StatementSpec statement = jdbcClient.sql("""
+                    INSERT INTO app.retailer_product_attribute (
+                        retailer_product_id,
+                        attribute_definition_id,
+                        text_value,
+                        confidence,
+                        assignment_source,
+                        evidence
+                    )
+                    SELECT product.id,
+                           definition.id,
+                           extracted.value,
+                           0.9500,
+                           'NAME_EXTRACTION',
+                           :evidence
+                    FROM app.retailer_product AS product
+                    JOIN app.product_attribute_definition AS definition
+                      ON definition.code = :attributeCode
+                    CROSS JOIN LATERAL (
+                        SELECT %s AS value
+                    ) AS extracted
+                    WHERE product.retailer_id = :retailerId
+                      AND extracted.value IS NOT NULL
+                    %s
+                    ON CONFLICT (
+                        retailer_product_id,
+                        attribute_definition_id
+                    ) DO NOTHING
+                    """.formatted(valueExpression, typeFilter))
+                .param("evidence", evidence)
+                .param("attributeCode", attributeCode)
+                .param("retailerId", retailerId);
+
+        if (applicableTypeCodes != null) {
+            statement = statement.param(
+                    "applicableTypeCodes",
+                    applicableTypeCodes
+            );
+        }
+
+        statement.update();
+    }
+
+    private void synchronizeFamilyProductTypes(long retailerId) {
+        jdbcClient.sql("""
+                    WITH affected_family AS (
+                        SELECT DISTINCT product_family_id
+                        FROM app.retailer_product
+                        WHERE retailer_id = ?
+                          AND product_family_id IS NOT NULL
+                    ), type_counts AS (
+                        SELECT product.product_family_id,
+                               assignment.product_type_id,
+                               COUNT(*) AS assignment_count,
+                               MAX(assignment.confidence)
+                                   AS maximum_confidence
+                        FROM app.retailer_product AS product
+                        JOIN affected_family AS affected
+                          ON affected.product_family_id =
+                              product.product_family_id
+                        JOIN app.retailer_product_type AS assignment
+                          ON assignment.retailer_product_id = product.id
+                        GROUP BY product.product_family_id,
+                                 assignment.product_type_id
+                    ), type_choice AS (
+                        SELECT DISTINCT ON (product_family_id)
+                               product_family_id,
+                               product_type_id
+                        FROM type_counts
+                        ORDER BY product_family_id,
+                                 assignment_count DESC,
+                                 maximum_confidence DESC,
+                                 product_type_id
+                    )
+                    UPDATE app.product_family AS family
+                    SET product_type_id = choice.product_type_id,
+                        updated_at = NOW()
+                    FROM affected_family AS affected
+                    LEFT JOIN type_choice AS choice
+                      ON choice.product_family_id =
+                         affected.product_family_id
+                    WHERE family.id = affected.product_family_id
+                      AND family.product_type_id IS DISTINCT FROM
+                          choice.product_type_id
                     """)
                 .param(1, retailerId)
                 .update();

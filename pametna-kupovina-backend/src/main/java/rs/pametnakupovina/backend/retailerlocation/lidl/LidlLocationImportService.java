@@ -42,7 +42,9 @@ public class LidlLocationImportService {
                         "OFFICIAL_LIDL_LOCATION_API",
                         "LIDL_LOCATION_JSON",
                         sourceUrl,
-                        "OFFICIAL_RETAILER_API"
+                        "OFFICIAL_RETAILER_API",
+                        true,
+                        null
                 )
         );
     }

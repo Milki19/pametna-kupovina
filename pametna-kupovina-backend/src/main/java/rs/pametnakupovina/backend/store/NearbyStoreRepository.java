@@ -37,6 +37,37 @@ public class NearbyStoreRepository {
             int radiusMeters,
             int limit
     ) {
+        return findNearby(
+                latitude,
+                longitude,
+                radiusMeters,
+                limit,
+                false
+        );
+    }
+
+    public List<NearbyStore> findPricingEligibleNearby(
+            double latitude,
+            double longitude,
+            int radiusMeters,
+            int limit
+    ) {
+        return findNearby(
+                latitude,
+                longitude,
+                radiusMeters,
+                limit,
+                true
+        );
+    }
+
+    private List<NearbyStore> findNearby(
+            double latitude,
+            double longitude,
+            int radiusMeters,
+            int limit,
+            boolean pricingEligibleOnly
+    ) {
         return jdbcClient.sql("""
                         WITH user_position AS (
                             SELECT ST_SetSRID(
@@ -78,6 +109,7 @@ public class NearbyStoreRepository {
                                   'AUTO_VERIFIED',
                                   'MANUALLY_VERIFIED'
                               )
+                              AND (NOT ? OR store.pricing_eligible = TRUE)
                               AND ST_DWithin(
                                   store.location,
                                   user_position.location,
@@ -105,8 +137,9 @@ public class NearbyStoreRepository {
                         """)
                 .param(1, longitude)
                 .param(2, latitude)
-                .param(3, radiusMeters)
-                .param(4, limit)
+                .param(3, pricingEligibleOnly)
+                .param(4, radiusMeters)
+                .param(5, limit)
                 .query(ROW_MAPPER)
                 .list();
     }

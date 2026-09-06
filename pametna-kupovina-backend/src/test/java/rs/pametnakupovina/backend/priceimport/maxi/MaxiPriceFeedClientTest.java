@@ -62,6 +62,7 @@ class MaxiPriceFeedClientTest {
                 "https://static.example.test/",
                 "508,538",
                 "508=508_VALJEVO_,538=MAXI_538_VALJEVO_",
+                "508=S841,538=S538",
                 7
         );
 
@@ -70,7 +71,7 @@ class MaxiPriceFeedClientTest {
         );
 
         assertThat(files).containsExactly(new MaxiPriceFile(
-                "508",
+                "S841",
                 "assets/pricelist/21-08-2026/508_VALJEVO_20260821.csv",
                 "https://static.example.test/prices/maxi-508.csv",
                 LocalDate.of(2026, 8, 21)

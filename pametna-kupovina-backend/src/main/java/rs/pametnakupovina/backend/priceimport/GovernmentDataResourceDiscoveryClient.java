@@ -12,8 +12,12 @@ import java.net.http.HttpClient;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.StreamSupport;
 
@@ -51,6 +55,50 @@ public class GovernmentDataResourceDiscoveryClient {
         this.restClient = restClient;
     }
 
+    public List<GovernmentPriceDataset> discoverPriceDatasets(
+            String catalogApiUrl,
+            int maximumPages
+    ) {
+        if (maximumPages < 1 || maximumPages > 100) {
+            throw new IllegalArgumentException(
+                    "Broj stranica API kataloga mora biti između 1 i 100."
+            );
+        }
+
+        URI nextPage = URI.create(catalogApiUrl);
+        validateCatalogApiOrigin(nextPage);
+
+        Map<String, GovernmentPriceDataset> discovered =
+                new LinkedHashMap<>();
+
+        for (int page = 0;
+             page < maximumPages && nextPage != null;
+             page++) {
+            JsonNode response = restClient.get()
+                    .uri(nextPage)
+                    .retrieve()
+                    .body(JsonNode.class);
+
+            if (response == null || !response.path("data").isArray()) {
+                throw new IllegalStateException(
+                        "data.gov.rs API katalog nema listu skupova."
+                );
+            }
+
+            for (JsonNode dataset : response.path("data")) {
+                toPriceDataset(dataset, nextPage)
+                        .ifPresent(candidate -> discovered.put(
+                                candidate.portalDatasetId(),
+                                candidate
+                        ));
+            }
+
+            nextPage = nextCatalogPage(response);
+        }
+
+        return new ArrayList<>(discovered.values());
+    }
+
     public DiscoveredCsvResource discoverLatestCsv(
             String discoveryUrl
     ) {
@@ -83,6 +131,41 @@ public class GovernmentDataResourceDiscoveryClient {
                 ))
                 .orElseThrow(() -> new IllegalStateException(
                         "data.gov.rs skup nema dostupan CSV cenovnik."
+                ));
+    }
+
+    public DiscoveredSpreadsheetResource
+    discoverLatestStoreMappingSpreadsheet(String discoveryUrl) {
+        URI apiUri = toDatasetApiUri(discoveryUrl);
+        JsonNode response = restClient.get()
+                .uri(apiUri)
+                .retrieve()
+                .body(JsonNode.class);
+
+        if (response == null) {
+            throw new IllegalStateException(
+                    "data.gov.rs API nije vratio odgovor."
+            );
+        }
+
+        JsonNode resources = response.path("resources");
+        if (!resources.isArray()) {
+            throw new IllegalStateException(
+                    "data.gov.rs odgovor nema listu resursa."
+            );
+        }
+
+        return StreamSupport.stream(resources.spliterator(), false)
+                .filter(this::isSpreadsheet)
+                .filter(this::isStoreMappingSpreadsheet)
+                .map(this::toSpreadsheetResource)
+                .flatMap(Optional::stream)
+                .max(Comparator.comparing(
+                        DiscoveredSpreadsheetResource::lastModified
+                ))
+                .orElseThrow(() -> new IllegalStateException(
+                        "data.gov.rs skup nema pregled cenovnika "
+                                + "po objektima."
                 ));
     }
 
@@ -121,6 +204,124 @@ public class GovernmentDataResourceDiscoveryClient {
         );
     }
 
+    private Optional<GovernmentPriceDataset> toPriceDataset(
+            JsonNode dataset,
+            URI catalogPage
+    ) {
+        if (!isPriceDataset(dataset)) {
+            return Optional.empty();
+        }
+
+        JsonNode resources = dataset.path("resources");
+        if (!resources.isArray()) {
+            return Optional.empty();
+        }
+
+        Optional<DetailedCsvResource> latestResource =
+                StreamSupport.stream(resources.spliterator(), false)
+                        .filter(this::isCsv)
+                        .filter(this::isPriceCatalog)
+                        .map(this::toDetailedResource)
+                        .flatMap(Optional::stream)
+                        .max(Comparator.comparing(
+                                DetailedCsvResource::lastModified
+                        ));
+
+        if (latestResource.isEmpty()) {
+            return Optional.empty();
+        }
+
+        String slug = dataset.path("slug").asText("").strip();
+        String portalId = dataset.path("id").asText("").strip();
+        String title = dataset.path("title").asText("").strip();
+
+        if (slug.isBlank() || title.isBlank()) {
+            return Optional.empty();
+        }
+
+        if (portalId.isBlank()) {
+            portalId = slug;
+        }
+
+        String pageUrl = dataset.path("page").asText("").strip();
+        if (pageUrl.isBlank()) {
+            pageUrl = catalogPage.getScheme()
+                    + "://"
+                    + catalogPage.getAuthority()
+                    + "/sr/datasets/"
+                    + slug
+                    + "/";
+        }
+
+        DetailedCsvResource resource = latestResource.get();
+        return Optional.of(new GovernmentPriceDataset(
+                portalId,
+                slug,
+                title,
+                dataset.path("organization").path("name")
+                        .asText("").strip(),
+                pageUrl,
+                resource.id(),
+                resource.title(),
+                resource.url(),
+                resource.format(),
+                resource.lastModified()
+        ));
+    }
+
+    private Optional<DetailedCsvResource> toDetailedResource(
+            JsonNode resource
+    ) {
+        Optional<DiscoveredCsvResource> safeResource =
+                toResource(resource);
+
+        return safeResource.map(discovered -> new DetailedCsvResource(
+                resource.path("id").asText("").strip(),
+                resource.path("title").asText("").strip(),
+                discovered.url(),
+                "CSV",
+                discovered.lastModified()
+        ));
+    }
+
+    private boolean isPriceDataset(JsonNode dataset) {
+        StringBuilder identity = new StringBuilder()
+                .append(dataset.path("title").asText(""))
+                .append(' ')
+                .append(dataset.path("description").asText(""));
+
+        JsonNode tags = dataset.path("tags");
+        if (tags.isArray()) {
+            for (JsonNode tag : tags) {
+                identity.append(' ')
+                        .append(tag.path("name").asText(""))
+                        .append(' ')
+                        .append(tag.path("display_name").asText(""));
+            }
+        }
+
+        String normalized = identity.toString().toLowerCase(Locale.ROOT);
+        return normalized.contains("cenovnik")
+                || normalized.contains("cenovnici")
+                || normalized.contains("cene proizvoda")
+                || normalized.contains("ценовник")
+                || normalized.contains("цене производа");
+    }
+
+    private URI nextCatalogPage(JsonNode response) {
+        String nextPage = response.path("next_page")
+                .asText("")
+                .strip();
+
+        if (nextPage.isBlank()) {
+            return null;
+        }
+
+        URI nextUri = URI.create(nextPage);
+        validateCatalogApiOrigin(nextUri);
+        return nextUri;
+    }
+
     private void validateDiscoveryOrigin(URI uri) {
         String host = uri.getHost();
         boolean officialSource = "https".equalsIgnoreCase(uri.getScheme())
@@ -132,6 +333,16 @@ public class GovernmentDataResourceDiscoveryClient {
             throw new IllegalArgumentException(
                     "Discovery je dozvoljen samo preko zvaničnog "
                             + "data.gov.rs API-ja."
+            );
+        }
+    }
+
+    private void validateCatalogApiOrigin(URI uri) {
+        validateDiscoveryOrigin(uri);
+
+        if (!uri.getPath().startsWith("/api/1/datasets/")) {
+            throw new IllegalArgumentException(
+                    "Discovery kataloga mora koristiti data.gov.rs API."
             );
         }
     }
@@ -176,6 +387,39 @@ public class GovernmentDataResourceDiscoveryClient {
                 || identity.contains(" cene");
     }
 
+    private boolean isSpreadsheet(JsonNode resource) {
+        String format = resource.path("format")
+                .asText("")
+                .toLowerCase(Locale.ROOT);
+        String mime = resource.path("mime")
+                .asText("")
+                .toLowerCase(Locale.ROOT);
+        String title = resource.path("title")
+                .asText("")
+                .toLowerCase(Locale.ROOT);
+
+        return format.equals("xlsx")
+                || mime.equals(
+                        "application/vnd.openxmlformats-officedocument."
+                                + "spreadsheetml.sheet"
+                )
+                || title.endsWith(".xlsx");
+    }
+
+    private boolean isStoreMappingSpreadsheet(JsonNode resource) {
+        String identity = (
+                resource.path("title").asText("")
+                        + " "
+                        + resource.path("description").asText("")
+                        + " "
+                        + resource.path("url").asText("")
+        ).toLowerCase(Locale.ROOT);
+
+        return identity.contains("maloprodajni")
+                || identity.contains("objekt")
+                || identity.contains("prodavnic");
+    }
+
     private Optional<DiscoveredCsvResource> toResource(
             JsonNode resource
     ) {
@@ -197,6 +441,32 @@ public class GovernmentDataResourceDiscoveryClient {
         }
 
         return Optional.of(new DiscoveredCsvResource(
+                url,
+                parseInstant(resource.path("last_modified").asText(""))
+        ));
+    }
+
+    private Optional<DiscoveredSpreadsheetResource> toSpreadsheetResource(
+            JsonNode resource
+    ) {
+        String url = resource.path("url").asText("").strip();
+        if (url.isBlank()) {
+            return Optional.empty();
+        }
+
+        URI resourceUri = URI.create(url);
+        String host = resourceUri.getHost();
+        boolean officialOrPublisherResource =
+                isSafeHttpsResource(resourceUri);
+        boolean localTestResource =
+                "http".equalsIgnoreCase(resourceUri.getScheme())
+                        && isLoopback(host);
+
+        if (!officialOrPublisherResource && !localTestResource) {
+            return Optional.empty();
+        }
+
+        return Optional.of(new DiscoveredSpreadsheetResource(
                 url,
                 parseInstant(resource.path("last_modified").asText(""))
         ));
@@ -245,6 +515,21 @@ public class GovernmentDataResourceDiscoveryClient {
 
     public record DiscoveredCsvResource(
             String url,
+            Instant lastModified
+    ) {
+    }
+
+    public record DiscoveredSpreadsheetResource(
+            String url,
+            Instant lastModified
+    ) {
+    }
+
+    private record DetailedCsvResource(
+            String id,
+            String title,
+            String url,
+            String format,
             Instant lastModified
     ) {
     }
