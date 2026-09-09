@@ -36,6 +36,8 @@ class LocationViewModel @Inject constructor(
                     coordinates = locationProvider.currentLocation(),
                     message = "Lokacija je pronađena. Proveri je i pokreni računanje."
                 )
+            } catch (error: kotlinx.coroutines.CancellationException) {
+                throw error
             } catch (error: Exception) {
                 LocationUiState(
                     message = error.message
@@ -48,7 +50,7 @@ class LocationViewModel @Inject constructor(
 
     fun permissionDenied() {
         _uiState.value = LocationUiState(
-            message = "Dozvola nije odobrena. Unesi koordinate ručno.",
+            message = "Dozvola nije odobrena. Možeš je uključiti u podešavanjima aplikacije ili uneti koordinate ručno.",
             isError = true
         )
     }

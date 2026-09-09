@@ -1,6 +1,11 @@
 package rs.pametnakupovina.app.ui.screens
 
 import android.Manifest
+import android.content.Intent
+import android.provider.Settings
+import android.net.Uri
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -86,6 +91,7 @@ fun LocationScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .verticalScroll(rememberScrollState())
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -125,6 +131,16 @@ fun LocationScreen(
                 } else {
                     Text("Koristi trenutnu lokaciju")
                 }
+            }
+
+            if (state.isError) {
+                TextButton(onClick = {
+                    context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+                }) { Text("Podešavanja lokacije") }
+                TextButton(onClick = {
+                    context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.parse("package:" + context.packageName)))
+                }) { Text("Dozvole aplikacije") }
             }
 
             Text("Ručni unos", style = MaterialTheme.typography.titleMedium)

@@ -7,6 +7,11 @@ public record FlexibleItemConstraints(
         String requiredBrand,
         BigDecimal minPackageQuantity,
         BigDecimal maxPackageQuantity,
-        String requiredBaseUnit
+        String requiredBaseUnit,
+        BigDecimal targetQuantity
 ) {
+    public FlexibleItemConstraints(String category, String requiredBrand,
+            BigDecimal minPackageQuantity, BigDecimal maxPackageQuantity, String requiredBaseUnit) {
+        this(category, requiredBrand, minPackageQuantity, maxPackageQuantity, requiredBaseUnit, null);
+    }
 }

@@ -10,6 +10,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import rs.pametnakupovina.app.data.local.MIGRATION_1_2
 import rs.pametnakupovina.app.data.local.MIGRATION_2_3
+import rs.pametnakupovina.app.data.local.MIGRATION_3_4
 
 @RunWith(AndroidJUnit4::class)
 @Suppress("DEPRECATION")
@@ -100,5 +101,25 @@ class RoomMigrationInstrumentedTest {
         const val DATABASE_NAME_V3 = "migration-test-v3"
         const val SCHEMA_FOLDER =
             "rs.pametnakupovina.app.data.local.PametnaKupovinaDatabase"
+    }
+
+    @Test
+    fun migrationTo4PreservesLegacyQuantitiesAndAddsEmptyPurchases() {
+        val name = "migration-test-v4"
+        helper.createDatabase(name, 3).apply {
+            execSQL("""INSERT INTO draft_items(name, quantity, matchingRule, matchingStatus, syncState, updatedAtEpochMillis)
+                VALUES('jogurt', 2, 'FLEXIBLE_CATEGORY', 'CONFIRMED', 'SYNCED', 1)""")
+            close()
+        }
+        helper.runMigrationsAndValidate(name, 4, true, MIGRATION_3_4).use { database ->
+            database.query("SELECT quantity,targetQuantity FROM draft_items").use {
+                it.moveToFirst()
+                assertEquals(2.0, it.getDouble(0), 0.0)
+                assertEquals(true, it.isNull(1))
+            }
+            database.query("SELECT COUNT(*) FROM purchase_sessions").use {
+                it.moveToFirst(); assertEquals(0, it.getInt(0))
+            }
+        }
     }
 }

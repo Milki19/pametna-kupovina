@@ -49,6 +49,11 @@ class FusedLocationProvider @Inject constructor(
             )
         }
 
+        val manager = context.getSystemService(Context.LOCATION_SERVICE) as android.location.LocationManager
+        if (!androidx.core.location.LocationManagerCompat.isLocationEnabled(manager)) {
+            throw LocationUnavailableException("Lokacijske usluge su isključene. Uključi ih u podešavanjima pa pokušaj ponovo.")
+        }
+
         val priority = if (hasFineLocationPermission(context)) {
             Priority.PRIORITY_HIGH_ACCURACY
         } else {
@@ -66,7 +71,12 @@ class FusedLocationProvider @Inject constructor(
                     awaitCurrentLocation(request)
                 }
             },
-            lastLocation = ::awaitLastLocation
+            lastLocation = { withTimeoutOrNull(2_000L) { awaitLastLocation() } },
+            isAcceptable = { location ->
+                isRecentLocation(location.elapsedRealtimeNanos, android.os.SystemClock.elapsedRealtimeNanos()) &&
+                    location.latitude.isFinite() && location.longitude.isFinite() &&
+                    location.latitude in -90.0..90.0 && location.longitude in -180.0..180.0
+            }
         ) ?: throw LocationUnavailableException(
                 "Lokacija nije pronađena. Uključi lokacijske usluge " +
                     "ili unesi koordinate ručno."
@@ -125,9 +135,14 @@ private fun hasFineLocationPermission(context: Context): Boolean =
         Manifest.permission.ACCESS_FINE_LOCATION
     ) == PackageManager.PERMISSION_GRANTED
 
+internal fun isRecentLocation(timestampNanos: Long, nowNanos: Long): Boolean =
+    timestampNanos > 0 && nowNanos >= timestampNanos &&
+        nowNanos - timestampNanos <= 30_000_000_000L
+
 internal suspend fun <T> resolveLocationWithFallback(
     freshLocation: suspend () -> T?,
-    lastLocation: suspend () -> T?
+    lastLocation: suspend () -> T?,
+    isAcceptable: (T) -> Boolean = { true }
 ): T? {
     val fresh = try {
         freshLocation()
@@ -136,10 +151,10 @@ internal suspend fun <T> resolveLocationWithFallback(
     } catch (_: Exception) {
         null
     }
-    if (fresh != null) return fresh
+    if (fresh != null && isAcceptable(fresh)) return fresh
 
     return try {
-        lastLocation()
+        lastLocation()?.takeIf(isAcceptable)
     } catch (error: CancellationException) {
         throw error
     } catch (_: Exception) {

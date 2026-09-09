@@ -36,12 +36,18 @@ data class DraftItemInput(
     val requiredBrand: String? = null,
     val minPackageQuantity: Double? = null,
     val maxPackageQuantity: Double? = null,
-    val requiredBaseUnit: String? = null
+    val requiredBaseUnit: String? = null,
+    val targetQuantity: Double? = null
 ) {
     fun validated(): DraftItemInput {
         require(name.isNotBlank()) { "Naziv stavke je obavezan." }
         require(quantity.isFinite() && quantity > 0) {
             "Količina mora biti veća od nule."
+        }
+        require(targetQuantity == null || (targetQuantity.isFinite() && targetQuantity > 0
+            && matchingRule == ShoppingItemRuleDto.FLEXIBLE_CATEGORY
+            && requiredBaseUnit in setOf("g", "ml", "piece", "kom", "komad"))) {
+            "Ukupna količina mora biti pozitivna i imati jedinicu g, ml ili piece."
         }
         when (matchingRule) {
             ShoppingItemRuleDto.EXACT_PRODUCT -> {
@@ -313,8 +319,19 @@ class ShoppingRepository @Inject constructor(
         return listId
     }
 
-    private suspend fun pushPending(listId: Long) {
+    private suspend fun pushPending(listId: Long) = pushPendingItems(api, dao, listId)
+}
+
+class ItemSyncValidationException(val itemNames: List<String>) : IllegalArgumentException(
+    "Proveri stavke: ${itemNames.joinToString(", ")}. Opis ili količina nisu podržani. " +
+        "Izmeni stavku ili izaberi tačan proizvod. Ostale ispravne stavke su poslate."
+)
+
+// Keep invalid rows locally, but do not let one rejected row block the rest of the list.
+internal suspend fun pushPendingItems(api: ShoppingApiService, dao: DraftItemDao, listId: Long) {
+        val rejected = mutableListOf<String>()
         dao.getAllItems().forEach { item ->
+          try {
             when (SyncState.valueOf(item.syncState)) {
                 SyncState.PENDING_CREATE -> {
                     val saved = api.addShoppingListItem(
@@ -356,17 +373,25 @@ class ShoppingRepository @Inject constructor(
 
                 SyncState.SYNCED -> Unit
             }
+          } catch (error: HttpException) {
+              if (error.code() !in setOf(400, 422)) throw error
+              rejected += item.name
+          }
         }
-    }
+        // Prevent calculation/remote replacement until every local row is represented.
+        if (rejected.isNotEmpty()) throw ItemSyncValidationException(rejected)
 }
 
-internal fun ParsedDraftLine.toFlexibleDraftInput() = DraftItemInput(
-    name = name,
-    rawInput = rawInput,
-    quantity = quantity,
-    matchingRule = ShoppingItemRuleDto.FLEXIBLE_CATEGORY,
-    category = name
-)
+internal fun ParsedDraftLine.toFlexibleDraftInput(): DraftItemInput {
+    val requested = parseShoppingAmount(name)
+    val categoryName = requested?.name ?: name
+    val amount = requested?.amount ?: suggestedAmount(categoryName)
+    return DraftItemInput(
+        name = categoryName, rawInput = rawInput, quantity = quantity,
+        matchingRule = ShoppingItemRuleDto.FLEXIBLE_CATEGORY, category = categoryName,
+        targetQuantity = amount?.value, requiredBaseUnit = amount?.unit
+    )
+}
 
 private fun DraftItemInput.toEntity(
     localId: Long = 0,
@@ -389,6 +414,7 @@ private fun DraftItemInput.toEntity(
     minPackageQuantity = minPackageQuantity,
     maxPackageQuantity = maxPackageQuantity,
     requiredBaseUnit = requiredBaseUnit,
+    targetQuantity = targetQuantity,
     syncState = syncState.name
 )
 
@@ -399,7 +425,8 @@ private fun DraftItemEntity.constraints(): FlexibleItemConstraintsDto? {
         requiredBrand = requiredBrand,
         minPackageQuantity = minPackageQuantity,
         maxPackageQuantity = maxPackageQuantity,
-        requiredBaseUnit = requiredBaseUnit
+        requiredBaseUnit = requiredBaseUnit,
+        targetQuantity = targetQuantity
     )
 }
 
@@ -444,5 +471,6 @@ private fun ShoppingListItemDto.toEntity(
     minPackageQuantity = flexibleConstraints?.minPackageQuantity,
     maxPackageQuantity = flexibleConstraints?.maxPackageQuantity,
     requiredBaseUnit = flexibleConstraints?.requiredBaseUnit,
+    targetQuantity = flexibleConstraints?.targetQuantity,
     syncState = SyncState.SYNCED.name
 )

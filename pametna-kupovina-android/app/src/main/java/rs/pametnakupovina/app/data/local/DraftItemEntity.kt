@@ -21,6 +21,7 @@ data class DraftItemEntity(
     val minPackageQuantity: Double? = null,
     val maxPackageQuantity: Double? = null,
     val requiredBaseUnit: String? = null,
+    val targetQuantity: Double? = null,
     val syncState: String = SyncState.PENDING_CREATE.name,
     val updatedAtEpochMillis: Long = System.currentTimeMillis()
 )

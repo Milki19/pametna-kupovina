@@ -4349,6 +4349,108 @@ class PametnaKupovinaBackendApplicationTests {
     }
 
     @Test
+    void amountOffersCompareWholePackagesAndRejectWrongDairyAndExcess() {
+        Long retailer = jdbcClient.sql("INSERT INTO app.retailer(code,name) VALUES('M2','M2 test') RETURNING id")
+                .query(Long.class).single();
+        Long format = jdbcClient.sql("INSERT INTO app.store_format(retailer_id,code,name) VALUES(?,'TEST','Test') RETURNING id")
+                .param(retailer).query(Long.class).single();
+        Long store = insertVerifiedStore(retailer, format, "M2-SHOP", "Test shop", 44.27, 19.88, true);
+        Long run = jdbcClient.sql("INSERT INTO app.import_run(retailer_id,source_url,status) VALUES(?,'https://example.test/m2','SUCCEEDED') RETURNING id")
+                .param(retailer).query(Long.class).single();
+        var normalizer = new rs.pametnakupovina.backend.matching.ProductNameNormalizer();
+        var parser = new rs.pametnakupovina.backend.matching.ProductQuantityParser();
+        String[][] products = {
+                {"small","JOGURT 2.8% 180G+20G MEGGLE-924","23"},
+                {"big","Jogurt 1kg","109"},
+                {"excess","Jogurt 2kg","50"},
+                {"fruit","Jogurt jagoda 1kg","1"},
+                {"banana","Jogurt banana 1kg","0.50"},
+                {"mixed-fruit","Vocni jogurt jagoda,tresnja 1kg","0.25"},
+                {"kefir","Kefir 1kg","1"},
+                {"ayran","Ajran 1kg","1"},
+                {"unknown","Jogurt domaći","1"},
+                {"choco","MLEKO COKO 0.2L PET IMLEK","10"},
+                {"choco-short","MLEKO COK. KRAVICA 250ML","11"},
+                {"vanilla","Mleko vanila 0.2l","1"},
+                {"cheese","BISER TOPLJ.SIR SUNKA 140g MLEKO","1"},
+                {"milk","Mleko 1l","100"},
+                {"wafer","NAPOL.FINA MLEKO COKOL. 400G-749","1"}
+        };
+        for (String[] p : products) {
+            var size = parser.parse(p[1]).orElse(null);
+            Long id = jdbcClient.sql("""
+                    INSERT INTO app.retailer_product(retailer_id,source_product_key,name,normalized_name,quantity_value,base_unit)
+                    VALUES(?,?,?,?,?,?) RETURNING id
+                    """).params(retailer,p[0],p[1],normalizer.normalize(p[1]))
+                    .param(5,size==null?null:size.value(),java.sql.Types.NUMERIC)
+                    .param(6,size==null?null:size.unit().databaseValue(),java.sql.Types.VARCHAR)
+                    .query(Long.class).single();
+            jdbcClient.sql("""
+                    INSERT INTO app.price_observation(retailer_product_id,import_run_id,price_date,regular_price)
+                    VALUES(?,?,'2026-09-06',?)
+                    """).params(id,run,new BigDecimal(p[2])).update();
+        }
+        productCatalogMaintenanceService.refreshRetailer(retailer);
+        assertThat(jdbcClient.sql("""
+                SELECT p.source_product_key || ':' || t.code FROM app.retailer_product p
+                JOIN app.retailer_product_type a ON a.retailer_product_id=p.id
+                JOIN app.product_type t ON t.id=a.product_type_id WHERE p.retailer_id=?
+                """).param(retailer).query(String.class).list())
+                .contains("fruit:FRUIT_YOGURT", "kefir:KEFIR", "ayran:AYRAN", "choco:FLAVORED_MILK", "milk:MILK",
+                        "choco-short:FLAVORED_MILK", "vanilla:FLAVORED_MILK")
+                .noneMatch(s -> s.startsWith("wafer:") || s.equals("cheese:MILK"));
+        var list = shoppingListService.create(new CreateShoppingListRequest("M2 amounts"),"m2-amounts");
+        assertThatThrownBy(() -> shoppingListService.addItem(list.id(),"m2-amounts",new AddShoppingListItemRequest(
+                "jogurt nepoznati ukus","jogurt nepoznati ukus",null,BigDecimal.ONE,ShoppingItemRule.FLEXIBLE_CATEGORY,
+                new FlexibleItemConstraints("jogurt nepoznati ukus",null,null,null,null))))
+                .isInstanceOf(ResponseStatusException.class);
+        var item = shoppingListService.addItem(list.id(),"m2-amounts",new AddShoppingListItemRequest(
+                "jogurt","jogurt 1kg",null,BigDecimal.ONE,ShoppingItemRule.FLEXIBLE_CATEGORY,
+                new FlexibleItemConstraints("jogurt",null,null,null,"g",new BigDecimal("1000"))));
+        assertThat(item.flexibleConstraints().targetQuantity()).isEqualByComparingTo("1000");
+        var best = storeShoppingOfferRepository.findOffers(list.id(),List.of(store),LocalDate.of(2026,9,6)).getFirst();
+        assertThat(best.productName()).isEqualTo("Jogurt 1kg");
+        assertThat(best.lineTotal()).isEqualByComparingTo("109");
+        assertThat(best.purchaseQuantity().packages()).isEqualByComparingTo("1");
+        assertThat(best.purchaseQuantity().unitPrice()).isEqualByComparingTo("109");
+        jdbcClient.sql("""
+                UPDATE app.price_observation SET regular_price=120 WHERE retailer_product_id IN
+                (SELECT id FROM app.retailer_product WHERE retailer_id=? AND source_product_key='big')
+                """).param(retailer).update();
+        best = storeShoppingOfferRepository.findOffers(list.id(),List.of(store),LocalDate.of(2026,9,6)).getFirst();
+        assertThat(best.productName()).startsWith("JOGURT 2.8%");
+        assertThat(best.purchaseQuantity().packages()).isEqualByComparingTo("5");
+        assertThat(best.purchaseQuantity().suppliedAmount()).isEqualByComparingTo("1000");
+        assertThat(best.lineTotal()).isEqualByComparingTo("115");
+        jdbcClient.sql("UPDATE app.shopping_list_item SET target_quantity=1100 WHERE id=?").param(item.id()).update();
+        best = storeShoppingOfferRepository.findOffers(list.id(),List.of(store),LocalDate.of(2026,9,6)).getFirst();
+        assertThat(best.purchaseQuantity().packages()).isEqualByComparingTo("6");
+        assertThat(best.purchaseQuantity().extraAmount()).isEqualByComparingTo("100");
+        assertThat(best.lineTotal()).isEqualByComparingTo("138");
+        // Never compare a litre with a kilogram by assuming density.
+        jdbcClient.sql("UPDATE app.shopping_list_item SET required_base_unit='ml' WHERE id=?").param(item.id()).update();
+        assertThat(storeShoppingOfferRepository.findOffers(list.id(),List.of(store),LocalDate.of(2026,9,6)).getFirst().available()).isFalse();
+
+        var flavors = shoppingListService.create(new CreateShoppingListRequest("M2 flavors"),"m2-flavors");
+        for (String name : List.of("jogurt jagoda", "mleko čokoladno", "kefir", "mleko", "jogurt jagoda 1 kg")) {
+            var added = shoppingListService.addItem(flavors.id(), "m2-flavors", new AddShoppingListItemRequest(
+                    name,name,null,BigDecimal.ONE,ShoppingItemRule.FLEXIBLE_CATEGORY,
+                    new FlexibleItemConstraints(name,null,null,null,null)));
+            assertThat(added.matchingStatus()).isEqualTo(ShoppingItemMatchingStatus.CONFIRMED);
+        }
+        var flavorOffers = storeShoppingOfferRepository.findOffers(flavors.id(),List.of(store),LocalDate.of(2026,9,6));
+        assertThat(flavorOffers).extracting(StoreItemOffer::productName)
+                .containsExactly("Jogurt jagoda 1kg", "MLEKO COKO 0.2L PET IMLEK", "Kefir 1kg", "Mleko 1l", "Jogurt jagoda 1kg");
+        // If strawberry disappears, do not substitute a cheaper banana or plain yogurt.
+        jdbcClient.sql("DELETE FROM app.price_observation WHERE retailer_product_id IN " +
+                "(SELECT id FROM app.retailer_product WHERE retailer_id=? AND source_product_key='fruit')")
+                .param(retailer).update();
+        assertThat(storeShoppingOfferRepository.findOffers(flavors.id(),List.of(store),LocalDate.of(2026,9,6))
+                .stream().filter(o -> o.requestedName().startsWith("jogurt jagoda")))
+                .allMatch(o -> !o.available());
+    }
+
+    @Test
     void uncertainProductTypeRequiresReviewBeforeItCanBeUsed() {
         Long retailerId = jdbcClient.sql("""
                         INSERT INTO app.retailer (code, name)

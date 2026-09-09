@@ -78,13 +78,7 @@ class ShoppingListServiceCanonicalSelectionTest {
                 isNull(),
                 eq(BigDecimal.ONE),
                 eq(ShoppingItemRule.EXACT_PRODUCT),
-                isNull(),
-                isNull(),
-                isNull(),
-                isNull(),
-                isNull(),
-                isNull(),
-                isNull()
+                isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull()
         );
     }
 
@@ -193,13 +187,7 @@ class ShoppingListServiceCanonicalSelectionTest {
                 eq(77L),
                 eq(BigDecimal.ONE),
                 eq(ShoppingItemRule.PRODUCT_FAMILY),
-                isNull(),
-                isNull(),
-                isNull(),
-                isNull(),
-                isNull(),
-                isNull(),
-                isNull()
+                isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull()
         );
     }
 

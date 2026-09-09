@@ -35,6 +35,11 @@ public class ProductQuantityParser {
                     + "(?![a-z])"
     );
 
+    private static final Pattern BONUS_PATTERN = Pattern.compile(
+            "(?<![-a-z0-9])(?<first>" + NUMBER_PATTERN + ")\\s*(?<unit1>" + UNIT_PATTERN
+            + ")?\\s*\\+\\s*(?<second>" + NUMBER_PATTERN + ")\\s*(?<unit2>" + UNIT_PATTERN + ")(?![a-z])");
+    private static final Pattern EGG_COUNT = Pattern.compile("\\b(?:jaja|jaje)\\b.*?\\b([1-9][0-9]*)\\s*/\\s*1\\b");
+
     private static final BigDecimal ONE_THOUSAND =
             BigDecimal.valueOf(1000);
 
@@ -49,18 +54,39 @@ public class ProductQuantityParser {
                         .replace('\u00A0', ' ')
                         .replaceAll("\\s+", " ");
 
+        if (normalizedValue.chars().filter(c -> c == '+').count() > 1
+                || (normalizedValue.contains("+") && MULTIPACK_PATTERN.matcher(normalizedValue).find())) {
+            return Optional.empty();
+        }
+        Matcher bonus = BONUS_PATTERN.matcher(normalizedValue);
+        if (bonus.find()) {
+            // Mixed dimensions and an ambiguous multipack+bonus are deliberately unknown.
+            if (MULTIPACK_PATTERN.matcher(normalizedValue).find()) return Optional.empty();
+            String firstUnit = bonus.group("unit1") == null ? bonus.group("unit2") : bonus.group("unit1");
+            var first = createQuantity(bonus.group("first"), firstUnit, BigDecimal.ONE);
+            var second = createQuantity(bonus.group("second"), bonus.group("unit2"), BigDecimal.ONE);
+            if (first.isEmpty() || second.isEmpty() || first.get().unit() != second.get().unit()) {
+                return Optional.empty();
+            }
+            return Optional.of(new ParsedQuantity(first.get().value().add(second.get().value()),
+                    first.get().unit()));
+        }
+
+        Matcher eggCount = EGG_COUNT.matcher(normalizedValue);
+        if (eggCount.find()) return createQuantity(eggCount.group(1), "kom", BigDecimal.ONE);
+
         Matcher multipackMatcher =
                 MULTIPACK_PATTERN.matcher(normalizedValue);
 
         if (multipackMatcher.find()) {
-            int packageCount = Integer.parseInt(
+            BigDecimal packageCount = new BigDecimal(
                     multipackMatcher.group("count")
             );
 
             return createQuantity(
                     multipackMatcher.group("amount"),
                     multipackMatcher.group("unit"),
-                    BigDecimal.valueOf(packageCount)
+                    packageCount
             );
         }
 

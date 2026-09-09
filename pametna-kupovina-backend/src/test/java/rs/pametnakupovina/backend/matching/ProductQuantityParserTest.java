@@ -37,10 +37,18 @@ class ProductQuantityParserTest {
         assertThat(parser.parse("Beli hleb")).isEmpty();
         assertThat(parser.parse("Sok 0 l")).isEmpty();
         assertThat(parser.parse("Sok -1 l")).isEmpty();
+        assertThat(parser.parse("Paket 180g + 20ml")).isEmpty();
+        assertThat(parser.parse("Jogurt 4x180g+20g")).isEmpty();
+        assertThat(parser.parse("Donat 1/1")).isEmpty();
     }
 
     private static Stream<Arguments> quantityExamples() {
         return Stream.of(
+                Arguments.of("JOGURT 2.8% 180G+20G MEGGLE", "200", BaseUnit.GRAM),
+                Arguments.of("Jogurt 180+20 g", "200", BaseUnit.GRAM),
+                Arguments.of("Jogurt 0.9 kg + 100 g", "1000", BaseUnit.GRAM),
+                Arguments.of("JAJA KOKOŠIJA 10/1", "10", BaseUnit.PIECE),
+                Arguments.of("Jogurt 4 x 200g", "800", BaseUnit.GRAM),
                 Arguments.of(
                         "Mleko 1 l",
                         "1000",

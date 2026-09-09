@@ -44,6 +44,12 @@ public class ShoppingListOptimizationService {
                                 )
                         );
 
+        if (shoppingList.items().stream().anyMatch(item -> item.flexibleConstraints() != null
+                && item.flexibleConstraints().targetQuantity() != null)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Za spisak sa ukupnim količinama koristi endpoint recommendations sa lokacijom.");
+        }
+
         List<ShoppingListPriceItem> lowestPriceItems =
                 pricingRepository.findBestPrices(listId);
 

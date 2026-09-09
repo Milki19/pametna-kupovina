@@ -14,6 +14,8 @@ import kotlinx.coroutines.launch
 import retrofit2.HttpException
 import rs.pametnakupovina.app.data.DraftItemInput
 import rs.pametnakupovina.app.data.ShoppingRepository
+import rs.pametnakupovina.app.data.ItemSyncValidationException
+import kotlinx.coroutines.CancellationException
 import rs.pametnakupovina.app.data.local.DraftItemEntity
 import rs.pametnakupovina.app.data.network.ProductCandidateDto
 import rs.pametnakupovina.app.data.network.ShoppingItemMatchResultDto
@@ -68,13 +70,14 @@ class ShoppingListViewModel @Inject constructor(
                     )
                 }
             } catch (error: Exception) {
+                if (error is CancellationException) throw error
                 syncScheduler.enqueue()
                 _uiState.update {
                     it.copy(
                         isInitialLoading = false,
                         isSyncing = false,
-                        isOffline = true,
-                        errorMessage = if (it.items.isEmpty()) {
+                        isOffline = error is IOException,
+                        errorMessage = if (it.items.isEmpty() || error is ItemSyncValidationException) {
                             error.toUserMessage(
                                 "Server trenutno nije dostupan. Možeš ipak napraviti spisak."
                             )
@@ -110,7 +113,7 @@ class ShoppingListViewModel @Inject constructor(
                 onSaved()
                 _uiState.update {
                     it.copy(
-                        notice = "Dodato stavki: $count",
+                        notice = "Dodato stavki: $count. Za mleko, jogurt i jaja predložene su ukupne količine; proveri ih na spisku pre računanja.",
                         errorMessage = null
                     )
                 }
@@ -146,7 +149,7 @@ class ShoppingListViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         isSyncing = false,
-                        isOffline = true,
+                        isOffline = error is IOException,
                         errorMessage = error.toUserMessage(
                             "Za proveru proizvoda je potrebna veza sa serverom."
                         )
@@ -182,9 +185,14 @@ class ShoppingListViewModel @Inject constructor(
         syncScheduler.enqueue()
         try {
             repository.synchronizePending()
-            _uiState.update { it.copy(isOffline = false) }
-        } catch (_: Exception) {
-            _uiState.update { it.copy(isOffline = true) }
+            _uiState.update { it.copy(isOffline = false, errorMessage = null) }
+        } catch (error: Exception) {
+            if (error is CancellationException) throw error
+            _uiState.update { it.copy(
+                isOffline = error is IOException,
+                errorMessage = if (error is IOException) null
+                    else error.toUserMessage("Sinhronizacija trenutno nije uspela.")
+            ) }
         }
     }
 

@@ -45,7 +45,8 @@ data class FlexibleItemConstraintsDto(
     val requiredBrand: String? = null,
     val minPackageQuantity: Double? = null,
     val maxPackageQuantity: Double? = null,
-    val requiredBaseUnit: String? = null
+    val requiredBaseUnit: String? = null,
+    val targetQuantity: Double? = null
 )
 
 @Serializable
@@ -291,6 +292,17 @@ data class RecommendationStoreDto(
 )
 
 @Serializable
+data class PurchaseQuantityDto(
+    val packages: Double? = null,
+    val packageSize: Double? = null,
+    val baseUnit: String? = null,
+    val targetAmount: Double? = null,
+    val suppliedAmount: Double? = null,
+    val extraAmount: Double? = null,
+    val unitPrice: Double? = null
+)
+
+@Serializable
 data class RecommendationItemDto(
     val itemId: Long,
     val requestedName: String,
@@ -310,7 +322,8 @@ data class RecommendationItemDto(
     val effectivePrice: Double? = null,
     val lineTotal: Double? = null,
     val priceScope: String? = null,
-    val explanation: String
+    val explanation: String,
+    val purchaseQuantity: PurchaseQuantityDto? = null
 )
 
 @Serializable

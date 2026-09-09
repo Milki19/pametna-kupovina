@@ -22,7 +22,7 @@ data class NavigationPoint(
 }
 
 fun googleMapsDirectionsUrl(
-    origin: NavigationPoint,
+    origin: NavigationPoint?,
     orderedStops: List<NavigationPoint>
 ): String {
     val stops = orderedStops.distinct()
@@ -33,8 +33,7 @@ fun googleMapsDirectionsUrl(
 
     return buildString {
         append("https://www.google.com/maps/dir/?api=1")
-        append("&origin=")
-        append(origin.queryValue())
+        origin?.let { append("&origin="); append(it.queryValue()) }
         append("&destination=")
         append(destination.queryValue())
         if (waypoints.isNotEmpty()) {
@@ -42,7 +41,6 @@ fun googleMapsDirectionsUrl(
             append(waypoints.joinToString("%7C") { it.queryValue() })
         }
         append("&travelmode=driving")
-        append("&dir_action=navigate")
     }
 }
 
@@ -55,7 +53,11 @@ fun launchGoogleMapsDirections(context: Context, url: String) {
     try {
         context.startActivity(googleMapsIntent)
     } catch (_: ActivityNotFoundException) {
-        context.startActivity(Intent(Intent.ACTION_VIEW, uri))
+        try { context.startActivity(Intent(Intent.ACTION_VIEW, uri)) }
+        catch (_: ActivityNotFoundException) {
+            android.widget.Toast.makeText(context, "Instaliraj Google Maps ili pregledač da otvoriš rutu.",
+                android.widget.Toast.LENGTH_LONG).show()
+        }
     }
 }
 

@@ -14,6 +14,7 @@ import rs.pametnakupovina.app.ui.screens.MatchingScreen
 import rs.pametnakupovina.app.ui.screens.ProductDetailsScreen
 import rs.pametnakupovina.app.ui.screens.RecommendationScreen
 import rs.pametnakupovina.app.ui.screens.ShoppingListScreen
+import rs.pametnakupovina.app.ui.screens.PurchaseScreen
 
 private object Route {
     const val LIST = "list"
@@ -40,8 +41,18 @@ fun PametnaKupovinaApp() {
         navController = navController,
         startDestination = Route.LIST
     ) {
+        composable("purchases") {
+            PurchaseScreen(onBack = navController::popBackStack,
+                onOpen = { navController.navigate("purchase/$it") })
+        }
+        composable("purchase/{sessionId}", arguments = listOf(navArgument("sessionId") { type = NavType.StringType })) { entry ->
+            PurchaseScreen(sessionId = entry.arguments?.getString("sessionId"),
+                onBack = navController::popBackStack,
+                onOpen = { navController.navigate("purchase/$it") })
+        }
         composable(Route.LIST) {
             ShoppingListScreen(
+                onOpenPurchases = { navController.navigate("purchases") },
                 onOpenMatching = { listId ->
                     navController.navigate(Route.matching(listId))
                 },
@@ -103,6 +114,7 @@ fun PametnaKupovinaApp() {
             RecommendationScreen(
                 listId = requireNotNull(entry.arguments?.getLong("listId")),
                 location = calculationLocation,
+                onOpenPurchase = { navController.navigate("purchase/$it") },
                 onBack = navController::popBackStack
             )
         }

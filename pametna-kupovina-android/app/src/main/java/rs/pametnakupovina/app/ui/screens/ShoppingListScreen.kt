@@ -26,6 +26,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import rs.pametnakupovina.app.data.suggestedAmount
+import rs.pametnakupovina.app.data.amountLabel
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -55,6 +57,7 @@ import rs.pametnakupovina.app.ui.components.canonicalProductPicker
 fun ShoppingListScreen(
     onOpenMatching: (Long) -> Unit,
     onOpenProduct: (Long) -> Unit,
+    onOpenPurchases: () -> Unit = {},
     viewModel: ShoppingListViewModel = hiltViewModel(),
     productSearchViewModel: ProductSearchViewModel = hiltViewModel()
 ) {
@@ -112,9 +115,10 @@ fun ShoppingListScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = PaddingValues(16.dp),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 100.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            item { OutlinedButton(onClick = onOpenPurchases, modifier = Modifier.fillMaxWidth()) { Text("Moje kupovine") } }
             item {
                 Text(
                     "Unesi stavke pojedinačno ili nalepi ceo spisak.",
@@ -257,7 +261,9 @@ private fun DraftItemCard(
     ) {
         Column(Modifier.padding(16.dp)) {
             Text(item.name, style = MaterialTheme.typography.titleMedium)
-            Text("Količina: ${formatQuantity(item.quantity)}")
+            Text(item.targetQuantity?.let {
+                "Ukupno: " + amountLabel(it * item.quantity, item.requiredBaseUnit)
+            } ?: "Broj pakovanja / komada: ${formatQuantity(item.quantity)}")
             Text(
                 when (item.matchingRule) {
                     ShoppingItemRuleDto.EXACT_PRODUCT.name ->
@@ -369,6 +375,11 @@ private fun ItemEditorDialog(
     var baseUnit by rememberSaveable(item?.localId) {
         mutableStateOf(item?.requiredBaseUnit.orEmpty())
     }
+    var targetQuantity by rememberSaveable(item?.localId) {
+        mutableStateOf(item?.targetQuantity?.let(::formatQuantity).orEmpty())
+    }
+    val isAmountMode = rule == ShoppingItemRuleDto.FLEXIBLE_CATEGORY && targetQuantity.isNotBlank()
+    val parsedTarget = targetQuantity.replace(',', '.').toDoubleOrNull()
     var selectedProduct by remember(item?.localId) {
         mutableStateOf<CanonicalProductSearchItemDto?>(null)
     }
@@ -391,7 +402,9 @@ private fun ItemEditorDialog(
     )
     val valid = name.isNotBlank() &&
         parsedQuantity != null &&
-        parsedQuantity > 0 &&
+        parsedQuantity.isFinite() && parsedQuantity > 0 &&
+        (!isAmountMode || (parsedTarget != null && parsedTarget.isFinite() && parsedTarget > 0
+            && baseUnit in setOf("g", "ml", "piece"))) &&
         when (rule) {
             ShoppingItemRuleDto.EXACT_PRODUCT -> exactSelection != null
             ShoppingItemRuleDto.PRODUCT_FAMILY -> familySelection != null
@@ -467,7 +480,7 @@ private fun ItemEditorDialog(
                     OutlinedTextField(
                         value = quantity,
                         onValueChange = { quantity = it },
-                        label = { Text("Količina") },
+                        label = { Text(if (isAmountMode) "Broj ovih količina" else "Broj pakovanja / komada") },
                         keyboardOptions = KeyboardOptions(
                             keyboardType = KeyboardType.Decimal
                         ),
@@ -520,6 +533,30 @@ private fun ItemEditorDialog(
                     }
                 }
                 if (rule == ShoppingItemRuleDto.FLEXIBLE_CATEGORY) {
+                    item {
+                        Column {
+                            Text("Koliko ti ukupno treba?", style = MaterialTheme.typography.titleSmall)
+                            suggestedAmount(category)?.let { suggestion ->
+                                TextButton(onClick = {
+                                    targetQuantity = formatQuantity(suggestion.value)
+                                    baseUnit = suggestion.unit
+                                    quantity = "1"
+                                }) { Text("Predlog: " + amountLabel(suggestion.value, suggestion.unit)) }
+                            }
+                            OutlinedTextField(
+                                value = targetQuantity, onValueChange = { targetQuantity = it },
+                                label = { Text("Ukupno u g, ml ili kom (opciono)") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Text("Primer: 1000 g = 1 kg. Bez unosa kupuješ broj pakovanja iznad. " +
+                                "Za ukupnu količinu biramo cela pakovanja, do 25% viška; g i ml ne izjednačavamo.",
+                                style = MaterialTheme.typography.bodySmall)
+                            if (isAmountMode) TextButton(onClick = { targetQuantity = "" }) {
+                                Text("Koristi samo broj pakovanja")
+                            }
+                        }
+                    }
                     item {
                         OutlinedTextField(
                             value = category,
@@ -614,6 +651,7 @@ private fun ItemEditorDialog(
                                     rule ==
                                         ShoppingItemRuleDto.FLEXIBLE_CATEGORY
                                 },
+                            targetQuantity = parsedTarget?.takeIf { rule == ShoppingItemRuleDto.FLEXIBLE_CATEGORY },
                             requiredBaseUnit = baseUnit.takeIf {
                                 rule == ShoppingItemRuleDto.FLEXIBLE_CATEGORY
                             }
