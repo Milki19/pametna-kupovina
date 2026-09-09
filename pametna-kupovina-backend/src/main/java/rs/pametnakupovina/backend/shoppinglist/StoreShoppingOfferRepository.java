@@ -47,7 +47,11 @@ public class StoreShoppingOfferRepository {
                     resultSet.getBigDecimal("discounted_price"),
                     resultSet.getBigDecimal("effective_price"),
                     resultSet.getBigDecimal("line_total"),
-                    resultSet.getString("price_scope")
+                    resultSet.getString("price_scope"),
+                    new PurchaseQuantity(resultSet.getBigDecimal("packages"),
+                            resultSet.getBigDecimal("package_size"), resultSet.getString("package_unit"),
+                            resultSet.getBigDecimal("target_amount"), resultSet.getBigDecimal("supplied_amount"),
+                            resultSet.getBigDecimal("extra_amount"), resultSet.getBigDecimal("unit_price"))
             );
 
     private final JdbcClient jdbcClient;
@@ -91,10 +95,16 @@ public class StoreShoppingOfferRepository {
                                offer.discounted_price,
                                offer.effective_price,
                                ROUND(
-                                   offer.effective_price * item.quantity,
+                                   offer.effective_price * offer.packages,
                                    2
                                ) AS line_total,
-                               offer.price_scope
+                               offer.price_scope,
+                               offer.packages, offer.package_size, offer.package_unit,
+                               item.target_quantity * item.quantity AS target_amount,
+                               offer.packages * offer.package_size AS supplied_amount,
+                               offer.packages * offer.package_size - item.target_quantity * item.quantity AS extra_amount,
+                               ROUND(offer.effective_price / NULLIF(offer.package_size, 0) *
+                                   CASE WHEN offer.package_unit IN ('g','ml') THEN 1000 ELSE 1 END, 2) AS unit_price
                         FROM app.store AS store
                         JOIN app.retailer AS retailer
                           ON retailer.id = store.retailer_id
@@ -113,8 +123,12 @@ public class StoreShoppingOfferRepository {
                             SELECT intent.id AS shopping_intent_id,
                                    intent.default_min_package_quantity,
                                    intent.default_max_package_quantity,
-                                   intent.default_base_unit
+                                   intent.default_base_unit,
+                                   alias.required_name_pattern
                             FROM app.shopping_intent AS intent
+                            LEFT JOIN app.shopping_intent_alias AS alias
+                              ON alias.shopping_intent_id = intent.id
+                             AND alias.normalized_alias = item.flexible_category_normalized
                             WHERE item.matching_rule =
                                   'FLEXIBLE_CATEGORY'
                               AND intent.id = item.shopping_intent_id
@@ -133,11 +147,22 @@ public class StoreShoppingOfferRepository {
                                    selected_price.regular_price,
                                    selected_price.discounted_price,
                                    selected_price.effective_price,
-                                   selected_price.price_scope
+                                   selected_price.price_scope,
+                                   pack.size AS package_size, pack.unit AS package_unit,
+                                   need.packages
                             FROM app.retailer_product AS product
                             LEFT JOIN app.canonical_product AS canonical
                               ON canonical.id =
                                   product.canonical_product_id
+                            CROSS JOIN LATERAL (
+                                SELECT product.quantity_value AS size,
+                                       product.base_unit AS unit
+                            ) pack
+                            CROSS JOIN LATERAL (
+                                SELECT CASE WHEN item.target_quantity IS NULL THEN item.quantity
+                                    ELSE CEIL(item.target_quantity * item.quantity / NULLIF(pack.size, 0))
+                                END AS packages
+                            ) need
                             JOIN LATERAL (
                                 SELECT priced.price_date,
                                        priced.regular_price,
@@ -360,6 +385,10 @@ public class StoreShoppingOfferRepository {
                                 LIMIT 1
                             ) AS selected_price ON TRUE
                             WHERE product.retailer_id = store.retailer_id
+                              AND (item.target_quantity IS NULL OR (
+                                  pack.size > 0 AND pack.unit = item.required_base_unit
+                                  AND need.packages * pack.size <= item.target_quantity * item.quantity * 1.25
+                              ))
                               AND (
                                   (
                                       item.matching_rule = 'EXACT_PRODUCT'
@@ -432,6 +461,9 @@ public class StoreShoppingOfferRepository {
                               AND (
                                   item.matching_rule <> 'FLEXIBLE_CATEGORY'
                                   OR (
+                                      (requested_intent.required_name_pattern IS NULL
+                                       OR product.normalized_name ~ requested_intent.required_name_pattern)
+                                      AND
                                       (
                                           item.required_brand IS NULL
                                           OR LOWER(BTRIM(COALESCE(
@@ -444,24 +476,15 @@ public class StoreShoppingOfferRepository {
                                       )
                                       AND (
                                           item.required_base_unit IS NULL
-                                          OR COALESCE(
-                                              canonical.base_unit,
-                                              product.base_unit
-                                          ) = item.required_base_unit
+                                          OR pack.unit = item.required_base_unit
                                       )
                                       AND (
                                           item.min_package_quantity IS NULL
-                                          OR COALESCE(
-                                              canonical.quantity_value,
-                                              product.quantity_value
-                                          ) >= item.min_package_quantity
+                                          OR pack.size >= item.min_package_quantity
                                       )
                                       AND (
                                           item.max_package_quantity IS NULL
-                                          OR COALESCE(
-                                              canonical.quantity_value,
-                                              product.quantity_value
-                                          ) <= item.max_package_quantity
+                                          OR pack.size <= item.max_package_quantity
                                       )
                                   )
                               )
@@ -487,7 +510,8 @@ public class StoreShoppingOfferRepository {
                                          ), 32767)
                                          ELSE 0
                                      END ASC,
-                                     selected_price.effective_price ASC,
+                                     selected_price.effective_price * need.packages ASC,
+                                     need.packages * pack.size ASC NULLS LAST,
                                      product.id ASC
                             LIMIT 1
                         ) AS offer ON TRUE

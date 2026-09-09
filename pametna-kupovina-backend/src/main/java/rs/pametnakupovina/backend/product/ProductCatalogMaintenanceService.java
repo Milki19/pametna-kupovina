@@ -564,7 +564,7 @@ public class ProductCatalogMaintenanceService {
                     WHERE candidate.retailer_product_id = product.id
                       AND product.retailer_id = ?
                       AND candidate.status = 'PENDING'
-                      AND candidate.algorithm_version = 'taxonomy-v2'
+                      AND candidate.algorithm_version IN ('taxonomy-v2', 'taxonomy-v3')
                     """)
                 .param(1, retailerId)
                 .update();
@@ -672,7 +672,7 @@ public class ProductCatalogMaintenanceService {
                       ON type.id = type_assignment.product_type_id
                      AND type.code IN (
                          'MILK', 'SOUR_MILK', 'FLAVORED_MILK',
-                         'YOGURT', 'CHEESE', 'BUTTER', 'CREAM'
+                         'YOGURT', 'FRUIT_YOGURT', 'KEFIR', 'AYRAN', 'CHEESE', 'BUTTER', 'CREAM'
                      )
                     JOIN app.product_attribute_definition AS definition
                       ON definition.code = 'FAT_PERCENT'
@@ -680,12 +680,12 @@ public class ProductCatalogMaintenanceService {
                         SELECT REPLACE(match[1], ',', '.')::NUMERIC
                                    AS value
                         FROM REGEXP_MATCH(
-                            product.normalized_name,
+                            product.name,
                             '([0-9]+([.,][0-9]+)?) ?%'
                         ) AS match
                     ) AS parsed
                     WHERE product.retailer_id = ?
-                      AND parsed.value > 0
+                      AND parsed.value >= 0
                       AND parsed.value <= 100
                     ON CONFLICT (
                         retailer_product_id,

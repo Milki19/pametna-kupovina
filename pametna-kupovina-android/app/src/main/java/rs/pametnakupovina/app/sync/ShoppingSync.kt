@@ -15,6 +15,8 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 import rs.pametnakupovina.app.data.ShoppingRepository
+import rs.pametnakupovina.app.data.ItemSyncValidationException
+import kotlinx.coroutines.CancellationException
 
 @HiltWorker
 class ShoppingSyncWorker @AssistedInject constructor(
@@ -26,6 +28,11 @@ class ShoppingSyncWorker @AssistedInject constructor(
     override suspend fun doWork(): Result = try {
         repository.synchronizePending()
         Result.success()
+    } catch (error: CancellationException) {
+        throw error
+    } catch (_: ItemSyncValidationException) {
+        // The next user edit queues another attempt; unchanged invalid input cannot recover.
+        Result.failure()
     } catch (_: Exception) {
         Result.retry()
     }

@@ -201,7 +201,8 @@ public class ShoppingListService {
                 flexible.requiredBrand(),
                 flexible.minPackageQuantity(),
                 flexible.maxPackageQuantity(),
-                flexible.requiredBaseUnit()
+                flexible.requiredBaseUnit(),
+                flexible.targetQuantity()
         );
 
         repository.touch(listId);
@@ -410,7 +411,8 @@ public class ShoppingListService {
                         flexible.requiredBrand(),
                         flexible.minPackageQuantity(),
                         flexible.maxPackageQuantity(),
-                        flexible.requiredBaseUnit()
+                        flexible.requiredBaseUnit(),
+                flexible.targetQuantity()
                 ).orElseThrow(() ->
                         new ResponseStatusException(
                                 HttpStatus.NOT_FOUND,
@@ -563,6 +565,20 @@ public class ShoppingListService {
         ShoppingIntentResolver.ResolvedShoppingIntent resolvedIntent =
                 shoppingIntentResolver.resolve(category).orElse(null);
 
+        rs.pametnakupovina.backend.matching.ParsedQuantity inlineAmount = null;
+        if (resolvedIntent != null && !resolvedIntent.exactAlias()) {
+            String remainder = normalizedCategory.replaceFirst(
+                    java.util.regex.Pattern.quote(resolvedIntent.normalizedAlias()), "").trim();
+            if (remainder.matches("[0-9]+(?: [0-9]+)? (g|gr|kg|ml|l|kom|komada)")) {
+                inlineAmount = new rs.pametnakupovina.backend.matching.ProductQuantityParser()
+                        .parse(category).orElse(null);
+            }
+            if (inlineAmount == null) {
+                throw badRequest("Dodatni opis kategorije nije podržan: izaberi tačan proizvod "
+                        + "ili opštu kategoriju, pa posebno zadaj brend i količinu.");
+            }
+        }
+
         if (resolvedIntent != null) {
             normalizedCategory = resolvedIntent.normalizedAlias();
         }
@@ -612,6 +628,9 @@ public class ShoppingListService {
                         ? null
                         : constraints.requiredBaseUnit()
         );
+        if (requiredBaseUnit == null && inlineAmount != null) {
+            requiredBaseUnit = inlineAmount.unit().databaseValue();
+        }
 
         if (requiredBaseUnit != null) {
             requiredBaseUnit = requiredBaseUnit.toLowerCase(
@@ -625,6 +644,19 @@ public class ShoppingListService {
             }
         }
 
+        BigDecimal targetQuantity = constraints == null ? null : constraints.targetQuantity();
+        if (inlineAmount != null) {
+            if ((targetQuantity != null && targetQuantity.compareTo(inlineAmount.value()) != 0)
+                    || !requiredBaseUnit.equals(inlineAmount.unit().databaseValue())) {
+                throw badRequest("Količina u nazivu i zadato ograničenje se razlikuju.");
+            }
+            targetQuantity = inlineAmount.value();
+        }
+        validatePackageQuantity(targetQuantity, "Tražena ukupna količina");
+        if (targetQuantity != null && requiredBaseUnit == null) {
+            throw badRequest("Ukupna količina zahteva jedinicu g, ml ili piece");
+        }
+
         return new ValidatedFlexibleConstraints(
                 category,
                 normalizedCategory,
@@ -634,7 +666,8 @@ public class ShoppingListService {
                 requiredBrand,
                 minPackageQuantity,
                 maxPackageQuantity,
-                requiredBaseUnit
+                requiredBaseUnit,
+                targetQuantity
         );
     }
 
@@ -648,6 +681,7 @@ public class ShoppingListService {
                         || constraints.minPackageQuantity() != null
                         || constraints.maxPackageQuantity() != null
                         || constraints.requiredBaseUnit() != null
+                        || constraints.targetQuantity() != null
         );
     }
 
@@ -809,17 +843,12 @@ public class ShoppingListService {
             String requiredBrand,
             BigDecimal minPackageQuantity,
             BigDecimal maxPackageQuantity,
-            String requiredBaseUnit
+            String requiredBaseUnit,
+            BigDecimal targetQuantity
     ) {
         private static ValidatedFlexibleConstraints empty() {
             return new ValidatedFlexibleConstraints(
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    null
+                    null, null, null, null, null, null, null, null
             );
         }
     }

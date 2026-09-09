@@ -45,7 +45,8 @@ public class ShoppingListRepository {
                         resultSet.getBigDecimal(
                                 "max_package_quantity"
                         ),
-                        resultSet.getString("required_base_unit")
+                        resultSet.getString("required_base_unit"),
+                        resultSet.getBigDecimal("target_quantity")
                 )
                         : null;
 
@@ -232,7 +233,7 @@ public class ShoppingListRepository {
                                        required_brand,
                                        min_package_quantity,
                                        max_package_quantity,
-                                       required_base_unit,
+                                       required_base_unit, target_quantity,
                                        created_at,
                                        updated_at
                                 FROM app.shopping_list_item
@@ -314,6 +315,27 @@ public class ShoppingListRepository {
             java.math.BigDecimal maxPackageQuantity,
             String requiredBaseUnit
     ) {
+        return addItem(listId, name, rawInput, barcode, selectedCanonicalProductId, selectedProductFamilyId, quantity, matchingRule, flexibleCategory, flexibleCategoryNormalized, shoppingIntentId, requiredBrand, minPackageQuantity, maxPackageQuantity, requiredBaseUnit, null);
+    }
+
+    public ShoppingListItemResponse addItem(
+            Long listId,
+            String name,
+            String rawInput,
+            String barcode,
+            Long selectedCanonicalProductId,
+            Long selectedProductFamilyId,
+            java.math.BigDecimal quantity,
+            ShoppingItemRule matchingRule,
+            String flexibleCategory,
+            String flexibleCategoryNormalized,
+            Long shoppingIntentId,
+            String requiredBrand,
+            java.math.BigDecimal minPackageQuantity,
+            java.math.BigDecimal maxPackageQuantity,
+            String requiredBaseUnit,
+            java.math.BigDecimal targetQuantity
+    ) {
         Long matchedCanonicalProductId =
                 matchingRule == ShoppingItemRule.EXACT_PRODUCT
                         && selectedCanonicalProductId != null
@@ -351,9 +373,9 @@ public class ShoppingListRepository {
                             required_brand,
                             min_package_quantity,
                             max_package_quantity,
-                            required_base_unit
+                            required_base_unit, target_quantity
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         RETURNING id,
                                   name,
                                   raw_input,
@@ -370,7 +392,7 @@ public class ShoppingListRepository {
                                   required_brand,
                                   min_package_quantity,
                                   max_package_quantity,
-                                  required_base_unit,
+                                  required_base_unit, target_quantity,
                                   created_at,
                                   updated_at
                         """)
@@ -398,6 +420,7 @@ public class ShoppingListRepository {
                 .param(14, minPackageQuantity, Types.NUMERIC)
                 .param(15, maxPackageQuantity, Types.NUMERIC)
                 .param(16, requiredBaseUnit, Types.VARCHAR)
+                .param(17, targetQuantity, Types.NUMERIC)
                 .query(ITEM_ROW_MAPPER)
                 .single();
     }
@@ -463,6 +486,28 @@ public class ShoppingListRepository {
             java.math.BigDecimal maxPackageQuantity,
             String requiredBaseUnit
     ) {
+        return updateItem(listId, itemId, name, rawInput, barcode, selectedCanonicalProductId, selectedProductFamilyId, quantity, matchingRule, flexibleCategory, flexibleCategoryNormalized, shoppingIntentId, requiredBrand, minPackageQuantity, maxPackageQuantity, requiredBaseUnit, null);
+    }
+
+    public Optional<ShoppingListItemResponse> updateItem(
+            Long listId,
+            Long itemId,
+            String name,
+            String rawInput,
+            String barcode,
+            Long selectedCanonicalProductId,
+            Long selectedProductFamilyId,
+            java.math.BigDecimal quantity,
+            ShoppingItemRule matchingRule,
+            String flexibleCategory,
+            String flexibleCategoryNormalized,
+            Long shoppingIntentId,
+            String requiredBrand,
+            java.math.BigDecimal minPackageQuantity,
+            java.math.BigDecimal maxPackageQuantity,
+            String requiredBaseUnit,
+            java.math.BigDecimal targetQuantity
+    ) {
         Long matchedCanonicalProductId =
                 matchingRule == ShoppingItemRule.EXACT_PRODUCT
                         && selectedCanonicalProductId != null
@@ -503,6 +548,7 @@ public class ShoppingListRepository {
                         min_package_quantity = ?,
                         max_package_quantity = ?,
                         required_base_unit = ?,
+                        target_quantity = ?,
                         updated_at = NOW()
                     WHERE id = ?
                       AND shopping_list_id = ?
@@ -522,7 +568,7 @@ public class ShoppingListRepository {
                               required_brand,
                               min_package_quantity,
                               max_package_quantity,
-                              required_base_unit,
+                              required_base_unit, target_quantity,
                               created_at,
                               updated_at
                     """)
@@ -549,8 +595,9 @@ public class ShoppingListRepository {
                 .param(13, minPackageQuantity, Types.NUMERIC)
                 .param(14, maxPackageQuantity, Types.NUMERIC)
                 .param(15, requiredBaseUnit, Types.VARCHAR)
-                .param(16, itemId)
-                .param(17, listId)
+                .param(16, targetQuantity, Types.NUMERIC)
+                .param(17, itemId)
+                .param(18, listId)
                 .query(ITEM_ROW_MAPPER)
                 .optional();
     }
@@ -576,7 +623,7 @@ public class ShoppingListRepository {
                                required_brand,
                                min_package_quantity,
                                max_package_quantity,
-                               required_base_unit,
+                               required_base_unit, target_quantity,
                                created_at,
                                updated_at
                         FROM app.shopping_list_item
@@ -624,7 +671,7 @@ public class ShoppingListRepository {
                                   required_brand,
                                   min_package_quantity,
                                   max_package_quantity,
-                                  required_base_unit,
+                                  required_base_unit, target_quantity,
                                   created_at,
                                   updated_at
                         """)

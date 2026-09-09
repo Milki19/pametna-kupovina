@@ -29,7 +29,7 @@ class RecommendationNavigationInstrumentedTest {
             }
         }
 
-        composeRule.onNodeWithText("Navigacija kroz 2 prodavnice")
+        composeRule.onNodeWithText("Pregled rute kroz 2 prodavnice")
             .assertIsDisplayed()
         composeRule.onNodeWithTag("open-google-maps")
             .assertIsDisplayed()

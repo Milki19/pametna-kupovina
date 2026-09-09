@@ -41,6 +41,9 @@ import rs.pametnakupovina.app.navigation.NavigationPoint
 import rs.pametnakupovina.app.navigation.googleMapsDirectionsUrl
 import rs.pametnakupovina.app.navigation.launchGoogleMapsDirections
 import rs.pametnakupovina.app.ui.RecommendationViewModel
+import rs.pametnakupovina.app.ui.PurchaseViewModel
+import rs.pametnakupovina.app.data.network.PurchaseQuantityDto
+import rs.pametnakupovina.app.data.amountLabel
 import rs.pametnakupovina.app.ui.components.ErrorState
 import rs.pametnakupovina.app.ui.components.LoadingState
 
@@ -50,9 +53,20 @@ fun RecommendationScreen(
     listId: Long,
     location: Pair<Double, Double>?,
     onBack: () -> Unit,
+    onOpenPurchase: (String) -> Unit = {},
+    purchaseViewModel: PurchaseViewModel = hiltViewModel(),
     viewModel: RecommendationViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val createdId by purchaseViewModel.createdId.collectAsStateWithLifecycle()
+    val saving by purchaseViewModel.saving.collectAsStateWithLifecycle()
+    val saveError by purchaseViewModel.message.collectAsStateWithLifecycle()
+    LaunchedEffect(createdId) {
+        createdId?.let { id ->
+            onOpenPurchase(id)
+            purchaseViewModel.consumeNavigation()
+        }
+    }
 
     LaunchedEffect(listId, location) {
         location?.let { (latitude, longitude) ->
@@ -96,7 +110,9 @@ fun RecommendationScreen(
                 )
                 state.result != null -> RecommendationContent(
                     result = requireNotNull(state.result),
-                    origin = requireNotNull(location)
+                    origin = requireNotNull(location),
+                    saving = saving, saveError = saveError,
+                    onStart = { purchaseViewModel.start(requireNotNull(state.result), it) }
                 )
             }
         }
@@ -106,7 +122,10 @@ fun RecommendationScreen(
 @Composable
 private fun RecommendationContent(
     result: ShoppingRecommendationDto,
-    origin: Pair<Double, Double>
+    origin: Pair<Double, Double>,
+    saving: Boolean,
+    saveError: String?,
+    onStart: (OptimizationScenarioDto) -> Unit
 ) {
     val context = LocalContext.current
     var selectedTypeName by rememberSaveable {
@@ -159,6 +178,17 @@ private fun RecommendationContent(
                     "neupareno ${selected.unmatchedItems}.",
                 style = MaterialTheme.typography.bodyMedium
             )
+        }
+
+        saveError?.let { item { Text(it, color = MaterialTheme.colorScheme.error) } }
+        if (selected.available) item {
+            Button(onClick = { onStart(selected) }, enabled = !saving,
+                modifier = Modifier.fillMaxWidth()) {
+                Text(if (saving) "Čuvam plan…" else "Započni kupovinu")
+            }
+            Text("Čuva izabrani plan za čekiranje bez mreže. Originalni spisak se ne menja.")
+            if (!selected.complete) Text("Ovaj plan je nepotpun; stavke bez ponude ostaju vidljive.",
+                color = MaterialTheme.colorScheme.error)
         }
 
         if (!selected.available) {
@@ -274,9 +304,9 @@ internal fun RouteNavigationCard(
             )
             Text(
                 if (stopCount == 1) {
-                    "Google Maps će te voditi do prodavnice iz izabranog plana."
+                    "Google Maps otvara pregled puta. Ti zatim biraš početak navigacije."
                 } else {
-                    "Google Maps će otvoriti svih $stopCount stajanja redom iz plana."
+                    "Google Maps otvara pregled $stopCount stajanja redom iz plana. Ti pokrećeš navigaciju."
                 }
             )
             Button(
@@ -287,9 +317,9 @@ internal fun RouteNavigationCard(
             ) {
                 Text(
                     if (stopCount == 1) {
-                        "Navigacija do prodavnice"
+                        "Pregled puta do prodavnice"
                     } else {
-                        "Navigacija kroz $stopCount prodavnice"
+                        "Pregled rute kroz $stopCount prodavnice"
                     }
                 )
             }
@@ -327,25 +357,25 @@ private fun ScenarioSummaryCard(
                 Text(
                     "Pokriveno: ${scenario.coveredItems}/${scenario.items.size} stavki"
                 )
-                Text("Cena korpe: ${money(scenario.basketCost)}")
+                Text("Cena korpe: ${purchaseMoney(scenario.basketCost)}")
                 Text(
                     "Put: ${distance(scenario.routeDistanceKm)} • " +
                         "${duration(scenario.routeDurationSeconds)}"
                 )
                 Text("Broj stajanja: ${scenario.stopCount}")
                 Text(
-                    "Ukupno: ${scenario.totalCost?.let(::money) ?: "—"}",
+                    "Sa putom, vremenom i stajanjima: ${scenario.totalCost?.let(::purchaseMoney) ?: "—"}",
                     style = MaterialTheme.typography.titleMedium
                 )
                 scenario.savingsComparedWithSingleStore?.let { savings ->
                     if (savings >= 0.0) {
                         Text(
-                            "Ušteda prema jednoj prodavnici: ${money(savings)}"
+                            "Ušteda prema jednoj prodavnici: ${purchaseMoney(savings)}"
                         )
                     } else {
                         Text(
                             "Dodatni ukupan trošak prema jednoj prodavnici: " +
-                                money(-savings)
+                                purchaseMoney(-savings)
                         )
                     }
                 }
@@ -411,11 +441,14 @@ private fun StoreAllocationCard(
                                 ?.let {
                                 Text(it, style = MaterialTheme.typography.bodySmall)
                             }
+                            item.purchaseQuantity?.let {
+                                Text(purchaseQuantityDescription(it), style = MaterialTheme.typography.bodySmall)
+                            }
                             itemPriceBreakdown(item)?.let {
                                 Text(it, style = MaterialTheme.typography.bodySmall)
                             }
                         }
-                        Text(item.lineTotal?.let(::money) ?: "—")
+                        Text(item.lineTotal?.let(::purchaseMoney) ?: "—")
                     }
                 }
             }
@@ -473,31 +506,44 @@ private fun AssumptionsCard(result: ShoppingRecommendationDto) {
             Text(
                 "Sveže cene imaju prednost do ${assumptions.maxPriceAgeDays} dana"
             )
-            Text("Trošak po km: ${money(assumptions.costPerKm)}")
-            Text("Vrednost vremena: ${money(assumptions.valuePerHour)} / h")
-            Text("Trošak stajanja: ${money(assumptions.costPerStop)}")
+            Text("Trošak po km: ${purchaseMoney(assumptions.costPerKm)}")
+            Text("Vrednost vremena: ${purchaseMoney(assumptions.valuePerHour)} / h")
+            Text("Trošak stajanja: ${purchaseMoney(assumptions.costPerStop)}")
             Text("Razmotreno objekata: ${result.candidateStoreCount}")
         }
     }
 }
 
-private fun scenarioTitle(type: RecommendationScenarioTypeDto): String = when (type) {
+internal fun scenarioTitle(type: RecommendationScenarioTypeDto): String = when (type) {
     RecommendationScenarioTypeDto.SINGLE_STORE -> "Jedna prodavnica"
     RecommendationScenarioTypeDto.RECOMMENDED_BALANCE -> "Preporučeni balans"
     RecommendationScenarioTypeDto.LOWEST_PRICE -> "Najniža cena"
 }
 
-private fun money(value: Double): String =
+internal fun purchaseMoney(value: Double): String =
     BigDecimal.valueOf(value)
         .setScale(2, RoundingMode.HALF_UP)
         .toPlainString() + " RSD"
 
 internal fun itemPriceBreakdown(item: RecommendationItemDto): String? {
     val unitPrice = item.effectivePrice ?: return null
-    val quantity = BigDecimal.valueOf(item.requestedQuantity)
+    val quantity = BigDecimal.valueOf(item.purchaseQuantity?.packages ?: item.requestedQuantity)
         .stripTrailingZeros()
         .toPlainString()
-    return "$quantity × ${money(unitPrice)}"
+    return "$quantity × ${purchaseMoney(unitPrice)}"
+}
+
+internal fun purchaseQuantityDescription(q: PurchaseQuantityDto): String {
+    if (q.packageSize == null || q.baseUnit == null) return "Veličina pakovanja nije poznata."
+    return buildString {
+        append("Pakovanje: " + amountLabel(q.packageSize, q.baseUnit))
+        q.targetAmount?.let { append(" • traženo: " + amountLabel(it, q.baseUnit)) }
+        q.suppliedAmount?.let { append(" • dobijaš: " + amountLabel(it, q.baseUnit)) }
+        q.extraAmount?.takeIf { it > 0 }?.let { append(" • višak: " + amountLabel(it, q.baseUnit)) }
+        q.unitPrice?.let {
+            append(" • " + purchaseMoney(it) + "/" + when(q.baseUnit) { "g" -> "kg"; "ml" -> "l"; else -> "kom" })
+        }
+    }
 }
 
 private fun distance(value: Double): String =

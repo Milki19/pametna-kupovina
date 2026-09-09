@@ -606,6 +606,10 @@ public class ShoppingRecommendationService {
                         + "ali je dostupna u drugom razmatranom scenariju."
                         : "Nema važeće cene ni u jednoj razmatranoj "
                         + "obližnjoj prodavnici za traženi datum.";
+                if (item.flexibleConstraints() != null && item.flexibleConstraints().targetQuantity() != null) {
+                    explanation += " Potrebno je poznato pakovanje u traženoj jedinici, sa najviše 25% viška. "
+                            + "Proveri količinu, jedinicu ili ograničenja pakovanja; odsustvo ponude ne znači da nema zaliha.";
+                }
                 unavailableItems++;
             }
 
@@ -729,7 +733,8 @@ public class ShoppingRecommendationService {
                 offer.lineTotal(),
                 offer.priceScope(),
                 "Važeća cena je izabrana po scope prioritetu "
-                        + "objekat, format, pa lanac."
+                        + "objekat, format, pa lanac.",
+                offer.purchaseQuantity()
         );
     }
 
