@@ -20,13 +20,24 @@ class PurchaseRepository @Inject constructor(
     private val dao get() = database.purchaseSessionDao()
     val sessions get() = dao.observeAll()
     fun observe(id: String) = dao.observe(id).map { it?.let(::decode) }
+    fun observeActive(listId: Long) = dao.observeActive().map { rows ->
+        rows.asSequence().map(::decode).firstOrNull { it.snapshot.listId == listId }
+    }
 
-    suspend fun start(result: ShoppingRecommendationDto, scenario: OptimizationScenarioDto): String {
+    suspend fun start(result: ShoppingRecommendationDto, scenario: OptimizationScenarioDto,
+        createNew: Boolean = false): String = database.withTransaction {
         require(scenario.available && scenario.items.isNotEmpty()) { "Plan još nije dostupan." }
         require(scenario in listOf(result.singleStore, result.recommendedBalance, result.lowestPrice)) {
             "Plan ne pripada ovom računanju."
         }
         require(scenario.items.map { it.itemId }.distinct().size == scenario.items.size)
+        // Repeated taps/reopening recommendations must not reset a shopping session.
+        // Starting another session is an explicit UI choice; its old snapshot stays intact.
+        if (!createNew) {
+            dao.getActive().asSequence().map(::decode)
+                .firstOrNull { it.snapshot.listId == result.listId }
+                ?.let { return@withTransaction it.id }
+        }
         val id = UUID.randomUUID().toString()
         // Store public shop coordinates, never the user's origin.
         val snapshot = PurchaseSnapshot(listId = result.listId, listName = result.listName,
@@ -34,7 +45,7 @@ class PurchaseRepository @Inject constructor(
         dao.insert(PurchaseSessionEntity(id, System.currentTimeMillis(),
             listName = result.listName, itemCount = scenario.items.size,
             snapshotJson = json.encodeToString(snapshot)))
-        return id
+        id
     }
 
     suspend fun update(id: String, itemId: Long, update: (PurchaseItemProgress) -> PurchaseItemProgress) {

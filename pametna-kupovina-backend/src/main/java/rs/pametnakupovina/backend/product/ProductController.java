@@ -111,10 +111,11 @@ public class ProductController {
             @RequestParam(
                     name = "limit",
                     defaultValue = "20"
-            ) int limit
+            ) int limit,
+            @RequestParam(name = "includeWithoutPrice", defaultValue = "false") boolean includeWithoutPrice
     ) {
         try {
-            return canonicalSearchService.search(query, page, limit);
+            return canonicalSearchService.search(query, page, limit, includeWithoutPrice);
         } catch (IllegalArgumentException exception) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,

@@ -136,7 +136,9 @@ data class CanonicalProductSearchItemDto(
     val categoryName: String? = null,
     val variantCount: Int = 1,
     val availability: List<ProductRetailerAvailabilityDto> = emptyList(),
-    val score: Double
+    val score: Double,
+    val hasUsablePrice: Boolean = false,
+    val knownRetailers: List<String> = emptyList()
 )
 
 @Serializable

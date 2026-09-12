@@ -126,11 +126,13 @@ class ShoppingRepository @Inject constructor(
     suspend fun searchProducts(
         query: String,
         page: Int = 0,
-        limit: Int = 10
+        limit: Int = 10,
+        includeWithoutPrice: Boolean = false
     ): CanonicalProductSearchPageDto = api.searchProducts(
         query = query.trim(),
         page = page,
-        limit = limit
+        limit = limit,
+        includeWithoutPrice = includeWithoutPrice
     )
 
     suspend fun getProductDetails(
@@ -146,6 +148,20 @@ class ShoppingRepository @Inject constructor(
     suspend fun addItem(input: DraftItemInput) {
         val value = input.validated()
         dao.insert(value.toEntity())
+    }
+
+    suspend fun alternativeQuery(itemId: Long): String {
+        val item = requireNotNull(dao.findByRemoteId(itemId)) { "Stavka nije u aktivnom spisku." }
+        return item.rawInput?.takeIf { it.isNotBlank() } ?: item.name
+    }
+
+    suspend fun replaceWithAlternative(itemId: Long, product: rs.pametnakupovina.app.data.network.CanonicalProductSearchItemDto, packages: Double) {
+        val item = requireNotNull(dao.findByRemoteId(itemId)) { "Stavka nije u aktivnom spisku." }
+        require(item.syncState != SyncState.PENDING_DELETE.name) { "Stavka je obrisana." }
+        require(product.hasUsablePrice) { "Izabrani proizvod nema aktuelnu cenu." }
+        updateItem(item, DraftItemInput(name=product.name,rawInput=item.rawInput,
+            productFamilyId=requireNotNull(product.productFamilyId),quantity=packages,
+            matchingRule=ShoppingItemRuleDto.PRODUCT_FAMILY))
     }
 
     suspend fun pasteItems(text: String): Int {

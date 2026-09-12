@@ -93,9 +93,10 @@ import java.util.concurrent.Executors;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-@SpringBootTest(properties =
-        "price-import.http.request-timeout-seconds=1"
-)
+@SpringBootTest(properties = {
+        "price-import.http.request-timeout-seconds=1",
+        "price-import.minimum-snapshot-date="
+})
 @Testcontainers
 class PametnaKupovinaBackendApplicationTests {
 
@@ -252,10 +253,87 @@ class PametnaKupovinaBackendApplicationTests {
     @Autowired
     private JdbcClient jdbcClient;
 
+    @Autowired
+    private javax.sql.DataSource testDataSource;
+
+    @Test
+    void dailyRefreshPersistsFiveOutcomesAndDoesNotCountRepeatedRunsAsDays() {
+        var importer = org.mockito.Mockito.mock(PriceImportService.class);
+        var maxi = org.mockito.Mockito.mock(rs.pametnakupovina.backend.priceimport.maxi.MaxiPriceImportCoordinator.class);
+        var today = LocalDate.now(java.time.ZoneId.of("Europe/Belgrade"));
+        var result = new ImportResult(1L,today,2,2,2,0,"SUCCEEDED");
+        org.mockito.Mockito.when(importer.importPrices(org.mockito.ArgumentMatchers.anyString())).thenReturn(result);
+        var stores = java.util.stream.IntStream.range(0,6).mapToObj(i ->
+                new rs.pametnakupovina.backend.priceimport.maxi.MaxiStoreImportResult("store"+i,"test",result,null)).toList();
+        org.mockito.Mockito.when(maxi.importLatest()).thenReturn(
+                new rs.pametnakupovina.backend.priceimport.maxi.MaxiLatestImportResult(today,6,6,"SUCCEEDED",stores));
+        var service = new rs.pametnakupovina.backend.priceimport.DailyPriceRefreshService(
+                new org.springframework.jdbc.core.JdbcTemplate(testDataSource),testDataSource,importer,maxi);
+        assertThat(service.refresh(true).get("status")).isEqualTo("SUCCEEDED");
+        assertThat(service.refresh(true).get("status")).isEqualTo("SUCCEEDED");
+        assertThat(service.refresh(false).get("status")).isEqualTo("NOT_DUE");
+        assertThat(service.status().get("consecutiveSuccessfulDays")).isEqualTo(1);
+        assertThat(jdbcClient.sql("SELECT COUNT(*) FROM app.price_refresh_result").query(Integer.class).single()).isEqualTo(10);
+        org.mockito.Mockito.when(importer.importPrices("LIDL")).thenThrow(new IllegalStateException("Test failure"));
+        assertThat(service.refresh(true).get("status")).isEqualTo("FAILED");
+        assertThat(jdbcClient.sql("SELECT COUNT(*) FROM app.price_refresh_result").query(Integer.class).single()).isEqualTo(15);
+        assertThat(jdbcClient.sql("SELECT COUNT(*) FROM app.price_refresh_cycle WHERE status='RUNNING'").query(Integer.class).single()).isZero();
+    }
+
+    @Test
+    void dailyRefreshRefusesOverlapAndRecoversInterruptedCycle() throws Exception {
+        var importer = org.mockito.Mockito.mock(PriceImportService.class);
+        var maxi = org.mockito.Mockito.mock(rs.pametnakupovina.backend.priceimport.maxi.MaxiPriceImportCoordinator.class);
+        var service = new rs.pametnakupovina.backend.priceimport.DailyPriceRefreshService(
+                new org.springframework.jdbc.core.JdbcTemplate(testDataSource),testDataSource,importer,maxi);
+        jdbcClient.sql("INSERT INTO app.price_refresh_cycle(cycle_date,status) VALUES (CURRENT_DATE,'RUNNING')").update();
+        try (var connection = testDataSource.getConnection(); var statement = connection.createStatement()) {
+            statement.execute("SELECT pg_advisory_lock(134712,1)");
+            try {
+                assertThat(service.refresh(true).get("status")).isEqualTo("ALREADY_RUNNING");
+                assertThat(jdbcClient.sql("SELECT COUNT(*) FROM app.price_refresh_cycle WHERE status='RUNNING'").query(Integer.class).single()).isEqualTo(1);
+                org.mockito.Mockito.verifyNoInteractions(importer,maxi);
+            } finally { statement.execute("SELECT pg_advisory_unlock(134712,1)"); }
+        }
+        org.mockito.Mockito.when(importer.importPrices(org.mockito.ArgumentMatchers.anyString())).thenThrow(new IllegalStateException("Test failure"));
+        org.mockito.Mockito.when(maxi.importLatest()).thenThrow(new IllegalStateException("Test failure"));
+        assertThat(service.refresh(true).get("status")).isEqualTo("FAILED");
+        assertThat(jdbcClient.sql("SELECT COUNT(*) FROM app.price_refresh_cycle WHERE status='FAILED'").query(Integer.class).single()).isEqualTo(2);
+    }
+
+    @Autowired
+    private org.springframework.transaction.PlatformTransactionManager transactionManager;
+
+    @Test
+    void sharedCatalogRefreshHoldsTransactionLockAndReleasesIt() {
+        long retailerId = jdbcClient.sql("INSERT INTO app.retailer(code,name) VALUES ('LOCK_TEST','Lock test') RETURNING id")
+                .query(Long.class).single();
+        new org.springframework.transaction.support.TransactionTemplate(transactionManager)
+                .executeWithoutResult(status -> {
+                    productCatalogMaintenanceService.refreshRetailer(retailerId);
+                    assertThat(jdbcClient.sql("""
+                            SELECT count(*) FROM pg_locks
+                            WHERE locktype='advisory' AND classid=134711 AND objid=1
+                              AND pid=pg_backend_pid() AND granted
+                            """).query(Integer.class).single()).isEqualTo(1);
+                });
+        assertThat(jdbcClient.sql("""
+                SELECT count(*) FROM pg_locks
+                WHERE locktype='advisory' AND classid=134711 AND objid=1 AND granted
+                """).query(Integer.class).single()).isZero();
+        productCatalogMaintenanceService.refreshAll();
+        assertThat(jdbcClient.sql("""
+                SELECT count(*) FROM pg_locks
+                WHERE locktype='advisory' AND classid=134711 AND objid=1 AND granted
+                """).query(Integer.class).single()).isZero();
+    }
+
     @BeforeEach
     void cleanBusinessData() {
         jdbcClient.sql("""
                         TRUNCATE TABLE
+                            app.price_refresh_result,
+                            app.price_refresh_cycle,
                             app.government_dataset_candidate,
                             app.shopping_list_item,
                             app.shopping_list,
@@ -4346,6 +4424,184 @@ class PametnaKupovinaBackendApplicationTests {
                                 "VINO CRNO 0.75L"
                         )
                 );
+    }
+
+    @Test
+    void priceAwareSearchFiltersBeforePagingAndKeepsExactBarcodeWithoutPrice() {
+        long retailer=jdbcClient.sql("INSERT INTO app.retailer(code,name) VALUES('LIDL','Lidl') RETURNING id").query(Long.class).single();
+        jdbcClient.sql("""
+                INSERT INTO app.retailer_product(retailer_id,source_product_key,name,normalized_name,brand,barcode)
+                VALUES (?,'missing','Sveze mleko 1l','sveze mleko 1 l','Pilos','4056489509400'),
+                       (?,'priced','Sveze mleko 2.8% 1l','sveze mleko 2 8 1 l','Pilos',NULL),
+                       (?,'old','Sveze mleko staro','sveze mleko staro','Pilos',NULL),
+                       (?,'future','Sveze mleko buduce','sveze mleko buduce','Pilos',NULL)
+                """).params(retailer,retailer,retailer,retailer).update();
+        insertCanonicalProduct("EAN:4056489509400", "Sveze mleko 1l", "4056489509400", 1000);
+        jdbcClient.sql("""
+                UPDATE app.canonical_product SET normalized_name='sveze mleko 1 l',brand='Pilos',base_unit='ml'
+                WHERE barcode='4056489509400'
+                """).update();
+        jdbcClient.sql("""
+                UPDATE app.retailer_product SET canonical_product_id=(
+                    SELECT id FROM app.canonical_product WHERE barcode='4056489509400')
+                WHERE retailer_id=? AND source_product_key='missing'
+                """).param(retailer).update();
+        productCatalogMaintenanceService.refreshRetailer(retailer);
+        jdbcClient.sql("""
+                INSERT INTO app.product_retailer_presence(product_family_id,retailer_id,first_seen_date,last_seen_date,
+                    latest_price_date,current_offer_count,store_count,format_count,minimum_effective_price)
+                SELECT product_family_id,retailer_id,d,d,d,1,0,1,100 FROM app.retailer_product
+                CROSS JOIN LATERAL (SELECT (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Belgrade')::date +
+                    CASE source_product_key WHEN 'old' THEN -31 WHEN 'future' THEN 1 ELSE 0 END AS d) dates
+                WHERE retailer_id=? AND source_product_key<>'missing'
+                """).param(retailer).update();
+        var filtered=canonicalProductSearchService.search("Pilos mleko",0,1,false);
+        assertThat(filtered.totalElements()).isEqualTo(1);
+        assertThat(filtered.items().getFirst().hasUsablePrice()).isTrue();
+        assertThat(filtered.items().getFirst().knownRetailers()).containsExactly("Lidl");
+        assertThat(filtered.hasNext()).isFalse();
+        var all=canonicalProductSearchService.search("Pilos mleko",0,1,true);
+        assertThat(all.totalElements()).isEqualTo(4);
+        assertThat(all.items().getFirst().hasUsablePrice()).isTrue();
+        assertThat(all.hasNext()).isTrue();
+        var barcode=canonicalProductSearchService.search("4056489509400",0,10,false);
+        assertThat(barcode.items()).hasSize(1);
+        assertThat(barcode.items().getFirst().hasUsablePrice()).isFalse();
+        assertThat(barcode.items().getFirst().knownRetailers()).containsExactly("Lidl");
+    }
+
+    @Test
+    void interruptedPriceWriteRollsBackEarlierBatchesAndCatalog() throws Exception {
+        assertFailedPromotionPreservesSnapshot(false);
+    }
+
+    @Test
+    void failedCatalogRefreshRollsBackPricesAndHistory() throws Exception {
+        assertFailedPromotionPreservesSnapshot(true);
+    }
+
+    private void assertFailedPromotionPreservesSnapshot(boolean failCatalog) throws Exception {
+        registerPriceTestRetailer("ATOMIC", "/prices.csv");
+        priceImportService.importPrices("ATOMIC");
+        String before = importBusinessFingerprint();
+        String path = "/atomic-" + java.util.UUID.randomUUID() + ".csv";
+        StringBuilder csv = new StringBuilder(NEXT_DAY_CSV_CONTENT);
+        // Failure is after a full 500-row batch, not just on the first write.
+        for (int i = 0; i < 505; i++) {
+            csv.append("MLEKO;Mleko;Atomic test ").append(i)
+                    .append(" 1l;Atomic;;l;Test format;").append(i == 504 ? "999" : "170")
+                    .append(";;03-03-2026;170;;;20\n");
+        }
+        byte[] body = csv.toString().getBytes(StandardCharsets.UTF_8);
+        csvServer.createContext(path, exchange -> {
+            exchange.sendResponseHeaders(200, body.length);
+            try (var output = exchange.getResponseBody()) { output.write(body); }
+        });
+        jdbcClient.sql("UPDATE app.retailer SET dataset_url=? WHERE code='ATOMIC'")
+                .param("http://127.0.0.1:" + csvServer.getAddress().getPort() + path).update();
+        String table = failCatalog ? "product_retailer_presence" : "current_price_offer";
+        jdbcClient.sql("""
+                CREATE FUNCTION app.atomic_test_fail() RETURNS trigger LANGUAGE plpgsql AS $$
+                BEGIN RAISE EXCEPTION 'intentional atomic promotion failure'; END $$
+                """).update();
+        jdbcClient.sql("CREATE TRIGGER atomic_test_failure BEFORE INSERT OR UPDATE ON app." + table
+                + " FOR EACH ROW " + (failCatalog ? "" : "WHEN (NEW.regular_price = 999) ")
+                + "EXECUTE FUNCTION app.atomic_test_fail()").update();
+        try {
+            assertThatThrownBy(() -> priceImportService.importPrices("ATOMIC"))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasStackTraceContaining("intentional atomic promotion failure");
+            assertThat(importBusinessFingerprint()).isEqualTo(before);
+            assertThat(jdbcClient.sql("SELECT status || ':' || rows_saved FROM app.import_run ORDER BY id DESC LIMIT 1")
+                    .query(String.class).single()).isEqualTo("FAILED:0");
+        } finally {
+            jdbcClient.sql("DROP TRIGGER atomic_test_failure ON app." + table).update();
+            jdbcClient.sql("DROP FUNCTION app.atomic_test_fail()").update();
+            csvServer.removeContext(path);
+        }
+    }
+
+    private String importBusinessFingerprint() {
+        StringBuilder fingerprint = new StringBuilder();
+        for (String table : List.of("current_price_offer", "price_observation", "retailer_product",
+                "canonical_product", "product_family", "product_family_member", "product_retailer_presence", "brand")) {
+            fingerprint.append(jdbcClient.sql("SELECT md5(COALESCE(string_agg(row_data, '' ORDER BY row_data), '')) "
+                    + "FROM (SELECT to_jsonb(t)::text row_data FROM app." + table + " t) rows")
+                    .query(String.class).single());
+        }
+        return fingerprint.toString();
+    }
+
+    @Test
+    void searchSortsSameNameFamiliesWithoutCanonicalRepresentative() {
+        jdbcClient.sql("""
+                INSERT INTO app.product_family(family_key,display_name,normalized_name)
+                VALUES('NO-CANONICAL-A','Regression mleko','regression mleko'),
+                      ('NO-CANONICAL-B','Regression mleko','regression mleko')
+                """).update();
+        var results = canonicalProductSearchService.search("Regression mleko",0,20).items();
+        assertThat(results).hasSize(2).allMatch(item -> item.canonicalProductId() == null);
+        assertThat(results.getFirst().productFamilyId()).isLessThan(results.getLast().productFamilyId());
+    }
+
+    @Test
+    void brandSearchFindsProductsWhoseNameOmitsTheBrand() {
+        long retailer = jdbcClient.sql("INSERT INTO app.retailer(code,name) VALUES('LIDL','Lidl') RETURNING id")
+                .query(Long.class).single();
+        jdbcClient.sql("""
+                INSERT INTO app.retailer_product(retailer_id,source_product_key,name,normalized_name,brand)
+                VALUES (?,'milk','Dugotrajno mleko 1l','dugotrajno mleko 1 l','Pilos'),
+                       (?,'yogurt','Jogurt 1kg','jogurt 1 kg','Pilos'),
+                       (?,'other','Mleko 1l','mleko 1 l','Drugi brend')
+                """).params(retailer,retailer,retailer).update();
+        productCatalogMaintenanceService.refreshRetailer(retailer);
+        assertThat(canonicalProductSearchService.search("Pilos",0,20).items())
+                .hasSize(2).allMatch(item -> "Pilos".equals(item.brand()));
+        for (String query : List.of("mleko Pilos", "Pilos mleko", "Пилос млеко")) {
+            assertThat(canonicalProductSearchService.search(query,0,20).items())
+                    .anyMatch(item -> "Dugotrajno mleko 1l".equals(item.name()) && "Pilos".equals(item.brand()));
+        }
+        assertThat(canonicalProductSearchService.search("Pilos nepostojeci",0,20).items()).isEmpty();
+    }
+
+    @Test
+    void beerIntentsNeverSubstituteNonAlcoholicForRegularOrTheReverse() {
+        long retailer = jdbcClient.sql("INSERT INTO app.retailer(code,name) VALUES('BEERTEST','Beer test') RETURNING id")
+                .query(Long.class).single();
+        long format = jdbcClient.sql("INSERT INTO app.store_format(retailer_id,code,name) VALUES(?,'TEST','Test') RETURNING id")
+                .param(retailer).query(Long.class).single();
+        long store = insertVerifiedStore(retailer,format,"BEER-SHOP","Test",44.27,19.88,true);
+        long run = jdbcClient.sql("INSERT INTO app.import_run(retailer_id,source_url,status) VALUES(?,'https://example.test/beer','SUCCEEDED') RETURNING id")
+                .param(retailer).query(Long.class).single();
+        var normalizer = new rs.pametnakupovina.backend.matching.ProductNameNormalizer();
+        for (String name : List.of("Pivo lager 0,5l", "Pivo bezalkoholno Bertold 0,5l", "Pivo 0.0 0,5l",
+                "Безалкохолно пиво 0,5л", "Pivo bez alkohola 0,5l", "Beer alcohol free 0.5l")) {
+            long product = jdbcClient.sql("""
+                    INSERT INTO app.retailer_product(retailer_id,source_product_key,name,normalized_name)
+                    VALUES(?,?,?,?) RETURNING id
+                    """).params(retailer,name,name,normalizer.normalize(name)).query(Long.class).single();
+            jdbcClient.sql("INSERT INTO app.price_observation(retailer_product_id,import_run_id,price_date,regular_price) VALUES(?,?,'2026-09-10',?)")
+                    .params(product,run,name.contains("lager") ? 100 : 10).update();
+        }
+        productCatalogMaintenanceService.refreshRetailer(retailer);
+        assertThat(jdbcClient.sql("""
+                SELECT count(*) FROM app.retailer_product_type a JOIN app.product_type t ON t.id=a.product_type_id
+                JOIN app.retailer_product p ON p.id=a.retailer_product_id
+                WHERE p.retailer_id=? AND t.code='NON_ALCOHOLIC_BEER'
+                """).param(retailer).query(Integer.class).single()).isEqualTo(5);
+        var list = shoppingListService.create(new CreateShoppingListRequest("Beer regression"),"beer-regression");
+        for (String request : List.of("pivo", "bezalkoholno pivo", "pivo 0.0")) {
+            shoppingListService.addItem(list.id(),"beer-regression",new AddShoppingListItemRequest(
+                    request,request,null,BigDecimal.ONE,ShoppingItemRule.FLEXIBLE_CATEGORY,
+                    new FlexibleItemConstraints(request,null,null,null,null)));
+        }
+        var offers = storeShoppingOfferRepository.findOffers(list.id(),List.of(store),LocalDate.of(2026,9,10));
+        assertThat(offers).hasSize(3);
+        assertThat(offers.getFirst().productName()).isEqualTo("Pivo lager 0,5l");
+        assertThat(offers.subList(1,3)).allMatch(o -> o.available() && !o.productName().contains("lager"));
+        jdbcClient.sql("DELETE FROM app.price_observation WHERE retailer_product_id IN (SELECT id FROM app.retailer_product WHERE retailer_id=? AND name='Pivo lager 0,5l')")
+                .param(retailer).update();
+        assertThat(storeShoppingOfferRepository.findOffers(list.id(),List.of(store),LocalDate.of(2026,9,10)).getFirst().available()).isFalse();
     }
 
     @Test

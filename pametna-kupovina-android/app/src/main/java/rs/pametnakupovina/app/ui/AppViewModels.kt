@@ -319,6 +319,34 @@ class RecommendationViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(RecommendationUiState())
     val uiState: StateFlow<RecommendationUiState> = _uiState.asStateFlow()
 
+    suspend fun alternativeQuery(itemId: Long) = repository.alternativeQuery(itemId)
+
+    fun replaceAlternative(listId: Long,itemId: Long,
+        product: rs.pametnakupovina.app.data.network.CanonicalProductSearchItemDto,
+        packages: Double,latitude: Double,longitude: Double,onDone: (String?) -> Unit) {
+        viewModelScope.launch {
+            var savedLocally = false
+            try {
+                repository.replaceWithAlternative(itemId,product,packages)
+                savedLocally = true
+                // The displayed allocation no longer describes the edited list.
+                _uiState.value = RecommendationUiState(isLoading = true)
+                val result=repository.getRecommendations(listId,latitude,longitude)
+                _uiState.value=RecommendationUiState(result=result)
+                onDone(null)
+            } catch(error: kotlinx.coroutines.CancellationException) { throw error }
+            catch(error: Exception) {
+                val message = if (savedLocally) {
+                    "Zamena je sačuvana na ovom uređaju, ali novi plan nije izračunat. Proveri vezu i ponovi računanje."
+                } else {
+                    error.toUserMessage("Zamena nije sačuvana. Pokušaj ponovo.")
+                }
+                if (savedLocally) _uiState.value = RecommendationUiState(errorMessage = message)
+                onDone(message)
+            }
+        }
+    }
+
     fun load(listId: Long, latitude: Double, longitude: Double) {
         viewModelScope.launch {
             _uiState.value = RecommendationUiState(isLoading = true)

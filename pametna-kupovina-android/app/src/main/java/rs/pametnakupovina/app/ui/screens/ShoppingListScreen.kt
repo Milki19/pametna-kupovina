@@ -215,6 +215,7 @@ fun ShoppingListScreen(
             onClearProductSearch = productSearchViewModel::clear,
             onRetryProductSearch = productSearchViewModel::retry,
             onLoadMoreProducts = productSearchViewModel::loadNextPage,
+            onIncludeWithoutPrice = productSearchViewModel::includeWithoutPrice,
             onDismiss = {
                 productSearchViewModel.clear()
                 showItemEditor = false
@@ -302,7 +303,7 @@ private fun DraftItemCard(
 private fun matchingStatusText(status: String): String = when (status) {
     "AUTO_MATCHED" -> "Automatski povezano"
     "NEEDS_CONFIRMATION" -> "Potrebna potvrda"
-    "CONFIRMED" -> "Potvrđeno"
+    "CONFIRMED" -> "Proizvod prepoznat"
     "UNMATCHED" -> "Neupareno"
     else -> "Čeka proveru"
 }
@@ -344,6 +345,7 @@ private fun ItemEditorDialog(
     onClearProductSearch: () -> Unit,
     onRetryProductSearch: () -> Unit,
     onLoadMoreProducts: () -> Unit,
+    onIncludeWithoutPrice: (Boolean) -> Unit,
     onDismiss: () -> Unit,
     onSave: (DraftItemInput) -> Unit
 ) {
@@ -445,6 +447,7 @@ private fun ItemEditorDialog(
                             onSearchQueryChange(name)
                         },
                         onRetry = onRetryProductSearch,
+                        onIncludeWithoutPrice = onIncludeWithoutPrice,
                         onLoadMore = onLoadMoreProducts
                     )
                     item(key = "product-mode-help") {

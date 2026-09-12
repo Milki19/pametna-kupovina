@@ -75,13 +75,27 @@ class PurchasePersistenceInstrumentedTest {
             assertEquals("46.00",restored.progress[1]!!.actualLineTotal)
             assertEquals(result.recommendedBalance,restored.snapshot.scenario)
             assertEquals(encodedBefore,db.purchaseSessionDao().get(id)!!.snapshotJson)
+            // Reopening recommendations resumes the old immutable snapshot, even if prices changed.
+            val changed = result.copy(requestedDate="2026-09-10",
+                recommendedBalance=result.recommendedBalance.copy(basketCost=999.0))
+            assertEquals(id, repository.start(changed, changed.recommendedBalance))
+            assertEquals(id, repository.observeActive(result.listId).first()!!.id)
+            assertNull(repository.observeActive(9999).first())
+            assertEquals(1, repository.observe(id).first()!!.purchasedCount)
+            val freshId = repository.start(changed, changed.recommendedBalance, createNew=true)
+            assertNotEquals(id, freshId)
+            assertEquals(0, repository.observe(freshId).first()!!.purchasedCount)
+            assertEquals(1, repository.observe(id).first()!!.purchasedCount)
+            repository.archive(freshId,true)
+            assertEquals(id, repository.observeActive(result.listId).first()!!.id)
             repository.archive(id,true)
+            assertNull(repository.observeActive(result.listId).first())
             assertNotNull(repository.observe(id).first()!!.archivedAt)
             repository.archive(id,false)
             repository.update(id,2) { it.copy(status=PurchaseStatus.TO_BUY,boughtPackages=0.0) }
             assertEquals(0,repository.observe(id).first()!!.purchasedCount)
             assertEquals(1,db.draftItemDao().getAllItems().size)
-            assertEquals(0,repository.sessions.first().single().purchasedCount)
+            assertEquals(0,repository.sessions.first().single { it.id == id }.purchasedCount)
         } finally {
             db.close()
             context.deleteDatabase(name)

@@ -22,7 +22,8 @@ data class ProductSearchUiState(
     val results: List<CanonicalProductSearchItemDto> = emptyList(),
     val totalElements: Long = 0,
     val hasNext: Boolean = false,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val includeWithoutPrice: Boolean = false
 )
 
 @HiltViewModel
@@ -35,21 +36,29 @@ class ProductSearchViewModel @Inject constructor(
 
     private var searchJob: Job? = null
 
+    fun includeWithoutPrice(include: Boolean) {
+        _uiState.value = _uiState.value.copy(includeWithoutPrice=include)
+        updateQuery(_uiState.value.query)
+    }
+
     fun updateQuery(query: String) {
         searchJob?.cancel()
 
-        val normalizedQuery = query.trim()
-        if (normalizedQuery.length < MIN_QUERY_LENGTH) {
-            _uiState.value = ProductSearchUiState(query = normalizedQuery)
+        // Keep the editable text verbatim, including the space before the next
+        // word. ShoppingRepository trims only the outgoing API query.
+        val include = _uiState.value.includeWithoutPrice
+        if (query.trim().length < MIN_QUERY_LENGTH) {
+            _uiState.value = ProductSearchUiState(query = query,includeWithoutPrice=include)
             return
         }
 
         _uiState.value = ProductSearchUiState(
-            query = normalizedQuery,
+            query = query,
+            includeWithoutPrice = include,
             isSearching = true
         )
         searchJob = launchSearch(
-            query = normalizedQuery,
+            query = query,
             page = 0,
             append = false,
             debounce = true
@@ -58,7 +67,7 @@ class ProductSearchViewModel @Inject constructor(
 
     fun retry() {
         val query = _uiState.value.query
-        if (query.length < MIN_QUERY_LENGTH) return
+        if (query.trim().length < MIN_QUERY_LENGTH) return
 
         searchJob?.cancel()
         _uiState.value = _uiState.value.copy(
@@ -103,18 +112,21 @@ class ProductSearchViewModel @Inject constructor(
         append: Boolean,
         debounce: Boolean = false
     ): Job = viewModelScope.launch {
+        val include = _uiState.value.includeWithoutPrice
         if (debounce) delay(DEBOUNCE_MILLIS)
 
         try {
             val response = repository.searchProducts(
                 query = query,
                 page = page,
-                limit = PAGE_SIZE
+                limit = PAGE_SIZE,
+                includeWithoutPrice = include
             )
-            if (_uiState.value.query != query) return@launch
+            if (_uiState.value.query != query || _uiState.value.includeWithoutPrice != include) return@launch
 
             _uiState.value = ProductSearchUiState(
                 query = query,
+                includeWithoutPrice = include,
                 page = response.page,
                 results = if (append) {
                     (_uiState.value.results + response.items)
@@ -130,7 +142,7 @@ class ProductSearchViewModel @Inject constructor(
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
-            if (_uiState.value.query == query) {
+            if (_uiState.value.query == query && _uiState.value.includeWithoutPrice == include) {
                 _uiState.value = _uiState.value.copy(
                     isSearching = false,
                     isLoadingMore = false,

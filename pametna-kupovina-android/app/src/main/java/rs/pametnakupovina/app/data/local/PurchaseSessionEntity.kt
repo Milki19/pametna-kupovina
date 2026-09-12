@@ -26,6 +26,10 @@ data class PurchaseSessionSummary(
 
 @Dao
 interface PurchaseSessionDao {
+    @Query("SELECT * FROM purchase_sessions WHERE archivedAt IS NULL ORDER BY createdAt DESC, id DESC")
+    fun observeActive(): Flow<List<PurchaseSessionEntity>>
+    @Query("SELECT * FROM purchase_sessions WHERE archivedAt IS NULL ORDER BY createdAt DESC, id DESC")
+    suspend fun getActive(): List<PurchaseSessionEntity>
     @Insert suspend fun insert(session: PurchaseSessionEntity)
     @Query("SELECT id,createdAt,archivedAt,listName,itemCount,purchasedCount FROM purchase_sessions ORDER BY createdAt DESC")
     fun observeAll(): Flow<List<PurchaseSessionSummary>>

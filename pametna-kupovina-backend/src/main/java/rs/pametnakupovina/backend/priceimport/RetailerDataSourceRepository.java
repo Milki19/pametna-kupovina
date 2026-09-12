@@ -117,7 +117,7 @@ public class RetailerDataSourceRepository {
         jdbcClient.sql("""
                     UPDATE app.retailer_data_source
                     SET last_status = ?,
-                        last_success_at = NOW(),
+                        last_success_at = clock_timestamp(),
                         last_snapshot_date = ?,
                         last_checksum = ?,
                         last_rows_read = ?,

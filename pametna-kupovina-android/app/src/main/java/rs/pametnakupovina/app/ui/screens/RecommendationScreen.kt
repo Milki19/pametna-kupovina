@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -55,12 +56,43 @@ fun RecommendationScreen(
     onBack: () -> Unit,
     onOpenPurchase: (String) -> Unit = {},
     purchaseViewModel: PurchaseViewModel = hiltViewModel(),
+    productSearchViewModel: rs.pametnakupovina.app.ui.ProductSearchViewModel = hiltViewModel(),
     viewModel: RecommendationViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val createdId by purchaseViewModel.createdId.collectAsStateWithLifecycle()
     val saving by purchaseViewModel.saving.collectAsStateWithLifecycle()
     val saveError by purchaseViewModel.message.collectAsStateWithLifecycle()
+    val activePurchase by purchaseViewModel.activePurchase.collectAsStateWithLifecycle()
+    val activeLoaded by purchaseViewModel.activeLoaded.collectAsStateWithLifecycle()
+    val searchState by productSearchViewModel.uiState.collectAsStateWithLifecycle()
+    var alternativeItem by androidx.compose.runtime.remember { mutableStateOf<RecommendationItemDto?>(null) }
+    var replacing by androidx.compose.runtime.remember { mutableStateOf(false) }
+    var replacementError by androidx.compose.runtime.remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(alternativeItem?.itemId) {
+        alternativeItem?.let { item ->
+            productSearchViewModel.clear()
+            val query = try { viewModel.alternativeQuery(item.itemId) }
+                catch (error: kotlinx.coroutines.CancellationException) { throw error }
+                catch (_: Exception) { item.requestedName }
+            productSearchViewModel.updateQuery(query)
+        }
+    }
+    alternativeItem?.let { item ->
+        AlternativePickerDialog(item.requestedName, searchState, replacing, replacementError,
+            onQuery=productSearchViewModel::updateQuery,onRetry=productSearchViewModel::retry,
+            onMore=productSearchViewModel::loadNextPage,
+            onDismiss={ if(!replacing) { alternativeItem=null; productSearchViewModel.clear() } },
+            onSave={ product, packages ->
+                replacing=true; replacementError=null
+                val position=requireNotNull(location)
+                viewModel.replaceAlternative(listId,item.itemId,product,packages,position.first,position.second) { error ->
+                    replacing=false; replacementError=error
+                    if(error==null) { alternativeItem=null; productSearchViewModel.clear() }
+                }
+            })
+    }
+    LaunchedEffect(listId) { purchaseViewModel.watchActive(listId) }
     LaunchedEffect(createdId) {
         createdId?.let { id ->
             onOpenPurchase(id)
@@ -112,7 +144,12 @@ fun RecommendationScreen(
                     result = requireNotNull(state.result),
                     origin = requireNotNull(location),
                     saving = saving, saveError = saveError,
-                    onStart = { purchaseViewModel.start(requireNotNull(state.result), it) }
+                    activePurchase = activePurchase, activeLoaded = activeLoaded,
+                    onResume = onOpenPurchase,
+                    onAlternative = { replacementError=null; alternativeItem=it },
+                    onStart = { scenario, createNew ->
+                        purchaseViewModel.start(requireNotNull(state.result), scenario, createNew)
+                    }
                 )
             }
         }
@@ -120,12 +157,16 @@ fun RecommendationScreen(
 }
 
 @Composable
-private fun RecommendationContent(
+internal fun RecommendationContent(
     result: ShoppingRecommendationDto,
     origin: Pair<Double, Double>,
     saving: Boolean,
     saveError: String?,
-    onStart: (OptimizationScenarioDto) -> Unit
+    activePurchase: rs.pametnakupovina.app.data.purchase.PurchaseSession?,
+    activeLoaded: Boolean,
+    onResume: (String) -> Unit,
+    onStart: (OptimizationScenarioDto, Boolean) -> Unit,
+    onAlternative: (RecommendationItemDto) -> Unit = {}
 ) {
     val context = LocalContext.current
     var selectedTypeName by rememberSaveable {
@@ -143,9 +184,19 @@ private fun RecommendationContent(
         it.resultStatus != RecommendationItemStatusDto.AVAILABLE
     }
     val orderedStores = selected.stores.sortedBy { it.stopOrder }
+    var confirmNew by rememberSaveable(result.listId, selected.type) { mutableStateOf(false) }
+    if (confirmNew) AlertDialog(
+        onDismissRequest = { confirmNew = false },
+        title = { Text("Započni novu kupovinu?") },
+        text = { Text("Novi izabrani plan imaće prazne kućice. Prethodna kupovina i čekirane stavke ostaju u „Moje kupovine“.") },
+        confirmButton = { TextButton(modifier = Modifier.testTag("confirm-new-purchase"), enabled = !saving, onClick = {
+            confirmNew = false; onStart(selected, true)
+        }) { Text("Započni novu kupovinu") } },
+        dismissButton = { TextButton(onClick = { confirmNew = false }) { Text("Otkaži") } }
+    )
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().testTag("recommendation-list"),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
@@ -157,6 +208,18 @@ private fun RecommendationContent(
             )
         }
 
+        if (activePurchase != null) item(key="previous-purchase") {
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                    Text("Prethodna kupovina",style=MaterialTheme.typography.titleMedium)
+                    Text("Plan od ${activePurchase.snapshot.calculationDate} · ${activePurchase.snapshot.scenario.items.size} stavki · kupljeno ${activePurchase.purchasedCount}")
+                    Text("Zadržava prethodni plan i čekirane stavke.")
+                    Button(modifier=Modifier.testTag("resume-previous-purchase"),enabled=!saving,
+                        onClick={ onResume(activePurchase.id) }) { Text("Nastavi prethodnu kupovinu") }
+                }
+            }
+        }
+        item { Text("Nove preporuke",style=MaterialTheme.typography.titleLarge) }
         scenarios.forEach { scenario ->
             item(key = scenario.type.name) {
                 ScenarioSummaryCard(
@@ -182,11 +245,17 @@ private fun RecommendationContent(
 
         saveError?.let { item { Text(it, color = MaterialTheme.colorScheme.error) } }
         if (selected.available) item {
-            Button(onClick = { onStart(selected) }, enabled = !saving,
-                modifier = Modifier.fillMaxWidth()) {
-                Text(if (saving) "Čuvam plan…" else "Započni kupovinu")
+            Button(onClick = {
+                if (activePurchase != null) confirmNew=true else onStart(selected, false)
+            }, enabled = !saving && activeLoaded,
+                modifier = Modifier.fillMaxWidth().testTag("start-or-resume-purchase")) {
+                Text(when {
+                    saving -> "Čuvam plan…"
+                    !activeLoaded -> "Proveravam sačuvane kupovine…"
+                    else -> "Započni kupovinu po ovom planu"
+                })
             }
-            Text("Čuva izabrani plan za čekiranje bez mreže. Originalni spisak se ne menja.")
+            Text("Čuva ovaj plan sa ${selected.items.size} stavki. Prethodne kupovine se ne menjaju.")
             if (!selected.complete) Text("Ovaj plan je nepotpun; stavke bez ponude ostaju vidljive.",
                 color = MaterialTheme.colorScheme.error)
         }
@@ -202,7 +271,7 @@ private fun RecommendationContent(
             }
             if (unresolved.isNotEmpty()) {
                 item {
-                    UnresolvedItemsCard(unresolved)
+                    UnresolvedItemsCard(unresolved,onAlternative)
                 }
             }
         } else {
@@ -240,7 +309,7 @@ private fun RecommendationContent(
 
             if (unresolved.isNotEmpty()) {
                 item {
-                    UnresolvedItemsCard(unresolved)
+                    UnresolvedItemsCard(unresolved,onAlternative)
                 }
             }
         }
@@ -457,7 +526,7 @@ private fun StoreAllocationCard(
 }
 
 @Composable
-private fun UnresolvedItemsCard(items: List<RecommendationItemDto>) {
+private fun UnresolvedItemsCard(items: List<RecommendationItemDto>, onAlternative: (RecommendationItemDto) -> Unit) {
     Card(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.errorContainer
@@ -487,6 +556,7 @@ private fun UnresolvedItemsCard(items: List<RecommendationItemDto>) {
                         style = MaterialTheme.typography.bodySmall
                     )
                     Text(item.explanation, style = MaterialTheme.typography.bodySmall)
+                    TextButton(onClick={ onAlternative(item) }) { Text("Pogledaj alternative") }
                 }
             }
         }

@@ -17,6 +17,10 @@ public class ProductCatalogMaintenanceService {
 
     @Transactional
     public ProductCatalogRefreshResult refreshRetailer(long retailerId) {
+        // Retailers share canonical products and brands. Serialize this phase
+        // across backend/worker instances, releasing the lock on commit/rollback.
+        jdbcClient.sql("SELECT pg_advisory_xact_lock(134711, 1)")
+                .query((resultSet, rowNumber) -> true).single();
         String retailerCode = jdbcClient.sql("""
                         SELECT code
                         FROM app.retailer
@@ -42,6 +46,7 @@ public class ProductCatalogMaintenanceService {
         return readResult(retailerId, retailerCode);
     }
 
+    @Transactional
     public List<ProductCatalogRefreshResult> refreshAll() {
         return jdbcClient.sql("""
                         SELECT id
