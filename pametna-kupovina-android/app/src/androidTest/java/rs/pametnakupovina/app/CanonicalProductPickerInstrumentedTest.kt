@@ -29,11 +29,13 @@ class CanonicalProductPickerInstrumentedTest {
                 canonicalProductId = 1,
                 name = "Donat sa barkodom",
                 barcode = "3838600041300",
+                hasUsablePrice = true,
                 score = 1.0
             ),
             CanonicalProductSearchItemDto(
                 canonicalProductId = 2,
                 name = "Proizvod bez barkoda",
+                hasUsablePrice = true,
                 score = 0.8
             )
         )

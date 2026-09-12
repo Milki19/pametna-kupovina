@@ -15,7 +15,9 @@ public record CanonicalProductSearchItem(
         String categoryName,
         int variantCount,
         List<ProductRetailerAvailability> availability,
-        BigDecimal score
+        BigDecimal score,
+        boolean hasUsablePrice,
+        List<String> knownRetailers
 ) {
 
     public CanonicalProductSearchItem(
@@ -39,7 +41,9 @@ public record CanonicalProductSearchItem(
                 null,
                 1,
                 List.of(),
-                score
+                score,
+                false,
+                List.of()
         );
     }
 }

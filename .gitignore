@@ -5,3 +5,7 @@
 .env
 .env.production
 infra/backups/*.dump
+infra/backups/*.tar
+infra/import-archive/
+infra/logs/
+infra/runtime/

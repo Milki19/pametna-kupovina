@@ -28,7 +28,8 @@ public class CanonicalProductSearchRepository {
                     resultSet.getString("category_name"),
                     resultSet.getInt("variant_count"),
                     resultSet.getBigDecimal("name_similarity"),
-                    resultSet.getBoolean("exact_ean_match")
+                    resultSet.getBoolean("exact_ean_match"),
+                    resultSet.getBoolean("has_usable_price")
             );
 
     private static final RowMapper<ProductAvailabilityRow>
@@ -51,9 +52,13 @@ public class CanonicalProductSearchRepository {
             );
 
     private final JdbcClient jdbcClient;
+    private final int maxPriceAgeDays;
 
-    public CanonicalProductSearchRepository(JdbcClient jdbcClient) {
+    public CanonicalProductSearchRepository(JdbcClient jdbcClient,
+            @org.springframework.beans.factory.annotation.Value("${shopping.optimization.max-price-age-days:30}") int maxPriceAgeDays) {
         this.jdbcClient = jdbcClient;
+        if(maxPriceAgeDays < 0) throw new IllegalArgumentException("Starost cena ne može biti negativna.");
+        this.maxPriceAgeDays = maxPriceAgeDays;
     }
 
     public List<CanonicalProductSearchRow> findCandidates(
@@ -61,6 +66,12 @@ public class CanonicalProductSearchRepository {
             String validEan
     ) {
         return jdbcClient.sql("""
+                        WITH matching_brands AS MATERIALIZED (
+                            SELECT brand_id, normalized_alias
+                            FROM app.brand_alias
+                            WHERE POSITION(' ' || normalized_alias || ' '
+                                IN ' ' || ? || ' ') > 0
+                        )
                         SELECT family.id AS product_family_id,
                                representative.id AS canonical_product_id,
                                family.display_name AS name,
@@ -70,6 +81,15 @@ public class CanonicalProductSearchRepository {
                                family.base_unit,
                                category.code AS category_code,
                                category.name AS category_name,
+                               EXISTS (
+                                   SELECT 1 FROM app.product_retailer_presence AS presence
+                                   WHERE presence.product_family_id=family.id
+                                     AND presence.current_offer_count > 0
+                                     AND presence.minimum_effective_price > 0
+                                     AND presence.latest_price_date BETWEEN
+                                         (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Belgrade')::date - ?
+                                         AND (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Belgrade')::date
+                               ) AS has_usable_price,
                                GREATEST(
                                    1,
                                    (
@@ -158,22 +178,34 @@ public class CanonicalProductSearchRepository {
                                   OPERATOR(public.%) ?
                               OR family.normalized_name LIKE
                                   '%' || ? || '%'
+                              OR EXISTS (
+                                  SELECT 1 FROM matching_brands AS alias
+                                  WHERE alias.brand_id = family.brand_id
+                                    AND NOT EXISTS (
+                                        SELECT 1 FROM unnest(string_to_array(?, ' ')) AS token(value)
+                                        WHERE POSITION(token.value IN family.normalized_name) = 0
+                                          AND POSITION(token.value IN alias.normalized_alias) = 0
+                                    )
+                              )
                           )
                         ORDER BY name_similarity DESC,
                                  family.display_name ASC,
                                  family.id ASC
                         """)
-                .param(1, validEan, Types.VARCHAR)
-                .param(2, validEan, Types.VARCHAR)
-                .param(3, normalizedQuery)
+                .param(1, normalizedQuery)
+                .param(2, maxPriceAgeDays)
+                .param(3, validEan, Types.VARCHAR)
                 .param(4, validEan, Types.VARCHAR)
-                .param(5, validEan, Types.VARCHAR)
+                .param(5, normalizedQuery)
                 .param(6, validEan, Types.VARCHAR)
                 .param(7, validEan, Types.VARCHAR)
                 .param(8, validEan, Types.VARCHAR)
                 .param(9, validEan, Types.VARCHAR)
-                .param(10, normalizedQuery)
-                .param(11, normalizedQuery)
+                .param(10, validEan, Types.VARCHAR)
+                .param(11, validEan, Types.VARCHAR)
+                .param(12, normalizedQuery)
+                .param(13, normalizedQuery)
+                .param(14, normalizedQuery)
                 .query(SEARCH_ROW_MAPPER)
                 .list();
     }
@@ -204,6 +236,19 @@ public class CanonicalProductSearchRepository {
                 .param("familyIds", productFamilyIds)
                 .query(AVAILABILITY_ROW_MAPPER)
                 .list();
+    }
+
+    public java.util.Map<Long, List<String>> findKnownRetailers(List<Long> familyIds) {
+        if (familyIds.isEmpty()) return java.util.Map.of();
+        return jdbcClient.sql("""
+                SELECT DISTINCT p.product_family_id, r.name
+                FROM app.retailer_product p JOIN app.retailer r ON r.id=p.retailer_id
+                WHERE p.product_family_id IN (:ids)
+                ORDER BY p.product_family_id,r.name
+                """).param("ids",familyIds)
+                .query((rs,n) -> java.util.Map.entry(rs.getLong(1),rs.getString(2))).list().stream()
+                .collect(java.util.stream.Collectors.groupingBy(java.util.Map.Entry::getKey,
+                        java.util.stream.Collectors.mapping(java.util.Map.Entry::getValue,java.util.stream.Collectors.toList())));
     }
 
     record ProductAvailabilityRow(

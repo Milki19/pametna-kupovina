@@ -98,6 +98,8 @@ public class PriceImportService {
     private final Duration requestTimeout;
     private final long maxDownloadBytes;
     private final Path archiveDirectory;
+    private final PriceSnapshotPolicy snapshotPolicy;
+    private final PriceImportSafety importSafety;
 
     public PriceImportService(
             JdbcClient jdbcClient,
@@ -110,6 +112,8 @@ public class PriceImportService {
             ProductCatalogMaintenanceService catalogMaintenanceService,
             StorePriceFormatMappingRepository
                     storePriceFormatMappingRepository,
+            PriceSnapshotPolicy snapshotPolicy,
+            PriceImportSafety importSafety,
             PlatformTransactionManager transactionManager,
             @Value("${price-import.http.connect-timeout-seconds:20}")
             long connectTimeoutSeconds,
@@ -130,6 +134,8 @@ public class PriceImportService {
         this.catalogMaintenanceService = catalogMaintenanceService;
         this.storePriceFormatMappingRepository =
                 storePriceFormatMappingRepository;
+        this.snapshotPolicy = snapshotPolicy;
+        this.importSafety = importSafety;
         this.transactionTemplate =
                 new TransactionTemplate(transactionManager);
         this.requestTimeout = Duration.ofSeconds(requestTimeoutSeconds);
@@ -227,51 +233,22 @@ public class PriceImportService {
                 );
             }
 
-            updateImportStage(importRunId, "WRITING");
-            SnapshotWriteResult writeResult = importLatestSnapshot(
+            snapshotPolicy.requireAccepted(snapshotDate);
+
+            SnapshotWriteResult preflight = importLatestSnapshot(
                     retailer.id(),
                     importRunId,
                     downloadedFile,
-                    scanResult
+                    scanResult,
+                    true
             );
-
-            rowsSelected = writeResult.rowsSelected();
-            rowsSaved = writeResult.rowsSaved();
-            rowsWithErrors += writeResult.rowsWithErrors();
-
-            int rowsSkipped = Math.max(
-                    rowsRead - rowsSaved,
-                    0
-            );
-
-            String status = rowsWithErrors == 0
-                    ? "SUCCEEDED"
-                    : "SUCCEEDED_WITH_ERRORS";
-
-            updateImportStage(importRunId, "REFRESHING_CATALOG");
-            catalogMaintenanceService.refreshRetailer(retailer.id());
-            storePriceFormatMappingRepository.refreshEligibility(
-                    retailer.id()
-            );
-
-            completeImport(
-                    importRunId,
-                    snapshotDate,
-                    rowsRead,
-                    rowsSelected,
-                    rowsSaved,
-                    rowsSkipped,
-                    status
-            );
-            return new ImportResult(
-                    importRunId,
-                    snapshotDate,
-                    rowsRead,
-                    rowsSelected,
-                    rowsSaved,
-                    rowsSkipped,
-                    status
-            );
+            rowsSelected = preflight.rowsSelected();
+            rowsWithErrors = Math.max(rowsWithErrors, preflight.rowsWithErrors());
+            Path validatedFile = downloadedFile;
+            return promoteSnapshot(retailer.id(), priceSource.id(), null, importRunId,
+                    snapshotDate, rowsRead, rowsSelected, rowsWithErrors,
+                    () -> importLatestSnapshot(retailer.id(), importRunId, validatedFile, scanResult, false).rowsSaved(),
+                    () -> storePriceFormatMappingRepository.refreshEligibility(retailer.id()));
         } catch (Exception exception) {
             if (exception instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
@@ -387,6 +364,7 @@ public class PriceImportService {
         Path downloadedFile = null;
 
         try {
+            snapshotPolicy.requireAccepted(snapshotDate);
             DownloadedCsv downloadedCsv = downloadCsv(
                     sourceUrl,
                     importRunId
@@ -399,49 +377,22 @@ public class PriceImportService {
                     downloadedCsv
             );
 
-            updateImportStage(importRunId, "WRITING");
-            StoreSnapshotWriteResult writeResult = importStoreSnapshot(
+            updateImportStage(importRunId, "SCANNING");
+            StoreSnapshotWriteResult preflight = importStoreSnapshot(
                     target,
                     importRunId,
                     downloadedFile,
-                    snapshotDate
-            );
-
-            rowsRead = writeResult.rowsRead();
-            rowsSelected = writeResult.rowsSelected();
-            rowsSaved = writeResult.rowsSaved();
-            rowsWithErrors = writeResult.rowsWithErrors();
-
-            int rowsSkipped = Math.max(rowsRead - rowsSaved, 0);
-            String status = rowsWithErrors == 0
-                    ? "SUCCEEDED"
-                    : "SUCCEEDED_WITH_ERRORS";
-
-            updateImportStage(importRunId, "REFRESHING_CATALOG");
-            catalogMaintenanceService.refreshRetailer(
-                    target.retailerId()
-            );
-
-            completeImport(
-                    importRunId,
                     snapshotDate,
-                    rowsRead,
-                    rowsSelected,
-                    rowsSaved,
-                    rowsSkipped,
-                    status
+                    true
             );
-            markStorePricingEligible(target.storeId());
-
-            return new ImportResult(
-                    importRunId,
-                    snapshotDate,
-                    rowsRead,
-                    rowsSelected,
-                    rowsSaved,
-                    rowsSkipped,
-                    status
-            );
+            rowsRead = preflight.rowsRead();
+            rowsSelected = preflight.rowsSelected();
+            rowsWithErrors = preflight.rowsWithErrors();
+            Path validatedFile = downloadedFile;
+            return promoteSnapshot(target.retailerId(), priceSource.id(), target.storeId(), importRunId,
+                    snapshotDate, rowsRead, rowsSelected, rowsWithErrors,
+                    () -> importStoreSnapshot(target, importRunId, validatedFile, snapshotDate, false).rowsSaved(),
+                    () -> markStorePricingEligible(target.storeId()));
         } catch (Exception exception) {
             if (exception instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
@@ -477,6 +428,41 @@ public class PriceImportService {
                 }
             }
         }
+    }
+
+    @FunctionalInterface
+    private interface SnapshotWriter { int write() throws IOException; }
+
+    private ImportResult promoteSnapshot(long retailerId, Long sourceId, Long storeId, long runId,
+            LocalDate date, int rowsRead, int rowsSelected, int errors,
+            SnapshotWriter writer, Runnable updateEligibility) {
+        importSafety.validate(retailerId, sourceId, storeId, date, rowsSelected, errors);
+        updateImportStage(runId, "WRITING");
+        return transactionTemplate.execute(transaction -> {
+            // Same lock as catalog maintenance, acquired BEFORE touching shared
+            // canonical products. Other readers keep seeing the last committed data.
+            jdbcClient.sql("SET LOCAL lock_timeout = '60s'").update();
+            jdbcClient.sql("SELECT pg_advisory_xact_lock(134711, 1)")
+                    .query((rs, n) -> true).single();
+            // Another worker may have published a newer snapshot while we waited.
+            importSafety.validate(retailerId, sourceId, storeId, date, rowsSelected, errors);
+            long before = importSafety.currentOfferCount(retailerId, storeId);
+            final int saved;
+            try {
+                saved = writer.write();
+            } catch (IOException error) {
+                throw new java.io.UncheckedIOException(error);
+            }
+            if (saved != rowsSelected) throw new IllegalStateException("INCOMPLETE_WRITE: cenovnik nije u celosti upisan.");
+            importSafety.validateWrittenVolume(retailerId, sourceId, storeId, runId, before);
+            updateImportStage(runId, "REFRESHING_CATALOG");
+            catalogMaintenanceService.refreshRetailer(retailerId);
+            updateEligibility.run();
+            int skipped = Math.max(rowsRead - saved, 0);
+            String status = errors == 0 ? "SUCCEEDED" : "SUCCEEDED_WITH_ERRORS";
+            completeImport(runId, date, rowsRead, rowsSelected, saved, skipped, status);
+            return new ImportResult(runId, date, rowsRead, rowsSelected, saved, skipped, status);
+        });
     }
 
     private StorePriceTarget findStorePriceTarget(
@@ -536,7 +522,8 @@ public class PriceImportService {
             StorePriceTarget target,
             Long importRunId,
             Path csvPath,
-            LocalDate snapshotDate
+            LocalDate snapshotDate,
+            boolean validateOnly
     ) throws IOException {
         int rowsRead = 0;
         int rowsSelected = 0;
@@ -554,9 +541,9 @@ public class PriceImportService {
         ) {
             for (CSVRecord record : parser) {
                 rowsRead++;
-
+                PriceCsvRow row;
                 try {
-                    PriceCsvRow row = parseStorePriceRecord(
+                    row = parseStorePriceRecord(
                             record,
                             target,
                             snapshotDate
@@ -565,20 +552,6 @@ public class PriceImportService {
                     if (row == null) {
                         continue;
                     }
-
-                    rowsSelected++;
-                    batch.add(row);
-
-                    if (batch.size() == WRITE_BATCH_SIZE) {
-                        BatchWriteResult result = saveSnapshotInBatches(
-                                target.retailerId(),
-                                importRunId,
-                                batch
-                        );
-                        rowsSaved += result.rowsSaved();
-                        rowsWithErrors += result.rowsWithErrors();
-                        batch.clear();
-                    }
                 } catch (RuntimeException exception) {
                     rowsWithErrors++;
                     errorsLogged = logParseError(
@@ -586,6 +559,14 @@ public class PriceImportService {
                             exception,
                             errorsLogged
                     );
+                    continue;
+                }
+                rowsSelected++;
+                batch.add(row);
+                if (batch.size() == WRITE_BATCH_SIZE) {
+                    BatchWriteResult result = saveSnapshotInBatches(target.retailerId(), importRunId, batch, validateOnly);
+                    rowsSaved += result.rowsSaved();
+                    batch.clear();
                 }
             }
         }
@@ -594,7 +575,8 @@ public class PriceImportService {
             BatchWriteResult result = saveSnapshotInBatches(
                     target.retailerId(),
                     importRunId,
-                    batch
+                    batch,
+                    validateOnly
             );
             rowsSaved += result.rowsSaved();
             rowsWithErrors += result.rowsWithErrors();
@@ -1077,7 +1059,8 @@ public class PriceImportService {
             Long retailerId,
             Long importRunId,
             Path csvPath,
-            SnapshotScanResult scanResult
+            SnapshotScanResult scanResult,
+            boolean validateOnly
     ) throws IOException {
         int rowsSelected = 0;
         int rowsSaved = 0;
@@ -1093,6 +1076,7 @@ public class PriceImportService {
                 CSVParser parser = CSV_FORMAT.parse(reader)
         ) {
             for (CSVRecord record : parser) {
+                PriceCsvRow row;
                 try {
                     LocalDate rowDate = parseRequiredDate(
                             column(record, "Datum cenovnika")
@@ -1104,26 +1088,12 @@ public class PriceImportService {
                         continue;
                     }
 
-                    PriceCsvRow row = parseRecord(record);
+                    row = parseRecord(record);
 
                     if (row == null) {
                         continue;
                     }
 
-                    rowsSelected++;
-                    batch.add(row);
-
-                    if (batch.size() == WRITE_BATCH_SIZE) {
-                        BatchWriteResult result = saveSnapshotInBatches(
-                                retailerId,
-                                importRunId,
-                                batch
-                        );
-
-                        rowsSaved += result.rowsSaved();
-                        rowsWithErrors += result.rowsWithErrors();
-                        batch.clear();
-                    }
                 } catch (RuntimeException exception) {
                     rowsWithErrors++;
                     errorsLogged = logParseError(
@@ -1131,6 +1101,14 @@ public class PriceImportService {
                             exception,
                             errorsLogged
                     );
+                    continue;
+                }
+                rowsSelected++;
+                batch.add(row);
+                if (batch.size() == WRITE_BATCH_SIZE) {
+                    BatchWriteResult result = saveSnapshotInBatches(retailerId, importRunId, batch, validateOnly);
+                    rowsSaved += result.rowsSaved();
+                    batch.clear();
                 }
             }
         }
@@ -1139,7 +1117,8 @@ public class PriceImportService {
             BatchWriteResult result = saveSnapshotInBatches(
                     retailerId,
                     importRunId,
-                    batch
+                    batch,
+                    validateOnly
             );
 
             rowsSaved += result.rowsSaved();
@@ -1195,96 +1174,15 @@ public class PriceImportService {
     private BatchWriteResult saveSnapshotInBatches(
             Long retailerId,
             Long importRunId,
-            List<PriceCsvRow> rows
+            List<PriceCsvRow> rows,
+            boolean validateOnly
     ) {
-        int rowsSaved = 0;
-        int rowsWithErrors = 0;
-
-        for (
-                int batchStart = 0;
-                batchStart < rows.size();
-                batchStart += WRITE_BATCH_SIZE
-        ) {
-            int batchEnd = Math.min(
-                    batchStart + WRITE_BATCH_SIZE,
-                    rows.size()
-            );
-
-            List<PriceCsvRow> batch = rows.subList(
-                    batchStart,
-                    batchEnd
-            );
-
-            int batchNumber =
-                    batchStart / WRITE_BATCH_SIZE + 1;
-
-            try {
-                /*
-                 * Svi redovi paketa se čuvaju u istoj transakciji.
-                 * Ako jedan padne, ceo paket se vraća.
-                 */
-                transactionTemplate.executeWithoutResult(
-                        transactionStatus -> {
-                            for (PriceCsvRow row : batch) {
-                                saveRecord(
-                                        retailerId,
-                                        importRunId,
-                                        row
-                                );
-                            }
-                        }
-                );
-
-                rowsSaved += batch.size();
-
-                log.info(
-                        "Sačuvan paket {}: {} redova.",
-                        batchNumber,
-                        batch.size()
-                );
-            } catch (RuntimeException batchException) {
-                log.warn(
-                        "Paket {} sa {} redova nije sačuvan: {}. "
-                                + "Pokušavam red po red.",
-                        batchNumber,
-                        batch.size(),
-                        batchException.getMessage()
-                );
-
-                /*
-                 * Prethodna transakcija je vraćena, zato sada
-                 * svaki red dobija zasebnu transakciju.
-                 */
-                for (PriceCsvRow row : batch) {
-                    try {
-                        transactionTemplate.executeWithoutResult(
-                                transactionStatus -> saveRecord(
-                                        retailerId,
-                                        importRunId,
-                                        row
-                                )
-                        );
-
-                        rowsSaved++;
-                    } catch (RuntimeException rowException) {
-                        rowsWithErrors++;
-
-                        log.warn(
-                                "Nije sačuvan proizvod {} "
-                                        + "iz formata '{}': {}",
-                                row.sourceProductKey(),
-                                row.retailerFormatName(),
-                                rowException.getMessage()
-                        );
-                    }
-                }
-            }
+        if (validateOnly) return new BatchWriteResult(rows.size(), 0);
+        if (!org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()) {
+            throw new IllegalStateException("Upis cenovnika zahteva jednu transakciju za ceo fajl.");
         }
-
-        return new BatchWriteResult(
-                rowsSaved,
-                rowsWithErrors
-        );
+        for (PriceCsvRow row : rows) saveRecord(retailerId, importRunId, row);
+        return new BatchWriteResult(rows.size(), 0);
     }
 
     protected void saveRecord(
@@ -1374,7 +1272,7 @@ public class PriceImportService {
         jdbcClient.sql("""
                     UPDATE app.import_run
                     SET stage = ?,
-                        last_progress_at = NOW()
+                        last_progress_at = clock_timestamp()
                     WHERE id = ?
                       AND status = 'RUNNING'
                     """)
@@ -1779,7 +1677,8 @@ public class PriceImportService {
                     UPDATE app.import_run
                     SET status = ?,
                         stage = 'COMPLETED',
-                        finished_at = NOW(),
+                        finished_at = clock_timestamp(),
+                        last_progress_at = clock_timestamp(),
                         snapshot_date = ?,
                         rows_read = ?,
                         rows_selected = ?,

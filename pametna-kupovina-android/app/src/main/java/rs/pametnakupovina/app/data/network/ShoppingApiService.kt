@@ -15,7 +15,8 @@ interface ShoppingApiService {
     suspend fun searchProducts(
         @Query("query") query: String,
         @Query("page") page: Int = 0,
-        @Query("limit") limit: Int = 10
+        @Query("limit") limit: Int = 10,
+        @Query("includeWithoutPrice") includeWithoutPrice: Boolean = false
     ): CanonicalProductSearchPageDto
 
     @GET("api/v1/products/{canonicalProductId}")

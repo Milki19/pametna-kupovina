@@ -25,6 +25,22 @@ class PurchaseViewModel @Inject constructor(private val repository: PurchaseRepo
     val createdId = _createdId.asStateFlow()
     private val _saving = MutableStateFlow(false)
     val saving = _saving.asStateFlow()
+    private val _activePurchase = MutableStateFlow<PurchaseSession?>(null)
+    val activePurchase = _activePurchase.asStateFlow()
+    private val _activeLoaded = MutableStateFlow(false)
+    val activeLoaded = _activeLoaded.asStateFlow()
+    private var activeJob: kotlinx.coroutines.Job? = null
+
+    fun watchActive(listId: Long) {
+        activeJob?.cancel()
+        _activePurchase.value = null
+        _activeLoaded.value = false
+        activeJob = viewModelScope.launch {
+            repository.observeActive(listId)
+                .catch { _message.value = it.message ?: "Započeta kupovina nije dostupna." }
+                .collect { _activePurchase.value = it; _activeLoaded.value = true }
+        }
+    }
 
     init {
         viewModelScope.launch {
@@ -43,11 +59,11 @@ class PurchaseViewModel @Inject constructor(private val repository: PurchaseRepo
     }
 
     fun consumeNavigation() { _createdId.value = null }
-    fun start(result: ShoppingRecommendationDto, scenario: OptimizationScenarioDto) {
+    fun start(result: ShoppingRecommendationDto, scenario: OptimizationScenarioDto, createNew: Boolean = false) {
         if (_saving.value || _createdId.value != null) return
         _saving.value = true
         action {
-            try { _createdId.value = repository.start(result, scenario) }
+            try { _createdId.value = repository.start(result, scenario, createNew) }
             finally { _saving.value = false }
         }
     }

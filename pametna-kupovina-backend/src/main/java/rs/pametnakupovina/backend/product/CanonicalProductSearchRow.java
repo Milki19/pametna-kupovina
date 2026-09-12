@@ -14,6 +14,7 @@ record CanonicalProductSearchRow(
         String categoryName,
         int variantCount,
         BigDecimal nameSimilarity,
-        boolean exactEanMatch
+        boolean exactEanMatch,
+        boolean hasUsablePrice
 ) {
 }

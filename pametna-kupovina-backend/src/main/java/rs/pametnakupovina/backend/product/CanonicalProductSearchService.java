@@ -47,6 +47,10 @@ public class CanonicalProductSearchService {
             int page,
             int limit
     ) {
+        return search(query,page,limit,true);
+    }
+
+    public CanonicalProductSearchPage search(String query, int page, int limit, boolean includeWithoutPrice) {
         validate(query, page, limit);
 
         String strippedQuery = query.strip();
@@ -68,13 +72,16 @@ public class CanonicalProductSearchService {
                         normalizedQuery,
                         validEan
                 ).stream()
+                .filter(row -> includeWithoutPrice || row.hasUsablePrice() || row.exactEanMatch())
                 .map(row -> score(
                         normalizedQuery,
                         queryQuantity,
                         row
                 ))
                 .sorted(
-                        Comparator.comparing(
+                        Comparator.<ScoredRow, Boolean>comparing(row -> row.source().exactEanMatch(), Comparator.reverseOrder())
+                                .thenComparing(row -> row.source().hasUsablePrice(), Comparator.reverseOrder())
+                                .thenComparing(
                                         ScoredRow::score,
                                         Comparator.reverseOrder()
                                 )
@@ -85,7 +92,7 @@ public class CanonicalProductSearchService {
                                 )
                                 .thenComparing(row -> row.source().name())
                                 .thenComparing(row -> row.source()
-                                        .canonicalProductId())
+                                        .productFamilyId())
                 )
                 .toList();
 
@@ -95,6 +102,8 @@ public class CanonicalProductSearchService {
         int toIndex = (int) Math.min(offset + limit, totalElements);
 
         List<ScoredRow> pageRows = scoredRows.subList(fromIndex, toIndex);
+        var knownRetailers = searchRepository.findKnownRetailers(pageRows.stream()
+                .map(row -> row.source().productFamilyId()).toList());
         Map<Long, List<ProductRetailerAvailability>> availabilityByFamily =
                 searchRepository.findAvailability(
                                 pageRows.stream()
@@ -120,7 +129,8 @@ public class CanonicalProductSearchService {
                         availabilityByFamily.getOrDefault(
                                 row.source().productFamilyId(),
                                 List.of()
-                        )
+                        ),
+                        knownRetailers.getOrDefault(row.source().productFamilyId(),List.of())
                 ))
                 .toList();
 
@@ -188,7 +198,8 @@ public class CanonicalProductSearchService {
 
     private CanonicalProductSearchItem toItem(
             ScoredRow scoredRow,
-            List<ProductRetailerAvailability> availability
+            List<ProductRetailerAvailability> availability,
+            List<String> knownRetailers
     ) {
         CanonicalProductSearchRow row = scoredRow.source();
 
@@ -204,7 +215,9 @@ public class CanonicalProductSearchService {
                 row.categoryName(),
                 row.variantCount(),
                 availability,
-                scoredRow.score()
+                scoredRow.score(),
+                row.hasUsablePrice(),
+                knownRetailers
         );
     }
 

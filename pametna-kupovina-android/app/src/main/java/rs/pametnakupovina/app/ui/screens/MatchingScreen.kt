@@ -236,7 +236,7 @@ private fun statusText(status: ShoppingItemMatchingStatusDto): String = when (st
     ShoppingItemMatchingStatusDto.PENDING -> "Čeka proveru"
     ShoppingItemMatchingStatusDto.AUTO_MATCHED -> "Automatski povezano"
     ShoppingItemMatchingStatusDto.NEEDS_CONFIRMATION -> "Potrebna je tvoja potvrda"
-    ShoppingItemMatchingStatusDto.CONFIRMED -> "Potvrđeno"
+    ShoppingItemMatchingStatusDto.CONFIRMED -> "Proizvod prepoznat"
     ShoppingItemMatchingStatusDto.UNMATCHED -> "Neupareno"
 }
 
