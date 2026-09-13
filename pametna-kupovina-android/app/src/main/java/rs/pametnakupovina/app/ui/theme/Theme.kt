@@ -2,6 +2,7 @@ package rs.pametnakupovina.app.ui.theme
 
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
@@ -9,6 +10,8 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -19,11 +22,32 @@ private val DarkColorScheme = darkColorScheme(
     primaryContainer = MarketGreenDarkContainer,
     onPrimaryContainer = MarketGreenLight,
     secondary = BasketAmberDark,
+    onSecondary = Night,
+    secondaryContainer = MarketGreenDarkContainer,
+    onSecondaryContainer = MarketGreenLight,
     tertiary = BasketAmberDark,
+    onTertiary = Night,
+    tertiaryContainer = BasketAmberNightContainer,
+    onTertiaryContainer = BasketAmberDark,
     error = TomatoDark,
+    onError = Night,
+    errorContainer = Color(0xFF4A1F1D),
+    onErrorContainer = TomatoDark,
     background = Night,
-    surface = NightSurface,
-    surfaceVariant = NightSurface
+    onBackground = Moonlight,
+    surface = Night,
+    onSurface = Moonlight,
+    surfaceVariant = NightVariant,
+    onSurfaceVariant = MoonlightMuted,
+    surfaceContainerLowest = Night,
+    surfaceContainerLow = NightLow,
+    surfaceContainer = NightContainer,
+    surfaceContainerHigh = NightContainerHigh,
+    surfaceContainerHighest = NightContainerHighest,
+    outline = NightOutline,
+    outlineVariant = NightOutlineFaint,
+    inverseSurface = Moonlight,
+    inverseOnSurface = Night
 )
 
 private val LightColorScheme = lightColorScheme(
@@ -35,13 +59,29 @@ private val LightColorScheme = lightColorScheme(
     secondaryContainer = BasketAmberLight,
     tertiary = BasketAmber,
     tertiaryContainer = BasketAmberLight,
+    onSecondary = Paper,
+    onSecondaryContainer = Ink,
+    onTertiary = Paper,
+    onTertiaryContainer = Ink,
     error = Tomato,
+    onError = Paper,
     errorContainer = TomatoContainer,
+    onErrorContainer = Ink,
     background = Paper,
     onBackground = Ink,
     surface = Paper,
     onSurface = Ink,
-    surfaceVariant = Mist
+    surfaceVariant = Mist,
+    onSurfaceVariant = InkMuted,
+    surfaceContainerLowest = Paper,
+    surfaceContainerLow = PaperLow,
+    surfaceContainer = PaperContainer,
+    surfaceContainerHigh = PaperContainerHigh,
+    surfaceContainerHighest = PaperContainerHighest,
+    outline = InkOutline,
+    outlineVariant = InkOutlineFaint,
+    inverseSurface = Ink,
+    inverseOnSurface = Paper
 )
 
 private val AppShapes = Shapes(
@@ -69,10 +109,16 @@ fun PametnaKupovinaTheme(
         else -> LightColorScheme
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography,
-        shapes = AppShapes,
-        content = content
-    )
+    // Raised once here rather than at fifty call sites: every Material control
+    // gets a touch area a shaky hand can hit, without changing how it looks.
+    CompositionLocalProvider(
+        LocalMinimumInteractiveComponentSize provides 52.dp
+    ) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = Typography,
+            shapes = AppShapes,
+            content = content
+        )
+    }
 }
