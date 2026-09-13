@@ -45,6 +45,30 @@ public class ShoppingListTextParser {
                             | Pattern.UNICODE_CASE
             );
 
+    /**
+     * Weight and volume written next to the name state how much is needed in
+     * total, not how many packages: "ćevapi 3kg" is three kilograms however
+     * the shop packs them. Spelled-out forms appear in real lists too
+     * ("sitan sir 400grama").
+     */
+    private static final String AMOUNT_UNIT =
+            "(?<unit>kg|kilogram(?:a)?|g|gr|grama|gram"
+                    + "|l|lit(?:ar|ra|ara)?|ml|mililitar(?:a)?)";
+
+    private static final Pattern SUFFIX_AMOUNT_PATTERN = Pattern.compile(
+            "^(?<name>.+?)\\s*(?:[-–—]\\s*)?" + QUANTITY
+                    + "\\s*" + AMOUNT_UNIT + "$",
+            Pattern.CASE_INSENSITIVE
+                    | Pattern.UNICODE_CASE
+    );
+
+    private static final Pattern PREFIX_AMOUNT_PATTERN = Pattern.compile(
+            "^" + QUANTITY + "\\s*" + AMOUNT_UNIT
+                    + "\\s+(?<name>.+)$",
+            Pattern.CASE_INSENSITIVE
+                    | Pattern.UNICODE_CASE
+    );
+
     public ParsedShoppingListText parse(String text) {
         if (text == null) {
             return new ParsedShoppingListText(List.of(), 0);
@@ -111,10 +135,73 @@ public class ShoppingListTextParser {
             return parsed;
         }
 
+        parsed = matchAmount(
+                SUFFIX_AMOUNT_PATTERN,
+                trimmedLine,
+                rawLine
+        );
+
+        if (parsed != null) {
+            return parsed;
+        }
+
+        parsed = matchAmount(
+                PREFIX_AMOUNT_PATTERN,
+                trimmedLine,
+                rawLine
+        );
+
+        if (parsed != null) {
+            return parsed;
+        }
+
         return new ParsedShoppingListLine(
                 trimmedLine,
                 rawLine,
                 BigDecimal.ONE
+        );
+    }
+
+    private ParsedShoppingListLine matchAmount(
+            Pattern pattern,
+            String trimmedLine,
+            String rawLine
+    ) {
+        Matcher matcher = pattern.matcher(trimmedLine);
+
+        if (!matcher.matches()) {
+            return null;
+        }
+
+        String name = matcher.group("name").trim();
+
+        if (name.isEmpty()) {
+            return null;
+        }
+
+        BigDecimal amount = new BigDecimal(
+                matcher.group("quantity").replace(',', '.')
+        );
+        String unit = matcher.group("unit")
+                .toLowerCase(java.util.Locale.ROOT);
+
+        BigDecimal inBaseUnit = switch (unit.charAt(0)) {
+            case 'k' -> amount.multiply(BigDecimal.valueOf(1000));
+            case 'l' -> amount.multiply(BigDecimal.valueOf(1000));
+            case 'm' -> amount;
+            default -> amount;
+        };
+        String baseUnit = unit.startsWith("l")
+                || unit.startsWith("m")
+                ? "ml"
+                : "g";
+
+        return new ParsedShoppingListLine(
+                name,
+                rawLine,
+                BigDecimal.ONE,
+                inBaseUnit.stripTrailingZeros(),
+                baseUnit
         );
     }
 

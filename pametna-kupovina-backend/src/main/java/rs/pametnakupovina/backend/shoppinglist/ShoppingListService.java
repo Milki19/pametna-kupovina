@@ -272,7 +272,8 @@ public class ShoppingListService {
                                 null,
                                 null,
                                 null,
-                                null
+                                item.requiredBaseUnit(),
+                                item.targetQuantity()
                         ))
                         .toList();
 
@@ -758,6 +759,12 @@ public class ShoppingListService {
                 ? ShoppingItemRule.EXACT_PRODUCT
                 : ShoppingItemRule.FLEXIBLE_CATEGORY;
 
+        // A total amount only means something once the line resolved to a
+        // category: for a specific product the shop's own pack size decides.
+        boolean carriesAmount = intent != null
+                && item.targetQuantity() != null
+                && item.targetQuantity().compareTo(BigDecimal.ZERO) > 0;
+
         return new ValidatedShoppingListItem(
                 name,
                 rawInput,
@@ -765,7 +772,9 @@ public class ShoppingListService {
                 matchingRule,
                 intent == null ? null : name,
                 intent == null ? null : intent.normalizedAlias(),
-                intent == null ? null : intent.shoppingIntentId()
+                intent == null ? null : intent.shoppingIntentId(),
+                carriesAmount ? item.targetQuantity() : null,
+                carriesAmount ? item.baseUnit() : null
         );
     }
 
@@ -832,7 +841,9 @@ public class ShoppingListService {
             ShoppingItemRule matchingRule,
             String flexibleCategory,
             String flexibleCategoryNormalized,
-            Long shoppingIntentId
+            Long shoppingIntentId,
+            BigDecimal targetQuantity,
+            String requiredBaseUnit
     ) {
     }
 
