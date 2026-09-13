@@ -38,7 +38,7 @@ fun parseShoppingAmount(input: String): RequestedShoppingAmount? {
 
 fun amountLabel(value: Double, unit: String?): String {
     val large = unit in setOf("g", "ml") && value >= 1000
-    val number = BigDecimal.valueOf(if (large) value / 1000 else value).stripTrailingZeros().toPlainString()
+    val number = BigDecimal.valueOf(if (large) value / 1000 else value).stripTrailingZeros().toPlainString().replace('.', ',')
     val label = when {
         unit == "g" && large -> "kg"
         unit == "ml" && large -> "l"
