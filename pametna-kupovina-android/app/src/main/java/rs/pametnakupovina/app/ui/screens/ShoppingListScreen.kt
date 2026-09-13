@@ -7,52 +7,59 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import rs.pametnakupovina.app.data.suggestedAmount
-import rs.pametnakupovina.app.data.amountLabel
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import java.math.BigDecimal
-import rs.pametnakupovina.app.data.DraftItemInput
+import kotlinx.coroutines.launch
+import rs.pametnakupovina.app.R
+import rs.pametnakupovina.app.data.amountLabel
 import rs.pametnakupovina.app.data.local.DraftItemEntity
-import rs.pametnakupovina.app.data.network.CanonicalProductSearchItemDto
 import rs.pametnakupovina.app.data.network.ShoppingItemRuleDto
-import rs.pametnakupovina.app.ui.ProductSearchUiState
 import rs.pametnakupovina.app.ui.ProductSearchViewModel
 import rs.pametnakupovina.app.ui.ShoppingListViewModel
+import rs.pametnakupovina.app.ui.components.AppIcon
+import rs.pametnakupovina.app.ui.components.AppSpacing
+import rs.pametnakupovina.app.ui.components.AppTopBar
+import rs.pametnakupovina.app.ui.components.BottomActionBar
 import rs.pametnakupovina.app.ui.components.LoadingState
+import rs.pametnakupovina.app.ui.components.NoticeBanner
+import rs.pametnakupovina.app.ui.components.PrimaryActionButton
 import rs.pametnakupovina.app.ui.components.StatusPill
 import rs.pametnakupovina.app.ui.components.StatusTone
-import rs.pametnakupovina.app.ui.components.canonicalProductPicker
+import rs.pametnakupovina.app.ui.decimal
+import rs.pametnakupovina.app.ui.items
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ShoppingListScreen(
     onOpenMatching: (Long) -> Unit,
@@ -67,38 +74,94 @@ fun ShoppingListScreen(
     var editedItem by remember { mutableStateOf<DraftItemEntity?>(null) }
     var showItemEditor by rememberSaveable { mutableStateOf(false) }
     var showPasteDialog by rememberSaveable { mutableStateOf(false) }
+    val snackbar = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+
+    // A snackbar rather than a card above the list, so reporting what was
+    // pasted never pushes the buttons out from under the reader's thumb.
+    LaunchedEffect(state.notice) {
+        state.notice?.let { message ->
+            snackbar.showSnackbar(
+                message = message,
+                actionLabel = "U redu",
+                duration = SnackbarDuration.Long
+            )
+            viewModel.clearNotice()
+        }
+    }
+
+    fun openEditor(item: DraftItemEntity?) {
+        productSearchViewModel.clear()
+        if (item != null && item.matchingRule != ShoppingItemRuleDto.FLEXIBLE_CATEGORY.name) {
+            productSearchViewModel.updateQuery(item.name)
+        }
+        editedItem = item
+        showItemEditor = true
+    }
+
+    fun delete(item: DraftItemEntity) {
+        viewModel.deleteItem(item)
+        scope.launch {
+            snackbar.currentSnackbarData?.dismiss()
+            val result = snackbar.showSnackbar(
+                message = "Obrisano: ${item.name}",
+                actionLabel = "Vrati",
+                duration = SnackbarDuration.Long
+            )
+            if (result == SnackbarResult.ActionPerformed) {
+                viewModel.restoreItem(item)
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text("Pametna kupovina")
-                        Text(
-                            text = if (state.isOffline) {
-                                "Offline draft, biće sinhronizovan"
-                            } else if (state.isSyncing) {
-                                "Sinhronizacija…"
-                            } else {
-                                "Aktivni spisak"
-                            },
-                            style = MaterialTheme.typography.labelMedium
+            AppTopBar(
+                title = "Moj spisak",
+                subtitle = when {
+                    state.isOffline -> "Bez mreže, izmene čekaju slanje"
+                    state.items.isNotEmpty() -> items(state.items.size)
+                    else -> null
+                },
+                actions = {
+                    TextButton(onClick = onOpenPurchases) {
+                        AppIcon(
+                            R.drawable.ic_history,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp)
                         )
+                        Spacer(Modifier.width(AppSpacing.xs))
+                        Text("Kupovine")
                     }
                 }
             )
         },
-        floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = {
-                    productSearchViewModel.clear()
-                    editedItem = null
-                    showItemEditor = true
+        bottomBar = {
+            if (!state.isInitialLoading) {
+                BottomActionBar {
+                    Row(horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm)) {
+                        SecondaryAction(
+                            text = "Dodaj stavku",
+                            icon = R.drawable.ic_add,
+                            onClick = { openEditor(null) },
+                            modifier = Modifier.weight(1f)
+                        )
+                        SecondaryAction(
+                            text = "Nalepi spisak",
+                            icon = R.drawable.ic_content_paste,
+                            onClick = { showPasteDialog = true },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    PrimaryActionButton(
+                        text = "Izračunaj",
+                        enabled = state.items.isNotEmpty() && !state.isSyncing,
+                        onClick = { viewModel.prepareMatching(onOpenMatching) }
+                    )
                 }
-            ) {
-                Text("+ Dodaj stavku")
             }
-        }
+        },
+        snackbarHost = { SnackbarHost(snackbar) }
     ) { padding ->
         if (state.isInitialLoading) {
             Column(
@@ -115,91 +178,33 @@ fun ShoppingListScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 100.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            contentPadding = PaddingValues(
+                horizontal = AppSpacing.lg,
+                vertical = AppSpacing.md
+            )
         ) {
-            item { OutlinedButton(onClick = onOpenPurchases, modifier = Modifier.fillMaxWidth()) { Text("Moje kupovine") } }
-            item {
-                Text(
-                    "Unesi stavke pojedinačno ili nalepi ceo spisak.",
-                    style = MaterialTheme.typography.bodyLarge
-                )
-            }
-
             state.errorMessage?.let { message ->
-                item {
-                    MessageCard(
-                        message = message,
-                        isError = true,
+                item(key = "error") {
+                    NoticeBanner(
+                        text = message,
+                        tone = StatusTone.ERROR,
                         actionLabel = "Pokušaj ponovo",
-                        onAction = viewModel::refresh
+                        onAction = viewModel::refresh,
+                        modifier = Modifier.padding(bottom = AppSpacing.md)
                     )
-                }
-            }
-
-            state.notice?.let { message ->
-                item {
-                    MessageCard(
-                        message = message,
-                        isError = false,
-                        actionLabel = "U redu",
-                        onAction = viewModel::clearMessage
-                    )
-                }
-            }
-
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = { showPasteDialog = true },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Nalepi spisak")
-                    }
-                    Button(
-                        enabled = state.items.isNotEmpty() && !state.isSyncing,
-                        onClick = {
-                            viewModel.prepareMatching(onOpenMatching)
-                        },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Izračunaj")
-                    }
                 }
             }
 
             if (state.items.isEmpty()) {
-                item {
-                    Card(modifier = Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(20.dp)) {
-                            Text(
-                                "Spisak je prazan",
-                                style = MaterialTheme.typography.titleMedium
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            Text("Dodaj prvu stavku pomoću dugmeta +.")
-                        }
-                    }
-                }
+                item(key = "empty") { EmptyList() }
             } else {
-                items(state.items, key = { it.localId }) { item ->
-                    DraftItemCard(
+                itemsIndexed(state.items, key = { _, item -> item.localId }) { index, item ->
+                    DraftItemRow(
                         item = item,
-                        onEdit = {
-                            productSearchViewModel.clear()
-                            if (
-                                item.matchingRule !=
-                                ShoppingItemRuleDto.FLEXIBLE_CATEGORY.name
-                            ) {
-                                productSearchViewModel.updateQuery(item.name)
-                            }
-                            editedItem = item
-                            showItemEditor = true
-                        },
-                        onDelete = { viewModel.deleteItem(item) },
+                        isFirst = index == 0,
+                        isLast = index == state.items.lastIndex,
+                        onEdit = { openEditor(item) },
+                        onDelete = { delete(item) },
                         onOpenProduct = onOpenProduct
                     )
                 }
@@ -222,16 +227,14 @@ fun ShoppingListScreen(
             },
             onSave = { input ->
                 val current = editedItem
+                val close = {
+                    productSearchViewModel.clear()
+                    showItemEditor = false
+                }
                 if (current == null) {
-                    viewModel.addItem(input) {
-                        productSearchViewModel.clear()
-                        showItemEditor = false
-                    }
+                    viewModel.addItem(input, close)
                 } else {
-                    viewModel.updateItem(current, input) {
-                        productSearchViewModel.clear()
-                        showItemEditor = false
-                    }
+                    viewModel.updateItem(current, input, close)
                 }
             }
         )
@@ -248,504 +251,158 @@ fun ShoppingListScreen(
 }
 
 @Composable
-private fun DraftItemCard(
+private fun SecondaryAction(
+    text: String,
+    icon: Int,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    OutlinedButton(
+        onClick = onClick,
+        contentPadding = PaddingValues(horizontal = AppSpacing.md),
+        modifier = modifier.heightIn(min = 52.dp)
+    ) {
+        AppIcon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(AppSpacing.xs))
+        Text(text, maxLines = 1)
+    }
+}
+
+@Composable
+private fun EmptyList() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = AppSpacing.lg, vertical = 48.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)
+    ) {
+        AppIcon(
+            R.drawable.ic_content_paste,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(48.dp)
+        )
+        Text("Spisak je prazan", style = MaterialTheme.typography.titleLarge)
+        Text(
+            "Nalepi spisak iz poruke ili beleške, ili dodaj stavku po stavku.",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+/**
+ * What to buy and how much on one line. Anything else appears only when it
+ * matters: a non-default way of choosing, or a status that needs the reader,
+ * so twenty rows of "recognised" no longer bury the one that is not.
+ */
+@Composable
+private fun DraftItemRow(
     item: DraftItemEntity,
+    isFirst: Boolean,
+    isLast: Boolean,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onOpenProduct: (Long) -> Unit
 ) {
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-        ),
+    val corner = 16.dp
+    val shape = when {
+        isFirst && isLast -> RoundedCornerShape(corner)
+        isFirst -> RoundedCornerShape(topStart = corner, topEnd = corner)
+        isLast -> RoundedCornerShape(bottomStart = corner, bottomEnd = corner)
+        else -> RectangleShape
+    }
+    val attention = draftAttention(item.matchingStatus)
+
+    Surface(
+        onClick = onEdit,
+        shape = shape,
+        color = MaterialTheme.colorScheme.surfaceContainer,
         modifier = Modifier.fillMaxWidth()
     ) {
-        Column(Modifier.padding(16.dp)) {
-            Text(item.name, style = MaterialTheme.typography.titleMedium)
-            Text(item.targetQuantity?.let {
-                "Ukupno: " + amountLabel(it * item.quantity, item.requiredBaseUnit)
-            } ?: "Broj pakovanja / komada: ${formatQuantity(item.quantity)}")
-            Text(
-                when (item.matchingRule) {
-                    ShoppingItemRuleDto.EXACT_PRODUCT.name ->
-                        "Tačan barkod"
-                    ShoppingItemRuleDto.PRODUCT_FAMILY.name ->
-                        "Isti proizvod • sve poznate varijante"
-                    else -> "Fleksibilno: ${item.category.orEmpty()}"
-                },
-                style = MaterialTheme.typography.bodySmall
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                StatusPill(
-                    text = matchingStatusText(item.matchingStatus),
-                    tone = matchingStatusTone(item.matchingStatus)
-                )
-                if (item.syncState != "SYNCED") {
-                    StatusPill("Čeka sinhronizaciju", StatusTone.WARNING)
-                }
-            }
+        Column {
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
+                modifier = Modifier.padding(
+                    start = AppSpacing.lg,
+                    end = AppSpacing.xs,
+                    top = AppSpacing.md,
+                    bottom = AppSpacing.md
+                ),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                item.canonicalProductId?.let { canonicalProductId ->
-                    TextButton(
-                        onClick = { onOpenProduct(canonicalProductId) }
-                    ) { Text("Cene") }
-                }
-                TextButton(onClick = onEdit) { Text("Izmeni") }
-                TextButton(onClick = onDelete) { Text("Obriši") }
-            }
-        }
-    }
-}
-
-private fun matchingStatusText(status: String): String = when (status) {
-    "AUTO_MATCHED" -> "Automatski povezano"
-    "NEEDS_CONFIRMATION" -> "Potrebna potvrda"
-    "CONFIRMED" -> "Proizvod prepoznat"
-    "UNMATCHED" -> "Neupareno"
-    else -> "Čeka proveru"
-}
-
-private fun matchingStatusTone(status: String): StatusTone = when (status) {
-    "AUTO_MATCHED", "CONFIRMED" -> StatusTone.POSITIVE
-    "NEEDS_CONFIRMATION", "PENDING" -> StatusTone.WARNING
-    "UNMATCHED" -> StatusTone.ERROR
-    else -> StatusTone.NEUTRAL
-}
-
-@Composable
-private fun MessageCard(
-    message: String,
-    isError: Boolean,
-    actionLabel: String,
-    onAction: () -> Unit
-) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp)) {
-            Text(
-                text = message,
-                color = if (isError) {
-                    MaterialTheme.colorScheme.error
-                } else {
-                    MaterialTheme.colorScheme.onSurface
-                }
-            )
-            TextButton(onClick = onAction) { Text(actionLabel) }
-        }
-    }
-}
-
-@Composable
-private fun ItemEditorDialog(
-    item: DraftItemEntity?,
-    productSearchState: ProductSearchUiState,
-    onSearchQueryChange: (String) -> Unit,
-    onClearProductSearch: () -> Unit,
-    onRetryProductSearch: () -> Unit,
-    onLoadMoreProducts: () -> Unit,
-    onIncludeWithoutPrice: (Boolean) -> Unit,
-    onDismiss: () -> Unit,
-    onSave: (DraftItemInput) -> Unit
-) {
-    var name by rememberSaveable(item?.localId) {
-        mutableStateOf(item?.name.orEmpty())
-    }
-    var quantity by rememberSaveable(item?.localId) {
-        mutableStateOf(item?.quantity?.let(::formatQuantity) ?: "1")
-    }
-    var rule by rememberSaveable(item?.localId) {
-        mutableStateOf(
-            item?.matchingRule
-                ?.let(ShoppingItemRuleDto::valueOf)
-                ?: ShoppingItemRuleDto.PRODUCT_FAMILY
-        )
-    }
-    var category by rememberSaveable(item?.localId) {
-        mutableStateOf(item?.category.orEmpty())
-    }
-    var brand by rememberSaveable(item?.localId) {
-        mutableStateOf(item?.requiredBrand.orEmpty())
-    }
-    var minPackage by rememberSaveable(item?.localId) {
-        mutableStateOf(item?.minPackageQuantity?.let(::formatQuantity).orEmpty())
-    }
-    var maxPackage by rememberSaveable(item?.localId) {
-        mutableStateOf(item?.maxPackageQuantity?.let(::formatQuantity).orEmpty())
-    }
-    var baseUnit by rememberSaveable(item?.localId) {
-        mutableStateOf(item?.requiredBaseUnit.orEmpty())
-    }
-    var targetQuantity by rememberSaveable(item?.localId) {
-        mutableStateOf(item?.targetQuantity?.let(::formatQuantity).orEmpty())
-    }
-    val isAmountMode = rule == ShoppingItemRuleDto.FLEXIBLE_CATEGORY && targetQuantity.isNotBlank()
-    val parsedTarget = targetQuantity.replace(',', '.').toDoubleOrNull()
-    var selectedProduct by remember(item?.localId) {
-        mutableStateOf<CanonicalProductSearchItemDto?>(null)
-    }
-    var selectedProductRawInput by remember(item?.localId) {
-        mutableStateOf<String?>(null)
-    }
-
-    val parsedQuantity = quantity.replace(',', '.').toDoubleOrNull()
-    val exactSelection = resolveDraftCanonicalProductId(
-        item = item,
-        enteredName = name,
-        rule = rule,
-        selectedProduct = selectedProduct
-    )
-    val familySelection = resolveDraftProductFamilyId(
-        item = item,
-        enteredName = name,
-        rule = rule,
-        selectedProduct = selectedProduct
-    )
-    val valid = name.isNotBlank() &&
-        parsedQuantity != null &&
-        parsedQuantity.isFinite() && parsedQuantity > 0 &&
-        (!isAmountMode || (parsedTarget != null && parsedTarget.isFinite() && parsedTarget > 0
-            && baseUnit in setOf("g", "ml", "piece"))) &&
-        when (rule) {
-            ShoppingItemRuleDto.EXACT_PRODUCT -> exactSelection != null
-            ShoppingItemRuleDto.PRODUCT_FAMILY -> familySelection != null
-            ShoppingItemRuleDto.FLEXIBLE_CATEGORY -> category.isNotBlank()
-        }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(if (item == null) "Dodaj stavku" else "Izmeni stavku") },
-        text = {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (rule != ShoppingItemRuleDto.FLEXIBLE_CATEGORY) {
-                    canonicalProductPicker(
-                        query = name,
-                        selectedProduct = selectedProduct,
-                        searchState = productSearchState,
-                        onQueryChange = { value ->
-                            name = value
-                            selectedProduct = null
-                            selectedProductRawInput = null
-                            onSearchQueryChange(value)
-                        },
-                        onSelectProduct = { product ->
-                            selectedProductRawInput = name.trim()
-                            selectedProduct = product
-                            name = product.name
-                            if (
-                                rule == ShoppingItemRuleDto.EXACT_PRODUCT &&
-                                product.canonicalProductId == null
-                            ) {
-                                rule = ShoppingItemRuleDto.PRODUCT_FAMILY
-                            }
-                            onClearProductSearch()
-                        },
-                        onClearSelection = {
-                            selectedProduct = null
-                            selectedProductRawInput = null
-                            onSearchQueryChange(name)
-                        },
-                        onRetry = onRetryProductSearch,
-                        onIncludeWithoutPrice = onIncludeWithoutPrice,
-                        onLoadMore = onLoadMoreProducts
-                    )
-                    item(key = "product-mode-help") {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Text(item.name, style = MaterialTheme.typography.titleMedium)
+                    draftRuleLabel(item)?.let { label ->
                         Text(
-                            if (rule == ShoppingItemRuleDto.PRODUCT_FAMILY) {
-                                "Isti proizvod obuhvata sve poznate barkod varijante i ponude prikazanih trgovaca."
-                            } else {
-                                "Tačan barkod zaključava stavku na izabranu GTIN varijantu."
-                            },
-                            style = MaterialTheme.typography.bodySmall
+                            label,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                } else {
-                    item(key = "flexible-item-name") {
-                        OutlinedTextField(
-                            value = name,
-                            onValueChange = { value ->
-                                if (
-                                    category.isBlank() ||
-                                    category.trim() == name.trim()
-                                ) {
-                                    category = value
-                                }
-                                name = value
-                            },
-                            label = { Text("Naziv stavke") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                    attention?.let { (text, tone) ->
+                        Spacer(Modifier.size(AppSpacing.xs))
+                        StatusPill(text, tone)
                     }
                 }
-                item {
-                    OutlinedTextField(
-                        value = quantity,
-                        onValueChange = { quantity = it },
-                        label = { Text(if (isAmountMode) "Broj ovih količina" else "Broj pakovanja / komada") },
-                        keyboardOptions = KeyboardOptions(
-                            keyboardType = KeyboardType.Decimal
-                        ),
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-                item {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            FilterChip(
-                                selected = rule ==
-                                    ShoppingItemRuleDto.PRODUCT_FAMILY,
-                                onClick = {
-                                    rule = ShoppingItemRuleDto.PRODUCT_FAMILY
-                                    selectedProduct = null
-                                    selectedProductRawInput = null
-                                    onSearchQueryChange(name)
-                                },
-                                label = { Text("Isti proizvod") }
-                            )
-                            FilterChip(
-                                selected = rule ==
-                                    ShoppingItemRuleDto.EXACT_PRODUCT,
-                                onClick = {
-                                    rule = ShoppingItemRuleDto.EXACT_PRODUCT
-                                    selectedProduct = null
-                                    selectedProductRawInput = null
-                                    onSearchQueryChange(name)
-                                },
-                                label = { Text("Tačan barkod") }
-                            )
-                        }
-                        FilterChip(
-                            selected = rule ==
-                                ShoppingItemRuleDto.FLEXIBLE_CATEGORY,
-                            onClick = {
-                                rule = ShoppingItemRuleDto.FLEXIBLE_CATEGORY
-                                if (category.isBlank()) {
-                                    category = name.trim()
-                                }
-                                selectedProduct = null
-                                selectedProductRawInput = null
-                                onClearProductSearch()
-                            },
-                            label = { Text("Fleksibilna kategorija") }
-                        )
-                    }
-                }
-                if (rule == ShoppingItemRuleDto.FLEXIBLE_CATEGORY) {
-                    item {
-                        Column {
-                            Text("Koliko ti ukupno treba?", style = MaterialTheme.typography.titleSmall)
-                            suggestedAmount(category)?.let { suggestion ->
-                                TextButton(onClick = {
-                                    targetQuantity = formatQuantity(suggestion.value)
-                                    baseUnit = suggestion.unit
-                                    quantity = "1"
-                                }) { Text("Predlog: " + amountLabel(suggestion.value, suggestion.unit)) }
-                            }
-                            OutlinedTextField(
-                                value = targetQuantity, onValueChange = { targetQuantity = it },
-                                label = { Text("Ukupno u g, ml ili kom (opciono)") },
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            Text("Primer: 1000 g = 1 kg. Bez unosa kupuješ broj pakovanja iznad. " +
-                                "Za ukupnu količinu biramo cela pakovanja, do 25% viška; g i ml ne izjednačavamo.",
-                                style = MaterialTheme.typography.bodySmall)
-                            if (isAmountMode) TextButton(onClick = { targetQuantity = "" }) {
-                                Text("Koristi samo broj pakovanja")
-                            }
-                        }
-                    }
-                    item {
-                        OutlinedTextField(
-                            value = category,
-                            onValueChange = { category = it },
-                            label = { Text("Kategorija*") },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                    item {
-                        OutlinedTextField(
-                            value = brand,
-                            onValueChange = { brand = it },
-                            label = { Text("Obavezan brend (opciono)") },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                    item {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedTextField(
-                                value = minPackage,
-                                onValueChange = { minPackage = it },
-                                label = { Text("Min. pakovanje") },
-                                keyboardOptions = KeyboardOptions(
-                                    keyboardType = KeyboardType.Decimal
-                                ),
-                                modifier = Modifier.weight(1f)
-                            )
-                            OutlinedTextField(
-                                value = maxPackage,
-                                onValueChange = { maxPackage = it },
-                                label = { Text("Maks. pakovanje") },
-                                keyboardOptions = KeyboardOptions(
-                                    keyboardType = KeyboardType.Decimal
-                                ),
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    }
-                    item {
-                        OutlinedTextField(
-                            value = baseUnit,
-                            onValueChange = { baseUnit = it },
-                            label = { Text("Jedinica: g, ml ili piece") },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                enabled = valid,
-                onClick = {
-                    onSave(
-                        DraftItemInput(
-                            name = name,
-                            rawInput = when {
-                                selectedProduct != null ->
-                                    selectedProductRawInput
-                                item != null &&
-                                    item.name.trim() == name.trim() ->
-                                    item.rawInput
-                                else -> name.trim()
-                            },
-                            barcode = resolveDraftBarcode(
-                                item = item,
-                                enteredName = name,
-                                rule = rule,
-                                selectedProduct = selectedProduct
-                            ),
-                            canonicalProductId = exactSelection,
-                            productFamilyId = familySelection,
-                            quantity = requireNotNull(parsedQuantity),
-                            matchingRule = rule,
-                            category = category.takeIf {
-                                rule == ShoppingItemRuleDto.FLEXIBLE_CATEGORY
-                            },
-                            requiredBrand = brand.takeIf {
-                                rule == ShoppingItemRuleDto.FLEXIBLE_CATEGORY
-                            },
-                            minPackageQuantity = minPackage
-                                .replace(',', '.')
-                                .toDoubleOrNull()
-                                ?.takeIf {
-                                    rule ==
-                                        ShoppingItemRuleDto.FLEXIBLE_CATEGORY
-                                },
-                            maxPackageQuantity = maxPackage
-                                .replace(',', '.')
-                                .toDoubleOrNull()
-                                ?.takeIf {
-                                    rule ==
-                                        ShoppingItemRuleDto.FLEXIBLE_CATEGORY
-                                },
-                            targetQuantity = parsedTarget?.takeIf { rule == ShoppingItemRuleDto.FLEXIBLE_CATEGORY },
-                            requiredBaseUnit = baseUnit.takeIf {
-                                rule == ShoppingItemRuleDto.FLEXIBLE_CATEGORY
-                            }
-                        )
-                    )
-                }
-            ) { Text("Sačuvaj") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Otkaži") }
-        }
-    )
-}
-
-internal fun resolveDraftBarcode(
-    item: DraftItemEntity?,
-    enteredName: String,
-    rule: ShoppingItemRuleDto,
-    selectedProduct: CanonicalProductSearchItemDto?
-): String? = when {
-    rule != ShoppingItemRuleDto.EXACT_PRODUCT -> null
-    selectedProduct != null -> selectedProduct.barcode
-    item != null &&
-        item.matchingRule == ShoppingItemRuleDto.EXACT_PRODUCT.name &&
-        item.name.trim() == enteredName.trim() -> item.barcode
-    else -> null
-}
-
-internal fun resolveDraftCanonicalProductId(
-    item: DraftItemEntity?,
-    enteredName: String,
-    rule: ShoppingItemRuleDto,
-    selectedProduct: CanonicalProductSearchItemDto?
-): Long? = when {
-    rule != ShoppingItemRuleDto.EXACT_PRODUCT -> null
-    selectedProduct != null -> selectedProduct.canonicalProductId
-    item != null &&
-        item.matchingRule == ShoppingItemRuleDto.EXACT_PRODUCT.name &&
-        item.name.trim() == enteredName.trim() -> item.canonicalProductId
-    else -> null
-}
-
-internal fun resolveDraftProductFamilyId(
-    item: DraftItemEntity?,
-    enteredName: String,
-    rule: ShoppingItemRuleDto,
-    selectedProduct: CanonicalProductSearchItemDto?
-): Long? = when {
-    rule != ShoppingItemRuleDto.PRODUCT_FAMILY -> null
-    selectedProduct != null -> selectedProduct.productFamilyId
-    item != null &&
-        item.matchingRule == ShoppingItemRuleDto.PRODUCT_FAMILY.name &&
-        item.name.trim() == enteredName.trim() -> item.productFamilyId
-    else -> null
-}
-
-@Composable
-private fun PasteItemsDialog(
-    onDismiss: () -> Unit,
-    onSave: (String) -> Unit
-) {
-    var text by rememberSaveable { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Nalepi spisak") },
-        text = {
-            Column {
                 Text(
-                    "Svaki neprazan red postaće fleksibilna stavka, pa aplikacija može da izabere najpovoljniji odgovarajući proizvod. Za tačan brend ili pakovanje koristi Dodaj stavku."
+                    draftAmountLabel(item),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(horizontal = AppSpacing.sm)
                 )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { text = it },
-                    minLines = 7,
-                    placeholder = { Text("2x mleko\nHleb\nJabuke x3") },
-                    modifier = Modifier.fillMaxWidth()
+                item.canonicalProductId?.let { canonicalProductId ->
+                    IconButton(onClick = { onOpenProduct(canonicalProductId) }) {
+                        AppIcon(R.drawable.ic_local_offer, contentDescription = "Cene za ${item.name}")
+                    }
+                }
+                IconButton(onClick = onDelete) {
+                    AppIcon(
+                        R.drawable.ic_delete,
+                        contentDescription = "Obriši ${item.name}",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            if (!isLast) {
+                HorizontalDivider(
+                    modifier = Modifier.padding(start = AppSpacing.lg),
+                    color = MaterialTheme.colorScheme.outlineVariant
                 )
             }
-        },
-        confirmButton = {
-            Button(
-                enabled = text.isNotBlank(),
-                onClick = { onSave(text) }
-            ) { Text("Dodaj sve") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Otkaži") }
         }
-    )
+    }
 }
 
-internal fun formatQuantity(value: Double): String =
-    BigDecimal.valueOf(value).stripTrailingZeros().toPlainString()
+internal fun draftAmountLabel(item: DraftItemEntity): String =
+    item.targetQuantity?.let { amountLabel(it * item.quantity, item.requiredBaseUnit) }
+        ?: "${decimal(item.quantity)} kom"
+
+/**
+ * Says how an item is chosen only when that differs from the default of
+ * taking the best offer, which is what most of a pasted list is.
+ */
+internal fun draftRuleLabel(item: DraftItemEntity): String? = when (item.matchingRule) {
+    ShoppingItemRuleDto.EXACT_PRODUCT.name -> "Tačan barkod"
+    ShoppingItemRuleDto.PRODUCT_FAMILY.name -> "Isti proizvod, sve varijante"
+    else -> {
+        val category = item.category?.trim().orEmpty()
+        listOfNotNull(
+            category
+                .takeUnless { it.isEmpty() || it.equals(item.name.trim(), ignoreCase = true) }
+                ?.let { "kategorija $it" },
+            item.requiredBrand?.takeIf(String::isNotBlank)?.let { "brend $it" }
+        ).joinToString(", ")
+            .replaceFirstChar { it.uppercaseChar() }
+            .ifEmpty { null }
+    }
+}
+
+private fun draftAttention(status: String): Pair<String, StatusTone>? = when (status) {
+    "NEEDS_CONFIRMATION" -> "Treba tvoja potvrda" to StatusTone.WARNING
+    "UNMATCHED" -> "Nije pronađeno" to StatusTone.ERROR
+    else -> null
+}

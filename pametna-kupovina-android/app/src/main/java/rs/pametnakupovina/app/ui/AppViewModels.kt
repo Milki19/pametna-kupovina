@@ -19,6 +19,7 @@ import kotlinx.coroutines.CancellationException
 import rs.pametnakupovina.app.data.local.DraftItemEntity
 import rs.pametnakupovina.app.data.network.ProductCandidateDto
 import rs.pametnakupovina.app.data.network.ShoppingItemMatchResultDto
+import rs.pametnakupovina.app.data.network.ShoppingItemRuleDto
 import rs.pametnakupovina.app.data.network.ShoppingListMatchingDto
 import rs.pametnakupovina.app.data.network.ShoppingRecommendationDto
 import rs.pametnakupovina.app.sync.SyncScheduler
@@ -110,10 +111,19 @@ class ShoppingListViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val count = repository.pasteItems(text)
+                // Name only the lines that actually received a suggested amount.
+                val suggested = rs.pametnakupovina.app.data.PastedListParser.parse(text)
+                    .map { it.name }
+                    .filter { rs.pametnakupovina.app.data.suggestedAmount(it) != null }
+                    .distinct()
                 onSaved()
                 _uiState.update {
                     it.copy(
-                        notice = "Dodato stavki: $count. Za mleko, jogurt i jaja predložene su ukupne količine; proveri ih na spisku pre računanja.",
+                        notice = "Dodato: ${items(count)}." + if (suggested.isEmpty()) {
+                            ""
+                        } else {
+                            " Za ${suggested.joinToString(", ")} predložena je ukupna količina, proveri je pre računanja."
+                        },
                         errorMessage = null
                     )
                 }
@@ -161,6 +171,42 @@ class ShoppingListViewModel @Inject constructor(
 
     fun clearMessage() {
         _uiState.update { it.copy(errorMessage = null, notice = null) }
+    }
+
+    fun clearNotice() {
+        _uiState.update { it.copy(notice = null) }
+    }
+
+    /**
+     * Undoes a delete by creating the item again through the normal path, so
+     * it syncs like any new item even if the delete already reached the server.
+     */
+    fun restoreItem(item: DraftItemEntity) {
+        val rule = ShoppingItemRuleDto.valueOf(item.matchingRule)
+        mutate {
+            repository.addItem(
+                DraftItemInput(
+                    name = item.name,
+                    rawInput = item.rawInput,
+                    // The server writes its match into these same columns, so
+                    // keep only what the rule allows, as the editor would.
+                    barcode = item.barcode
+                        .takeIf { rule == ShoppingItemRuleDto.EXACT_PRODUCT },
+                    canonicalProductId = item.canonicalProductId
+                        .takeIf { rule == ShoppingItemRuleDto.EXACT_PRODUCT },
+                    productFamilyId = item.productFamilyId
+                        .takeIf { rule == ShoppingItemRuleDto.PRODUCT_FAMILY },
+                    quantity = item.quantity,
+                    matchingRule = rule,
+                    category = item.category,
+                    requiredBrand = item.requiredBrand,
+                    minPackageQuantity = item.minPackageQuantity,
+                    maxPackageQuantity = item.maxPackageQuantity,
+                    requiredBaseUnit = item.requiredBaseUnit,
+                    targetQuantity = item.targetQuantity
+                )
+            )
+        }
     }
 
     private fun mutate(
