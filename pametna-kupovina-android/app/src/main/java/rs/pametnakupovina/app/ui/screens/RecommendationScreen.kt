@@ -1,5 +1,8 @@
 package rs.pametnakupovina.app.ui.screens
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -15,6 +18,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -219,28 +223,20 @@ internal fun RecommendationContent(
                 }
             }
         }
-        item { Text("Nove preporuke",style=MaterialTheme.typography.titleLarge) }
-        scenarios.forEach { scenario ->
-            item(key = scenario.type.name) {
-                ScenarioSummaryCard(
-                    scenario = scenario,
-                    selected = scenario.type == selected.type,
-                    onClick = { selectedTypeName = scenario.type.name }
-                )
-            }
+        item(key = "scenario-chooser") {
+            ScenarioChooser(
+                scenarios = scenarios,
+                selectedType = selected.type,
+                onSelect = { selectedTypeName = it.name }
+            )
         }
 
-        item {
-            Text(
-                "Plan kupovine — ${scenarioTitle(selected.type)}",
-                style = MaterialTheme.typography.titleLarge
-            )
-            Text(
-                "Pokriveno ${selected.coveredItems}/${selected.items.size} stavki; " +
-                    "bez cene ${selected.unavailableItems}; " +
-                    "neupareno ${selected.unmatchedItems}.",
-                style = MaterialTheme.typography.bodyMedium
-            )
+        item(key = "scenario-hero") {
+            ScenarioHeroCard(selected)
+        }
+
+        item(key = "scenario-details") {
+            ScenarioDetails(selected)
         }
 
         saveError?.let { item { Text(it, color = MaterialTheme.colorScheme.error) } }
@@ -397,77 +393,158 @@ internal fun RouteNavigationCard(
 }
 
 @Composable
-private fun ScenarioSummaryCard(
-    scenario: OptimizationScenarioDto,
-    selected: Boolean,
-    onClick: () -> Unit
+private fun ScenarioChooser(
+    scenarios: List<OptimizationScenarioDto>,
+    selectedType: RecommendationScenarioTypeDto,
+    onSelect: (RecommendationScenarioTypeDto) -> Unit
 ) {
-    Card(
-        onClick = onClick,
-        colors = CardDefaults.cardColors(
-            containerColor = if (selected) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else {
-                MaterialTheme.colorScheme.surfaceVariant
-            }
-        ),
-        modifier = Modifier.fillMaxWidth()
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(5.dp)
-        ) {
-            Text(
-                scenarioTitle(scenario.type),
-                style = MaterialTheme.typography.titleLarge
+        scenarios.forEach { scenario ->
+            val isSelected = scenario.type == selectedType
+            // The three totals sit side by side so the choice is a comparison
+            // of prices, not of paragraphs.
+            val weight by animateFloatAsState(
+                targetValue = if (isSelected) 1.25f else 1f,
+                animationSpec = spring(dampingRatio = 0.6f),
+                label = "scenarioWeight"
             )
-            Text(scenario.explanation)
-            if (scenario.available) {
-                Text(
-                    "Pokriveno: ${scenario.coveredItems}/${scenario.items.size} stavki"
-                )
-                Text("Cena korpe: ${purchaseMoney(scenario.basketCost)}")
-                Text(
-                    "Put: ${distance(scenario.routeDistanceKm)} • " +
-                        "${duration(scenario.routeDurationSeconds)}"
-                )
-                Text("Broj stajanja: ${scenario.stopCount}")
-                Text(
-                    "Sa putom, vremenom i stajanjima: ${scenario.totalCost?.let(::purchaseMoney) ?: "—"}",
-                    style = MaterialTheme.typography.titleMedium
-                )
-                scenario.savingsComparedWithSingleStore?.let { savings ->
-                    if (savings >= 0.0) {
+            Surface(
+                onClick = { onSelect(scenario.type) },
+                enabled = scenario.available,
+                shape = MaterialTheme.shapes.medium,
+                color = if (isSelected) {
+                    MaterialTheme.colorScheme.primaryContainer
+                } else {
+                    MaterialTheme.colorScheme.surfaceContainerHigh
+                },
+                border = if (isSelected) {
+                    BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+                } else {
+                    null
+                },
+                modifier = Modifier
+                    .weight(weight)
+                    .testTag("scenario-${scenario.type.name}")
+            ) {
+                Column(
+                    modifier = Modifier.padding(
+                        horizontal = 10.dp,
+                        vertical = 12.dp
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        scenarioShortTitle(scenario.type),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        if (scenario.available) {
+                            scenario.totalCost?.let(::shortMoney) ?: "nema"
+                        } else {
+                            "nema"
+                        },
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                    // Says which number this is, so the cheapest basket
+                    // showing the highest figure reads as sense, not error.
+                    Text(
+                        "ukupno",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (scenario.available) {
                         Text(
-                            "Ušteda prema jednoj prodavnici: ${purchaseMoney(savings)}"
-                        )
-                    } else {
-                        Text(
-                            "Dodatni ukupan trošak prema jednoj prodavnici: " +
-                                purchaseMoney(-savings)
+                            "korpa ${shortMoney(scenario.basketCost)}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
-                if (scenario.approximateRoute) {
+            }
+        }
+    }
+}
+
+@Composable
+private fun ScenarioHeroCard(scenario: OptimizationScenarioDto) {
+    Surface(
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.primaryContainer,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                scenarioTitle(scenario.type),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (scenario.available) {
+                // The number the screen exists for, at a size that needs no
+                // searching for.
+                Text(
+                    scenario.totalCost?.let(::purchaseMoney) ?: "nema cene",
+                    style = MaterialTheme.typography.displaySmall
+                )
+                Text(
+                    "korpa ${purchaseMoney(scenario.basketCost)}" +
+                        (scenario.travelCost?.let { " + put ${purchaseMoney(it)}" } ?: ""),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Text(
+                    "${scenario.coveredItems}/${scenario.items.size} stavki" +
+                        " \u00b7 ${scenario.stopCount} stajanja" +
+                        " \u00b7 ${distance(scenario.routeDistanceKm)}",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                scenario.savingsComparedWithSingleStore?.let { savings ->
+                    if (savings > 0.0) {
+                        Text(
+                            "Jeftinije od jedne prodavnice za ${purchaseMoney(savings)}",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                    }
+                }
+                if (!scenario.complete) {
                     Text(
-                        "Ruta je aproksimacija (${scenario.distanceMethod}).",
-                        style = MaterialTheme.typography.bodySmall
+                        "Plan je nepotpun.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error
                     )
                 }
-                Text(
-                    "Izvori cena: ${scenario.priceSources.joinToString().ifBlank { "nije navedeno" }}",
-                    style = MaterialTheme.typography.bodySmall
-                )
             } else {
                 Text(
-                    "Scenario trenutno nije dostupan.",
-                    color = MaterialTheme.colorScheme.error
+                    scenario.explanation,
+                    style = MaterialTheme.typography.bodyMedium
                 )
             }
         }
     }
 }
 
+@Composable
+private fun ScenarioDetails(scenario: OptimizationScenarioDto) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        if (scenario.approximateRoute) {
+            Text(
+                "Ruta je aproksimacija (${scenario.distanceMethod}).",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Text(
+            "Izvori cena: ${scenario.priceSources.joinToString().ifBlank { "nije navedeno" }}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
 @Composable
 private fun StoreAllocationCard(
     store: RecommendationStoreDto,
@@ -517,7 +594,7 @@ private fun StoreAllocationCard(
                                 Text(it, style = MaterialTheme.typography.bodySmall)
                             }
                         }
-                        Text(item.lineTotal?.let(::purchaseMoney) ?: "—")
+                        Text(item.lineTotal?.let(::purchaseMoney) ?: "nema")
                     }
                 }
             }
@@ -589,6 +666,21 @@ internal fun scenarioTitle(type: RecommendationScenarioTypeDto): String = when (
     RecommendationScenarioTypeDto.RECOMMENDED_BALANCE -> "Preporučeni balans"
     RecommendationScenarioTypeDto.LOWEST_PRICE -> "Najniža cena"
 }
+
+/**
+ * Each scenario wins at a different thing, so the label has to say which.
+ * "Najjeftinije" alone read as a promise about the total, and the cheapest
+ * basket can carry the dearest journey.
+ */
+internal fun scenarioShortTitle(type: RecommendationScenarioTypeDto): String = when (type) {
+    RecommendationScenarioTypeDto.SINGLE_STORE -> "Jedna stanica"
+    RecommendationScenarioTypeDto.RECOMMENDED_BALANCE -> "Najbolje ukupno"
+    RecommendationScenarioTypeDto.LOWEST_PRICE -> "Najjeftinija korpa"
+}
+
+/** Whole dinars: the comparison is between thousands, not between paras. */
+internal fun shortMoney(value: Double): String =
+    "${BigDecimal(value).setScale(0, RoundingMode.HALF_UP)}"
 
 internal fun purchaseMoney(value: Double): String =
     BigDecimal.valueOf(value)
