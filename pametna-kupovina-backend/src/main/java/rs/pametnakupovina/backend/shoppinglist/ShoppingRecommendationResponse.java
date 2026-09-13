@@ -1,6 +1,7 @@
 package rs.pametnakupovina.backend.shoppinglist;
 
 import java.time.LocalDate;
+import java.util.List;
 
 public record ShoppingRecommendationResponse(
         Long listId,
@@ -13,6 +14,7 @@ public record ShoppingRecommendationResponse(
         OptimizationScenarioResponse singleStore,
         OptimizationScenarioResponse recommendedBalance,
         OptimizationScenarioResponse lowestPrice,
+        List<UnlocatedPriceOption> unlocatedPriceOptions,
         String disclaimer
 ) {
 }

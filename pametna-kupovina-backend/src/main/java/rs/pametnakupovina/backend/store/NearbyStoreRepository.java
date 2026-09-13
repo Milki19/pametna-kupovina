@@ -131,8 +131,22 @@ public class NearbyStoreRepository {
                                    exact_distance_meters::numeric,
                                    1
                                )::double precision AS distance_meters
-                        FROM nearby
-                        ORDER BY exact_distance_meters, store_id
+                        FROM (
+                            SELECT nearby.*,
+                                   ROW_NUMBER() OVER (
+                                       PARTITION BY retailer_code,
+                                                    store_format_code
+                                       ORDER BY exact_distance_meters
+                                   ) AS format_rank
+                            FROM nearby
+                        ) AS ranked
+                        -- Prices are per chain and format, so a second shop of
+                        -- the same brand quotes the same basket and only
+                        -- differs in distance. Taking the plain nearest N fills
+                        -- the list with one brand in a dense city and hides a
+                        -- cheaper chain a kilometre further out, so every brand
+                        -- gets its closest shop first.
+                        ORDER BY format_rank, exact_distance_meters, store_id
                         LIMIT ?
                         """)
                 .param(1, longitude)

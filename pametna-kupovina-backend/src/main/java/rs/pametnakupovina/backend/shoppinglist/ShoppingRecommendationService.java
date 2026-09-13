@@ -21,6 +21,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class ShoppingRecommendationService {
@@ -212,8 +213,137 @@ public class ShoppingRecommendationService {
                 singleScenario,
                 recommendedScenario,
                 lowestPriceScenario,
+                findUnlocatedPriceOptions(
+                        shoppingList.id(),
+                        shoppingList.items().size(),
+                        asOfDate
+                ),
                 DISCLAIMER
         );
+    }
+
+    /**
+     * Prices the basket against chains that publish prices but no shop
+     * locations. These never enter a route or a scenario; they only answer
+     * whether the shopper is leaving money on the table somewhere we cannot
+     * send them.
+     */
+    private List<UnlocatedPriceOption> findUnlocatedPriceOptions(
+            Long listId,
+            int totalItems,
+            LocalDate asOfDate
+    ) {
+        List<StoreShoppingOfferRepository.PriceListEntry> entries =
+                offerRepository.findPriceListEntriesWithoutLocation();
+
+        if (entries.isEmpty()) {
+            return List.of();
+        }
+
+        Map<Long, StoreShoppingOfferRepository.PriceListEntry> entryById =
+                entries.stream().collect(Collectors.toMap(
+                        StoreShoppingOfferRepository.PriceListEntry::storeId,
+                        entry -> entry
+                ));
+
+        List<StoreItemOffer> offers = offerRepository.findPriceListOffers(
+                listId,
+                List.copyOf(entryById.keySet()),
+                asOfDate
+        );
+
+        // One basket per published price list, then the range per chain.
+        Map<Long, List<StoreItemOffer>> byEntry = offers.stream()
+                .collect(Collectors.groupingBy(StoreItemOffer::storeId));
+
+        Map<String, List<PricedList>> byRetailer = new LinkedHashMap<>();
+
+        for (Map.Entry<Long, List<StoreItemOffer>> entry
+                : byEntry.entrySet()) {
+            StoreShoppingOfferRepository.PriceListEntry priceList =
+                    entryById.get(entry.getKey());
+
+            if (priceList == null) {
+                continue;
+            }
+
+            int covered = 0;
+            BigDecimal basket = BigDecimal.ZERO;
+
+            for (StoreItemOffer offer : entry.getValue()) {
+                if (offer.available() && offer.lineTotal() != null) {
+                    covered++;
+                    basket = basket.add(offer.lineTotal());
+                }
+            }
+
+            if (covered == 0) {
+                continue;
+            }
+
+            byRetailer.computeIfAbsent(
+                    priceList.retailerCode(),
+                    code -> new ArrayList<>()
+            ).add(new PricedList(priceList, covered, basket));
+        }
+
+        List<UnlocatedPriceOption> options = new ArrayList<>();
+
+        for (List<PricedList> pricedLists : byRetailer.values()) {
+            int bestCoverage = pricedLists.stream()
+                    .mapToInt(PricedList::coveredItems)
+                    .max()
+                    .orElse(0);
+
+            // Comparing a full basket with a partial one would be misleading,
+            // so only the lists that cover the most items form the range.
+            List<PricedList> comparable = pricedLists.stream()
+                    .filter(priced -> priced.coveredItems() == bestCoverage)
+                    .toList();
+
+            BigDecimal lowest = comparable.stream()
+                    .map(PricedList::basketCost)
+                    .min(BigDecimal::compareTo)
+                    .orElse(BigDecimal.ZERO);
+            BigDecimal highest = comparable.stream()
+                    .map(PricedList::basketCost)
+                    .max(BigDecimal::compareTo)
+                    .orElse(BigDecimal.ZERO);
+
+            StoreShoppingOfferRepository.PriceListEntry first =
+                    comparable.getFirst().entry();
+
+            options.add(new UnlocatedPriceOption(
+                    first.retailerCode(),
+                    first.retailerName(),
+                    bestCoverage,
+                    totalItems,
+                    lowest.setScale(2, RoundingMode.HALF_UP),
+                    highest.setScale(2, RoundingMode.HALF_UP),
+                    comparable.size(),
+                    comparable.size() > 1
+                            ? "Ovaj lanac ne objavljuje adrese objekata, a ima "
+                                    + comparable.size()
+                                    + " različitih cenovnika. Ne znamo koji"
+                                    + " važi za prodavnicu kod tebe."
+                            : "Ovaj lanac ne objavljuje adrese objekata, pa ne"
+                                    + " možemo da ti kažemo u koju prodavnicu"
+                                    + " da odeš niti koliko je daleko."
+            ));
+        }
+
+        options.sort(Comparator.comparing(
+                UnlocatedPriceOption::lowestBasketCost
+        ));
+
+        return List.copyOf(options);
+    }
+
+    private record PricedList(
+            StoreShoppingOfferRepository.PriceListEntry entry,
+            int coveredItems,
+            BigDecimal basketCost
+    ) {
     }
 
     private Map<Long, Map<Long, StoreItemOffer>> groupOffersByStore(
