@@ -7,6 +7,9 @@ val MarketGreenLight = Color(0xFFA9DCCB)
 val MarketGreenDark = Color(0xFF84CDB5)
 val MarketGreenContainer = Color(0xFFD1F2E5)
 val MarketGreenDarkContainer = Color(0xFF124D3D)
+/* Selected chips, segments and tonal buttons. Amber here made every choice
+ * look like a warning, since warnings are amber too. */
+val MarketGreenSoft = Color(0xFFC9E7D9)
 
 val BasketAmber = Color(0xFF8A5A00)
 val BasketAmberLight = Color(0xFFFFDFA0)

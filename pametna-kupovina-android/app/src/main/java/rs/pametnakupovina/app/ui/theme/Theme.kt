@@ -47,7 +47,8 @@ private val DarkColorScheme = darkColorScheme(
     outline = NightOutline,
     outlineVariant = NightOutlineFaint,
     inverseSurface = Moonlight,
-    inverseOnSurface = Night
+    inverseOnSurface = Night,
+    inversePrimary = MarketGreen
 )
 
 private val LightColorScheme = lightColorScheme(
@@ -56,7 +57,7 @@ private val LightColorScheme = lightColorScheme(
     primaryContainer = MarketGreenContainer,
     onPrimaryContainer = Ink,
     secondary = BasketAmber,
-    secondaryContainer = BasketAmberLight,
+    secondaryContainer = MarketGreenSoft,
     tertiary = BasketAmber,
     tertiaryContainer = BasketAmberLight,
     onSecondary = Paper,
@@ -81,7 +82,8 @@ private val LightColorScheme = lightColorScheme(
     outline = InkOutline,
     outlineVariant = InkOutlineFaint,
     inverseSurface = Ink,
-    inverseOnSurface = Paper
+    inverseOnSurface = Paper,
+    inversePrimary = MarketGreenDark
 )
 
 private val AppShapes = Shapes(
