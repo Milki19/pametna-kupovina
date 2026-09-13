@@ -29,13 +29,29 @@ pk_db_name="$(docker exec pametna-kupovina-postgres printenv POSTGRES_DB)"
 test -n "$pk_db_user"
 test -n "$pk_db_password"
 test "$pk_db_name" = pametna_kupovina
+# Loopback unless a phone on the same network has to reach the API. Binding
+# wider also exposes the administrative import endpoints, so set an admin key
+# when opening this up: PK_BIND_ADDRESS=0.0.0.0 PK_ADMIN_API_KEY=... run this.
+pk_bind_address="${PK_BIND_ADDRESS:-127.0.0.1}"
+[[ "$pk_bind_address" =~ ^[0-9.]+$ ]] || exit 1
+
+# Passed through the environment, never on the command line, so the key does
+# not show up in the process list.
+if [[ -n "${PK_ADMIN_API_KEY:-}" ]]; then
+    export ADMIN_API_KEY_REQUIRED=true
+    export ADMIN_API_KEY="$PK_ADMIN_API_KEY"
+elif [[ "$pk_bind_address" != "127.0.0.1" ]]; then
+    echo 'Upozorenje: API je otvoren ka mreži bez administratorskog ključa.'
+    echo 'Postavi PK_ADMIN_API_KEY da uvoz i izvori ne budu svima dostupni.'
+fi
+
 export DB_URL=jdbc:postgresql://127.0.0.1:5432/pametna_kupovina
 export DB_USERNAME="$pk_db_user"
 export DB_PASSWORD="$pk_db_password"
 exec java -Xmx2048m -Dspring.devtools.restart.enabled=false \
     -jar "$pk_runtime_jar" \
     --spring.profiles.active=local-daily \
-    --server.address=127.0.0.1 \
+    --server.address="$pk_bind_address" \
     --price-import.archive.directory="$pk_project_dir/infra/import-archive" \
     --price-import.worker.enabled=false \
     --verified-location-import.schedule.enabled=false
