@@ -311,6 +311,12 @@ Ove funkcije imaju vrednost, ali ne treba da blokiraju osnovnu betu.
 - Unutrašnji map preview sa markerima prodavnica, pre prelaska u Google Maps.
 - Zamena nedostupnog proizvoda ekvivalentnom varijantom uz potvrdu korisnika.
 - Ocena kvaliteta preporuke i jednostavno objašnjenje „zašto je ovo izabrano“.
+- Pitanje korisniku kada je unos dvosmislen. Isti pojam često znači dve
+  različite kupovine: „belo meso“ je svež pileći file za roštilj, a u katalogu
+  je najčešće dimljeni narezak; isto važi za „vrat“ (svež za roštilj naspram
+  suvog vrata u slajsu) i „kobasice“. Umesto tihog biranja, aplikacija treba
+  da ponudi kratko pojašnjenje („sveže za roštilj“ ili „suvo/narezak“) i da
+  zapamti izbor za sledeći put.
 
 ### P2 — fiskalni računi i istorija kupovine
 
