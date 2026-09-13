@@ -33,7 +33,6 @@ class ResumePurchaseScreenInstrumentedTest {
         compose.onNodeWithTag("recommendation-list").performScrollToNode(hasTestTag("resume-previous-purchase"))
         compose.onNodeWithText("Nastavi prethodnu kupovinu").performClick()
         compose.runOnIdle { assertEquals("saved-id",resumed); assertEquals(0,newCount) }
-        compose.onNodeWithTag("recommendation-list").performScrollToNode(hasTestTag("start-or-resume-purchase"))
         compose.onNodeWithTag("start-or-resume-purchase").performClick()
         compose.onNodeWithTag("confirm-new-purchase").assertIsDisplayed()
         compose.runOnIdle { assertEquals(0,newCount) }
@@ -56,7 +55,6 @@ class ResumePurchaseScreenInstrumentedTest {
                     })
             }
         }
-        compose.onNodeWithTag("recommendation-list").performScrollToNode(hasTestTag("start-or-resume-purchase"))
         compose.onNodeWithText("Započni kupovinu po ovom planu").performClick()
         compose.runOnIdle { assertTrue(started) }
     }

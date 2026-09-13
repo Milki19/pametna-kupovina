@@ -23,6 +23,6 @@ class RecommendationScreenTest {
             explanation = "Dostupno"
         )
 
-        assertEquals("6 × 170.50 RSD", itemPriceBreakdown(item))
+        assertEquals("6 × 170,50 RSD", itemPriceBreakdown(item))
     }
 }
