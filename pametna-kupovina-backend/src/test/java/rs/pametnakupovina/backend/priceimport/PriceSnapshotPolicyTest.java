@@ -27,14 +27,7 @@ class PriceSnapshotPolicyTest {
                 .isInstanceOf(java.time.format.DateTimeParseException.class);
     }
 
-    @Test
-    void volumeGateRejectsAFeedThatWouldEraseMostOffers() {
-        assertThatThrownBy(() -> PriceImportSafety.requireVolume(49, 100, new java.math.BigDecimal("0.5")))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("VOLUME_DROP");
-        assertThatCode(() -> PriceImportSafety.requireVolume(50, 100, new java.math.BigDecimal("0.5")))
-                .doesNotThrowAnyException();
-        assertThatCode(() -> PriceImportSafety.requireVolume(59172, 157732, 19712,
-                new java.math.BigDecimal("0.6"))).doesNotThrowAnyException();
-    }
+    // Volume-drop / format-change gate coverage moved to PriceImportSafetyTest,
+    // which replaced the live-state baseline this test used to exercise with
+    // a rolling median over import_run history (see ficaFromSep12.md).
 }

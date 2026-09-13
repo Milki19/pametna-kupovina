@@ -179,7 +179,10 @@ public class RetailerDataSourceRepository {
                                source.last_started_at,
                                source.last_success_at,
                                source.last_snapshot_date,
-                               source.last_error
+                               source.last_error,
+                               source.acknowledged_format_count,
+                               source.pending_format_count,
+                               source.format_count_flagged_at
                         FROM app.retailer_data_source AS source
                         JOIN app.retailer AS retailer
                           ON retailer.id = source.retailer_id
@@ -213,9 +216,36 @@ public class RetailerDataSourceRepository {
                                         "last_snapshot_date",
                                         LocalDate.class
                                 ),
-                                resultSet.getString("last_error")
+                                resultSet.getString("last_error"),
+                                (Integer) resultSet.getObject("acknowledged_format_count"),
+                                (Integer) resultSet.getObject("pending_format_count"),
+                                resultSet.getTimestamp("format_count_flagged_at") == null
+                                        ? null
+                                        : resultSet.getTimestamp(
+                                                "format_count_flagged_at"
+                                        ).toInstant()
                         ))
                 .list();
+    }
+
+    /**
+     * Confirms that the source's current distinct-price-format count is a
+     * legitimate catalog shape (not a broken/partial feed), so future imports
+     * with that same format count are compared normally instead of being
+     * flagged again.
+     */
+    public boolean acknowledgeFormatCount(Long dataSourceId) {
+        return jdbcClient.sql("""
+                    UPDATE app.retailer_data_source
+                    SET acknowledged_format_count = pending_format_count,
+                        pending_format_count = NULL,
+                        format_count_flagged_at = NULL,
+                        updated_at = NOW()
+                    WHERE id = ?
+                      AND pending_format_count IS NOT NULL
+                    """)
+                .param(1, dataSourceId)
+                .update() == 1;
     }
 
     private static String firstNonBlank(String first, String second) {
