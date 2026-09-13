@@ -36,7 +36,8 @@ class PurchaseScreenInstrumentedTest {
             compose.waitUntil(5000) { viewModel.session.value?.purchasedCount == 1 }
             compose.onNodeWithTag("bought-1").assertIsOn().performClick()
             compose.waitUntil(5000) { viewModel.session.value?.purchasedCount == 0 }
-            compose.onNodeWithTag("purchase-list").performScrollToNode(hasText("Detalji"))
+            compose.onNodeWithTag("purchase-list").performScrollToNode(hasTestTag("item-menu-1"))
+            compose.onNodeWithTag("item-menu-1").performClick()
             compose.onAllNodesWithText("Detalji")[0].performClick()
             compose.onNodeWithText("Napomena").performTextInput("Uzmi hladan")
             compose.onNodeWithText("Kupljeno (može delimično)").performTextReplacement("2")

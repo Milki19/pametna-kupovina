@@ -356,6 +356,22 @@ data class OptimizationScenarioDto(
     val disclaimer: String
 )
 
+/**
+ * A chain that publishes prices but not where its shops are. It never enters
+ * a plan; it only answers whether somewhere else would have been cheaper.
+ */
+@Serializable
+data class UnlocatedPriceOptionDto(
+    val retailerCode: String,
+    val retailerName: String,
+    val coveredItems: Int,
+    val totalItems: Int,
+    val lowestBasketCost: Double,
+    val highestBasketCost: Double,
+    val priceListCount: Int,
+    val caveat: String
+)
+
 @Serializable
 data class ShoppingRecommendationDto(
     val listId: Long,
@@ -368,5 +384,6 @@ data class ShoppingRecommendationDto(
     val singleStore: OptimizationScenarioDto,
     val recommendedBalance: OptimizationScenarioDto,
     val lowestPrice: OptimizationScenarioDto,
-    val disclaimer: String
+    val disclaimer: String,
+    val unlocatedPriceOptions: List<UnlocatedPriceOptionDto> = emptyList()
 )
