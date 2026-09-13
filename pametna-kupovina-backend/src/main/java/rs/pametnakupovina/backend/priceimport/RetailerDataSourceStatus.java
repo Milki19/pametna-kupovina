@@ -19,6 +19,9 @@ public record RetailerDataSourceStatus(
         Instant lastStartedAt,
         Instant lastSuccessAt,
         LocalDate lastSnapshotDate,
-        String lastError
+        String lastError,
+        Integer acknowledgedFormatCount,
+        Integer pendingFormatCount,
+        Instant formatCountFlaggedAt
 ) {
 }

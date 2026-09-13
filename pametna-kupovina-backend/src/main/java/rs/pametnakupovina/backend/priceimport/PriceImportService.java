@@ -24,6 +24,7 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.Reader;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -64,6 +65,10 @@ public class PriceImportService {
 
     private static final DateTimeFormatter DATE_FORMAT =
             DateTimeFormatter.ofPattern("dd-MM-uuuu");
+    private static final DateTimeFormatter ISO_DATE_FORMAT =
+            DateTimeFormatter.ofPattern("uuuu-MM-dd");
+    private static final java.util.regex.Pattern VARIABLE_WEIGHT_PATTERN =
+            java.util.regex.Pattern.compile("\\bcca\\b");
     private static final DateTimeFormatter MAXI_PROMOTION_DATE_FORMAT =
             new DateTimeFormatterBuilder()
                     .parseCaseInsensitive()
@@ -185,6 +190,7 @@ public class PriceImportService {
         Long importRunId = startImport(
                 retailer.id(),
                 priceSource.id(),
+                null,
                 resolvedSourceUrl
         );
 
@@ -246,7 +252,7 @@ public class PriceImportService {
             rowsWithErrors = Math.max(rowsWithErrors, preflight.rowsWithErrors());
             Path validatedFile = downloadedFile;
             return promoteSnapshot(retailer.id(), priceSource.id(), null, importRunId,
-                    snapshotDate, rowsRead, rowsSelected, rowsWithErrors,
+                    snapshotDate, rowsRead, rowsSelected, rowsWithErrors, preflight.distinctFormatCount(),
                     () -> importLatestSnapshot(retailer.id(), importRunId, validatedFile, scanResult, false).rowsSaved(),
                     () -> storePriceFormatMappingRepository.refreshEligibility(retailer.id()));
         } catch (Exception exception) {
@@ -354,6 +360,7 @@ public class PriceImportService {
         Long importRunId = startImport(
                 target.retailerId(),
                 priceSource.id(),
+                target.storeId(),
                 sourceUrl
         );
 
@@ -390,7 +397,7 @@ public class PriceImportService {
             rowsWithErrors = preflight.rowsWithErrors();
             Path validatedFile = downloadedFile;
             return promoteSnapshot(target.retailerId(), priceSource.id(), target.storeId(), importRunId,
-                    snapshotDate, rowsRead, rowsSelected, rowsWithErrors,
+                    snapshotDate, rowsRead, rowsSelected, rowsWithErrors, preflight.distinctFormatCount(),
                     () -> importStoreSnapshot(target, importRunId, validatedFile, snapshotDate, false).rowsSaved(),
                     () -> markStorePricingEligible(target.storeId()));
         } catch (Exception exception) {
@@ -434,9 +441,9 @@ public class PriceImportService {
     private interface SnapshotWriter { int write() throws IOException; }
 
     private ImportResult promoteSnapshot(long retailerId, Long sourceId, Long storeId, long runId,
-            LocalDate date, int rowsRead, int rowsSelected, int errors,
+            LocalDate date, int rowsRead, int rowsSelected, int errors, int distinctFormatCount,
             SnapshotWriter writer, Runnable updateEligibility) {
-        importSafety.validate(retailerId, sourceId, storeId, date, rowsSelected, errors);
+        importSafety.validate(retailerId, sourceId, storeId, date, rowsSelected, errors, distinctFormatCount);
         updateImportStage(runId, "WRITING");
         return transactionTemplate.execute(transaction -> {
             // Same lock as catalog maintenance, acquired BEFORE touching shared
@@ -445,8 +452,7 @@ public class PriceImportService {
             jdbcClient.sql("SELECT pg_advisory_xact_lock(134711, 1)")
                     .query((rs, n) -> true).single();
             // Another worker may have published a newer snapshot while we waited.
-            importSafety.validate(retailerId, sourceId, storeId, date, rowsSelected, errors);
-            long before = importSafety.currentOfferCount(retailerId, storeId);
+            importSafety.validate(retailerId, sourceId, storeId, date, rowsSelected, errors, distinctFormatCount);
             final int saved;
             try {
                 saved = writer.write();
@@ -454,12 +460,14 @@ public class PriceImportService {
                 throw new java.io.UncheckedIOException(error);
             }
             if (saved != rowsSelected) throw new IllegalStateException("INCOMPLETE_WRITE: cenovnik nije u celosti upisan.");
-            importSafety.validateWrittenVolume(retailerId, sourceId, storeId, runId, before);
+            PriceImportSafety.ValidationOutcome outcome =
+                    importSafety.validateWrittenVolume(retailerId, sourceId, storeId, runId);
             updateImportStage(runId, "REFRESHING_CATALOG");
             catalogMaintenanceService.refreshRetailer(retailerId);
             updateEligibility.run();
             int skipped = Math.max(rowsRead - saved, 0);
-            String status = errors == 0 ? "SUCCEEDED" : "SUCCEEDED_WITH_ERRORS";
+            String status = errors != 0 ? "SUCCEEDED_WITH_ERRORS"
+                    : outcome.needsFormatReview() ? "SUCCEEDED_FORMAT_REVIEW" : "SUCCEEDED";
             completeImport(runId, date, rowsRead, rowsSelected, saved, skipped, status);
             return new ImportResult(runId, date, rowsRead, rowsSelected, saved, skipped, status);
         });
@@ -533,6 +541,7 @@ public class PriceImportService {
         List<PriceCsvRow> batch = new java.util.ArrayList<>(
                 WRITE_BATCH_SIZE
         );
+        java.util.Set<String> distinctFormats = new java.util.HashSet<>();
 
         try (
                 InputStream inputStream = Files.newInputStream(csvPath);
@@ -562,6 +571,9 @@ public class PriceImportService {
                     continue;
                 }
                 rowsSelected++;
+                if (row.retailerFormatName() != null) {
+                    distinctFormats.add(row.retailerFormatName());
+                }
                 batch.add(row);
                 if (batch.size() == WRITE_BATCH_SIZE) {
                     BatchWriteResult result = saveSnapshotInBatches(target.retailerId(), importRunId, batch, validateOnly);
@@ -586,7 +598,8 @@ public class PriceImportService {
                 rowsRead,
                 rowsSelected,
                 rowsSaved,
-                rowsWithErrors
+                rowsWithErrors,
+                distinctFormats.size()
         );
     }
 
@@ -1069,6 +1082,7 @@ public class PriceImportService {
         List<PriceCsvRow> batch = new java.util.ArrayList<>(
                 WRITE_BATCH_SIZE
         );
+        java.util.Set<String> distinctFormats = new java.util.HashSet<>();
 
         try (
                 InputStream inputStream = Files.newInputStream(csvPath);
@@ -1104,6 +1118,9 @@ public class PriceImportService {
                     continue;
                 }
                 rowsSelected++;
+                if (row.retailerFormatName() != null) {
+                    distinctFormats.add(row.retailerFormatName());
+                }
                 batch.add(row);
                 if (batch.size() == WRITE_BATCH_SIZE) {
                     BatchWriteResult result = saveSnapshotInBatches(retailerId, importRunId, batch, validateOnly);
@@ -1128,7 +1145,8 @@ public class PriceImportService {
         return new SnapshotWriteResult(
                 rowsSelected,
                 rowsSaved,
-                rowsWithErrors
+                rowsWithErrors,
+                distinctFormats.size()
         );
     }
 
@@ -1234,6 +1252,7 @@ public class PriceImportService {
     private Long startImport(
             Long retailerId,
             Long dataSourceId,
+            Long storeId,
             String sourceUrl
     ) {
         if (!dataSourceRepository.tryMarkRunning(dataSourceId)) {
@@ -1247,15 +1266,17 @@ public class PriceImportService {
                             INSERT INTO app.import_run (
                                 retailer_id,
                                 data_source_id,
+                                store_id,
                                 source_url,
                                 status
                             )
-                            VALUES (?, ?, ?, 'RUNNING')
+                            VALUES (?, ?, ?, ?, 'RUNNING')
                             RETURNING id
                             """)
                     .param(1, retailerId)
                     .param(2, dataSourceId, Types.BIGINT)
-                    .param(3, sourceUrl)
+                    .param(3, storeId, Types.BIGINT)
+                    .param(4, sourceUrl)
                     .query(Long.class)
                     .single();
         } catch (RuntimeException exception) {
@@ -2040,10 +2061,18 @@ public class PriceImportService {
             return null;
         }
 
-        return LocalDate.parse(
-                normalizedValue,
-                DATE_FORMAT
-        );
+        try {
+            return LocalDate.parse(normalizedValue, DATE_FORMAT);
+        } catch (DateTimeParseException dayFirstFailed) {
+            // METRO publishes the same Pravilnik columns with ISO dates. The
+            // two shapes cannot be confused: only one of them starts with a
+            // four digit year.
+            try {
+                return LocalDate.parse(normalizedValue, ISO_DATE_FORMAT);
+            } catch (DateTimeParseException isoFailed) {
+                throw dayFirstFailed;
+            }
+        }
     }
 
     private LocalDate parseRequiredDate(String value) {
@@ -2176,6 +2205,20 @@ public class PriceImportService {
                 categoryCode
         );
 
+        BigDecimal packageFactor = pricedPerUnitOfMeasureFactor(
+                normalizedProductName,
+                unitOfMeasure,
+                quantityValue,
+                baseUnit,
+                regularPrice,
+                unitPrice
+        );
+
+        if (packageFactor != null) {
+            regularPrice = scalePrice(regularPrice, packageFactor);
+            discountedPrice = scalePrice(discountedPrice, packageFactor);
+        }
+
         return new PriceCsvRow(
                 sourceProductKey,
                 categoryCode,
@@ -2197,6 +2240,72 @@ public class PriceImportService {
                 vatRate,
                 null
         );
+    }
+
+    /**
+     * Goods of variable weight are named "cca 3kg" and quoted per kilogram,
+     * with both price columns carrying that same per-kilogram figure. Read as
+     * a package price they are nonsense: METRO's "CCA 15KG ZAMRZNUTI PILECI
+     * FILE" at 571,99 would be 38 dinars a kilo.
+     *
+     * The marker has to stay this narrow. Where the two price columns simply
+     * repeat each other WITHOUT "cca" the package price is the correct
+     * reading — a 200g box of Ferrero at 861,99 is the box, not the kilo —
+     * and that case outnumbers this one many times over.
+     *
+     * @return how many units of measure the package holds, or null when the
+     *         quoted price already refers to the package.
+     */
+    private BigDecimal pricedPerUnitOfMeasureFactor(
+            String normalizedProductName,
+            String unitOfMeasure,
+            BigDecimal quantityValue,
+            String baseUnit,
+            BigDecimal regularPrice,
+            BigDecimal unitPrice
+    ) {
+        if (normalizedProductName == null
+                || !VARIABLE_WEIGHT_PATTERN.matcher(
+                        normalizedProductName
+                ).find()) {
+            return null;
+        }
+
+        if (unitOfMeasure == null || quantityValue == null
+                || baseUnit == null || regularPrice == null
+                || unitPrice == null) {
+            return null;
+        }
+
+        String unit = unitOfMeasure.strip().toUpperCase(Locale.ROOT);
+
+        if (!unit.equals("KG") && !unit.equals("L")) {
+            return null;
+        }
+
+        if (!baseUnit.equals("g") && !baseUnit.equals("ml")) {
+            return null;
+        }
+
+        if (unitPrice.compareTo(regularPrice) != 0) {
+            return null;
+        }
+
+        BigDecimal packageUnits = quantityValue.divide(
+                BigDecimal.valueOf(1000),
+                6,
+                RoundingMode.HALF_UP
+        );
+
+        return packageUnits.compareTo(BigDecimal.ONE) == 0
+                ? null
+                : packageUnits;
+    }
+
+    private BigDecimal scalePrice(BigDecimal price, BigDecimal factor) {
+        return price == null
+                ? null
+                : price.multiply(factor).setScale(2, RoundingMode.HALF_UP);
     }
 
     private String normalizeBarcode(String value) {
@@ -2319,7 +2428,8 @@ public class PriceImportService {
     private record SnapshotWriteResult(
             int rowsSelected,
             int rowsSaved,
-            int rowsWithErrors
+            int rowsWithErrors,
+            int distinctFormatCount
     ) {
     }
 
@@ -2340,7 +2450,8 @@ public class PriceImportService {
             int rowsRead,
             int rowsSelected,
             int rowsSaved,
-            int rowsWithErrors
+            int rowsWithErrors,
+            int distinctFormatCount
     ) {
     }
 
