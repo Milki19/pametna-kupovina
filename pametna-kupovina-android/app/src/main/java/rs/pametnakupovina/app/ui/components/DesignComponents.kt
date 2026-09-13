@@ -256,22 +256,6 @@ fun NoticeBanner(
 }
 
 @Composable
-fun MetricRow(vararg metrics: Pair<String, String>) {
-    Row(horizontalArrangement = Arrangement.spacedBy(AppSpacing.lg)) {
-        metrics.forEach { (value, label) ->
-            Column {
-                Text(value, style = MaterialTheme.typography.titleLarge)
-                Text(
-                    label,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-    }
-}
-
-@Composable
 fun SectionHeader(
     text: String,
     modifier: Modifier = Modifier,
