@@ -2,75 +2,80 @@ package rs.pametnakupovina.backend.shoppinglist;
 
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
+/**
+ * A grill list says how much meat is needed in total ("ćevapi 3kg"), never how
+ * many packs, because the pack size differs per shop. Counting words keep
+ * meaning packs.
+ */
 class ShoppingListTextParserTest {
 
-    private final ShoppingListTextParser parser =
-            new ShoppingListTextParser();
+    private final ShoppingListTextParser parser = new ShoppingListTextParser();
 
-    @Test
-    void everyNonBlankLineBecomesOneItemAndOriginalLineIsKept() {
-        ParsedShoppingListText result = parser.parse(
-                "  Mleko 1 l  \r\n\r\n  \r\nHleb\n"
-        );
-
-        assertThat(result.items()).hasSize(2);
-        assertThat(result.ignoredBlankLineCount()).isEqualTo(3);
-        assertThat(result.items().get(0).name())
-                .isEqualTo("Mleko 1 l");
-        assertThat(result.items().get(0).rawInput())
-                .isEqualTo("  Mleko 1 l  ");
-        assertThat(result.items().get(1).rawInput())
-                .isEqualTo("Hleb");
+    private ParsedShoppingListLine parseOne(String line) {
+        List<ParsedShoppingListLine> items = parser.parse(line).items();
+        assertThat(items).hasSize(1);
+        return items.getFirst();
     }
 
     @Test
-    void explicitPrefixAndSuffixQuantitiesAreParsed() {
-        ParsedShoppingListText result = parser.parse("""
-                2 x Mleko 1 l
-                3kom Hleb
-                Jogurt x4
-                Jabuke - 1,5 kg
-                """);
-
-        assertThat(result.items())
-                .extracting(ParsedShoppingListLine::name)
-                .containsExactly(
-                        "Mleko 1 l",
-                        "Hleb",
-                        "Jogurt",
-                        "Jabuke - 1,5 kg"
-                );
-
-        assertThat(result.items())
-                .extracting(ParsedShoppingListLine::quantity)
-                .containsExactly(
-                        new java.math.BigDecimal("2"),
-                        new java.math.BigDecimal("3"),
-                        new java.math.BigDecimal("4"),
-                        java.math.BigDecimal.ONE
-                );
+    void weightBecomesATotalAmountAndLeavesTheNameSearchable() {
+        ParsedShoppingListLine cevapi = parseOne("Ćevapi 3kg");
+        assertThat(cevapi.name()).isEqualTo("Ćevapi");
+        assertThat(cevapi.targetQuantity()).isEqualByComparingTo("3000");
+        assertThat(cevapi.baseUnit()).isEqualTo("g");
+        assertThat(cevapi.quantity()).isEqualByComparingTo("1");
     }
 
     @Test
-    void numbersInProductNameOrPackageAreNotGuessedAsItemCount() {
-        ParsedShoppingListText result = parser.parse("""
-                Mleko 1 l
-                7 Days kroasan
-                Pelene 4 maxi
-                """);
+    void volumeConvertsToMillilitresAndSpelledOutUnitsAreUnderstood() {
+        assertThat(parseOne("mleko 1l").targetQuantity())
+                .isEqualByComparingTo("1000");
+        assertThat(parseOne("mleko 1l").baseUnit()).isEqualTo("ml");
+        assertThat(parseOne("sok 500ml").targetQuantity())
+                .isEqualByComparingTo("500");
 
-        assertThat(result.items())
-                .extracting(ParsedShoppingListLine::quantity)
-                .containsOnly(java.math.BigDecimal.ONE);
+        ParsedShoppingListLine sir = parseOne("Sitan sir 400grama");
+        assertThat(sir.name()).isEqualTo("Sitan sir");
+        assertThat(sir.targetQuantity()).isEqualByComparingTo("400");
+        assertThat(sir.baseUnit()).isEqualTo("g");
+    }
 
-        assertThat(result.items())
-                .extracting(ParsedShoppingListLine::name)
-                .containsExactly(
-                        "Mleko 1 l",
-                        "7 Days kroasan",
-                        "Pelene 4 maxi"
-                );
+    @Test
+    void decimalsAndLeadingAmountsWork() {
+        assertThat(parseOne("Vrat 1,5 kg").targetQuantity())
+                .isEqualByComparingTo("1500");
+        ParsedShoppingListLine leading = parseOne("2kg krilca");
+        assertThat(leading.name()).isEqualTo("krilca");
+        assertThat(leading.targetQuantity()).isEqualByComparingTo("2000");
+    }
+
+    @Test
+    void countingWordsStillMeanPackagesNotWeight() {
+        ParsedShoppingListLine pieces = parseOne("3x mleko");
+        assertThat(pieces.quantity()).isEqualByComparingTo("3");
+        assertThat(pieces.targetQuantity()).isNull();
+
+        ParsedShoppingListLine suffix = parseOne("jaja 2 kom");
+        assertThat(suffix.quantity()).isEqualByComparingTo("2");
+        assertThat(suffix.targetQuantity()).isNull();
+    }
+
+    @Test
+    void aPlainNameCarriesNoAmountAtAll() {
+        ParsedShoppingListLine plain = parseOne("kiselo mleko");
+        assertThat(plain.name()).isEqualTo("kiselo mleko");
+        assertThat(plain.targetQuantity()).isNull();
+        assertThat(plain.quantity()).isEqualByComparingTo(BigDecimal.ONE);
+    }
+
+    @Test
+    void anAmountWithNoProductNameIsNotAnItem() {
+        assertThat(parseOne("3kg").name()).isEqualTo("3kg");
+        assertThat(parseOne("3kg").targetQuantity()).isNull();
     }
 }
