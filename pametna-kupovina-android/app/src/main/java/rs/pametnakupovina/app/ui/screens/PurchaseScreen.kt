@@ -78,7 +78,7 @@ fun PurchaseScreen(
                     val recorded = session.progress.values.mapNotNull { it.actualLineTotal?.toBigDecimalOrNull() }
                     if (recorded.isNotEmpty()) Text("Zabeleženi stvarni iznosi: ${recorded.fold(java.math.BigDecimal.ZERO, java.math.BigDecimal::add)} RSD " +
                         "(${recorded.size} stavki; nije nužno cela kupovina)")
-                    if (!scenario.complete) Text("Plan nije kompletan — proveri i stavke bez ponude.",
+                    if (!scenario.complete) Text("Plan nije kompletan. Proveri i stavke bez ponude.",
                         color = MaterialTheme.colorScheme.error)
                 }
                 val stores = scenario.stores.sortedBy { it.stopOrder }
@@ -91,7 +91,7 @@ fun PurchaseScreen(
                 stores.forEach { store ->
                     val products = scenario.items.filter { it.storeId == store.storeId }
                     item(key = "store-${store.storeId}") {
-                        Text("${store.stopOrder}. ${store.retailerName} — ${store.storeName}",
+                        Text("${store.stopOrder}. ${store.retailerName}, ${store.storeName}",
                             style = MaterialTheme.typography.titleLarge)
                         Text(listOfNotNull(store.address, store.city).joinToString(", "))
                         Text("Kupljeno ${products.count { session.progress[it.itemId]?.status == PurchaseStatus.PURCHASED }}/${products.size}")

@@ -175,7 +175,7 @@ private fun MatchingItemCard(
                     enabled = enabled,
                     onClick = { onChoose(null) }
                 ) {
-                    Text("Nijedan — ostavi neupareno")
+                    Text("Nijedan, ostavi neupareno")
                 }
             }
 

@@ -76,7 +76,7 @@ fun ShoppingListScreen(
                         Text("Pametna kupovina")
                         Text(
                             text = if (state.isOffline) {
-                                "Offline draft — biće sinhronizovan"
+                                "Offline draft, biće sinhronizovan"
                             } else if (state.isSyncing) {
                                 "Sinhronizacija…"
                             } else {
