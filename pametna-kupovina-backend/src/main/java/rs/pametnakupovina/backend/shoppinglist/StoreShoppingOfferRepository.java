@@ -65,6 +65,15 @@ public class StoreShoppingOfferRepository {
             List<Long> storeIds,
             LocalDate asOfDate
     ) {
+        return findOffers(listId, storeIds, asOfDate, false);
+    }
+
+    private List<StoreItemOffer> findOffers(
+            Long listId,
+            List<Long> storeIds,
+            LocalDate asOfDate,
+            boolean includeUnlocated
+    ) {
         if (storeIds == null || storeIds.isEmpty()) {
             return List.of();
         }
@@ -510,6 +519,44 @@ public class StoreShoppingOfferRepository {
                                          ), 32767)
                                          ELSE 0
                                      END ASC,
+                                     -- Someone who writes only "mleko" means a
+                                     -- litre of it, not the cheapest 200ml cup.
+                                     -- Ranked, not filtered: a store that only
+                                     -- stocks small packs still offers milk
+                                     -- instead of dropping out of the basket.
+                                     -- Once an amount is actually stated, the
+                                     -- cheapest way to supply it wins again:
+                                     -- five 200g cups may beat one 1kg tub.
+                                     CASE
+                                         WHEN item.matching_rule <>
+                                              'FLEXIBLE_CATEGORY'
+                                             THEN 0
+                                         WHEN item.target_quantity IS NOT NULL
+                                             OR item.min_package_quantity
+                                                 IS NOT NULL
+                                             OR item.max_package_quantity
+                                                 IS NOT NULL
+                                             THEN 0
+                                         WHEN pack.size IS NULL
+                                             THEN 1
+                                         WHEN (
+                                             requested_intent.default_min_package_quantity
+                                                 IS NULL
+                                             OR pack.size >=
+                                                requested_intent.default_min_package_quantity
+                                         ) AND (
+                                             requested_intent.default_max_package_quantity
+                                                 IS NULL
+                                             OR pack.size <=
+                                                requested_intent.default_max_package_quantity
+                                         ) AND (
+                                             requested_intent.default_base_unit
+                                                 IS NULL
+                                             OR pack.unit =
+                                                requested_intent.default_base_unit
+                                         ) THEN 0
+                                         ELSE 1
+                                     END ASC,
                                      selected_price.effective_price * need.packages ASC,
                                      need.packages * pack.size ASC NULLS LAST,
                                      product.id ASC
@@ -517,7 +564,10 @@ public class StoreShoppingOfferRepository {
                         ) AS offer ON TRUE
                         WHERE item.shopping_list_id = :listId
                           AND store.id IN (:storeIds)
-                          AND store.pricing_eligible = TRUE
+                          AND (
+                              store.pricing_eligible = TRUE
+                              OR (:includeUnlocated AND store.location IS NULL)
+                          )
                         ORDER BY store.id ASC,
                                  item.created_at ASC,
                                  item.id ASC
@@ -525,7 +575,59 @@ public class StoreShoppingOfferRepository {
                 .param("asOfDate", asOfDate)
                 .param("listId", listId)
                 .param("storeIds", storeIds)
+                .param("includeUnlocated", includeUnlocated)
                 .query(ROW_MAPPER)
                 .list();
+    }
+
+    /**
+     * Prices a basket against published price lists whose shop location is
+     * unknown (see V65). These entries have no coordinates and are never
+     * pricing_eligible, so they cannot be routed to; this exists only to say
+     * "it would be cheaper here" next to a plan the shopper can actually
+     * follow.
+     */
+    public List<StoreItemOffer> findPriceListOffers(
+            Long listId,
+            List<Long> priceListEntryIds,
+            LocalDate asOfDate
+    ) {
+        return findOffers(listId, priceListEntryIds, asOfDate, true);
+    }
+
+    /** Published price lists that no shop location could be attached to. */
+    public List<PriceListEntry> findPriceListEntriesWithoutLocation() {
+        return jdbcClient.sql("""
+                        SELECT store.id AS store_id,
+                               retailer.code AS retailer_code,
+                               retailer.name AS retailer_name,
+                               store.name AS label
+                        FROM app.store AS store
+                        JOIN app.retailer AS retailer
+                          ON retailer.id = store.retailer_id
+                        JOIN app.store_price_format_mapping AS mapping
+                          ON mapping.retailer_id = store.retailer_id
+                         AND mapping.store_external_code = store.external_code
+                         AND mapping.active = TRUE
+                         AND mapping.verification_status = 'VERIFIED'
+                        WHERE store.active = TRUE
+                          AND store.location IS NULL
+                        ORDER BY retailer.code, store.name
+                        """)
+                .query((resultSet, rowNumber) -> new PriceListEntry(
+                        resultSet.getLong("store_id"),
+                        resultSet.getString("retailer_code"),
+                        resultSet.getString("retailer_name"),
+                        resultSet.getString("label")
+                ))
+                .list();
+    }
+
+    public record PriceListEntry(
+            Long storeId,
+            String retailerCode,
+            String retailerName,
+            String label
+    ) {
     }
 }
