@@ -18,7 +18,8 @@ public class CanonicalProductDetailsRepository {
                     resultSet.getString("brand"),
                     resultSet.getString("barcode"),
                     resultSet.getBigDecimal("quantity_value"),
-                    resultSet.getString("base_unit")
+                    resultSet.getString("base_unit"),
+                    resultSet.getInt("package_count")
             );
 
     private static final RowMapper<CanonicalProductOffer> OFFER_MAPPER =
@@ -66,7 +67,15 @@ public class CanonicalProductDetailsRepository {
                                brand,
                                barcode,
                                quantity_value,
-                               base_unit
+                               base_unit,
+                               COALESCE((
+                                   SELECT MAX(product.package_count)
+                                   FROM app.retailer_product AS product
+                                   WHERE product.canonical_product_id =
+                                         canonical_product.id
+                                     AND product.quantity_value =
+                                         canonical_product.quantity_value
+                               ), 1) AS package_count
                         FROM app.canonical_product
                         WHERE id = ?
                         """)
@@ -214,8 +223,18 @@ public class CanonicalProductDetailsRepository {
                                      )
                                  )
                              )
-                            WHERE retailer_product.canonical_product_id =
-                                  :productId
+                            -- A merged product sells under several
+                            -- barcodes; every chain carrying one counts.
+                            WHERE (
+                                retailer_product.canonical_product_id =
+                                    :productId
+                                OR retailer_product.product_family_id IN (
+                                    SELECT member.family_id
+                                    FROM app.product_family_member AS member
+                                    WHERE member.canonical_product_id =
+                                          :productId
+                                )
+                            )
                               AND observation.price_date <= :asOfDate
                         )
                         SELECT retailer_product_id,
@@ -322,8 +341,14 @@ public class CanonicalProductDetailsRepository {
                                  )
                              )
                          )
-                        WHERE retailer_product.canonical_product_id =
-                              :productId
+                        WHERE (
+                            retailer_product.canonical_product_id = :productId
+                            OR retailer_product.product_family_id IN (
+                                SELECT member.family_id
+                                FROM app.product_family_member AS member
+                                WHERE member.canonical_product_id = :productId
+                            )
+                        )
                           AND observation.price_date <= :asOfDate
                           AND (
                               observation.discounted_price > 0
@@ -346,7 +371,19 @@ public class CanonicalProductDetailsRepository {
             String brand,
             String barcode,
             java.math.BigDecimal quantityValue,
-            String baseUnit
+            String baseUnit,
+            int packageCount
     ) {
+
+        CanonicalProductSummary(
+                Long id,
+                String name,
+                String brand,
+                String barcode,
+                java.math.BigDecimal quantityValue,
+                String baseUnit
+        ) {
+            this(id, name, brand, barcode, quantityValue, baseUnit, 1);
+        }
     }
 }

@@ -7,6 +7,8 @@ import org.springframework.stereotype.Repository;
 import java.sql.Types;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Repository
 public class CanonicalProductSearchRepository {
@@ -29,7 +31,9 @@ public class CanonicalProductSearchRepository {
                     resultSet.getInt("variant_count"),
                     resultSet.getBigDecimal("name_similarity"),
                     resultSet.getBoolean("exact_ean_match"),
-                    resultSet.getBoolean("has_usable_price")
+                    resultSet.getBoolean("has_usable_price"),
+                    resultSet.getObject("product_type_id", Long.class),
+                    resultSet.getInt("package_count")
             );
 
     private static final RowMapper<ProductAvailabilityRow>
@@ -81,6 +85,17 @@ public class CanonicalProductSearchRepository {
                                family.base_unit,
                                category.code AS category_code,
                                category.name AS category_name,
+                               family.product_type_id,
+                               -- Only rows stating the family's own size: chains
+                               -- that describe one barcode differently must not
+                               -- turn 45 g into "3 × 15 g".
+                               COALESCE((
+                                   SELECT MAX(member_product.package_count)
+                                   FROM app.retailer_product AS member_product
+                                   WHERE member_product.product_family_id = family.id
+                                     AND member_product.quantity_value =
+                                         family.quantity_value
+                               ), 1) AS package_count,
                                EXISTS (
                                    SELECT 1 FROM app.product_retailer_presence AS presence
                                    WHERE presence.product_family_id=family.id
@@ -236,6 +251,28 @@ public class CanonicalProductSearchRepository {
                 .param("familyIds", productFamilyIds)
                 .query(AVAILABILITY_ROW_MAPPER)
                 .list();
+    }
+
+    public Map<Long, Integer> findProductTypePriorities(
+            long shoppingIntentId
+    ) {
+        return jdbcClient.sql("""
+                        SELECT product_type_id, match_priority
+                        FROM app.shopping_intent_product_type
+                        WHERE shopping_intent_id = ?
+                          AND enabled_by_default = TRUE
+                        """)
+                .param(1, shoppingIntentId)
+                .query((resultSet, rowNumber) -> Map.entry(
+                        resultSet.getLong("product_type_id"),
+                        resultSet.getInt("match_priority")
+                ))
+                .list()
+                .stream()
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        Map.Entry::getValue
+                ));
     }
 
     public java.util.Map<Long, List<String>> findKnownRetailers(List<Long> familyIds) {

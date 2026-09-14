@@ -15,6 +15,8 @@ record CanonicalProductSearchRow(
         int variantCount,
         BigDecimal nameSimilarity,
         boolean exactEanMatch,
-        boolean hasUsablePrice
+        boolean hasUsablePrice,
+        Long productTypeId,
+        int packageCount
 ) {
 }

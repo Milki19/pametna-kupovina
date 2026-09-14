@@ -6,6 +6,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Function;
 import java.util.function.Predicate;
 
 @Service
@@ -69,7 +70,8 @@ public class ProductMatchDecisionService {
                 limit,
                 clientToken,
                 candidate -> true,
-                true
+                true,
+                this::canonicalCandidates
         );
     }
 
@@ -91,8 +93,39 @@ public class ProductMatchDecisionService {
                 limit,
                 clientToken,
                 candidateFilter,
-                false
+                false,
+                this::canonicalCandidates
         );
+    }
+
+    // Shopping lists match against what the search box finds: products merged
+    // across chains, and those sold without a barcode for clients that can
+    // confirm one.
+    @Transactional
+    public ProductMatchDecision decideFromProductSearch(
+            String query,
+            int limit,
+            String clientToken,
+            Predicate<FuzzyProductCandidate> candidateFilter,
+            boolean reuseFeedback,
+            boolean includeWithoutBarcode
+    ) {
+        return decideInternal(
+                query,
+                limit,
+                clientToken,
+                candidateFilter,
+                reuseFeedback,
+                candidateQuery -> candidateService.findProductSearchCandidates(
+                        candidateQuery,
+                        MAX_LIMIT,
+                        includeWithoutBarcode
+                )
+        );
+    }
+
+    private List<FuzzyProductCandidate> canonicalCandidates(String query) {
+        return candidateService.findCandidates(query, MAX_LIMIT);
     }
 
     private ProductMatchDecision decideInternal(
@@ -100,7 +133,8 @@ public class ProductMatchDecisionService {
             int limit,
             String clientToken,
             Predicate<FuzzyProductCandidate> candidateFilter,
-            boolean reuseFeedback
+            boolean reuseFeedback,
+            Function<String, List<FuzzyProductCandidate>> candidateSource
     ) {
         validateQueryAndLimit(query, limit);
 
@@ -116,11 +150,15 @@ public class ProductMatchDecisionService {
                 clientTokenValidator.validateOptional(clientToken);
 
         if (reuseFeedback && normalizedClientToken != null) {
+            // A confirmed product without a barcode is not replayed as an
+            // automatic match; the algorithm suggests it again instead.
             Optional<ReusableProductMatch> reusableMatch =
                     feedbackRepository.findReusableFeedback(
                             normalizedClientToken,
                             normalizedQuery
-                    );
+                    ).filter(match -> match.action()
+                            == ProductMatchFeedbackAction.REJECTED
+                            || match.canonicalProductId() != null);
 
             if (reusableMatch.isPresent()) {
                 return reusedDecision(reusableMatch.orElseThrow());
@@ -128,7 +166,7 @@ public class ProductMatchDecisionService {
         }
 
         List<FuzzyProductCandidate> candidates =
-                candidateService.findCandidates(query, MAX_LIMIT)
+                candidateSource.apply(query)
                         .stream()
                         .filter(candidateFilter)
                         .limit(limit)
@@ -140,11 +178,22 @@ public class ProductMatchDecisionService {
         Optional<BigDecimal> topScore = topCandidate
                 .map(candidate -> candidate.score().totalScore());
 
-        ProductMatchStatus status = thresholdPolicy.classify(topScore);
-
         Long topCandidateId = topCandidate
                 .map(FuzzyProductCandidate::canonicalProductId)
                 .orElse(null);
+
+        Long topCandidateFamilyId = topCandidate
+                .map(FuzzyProductCandidate::productFamilyId)
+                .orElse(null);
+
+        ProductMatchStatus status = thresholdPolicy.classify(topScore);
+
+        // A product without a barcode is known by its name alone, so the
+        // shopper confirms it however close that name is.
+        if (status == ProductMatchStatus.AUTO_ACCEPTED
+                && topCandidateId == null) {
+            status = ProductMatchStatus.NEEDS_CONFIRMATION;
+        }
 
         Long matchedCanonicalProductId =
                 status == ProductMatchStatus.AUTO_ACCEPTED
@@ -158,6 +207,7 @@ public class ProductMatchDecisionService {
                 query,
                 normalizedQuery,
                 topCandidateId,
+                topCandidateFamilyId,
                 matchedCanonicalProductId,
                 score,
                 status,

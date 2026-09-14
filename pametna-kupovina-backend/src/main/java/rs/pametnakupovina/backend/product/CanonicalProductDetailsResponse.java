@@ -14,7 +14,8 @@ public record CanonicalProductDetailsResponse(
         LocalDate requestedDate,
         LocalDate latestPriceDate,
         List<CanonicalProductOffer> offers,
-        List<CanonicalProductPricePoint> priceHistory
+        List<CanonicalProductPricePoint> priceHistory,
+        int packageCount
 ) {
     public CanonicalProductDetailsResponse {
         offers = List.copyOf(offers);

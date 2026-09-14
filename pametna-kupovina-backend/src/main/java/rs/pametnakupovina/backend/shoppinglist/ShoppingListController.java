@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -107,9 +108,17 @@ public class ShoppingListController {
     @PostMapping("/{listId}/matching")
     public ShoppingListMatchingResponse matchItems(
             @PathVariable("listId") Long listId,
-            @RequestHeader(CLIENT_TOKEN_HEADER) String clientToken
+            @RequestHeader(CLIENT_TOKEN_HEADER) String clientToken,
+            @RequestParam(
+                    name = "includeProductsWithoutBarcode",
+                    defaultValue = "false"
+            ) boolean includeProductsWithoutBarcode
     ) {
-        return matchingService.match(listId, clientToken);
+        return matchingService.match(
+                listId,
+                clientToken,
+                includeProductsWithoutBarcode
+        );
     }
 
     @PutMapping("/{listId}/items/{itemId}/match")

@@ -694,6 +694,57 @@ public class ShoppingListRepository {
                 .optional();
     }
 
+    // A product sold without a barcode is confirmed as the merged product, so
+    // the item follows every chain that sells it.
+    public Optional<ShoppingListItemResponse> confirmProductFamilyMatch(
+            Long listId,
+            Long itemId,
+            Long productFamilyId,
+            Long matchingDecisionId
+    ) {
+        return jdbcClient.sql("""
+                        UPDATE app.shopping_list_item
+                        SET matching_rule = 'PRODUCT_FAMILY',
+                            matching_status = 'CONFIRMED',
+                            matched_canonical_product_id = NULL,
+                            matched_product_family_id = ?,
+                            barcode = NULL,
+                            matching_decision_id = ?,
+                            matching_score = 1.0000,
+                            matching_algorithm_version =
+                                'user-confirmation-v1',
+                            updated_at = NOW()
+                        WHERE shopping_list_id = ?
+                          AND id = ?
+                          AND matching_rule = 'EXACT_PRODUCT'
+                        RETURNING id,
+                                  name,
+                                  raw_input,
+                                  barcode,
+                                  quantity,
+                                  matching_rule,
+                                  matching_status,
+                                  matched_canonical_product_id,
+                                  matched_product_family_id,
+                                  matching_decision_id,
+                                  matching_score,
+                                  matching_algorithm_version,
+                                  flexible_category,
+                                  required_brand,
+                                  min_package_quantity,
+                                  max_package_quantity,
+                                  required_base_unit, target_quantity,
+                                  created_at,
+                                  updated_at
+                        """)
+                .param(1, productFamilyId)
+                .param(2, matchingDecisionId, Types.BIGINT)
+                .param(3, listId)
+                .param(4, itemId)
+                .query(ITEM_ROW_MAPPER)
+                .optional();
+    }
+
     private Optional<Long> findCanonicalProductIdByBarcode(
             String barcode
     ) {

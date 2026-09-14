@@ -17,7 +17,8 @@ public record CanonicalProductSearchItem(
         List<ProductRetailerAvailability> availability,
         BigDecimal score,
         boolean hasUsablePrice,
-        List<String> knownRetailers
+        List<String> knownRetailers,
+        int packageCount
 ) {
 
     public CanonicalProductSearchItem(
@@ -43,7 +44,8 @@ public record CanonicalProductSearchItem(
                 List.of(),
                 score,
                 false,
-                List.of()
+                List.of(),
+                1
         );
     }
 }

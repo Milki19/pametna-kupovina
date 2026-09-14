@@ -47,6 +47,17 @@ public class ShoppingListMatchingService {
             Long listId,
             String clientToken
     ) {
+        return match(listId, clientToken, false);
+    }
+
+    // Only a client that can confirm a product sold without a barcode asks
+    // for such candidates; older apps expect every candidate to carry one.
+    @Transactional
+    public ShoppingListMatchingResponse match(
+            Long listId,
+            String clientToken,
+            boolean includeProductsWithoutBarcode
+    ) {
         ShoppingListResponse shoppingList =
                 shoppingListService.requireOwnedList(
                         listId,
@@ -56,7 +67,12 @@ public class ShoppingListMatchingService {
         List<ShoppingItemMatchResult> results = new ArrayList<>();
 
         for (ShoppingListItemResponse item : shoppingList.items()) {
-            results.add(matchItem(listId, item, clientToken));
+            results.add(matchItem(
+                    listId,
+                    item,
+                    clientToken,
+                    includeProductsWithoutBarcode
+            ));
         }
 
         List<Long> blockingItemIds = results.stream()
@@ -138,9 +154,24 @@ public class ShoppingListMatchingService {
         }
 
         if (request.action() == ShoppingItemMatchAction.CONFIRM) {
-            if (request.canonicalProductId() == null) {
+            if (request.canonicalProductId() == null
+                    && request.productFamilyId() == null) {
                 throw badRequest(
                         "canonicalProductId je obavezan za potvrdu"
+                );
+            }
+
+            if (request.canonicalProductId() != null
+                    && request.productFamilyId() != null) {
+                throw badRequest(
+                        "Potvrda bira kanonski proizvod ili porodicu, ne oba"
+                );
+            }
+
+            if (request.productFamilyId() != null
+                    && item.matchingRule() != ShoppingItemRule.EXACT_PRODUCT) {
+                throw badRequest(
+                        "Porodica proizvoda se potvrđuje samo za tačan proizvod"
                 );
             }
 
@@ -150,21 +181,32 @@ public class ShoppingListMatchingService {
                             clientToken,
                             ProductMatchFeedbackAction.CONFIRMED,
                             request.canonicalProductId(),
-                            request.note()
+                            request.note(),
+                            request.productFamilyId()
                     )
             );
 
-            item = updateResult(
-                    listId,
-                    itemId,
-                    ShoppingItemMatchingStatus.CONFIRMED,
-                    request.canonicalProductId(),
-                    item.matchingDecisionId(),
-                    BigDecimal.ONE.setScale(4),
-                    "user-confirmation-v1"
-            );
+            if (request.productFamilyId() != null) {
+                item = shoppingListRepository.confirmProductFamilyMatch(
+                        listId,
+                        itemId,
+                        request.productFamilyId(),
+                        item.matchingDecisionId()
+                ).orElseThrow(() -> itemNotFound(itemId));
+            } else {
+                item = updateResult(
+                        listId,
+                        itemId,
+                        ShoppingItemMatchingStatus.CONFIRMED,
+                        request.canonicalProductId(),
+                        item.matchingDecisionId(),
+                        BigDecimal.ONE.setScale(4),
+                        "user-confirmation-v1"
+                );
+            }
         } else {
-            if (request.canonicalProductId() != null) {
+            if (request.canonicalProductId() != null
+                    || request.productFamilyId() != null) {
                 throw badRequest(
                         "Odbijanje ne sme da izabere kanonski proizvod"
                 );
@@ -198,7 +240,8 @@ public class ShoppingListMatchingService {
     private ShoppingItemMatchResult matchItem(
             Long listId,
             ShoppingListItemResponse item,
-            String clientToken
+            String clientToken,
+            boolean includeProductsWithoutBarcode
     ) {
         if (item.matchingStatus()
                 == ShoppingItemMatchingStatus.CONFIRMED) {
@@ -218,20 +261,27 @@ public class ShoppingListMatchingService {
 
             String query = flexibleQuery(item, constraints);
 
-            decision = decisionService.decideWithCandidateFilter(
+            // A flexible item is never pinned to one product, so it gets
+            // no candidate it could only confirm as a family.
+            decision = decisionService.decideFromProductSearch(
                     query,
                     CANDIDATE_LIMIT,
                     clientToken,
                     candidate -> satisfiesConstraints(
                             candidate,
                             constraints
-                    )
+                    ),
+                    false,
+                    false
             );
         } else {
-            decision = decisionService.decide(
+            decision = decisionService.decideFromProductSearch(
                     item.name(),
                     CANDIDATE_LIMIT,
-                    clientToken
+                    clientToken,
+                    candidate -> true,
+                    true,
+                    includeProductsWithoutBarcode
             );
         }
 

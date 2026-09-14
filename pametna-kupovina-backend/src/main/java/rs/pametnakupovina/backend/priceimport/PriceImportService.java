@@ -1362,6 +1362,7 @@ public class PriceImportService {
                     unit = EXCLUDED.unit,
                     quantity_value = EXCLUDED.quantity_value,
                     base_unit = EXCLUDED.base_unit,
+                    package_count = 1,
                     canonical_product_id = EXCLUDED.canonical_product_id
                 RETURNING id
                 """)

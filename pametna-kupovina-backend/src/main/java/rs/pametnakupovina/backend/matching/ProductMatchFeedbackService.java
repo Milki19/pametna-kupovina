@@ -48,7 +48,8 @@ public class ProductMatchFeedbackService {
 
         validateSelectedProduct(
                 request.action(),
-                request.selectedCanonicalProductId()
+                request.selectedCanonicalProductId(),
+                request.selectedProductFamilyId()
         );
 
         String note = normalizeNote(request.note());
@@ -71,28 +72,48 @@ public class ProductMatchFeedbackService {
             );
         }
 
+        if (request.selectedProductFamilyId() != null
+                && !feedbackRepository.productFamilyExists(
+                request.selectedProductFamilyId()
+        )) {
+            throw new IllegalArgumentException(
+                    "Izabrana porodica proizvoda ne postoji"
+            );
+        }
+
         return feedbackRepository.save(
                 decisionId,
                 clientToken,
                 request.action(),
                 request.selectedCanonicalProductId(),
+                request.selectedProductFamilyId(),
                 note
         );
     }
 
     private void validateSelectedProduct(
             ProductMatchFeedbackAction action,
-            Long selectedCanonicalProductId
+            Long selectedCanonicalProductId,
+            Long selectedProductFamilyId
     ) {
         if (action == ProductMatchFeedbackAction.CONFIRMED
-                && selectedCanonicalProductId == null) {
+                && selectedCanonicalProductId == null
+                && selectedProductFamilyId == null) {
             throw new IllegalArgumentException(
                     "selectedCanonicalProductId je obavezan za potvrdu"
             );
         }
 
+        if (selectedCanonicalProductId != null
+                && selectedProductFamilyId != null) {
+            throw new IllegalArgumentException(
+                    "Potvrda bira kanonski proizvod ili porodicu, ne oba"
+            );
+        }
+
         if (action == ProductMatchFeedbackAction.REJECTED
-                && selectedCanonicalProductId != null) {
+                && (selectedCanonicalProductId != null
+                || selectedProductFamilyId != null)) {
             throw new IllegalArgumentException(
                     "Odbijanje ne sme da izabere kanonski proizvod"
             );

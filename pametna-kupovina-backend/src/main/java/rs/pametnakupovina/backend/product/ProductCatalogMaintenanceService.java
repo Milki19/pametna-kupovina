@@ -34,6 +34,7 @@ public class ProductCatalogMaintenanceService {
                 ));
 
         synchronizeBrands(retailerId);
+        synchronizePackageSizes(retailerId);
         synchronizeFamilies(retailerId);
         synchronizeProductCategories(retailerId);
         synchronizeFamilyCategories(retailerId);
@@ -231,174 +232,24 @@ public class ProductCatalogMaintenanceService {
                 .update();
     }
 
+    private void synchronizePackageSizes(long retailerId) {
+        // Sizes a name states unclearly ("0.355ML", a bare "0.33" on a drink,
+        // a case of eight under one bottle's name) are corrected in the
+        // database (V71) before products are grouped by size.
+        jdbcClient.sql("SELECT app.refresh_package_sizes(?)")
+                .param(1, retailerId)
+                .query((resultSet, rowNumber) -> true)
+                .single();
+    }
+
     private void synchronizeFamilies(long retailerId) {
-        jdbcClient.sql("""
-                    INSERT INTO app.product_family (
-                        family_key,
-                        display_name,
-                        normalized_name,
-                        brand_id,
-                        quantity_value,
-                        base_unit,
-                        review_status
-                    )
-                    SELECT 'SEM:' || MD5(signature),
-                           MIN(name),
-                           normalized_name,
-                           brand_id,
-                           quantity_value,
-                           base_unit,
-                           CASE
-                               WHEN COUNT(DISTINCT barcode)
-                                   FILTER (WHERE barcode IS NOT NULL) > 1
-                                   THEN 'REVIEW_REQUIRED'
-                               ELSE 'ACTIVE'
-                           END
-                    FROM (
-                        SELECT canonical.name,
-                               canonical.normalized_name,
-                               canonical.brand_id,
-                               canonical.quantity_value,
-                               canonical.base_unit,
-                               canonical.barcode,
-                               canonical.normalized_name || '|' ||
-                                   COALESCE(brand.normalized_name, '') || '|' ||
-                                   COALESCE(
-                                       canonical.quantity_value::TEXT,
-                                       ''
-                                   ) || '|' ||
-                                   COALESCE(canonical.base_unit, '')
-                                       AS signature
-                        FROM app.canonical_product AS canonical
-                        JOIN app.retailer_product AS product
-                          ON product.canonical_product_id = canonical.id
-                        LEFT JOIN app.brand AS brand
-                          ON brand.id = canonical.brand_id
-                        WHERE product.retailer_id = ?
-                    ) AS signature_rows
-                    GROUP BY signature,
-                             normalized_name,
-                             brand_id,
-                             quantity_value,
-                             base_unit
-                    ON CONFLICT (family_key) DO UPDATE SET
-                        display_name = EXCLUDED.display_name,
-                        brand_id = EXCLUDED.brand_id,
-                        quantity_value = EXCLUDED.quantity_value,
-                        base_unit = EXCLUDED.base_unit,
-                        updated_at = NOW()
-                    """)
+        // The grouping rule and the id-preserving reassignment live in the
+        // database (V67), so a migration that refines the rule regroups
+        // existing products exactly the way an import does.
+        jdbcClient.sql("SELECT app.assign_product_families(?)")
                 .param(1, retailerId)
-                .update();
-
-        jdbcClient.sql("""
-                    INSERT INTO app.product_family_member (
-                        family_id,
-                        canonical_product_id,
-                        relation_type,
-                        confidence
-                    )
-                    SELECT family.id,
-                           canonical.id,
-                           'SINGLE_GTIN',
-                           1.0000
-                    FROM app.canonical_product AS canonical
-                    JOIN app.retailer_product AS product
-                      ON product.canonical_product_id = canonical.id
-                    LEFT JOIN app.brand AS brand
-                      ON brand.id = canonical.brand_id
-                    JOIN app.product_family AS family
-                      ON family.family_key = 'SEM:' || MD5(
-                          canonical.normalized_name || '|' ||
-                          COALESCE(brand.normalized_name, '') || '|' ||
-                          COALESCE(canonical.quantity_value::TEXT, '') || '|' ||
-                          COALESCE(canonical.base_unit, '')
-                      )
-                    WHERE product.retailer_id = ?
-                    ON CONFLICT (canonical_product_id) DO NOTHING
-                    """)
-                .param(1, retailerId)
-                .update();
-
-        jdbcClient.sql("""
-                    INSERT INTO app.product_family (
-                        family_key,
-                        display_name,
-                        normalized_name,
-                        brand_id,
-                        quantity_value,
-                        base_unit,
-                        review_status
-                    )
-                    SELECT 'SEM:' || MD5(signature),
-                           MIN(name),
-                           normalized_name,
-                           brand_id,
-                           quantity_value,
-                           base_unit,
-                           'ACTIVE'
-                    FROM (
-                        SELECT product.name,
-                               product.normalized_name,
-                               product.brand_id,
-                               product.quantity_value,
-                               product.base_unit,
-                               product.normalized_name || '|' ||
-                                   COALESCE(brand.normalized_name, '') || '|' ||
-                                   COALESCE(
-                                       product.quantity_value::TEXT,
-                                       ''
-                                   ) || '|' ||
-                                   COALESCE(product.base_unit, '')
-                                       AS signature
-                        FROM app.retailer_product AS product
-                        LEFT JOIN app.brand AS brand
-                          ON brand.id = product.brand_id
-                        WHERE product.retailer_id = ?
-                          AND product.canonical_product_id IS NULL
-                    ) AS signature_rows
-                    WHERE NULLIF(BTRIM(normalized_name), '') IS NOT NULL
-                    GROUP BY signature,
-                             normalized_name,
-                             brand_id,
-                             quantity_value,
-                             base_unit
-                    ON CONFLICT (family_key) DO UPDATE SET
-                        display_name = EXCLUDED.display_name,
-                        updated_at = NOW()
-                    """)
-                .param(1, retailerId)
-                .update();
-
-        jdbcClient.sql("""
-                    UPDATE app.retailer_product AS product
-                    SET product_family_id = family.id
-                    FROM app.product_family AS family
-                    WHERE product.retailer_id = ?
-                      AND family.family_key = 'SEM:' || MD5(
-                          product.normalized_name || '|' ||
-                          COALESCE((
-                              SELECT brand.normalized_name
-                              FROM app.brand AS brand
-                              WHERE brand.id = product.brand_id
-                          ), '') || '|' ||
-                          COALESCE(product.quantity_value::TEXT, '') || '|' ||
-                          COALESCE(product.base_unit, '')
-                      )
-                    """)
-                .param(1, retailerId)
-                .update();
-
-        jdbcClient.sql("""
-                    UPDATE app.retailer_product AS product
-                    SET product_family_id = member.family_id
-                    FROM app.product_family_member AS member
-                    WHERE product.retailer_id = ?
-                      AND member.canonical_product_id =
-                          product.canonical_product_id
-                    """)
-                .param(1, retailerId)
-                .update();
+                .query((resultSet, rowNumber) -> true)
+                .single();
 
         jdbcClient.sql("""
                     WITH variant_counts AS (
