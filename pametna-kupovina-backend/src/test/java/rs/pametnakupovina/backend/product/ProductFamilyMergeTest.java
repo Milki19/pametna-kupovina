@@ -27,7 +27,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * for "50G CARNEX", a department label or nothing in the brand column. Once
  * both price lists are in, it must be one product with a price from each
  * chain, while products that only look alike stay apart: another brand is
- * another product, and so is another variant of the same brand and size.
+ * another product, so is another variant of the same brand and size, and so
+ * is a loose product one chain prices per piece and another per kilogram.
  */
 @SpringBootTest(properties = {
         "price-import.http.request-timeout-seconds=5",
@@ -60,6 +61,8 @@ class ProductFamilyMergeTest {
             3;Meso;SVINJSKI VRAT SK;Trlić;;KG;Test format;699,99;;13-09-2026;699,99;;;10
             4;Bebe;HIPP COMBIOTIC 1 300G;Hipp;8601234000037;KOM;Test format;999,99;;13-09-2026;999,99;;;20
             5;Povrce;KARFIOL;povrće;;KG;Test format;189,99;;13-09-2026;189,99;;;10
+            6;Povrce;CELER;povrće;;KOM;Test format;109,90;;13-09-2026;109,90;;;10
+            7;Voce;MANGO KOMAD;voće;;KOM;Test format;199,99;;13-09-2026;199,99;;;10
             """;
 
     private static final String SECOND_CHAIN = HEADER + """
@@ -68,6 +71,8 @@ class ProductFamilyMergeTest {
             2;Pastete;PASTETA JETRENA 50G-CARNE;Carnex;8601234000020;KOM;Test format;84,99;;13-09-2026;84,99;;;20
             3;Meso;VRAT SVINJSKI SK;Vero;;KG;Test format;649,99;;13-09-2026;649,99;;;10
             4;Bebe;HIPP COMBIOTIC 2 300G;Hipp;8601234000044;KOM;Test format;979,99;;13-09-2026;979,99;;;20
+            6;Povrce;Celer;;;KG;Test format;249,99;;13-09-2026;249,99;;;10
+            7;Voce;Mango komad;;;kg;Test format;219,99;;13-09-2026;219,99;;;10
             """;
 
     private static HttpServer csvServer;
@@ -166,5 +171,14 @@ class ProductFamilyMergeTest {
                 .isNotEqualTo(familyOf("MERGE_ONE", "SVINJSKI VRAT SK"));
         assertThat(familyOf("MERGE_TWO", "HIPP COMBIOTIC 2 300G"))
                 .isNotEqualTo(familyOf("MERGE_ONE", "HIPP COMBIOTIC 1 300G"));
+
+        // Sold loose, a piece and a kilogram are different products once the
+        // prices confirm it: 249,99 a kilogram against 109,90 a piece. A chain
+        // that writes "kg" for a mango sold by the piece asks about what the
+        // other chain asks per piece, so that label alone splits nothing.
+        assertThat(familyOf("MERGE_TWO", "Celer"))
+                .isNotEqualTo(familyOf("MERGE_ONE", "CELER"));
+        assertThat(familyOf("MERGE_TWO", "Mango komad"))
+                .isEqualTo(familyOf("MERGE_ONE", "MANGO KOMAD"));
     }
 }

@@ -163,6 +163,10 @@ public class StoreShoppingOfferRepository {
                             LEFT JOIN app.canonical_product AS canonical
                               ON canonical.id =
                                   product.canonical_product_id
+                            LEFT JOIN app.product_family_typical_price
+                                AS typical_price
+                              ON typical_price.product_family_id =
+                                  product.product_family_id
                             CROSS JOIN LATERAL (
                                 SELECT product.quantity_value AS size,
                                        product.base_unit AS unit
@@ -394,6 +398,16 @@ public class StoreShoppingOfferRepository {
                                 LIMIT 1
                             ) AS selected_price ON TRUE
                             WHERE product.retailer_id = store.retailer_id
+                              -- Far below what other chains charge, the price
+                              -- is most likely for one piece or one kilogram
+                              -- of a bigger pack (V72). The product screen
+                              -- shows it to be checked; a plan never counts
+                              -- on it.
+                              AND NOT app.price_needs_check(
+                                  selected_price.regular_price,
+                                  selected_price.discounted_price,
+                                  typical_price.typical_price
+                              )
                               AND (item.target_quantity IS NULL OR (
                                   pack.size > 0 AND pack.unit = item.required_base_unit
                                   AND need.packages * pack.size <= item.target_quantity * item.quantity * 1.25

@@ -36,7 +36,8 @@ public class CanonicalProductDetailsRepository {
                     resultSet.getBigDecimal("discounted_price"),
                     resultSet.getBigDecimal("effective_price"),
                     resultSet.getBigDecimal("unit_price"),
-                    resultSet.getString("price_scope")
+                    resultSet.getString("price_scope"),
+                    resultSet.getBoolean("price_needs_check")
             );
 
     private static final RowMapper<CanonicalProductPricePoint> HISTORY_MAPPER =
@@ -125,6 +126,11 @@ public class CanonicalProductDetailsRepository {
                                        END
                                    ) AS effective_price,
                                    observation.unit_price,
+                                   app.price_needs_check(
+                                       observation.regular_price,
+                                       observation.discounted_price,
+                                       typical_price.typical_price
+                                   ) AS price_needs_check,
                                    CASE
                                        WHEN observation.store_id IS NOT NULL
                                            THEN 'STORE'
@@ -201,6 +207,10 @@ public class CanonicalProductDetailsRepository {
                             ) AS observation
                               ON observation.retailer_product_id =
                                   retailer_product.id
+                            LEFT JOIN app.product_family_typical_price
+                                AS typical_price
+                              ON typical_price.product_family_id =
+                                  retailer_product.product_family_id
                             LEFT JOIN app.store AS store
                               ON store.id = observation.store_id
                             LEFT JOIN app.store_format AS store_format
@@ -249,11 +259,14 @@ public class CanonicalProductDetailsRepository {
                                discounted_price,
                                effective_price,
                                unit_price,
-                               price_scope
+                               price_scope,
+                               price_needs_check
                         FROM ranked
                         WHERE rank_number = 1
                           AND effective_price > 0
-                        ORDER BY effective_price ASC,
+                        -- A price to be checked is never the cheapest.
+                        ORDER BY price_needs_check ASC,
+                                 effective_price ASC,
                                  retailer_name ASC,
                                  price_scope ASC
                         """)

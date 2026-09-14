@@ -341,6 +341,7 @@ class PametnaKupovinaBackendApplicationTests {
                             app.product_match_decision,
                             app.import_worker_heartbeat,
                             app.product_identity_candidate,
+                            app.product_family_typical_price,
                             app.product_retailer_presence,
                             app.product_family_member,
                             app.retailer_product_attribute,

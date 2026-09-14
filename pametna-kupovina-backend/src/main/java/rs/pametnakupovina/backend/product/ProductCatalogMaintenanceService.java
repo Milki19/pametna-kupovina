@@ -43,6 +43,7 @@ public class ProductCatalogMaintenanceService {
         synchronizeProductAttributes(retailerId);
         synchronizeIdentityCandidates(retailerId);
         synchronizePresence(retailerId);
+        synchronizeTypicalPrices();
 
         return readResult(retailerId, retailerCode);
     }
@@ -238,6 +239,13 @@ public class ProductCatalogMaintenanceService {
         // database (V71) before products are grouped by size.
         jdbcClient.sql("SELECT app.refresh_package_sizes(?)")
                 .param(1, retailerId)
+                .query((resultSet, rowNumber) -> true)
+                .single();
+
+        // A product without a size is split into sold by the piece and sold
+        // by the kilogram only where the chains' prices confirm it (V72), so
+        // every chain's products are looked at, not only this chain's.
+        jdbcClient.sql("SELECT app.refresh_sale_units()")
                 .query((resultSet, rowNumber) -> true)
                 .single();
     }
@@ -848,6 +856,15 @@ public class ProductCatalogMaintenanceService {
                     """)
                 .param(1, retailerId)
                 .update();
+    }
+
+    private void synchronizeTypicalPrices() {
+        // What a product typically costs across chains, the yardstick for an
+        // offer too cheap to believe (V72). One chain's new prices move it
+        // for every chain.
+        jdbcClient.sql("SELECT app.refresh_typical_prices()")
+                .query((resultSet, rowNumber) -> true)
+                .single();
     }
 
     private ProductCatalogRefreshResult readResult(
