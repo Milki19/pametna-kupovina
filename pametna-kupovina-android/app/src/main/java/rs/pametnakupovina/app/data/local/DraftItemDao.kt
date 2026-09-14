@@ -60,11 +60,22 @@ interface DraftItemDao {
     @Query("SELECT remoteId FROM draft_items WHERE remoteId IS NOT NULL")
     suspend fun remoteIdsKeptLocally(): List<Long>
 
-    /** What the server holds, next to the rows it has not accepted yet. */
+    /**
+     * What the server holds, next to the rows it has not accepted yet. Rows
+     * keep their place: a new local id would move every accepted row below
+     * the refused one.
+     */
     @Transaction
     suspend fun replaceSyncedWithRemote(items: List<DraftItemEntity>) {
+        val localIdByRemoteId = getAllItems()
+            .filter { it.remoteId != null }
+            .associate { it.remoteId to it.localId }
         deleteSynced()
         val kept = remoteIdsKeptLocally().toSet()
-        insertAll(items.filter { it.remoteId !in kept })
+        insertAll(
+            items.filter { it.remoteId !in kept }.map { remote ->
+                localIdByRemoteId[remote.remoteId]?.let { remote.copy(localId = it) } ?: remote
+            }
+        )
     }
 }
