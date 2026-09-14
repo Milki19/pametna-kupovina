@@ -167,9 +167,39 @@ public class StoreShoppingOfferRepository {
                                 AS typical_price
                               ON typical_price.product_family_id =
                                   product.product_family_id
+                            -- "6 kom" of something sold by volume or weight
+                            -- counts bottles, cans and bags, so six bottles
+                            -- and a case of six compare by price (V73). Not
+                            -- where the usual amount is itself a number of
+                            -- pieces, as a litre of liquid egg is no egg, and
+                            -- not for loose goods priced by weight.
                             CROSS JOIN LATERAL (
-                                SELECT product.quantity_value AS size,
-                                       product.base_unit AS unit
+                                SELECT CASE WHEN counted.by_piece
+                                            THEN product.package_count::NUMERIC
+                                            ELSE product.quantity_value
+                                       END AS size,
+                                       CASE WHEN counted.by_piece
+                                            THEN 'piece'
+                                            ELSE product.base_unit
+                                       END AS unit,
+                                       -- One bottle or can, for the usual size.
+                                       CASE WHEN counted.by_piece
+                                            THEN product.quantity_value
+                                                 / product.package_count
+                                            ELSE product.quantity_value
+                                       END AS one_size,
+                                       product.base_unit AS one_unit,
+                                       counted.by_piece
+                                FROM (
+                                    SELECT COALESCE(
+                                               item.required_base_unit = 'piece'
+                                               AND product.base_unit IN ('g', 'ml')
+                                               AND requested_intent.default_base_unit
+                                                   IS DISTINCT FROM 'piece'
+                                               AND product.name !~* '\\m(rinfuz|cca)\\M',
+                                               FALSE
+                                           ) AS by_piece
+                                ) AS counted
                             ) pack
                             CROSS JOIN LATERAL (
                                 SELECT CASE WHEN item.target_quantity IS NULL THEN item.quantity
@@ -554,28 +584,32 @@ public class StoreShoppingOfferRepository {
                                          WHEN item.matching_rule <>
                                               'FLEXIBLE_CATEGORY'
                                              THEN 0
-                                         WHEN item.target_quantity IS NOT NULL
+                                         -- A number of bottles or cans still
+                                         -- prefers the usual size of one.
+                                         WHEN NOT pack.by_piece AND (
+                                             item.target_quantity IS NOT NULL
                                              OR item.min_package_quantity
                                                  IS NOT NULL
                                              OR item.max_package_quantity
                                                  IS NOT NULL
+                                         )
                                              THEN 0
-                                         WHEN pack.size IS NULL
+                                         WHEN pack.one_size IS NULL
                                              THEN 1
                                          WHEN (
                                              requested_intent.default_min_package_quantity
                                                  IS NULL
-                                             OR pack.size >=
+                                             OR pack.one_size >=
                                                 requested_intent.default_min_package_quantity
                                          ) AND (
                                              requested_intent.default_max_package_quantity
                                                  IS NULL
-                                             OR pack.size <=
+                                             OR pack.one_size <=
                                                 requested_intent.default_max_package_quantity
                                          ) AND (
                                              requested_intent.default_base_unit
                                                  IS NULL
-                                             OR pack.unit =
+                                             OR pack.one_unit =
                                                 requested_intent.default_base_unit
                                          ) THEN 0
                                          ELSE 1
