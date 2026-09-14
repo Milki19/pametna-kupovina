@@ -27,19 +27,22 @@ public class ShoppingListMatchingService {
     private final ProductMatchDecisionService decisionService;
     private final ProductMatchFeedbackService feedbackService;
     private final ProductNameNormalizer productNameNormalizer;
+    private final ShoppingLineInterpreter lineInterpreter;
 
     public ShoppingListMatchingService(
             ShoppingListService shoppingListService,
             ShoppingListRepository shoppingListRepository,
             ProductMatchDecisionService decisionService,
             ProductMatchFeedbackService feedbackService,
-            ProductNameNormalizer productNameNormalizer
+            ProductNameNormalizer productNameNormalizer,
+            ShoppingLineInterpreter lineInterpreter
     ) {
         this.shoppingListService = shoppingListService;
         this.shoppingListRepository = shoppingListRepository;
         this.decisionService = decisionService;
         this.feedbackService = feedbackService;
         this.productNameNormalizer = productNameNormalizer;
+        this.lineInterpreter = lineInterpreter;
     }
 
     @Transactional
@@ -66,7 +69,8 @@ public class ShoppingListMatchingService {
 
         List<ShoppingItemMatchResult> results = new ArrayList<>();
 
-        for (ShoppingListItemResponse item : shoppingList.items()) {
+        for (ShoppingListItemResponse stored : shoppingList.items()) {
+            ShoppingListItemResponse item = readAgain(listId, stored);
             results.add(matchItem(
                     listId,
                     item,
@@ -237,6 +241,100 @@ public class ShoppingListMatchingService {
         return item;
     }
 
+    /**
+     * A line keeps the reading it got when it was pasted, so the slava list of
+     * 13.09. still had "Belo meso 3kg" as an unknown product after the words
+     * were learned. What nobody has decided on is read again from what was
+     * written. A product someone picked or turned down is left alone, and a
+     * kind of product never falls back to a single product.
+     */
+    private ShoppingListItemResponse readAgain(
+            Long listId,
+            ShoppingListItemResponse item
+    ) {
+        if (item.rawInput() == null || item.rawInput().isBlank()) {
+            return item;
+        }
+
+        boolean undecidedProduct =
+                item.matchingRule() == ShoppingItemRule.EXACT_PRODUCT
+                        && item.barcode() == null
+                        && item.matchedCanonicalProductId() == null
+                        && item.matchingStatus()
+                        != ShoppingItemMatchingStatus.CONFIRMED
+                        && (item.matchingAlgorithmVersion() == null
+                        || !item.matchingAlgorithmVersion().startsWith("user-"));
+
+        FlexibleItemConstraints constraints = item.flexibleConstraints();
+
+        // A kind of product the words name is stored as confirmed.
+        boolean unknownKind =
+                item.matchingRule() == ShoppingItemRule.FLEXIBLE_CATEGORY
+                        && item.matchingStatus()
+                        != ShoppingItemMatchingStatus.CONFIRMED
+                        && constraints != null
+                        && constraints.requiredBrand() == null
+                        && constraints.minPackageQuantity() == null
+                        && constraints.maxPackageQuantity() == null;
+
+        if (!undecidedProduct && !unknownKind) {
+            return item;
+        }
+
+        ShoppingLineInterpreter.InterpretedLine line =
+                lineInterpreter.interpret(item.rawInput());
+
+        if (line.matchingRule() == ShoppingItemRule.FLEXIBLE_CATEGORY) {
+            boolean keepsAmount = line.targetQuantity() == null
+                    && constraints != null
+                    && constraints.targetQuantity() != null;
+
+            return shoppingListRepository.updateItem(
+                    listId,
+                    item.id(),
+                    line.name(),
+                    item.rawInput(),
+                    null,
+                    null,
+                    null,
+                    item.quantity(),
+                    ShoppingItemRule.FLEXIBLE_CATEGORY,
+                    line.category(),
+                    line.normalizedCategory(),
+                    line.shoppingIntentId(),
+                    line.requiredBrand(),
+                    null,
+                    null,
+                    keepsAmount ? constraints.requiredBaseUnit() : line.baseUnit(),
+                    keepsAmount ? constraints.targetQuantity() : line.targetQuantity()
+            ).orElse(item);
+        }
+
+        if (undecidedProduct && !line.name().equals(item.name())) {
+            return shoppingListRepository.updateItem(
+                    listId,
+                    item.id(),
+                    line.name(),
+                    item.rawInput(),
+                    null,
+                    null,
+                    null,
+                    item.quantity(),
+                    ShoppingItemRule.EXACT_PRODUCT,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null
+            ).orElse(item);
+        }
+
+        return item;
+    }
+
     private ShoppingItemMatchResult matchItem(
             Long listId,
             ShoppingListItemResponse item,
@@ -248,7 +346,9 @@ public class ShoppingListMatchingService {
             return resultForStoredItem(
                     item,
                     false,
-                    "Proizvod je već potvrđen."
+                    item.matchingRule() == ShoppingItemRule.FLEXIBLE_CATEGORY
+                            ? "Biramo najpovoljniju ponudu u prodavnicama u blizini."
+                            : "Proizvod je potvrđen."
             );
         }
 
@@ -319,7 +419,12 @@ public class ShoppingListMatchingService {
                 updated.matchingDecisionId(),
                 updated.matchingScore(),
                 blocksOptimization,
-                explanation(updated),
+                explanation(
+                        updated,
+                        decision.candidates().isEmpty()
+                                ? null
+                                : decision.candidates().getFirst().name()
+                ),
                 decision.candidates()
         );
     }
@@ -446,28 +551,33 @@ public class ShoppingListMatchingService {
         );
     }
 
-    private String explanation(ShoppingListItemResponse item) {
+    private String explanation(
+            ShoppingListItemResponse item,
+            String topCandidateName
+    ) {
         if (item.matchingRule()
                 == ShoppingItemRule.FLEXIBLE_CATEGORY) {
-            return switch (item.matchingStatus()) {
-                case AUTO_MATCHED ->
-                        "Fleksibilna kategorija ima automatski predlog; optimizator i dalje sme da izabere jeftiniji proizvod koji ispunjava ograničenja.";
-                case NEEDS_CONFIRMATION ->
-                        "Kandidati su prikazani, ali fleksibilna stavka može da se optimizuje po zadatim ograničenjima.";
-                case UNMATCHED ->
-                        "Nema kanonskog kandidata; fleksibilna kategorija ostaje vidljiva i proverava se među ponudama trgovaca.";
-                default -> "Fleksibilna stavka je spremna.";
-            };
+            String category = item.flexibleConstraints() == null
+                    ? item.name()
+                    : item.flexibleConstraints().category();
+
+            return item.matchingStatus() == ShoppingItemMatchingStatus.CONFIRMED
+                    ? "Biramo najpovoljniju ponudu u prodavnicama u blizini."
+                    : "„" + category + "“ ne prepoznajemo kao vrstu proizvoda. "
+                    + "Tražimo proizvode čiji naziv tako počinje, a sigurnije "
+                    + "je da izabereš proizvod iz pretrage.";
         }
 
         return switch (item.matchingStatus()) {
-            case AUTO_MATCHED -> "Proizvod je automatski povezan.";
+            case AUTO_MATCHED -> topCandidateName == null
+                    ? "Proizvod je prepoznat."
+                    : "Prepoznato kao: " + topCandidateName;
             case NEEDS_CONFIRMATION ->
-                    "Potrebna je potvrda kandidata pre optimizacije.";
+                    "Ima više sličnih proizvoda. Izaberi pravi pre računanja.";
             case UNMATCHED ->
-                    "Proizvod nije uparen i neće biti sakriven iz rezultata.";
+                    "Ne nalazimo ovaj proizvod u cenovnicima, pa neće ući u račun.";
             case CONFIRMED -> "Proizvod je potvrđen.";
-            case PENDING -> "Uparivanje još nije pokrenuto.";
+            case PENDING -> "Provera još nije pokrenuta.";
         };
     }
 

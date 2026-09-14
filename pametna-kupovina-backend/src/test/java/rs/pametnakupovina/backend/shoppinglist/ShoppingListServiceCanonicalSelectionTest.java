@@ -28,6 +28,8 @@ class ShoppingListServiceCanonicalSelectionTest {
             mock(ProductNameNormalizer.class);
     private final ShoppingIntentResolver intentResolver =
             mock(ShoppingIntentResolver.class);
+    private final ShoppingLineInterpreter lineInterpreter =
+            mock(ShoppingLineInterpreter.class);
 
     private ShoppingListService service;
 
@@ -38,7 +40,8 @@ class ShoppingListServiceCanonicalSelectionTest {
                 tokenPolicy,
                 textParser,
                 normalizer,
-                intentResolver
+                intentResolver,
+                lineInterpreter
         );
         when(tokenPolicy.validateAndHash("client-token"))
                 .thenReturn("client-token-hash");

@@ -535,6 +535,16 @@ public class StoreShoppingOfferRepository {
                                           ))) = LOWER(BTRIM(
                                               item.required_brand
                                           ))
+                                          -- One brand, several spellings:
+                                          -- "Zaječarsko", "ZAJEČARSKO",
+                                          -- "Zajecarsko".
+                                          OR (
+                                              app.product_match_brand_key(item.required_brand) <> ''
+                                              AND app.product_match_brand_key(item.required_brand) IN (
+                                                  app.product_match_brand_key(canonical.brand),
+                                                  app.product_match_brand_key(product.brand)
+                                              )
+                                          )
                                       )
                                       AND (
                                           item.required_base_unit IS NULL

@@ -3645,13 +3645,17 @@ class PametnaKupovinaBackendApplicationTests {
 
         assertThat(result.createdCount()).isEqualTo(3);
         assertThat(result.ignoredBlankLineCount()).isEqualTo(1);
+        // "2 x Mleko 1 l" is two litres of any milk, read the same way as
+        // "ćevapi 3kg": the size is an amount, not part of a product name.
         assertThat(result.items())
                 .extracting(ShoppingListItemResponse::name)
                 .containsExactly(
-                        "Mleko 1 l",
+                        "Mleko",
                         "Hleb",
                         "Jogurt"
                 );
+        assertThat(result.items().getFirst().flexibleConstraints().targetQuantity())
+                .isEqualByComparingTo("1000");
         assertThat(result.items())
                 .extracting(ShoppingListItemResponse::quantity)
                 .usingElementComparator(BigDecimal::compareTo)
@@ -3665,14 +3669,14 @@ class PametnaKupovinaBackendApplicationTests {
         assertThat(result.items())
                 .extracting(ShoppingListItemResponse::matchingRule)
                 .containsExactly(
-                        ShoppingItemRule.EXACT_PRODUCT,
+                        ShoppingItemRule.FLEXIBLE_CATEGORY,
                         ShoppingItemRule.FLEXIBLE_CATEGORY,
                         ShoppingItemRule.FLEXIBLE_CATEGORY
                 );
         assertThat(result.items())
                 .extracting(ShoppingListItemResponse::matchingStatus)
                 .containsExactly(
-                        ShoppingItemMatchingStatus.PENDING,
+                        ShoppingItemMatchingStatus.CONFIRMED,
                         ShoppingItemMatchingStatus.CONFIRMED,
                         ShoppingItemMatchingStatus.CONFIRMED
                 );

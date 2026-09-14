@@ -362,7 +362,7 @@ class ShoppingRecommendationServiceTest {
                 .singleElement()
                 .extracting(RecommendationItemResponse::explanation)
                 .asString()
-                .contains("drugom razmatranom scenariju");
+                .contains("u drugom planu");
 
         assertThat(response.recommendedBalance().complete()).isTrue();
         assertThat(response.recommendedBalance().coveredItems())
