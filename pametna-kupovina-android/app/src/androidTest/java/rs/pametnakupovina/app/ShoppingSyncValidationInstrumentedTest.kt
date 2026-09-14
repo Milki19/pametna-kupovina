@@ -107,4 +107,21 @@ class ShoppingSyncValidationInstrumentedTest {
             assertEquals("PENDING_PASTE", refused.syncState)
         } finally { db.close() }
     }
+
+    @Test fun refreshAroundARefusedRowKeepsTheListInOrder() = runBlocking {
+        val db = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext(),
+            PametnaKupovinaDatabase::class.java).build()
+        try {
+            val dao = db.draftItemDao()
+            dao.insert(DraftItemEntity(remoteId=1,name="ulje",quantity=1.0,matchingRule="FLEXIBLE_CATEGORY",syncState="SYNCED"))
+            dao.insert(DraftItemEntity(name="hleb",rawInput="0 x hleb",quantity=1.0,matchingRule="FLEXIBLE_CATEGORY",
+                syncState="PENDING_PASTE",syncError="Količina mora biti veća od nule"))
+            dao.insert(DraftItemEntity(remoteId=2,name="jaja",quantity=1.0,matchingRule="FLEXIBLE_CATEGORY",syncState="SYNCED"))
+            dao.replaceSyncedWithRemote(listOf(
+                DraftItemEntity(remoteId=1,name="Ulje",quantity=1.0,matchingRule="FLEXIBLE_CATEGORY",syncState="SYNCED"),
+                DraftItemEntity(remoteId=2,name="Jaja",quantity=1.0,matchingRule="FLEXIBLE_CATEGORY",syncState="SYNCED")
+            ))
+            assertEquals(listOf("Ulje","hleb","Jaja"), dao.getAllItems().map { it.name })
+        } finally { db.close() }
+    }
 }
