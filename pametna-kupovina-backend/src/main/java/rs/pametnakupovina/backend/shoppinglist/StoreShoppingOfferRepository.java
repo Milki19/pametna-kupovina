@@ -408,6 +408,15 @@ public class StoreShoppingOfferRepository {
                                       AND (
                                           product.canonical_product_id =
                                               item.matched_canonical_product_id
+                                          -- The same product under another
+                                          -- chain's barcode.
+                                          OR product.product_family_id IN (
+                                              SELECT member.family_id
+                                              FROM app.product_family_member
+                                                  AS member
+                                              WHERE member.canonical_product_id =
+                                                  item.matched_canonical_product_id
+                                          )
                                           OR (
                                               item.barcode IS NOT NULL
                                               AND product.barcode = item.barcode

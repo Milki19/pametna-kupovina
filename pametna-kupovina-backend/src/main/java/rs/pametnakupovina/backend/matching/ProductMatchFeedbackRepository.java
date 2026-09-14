@@ -65,11 +65,25 @@ public class ProductMatchFeedbackRepository {
         return count > 0;
     }
 
+    public boolean productFamilyExists(Long productFamilyId) {
+        return jdbcClient.sql("""
+                        SELECT EXISTS (
+                            SELECT 1
+                            FROM app.product_family
+                            WHERE id = ?
+                        )
+                        """)
+                .param(1, productFamilyId)
+                .query(Boolean.class)
+                .single();
+    }
+
     public ProductMatchFeedback save(
             Long decisionId,
             String clientToken,
             ProductMatchFeedbackAction action,
             Long selectedCanonicalProductId,
+            Long selectedProductFamilyId,
             String note
     ) {
         return jdbcClient.sql("""
@@ -78,9 +92,10 @@ public class ProductMatchFeedbackRepository {
                             client_token,
                             action,
                             selected_canonical_product_id,
+                            selected_product_family_id,
                             note
                         )
-                        VALUES (?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?)
                         RETURNING id, created_at
                         """)
                 .param(1, decisionId)
@@ -91,7 +106,8 @@ public class ProductMatchFeedbackRepository {
                         selectedCanonicalProductId,
                         Types.BIGINT
                 )
-                .param(5, note, Types.VARCHAR)
+                .param(5, selectedProductFamilyId, Types.BIGINT)
+                .param(6, note, Types.VARCHAR)
                 .query((resultSet, rowNumber) ->
                         new ProductMatchFeedback(
                                 resultSet.getLong("id"),

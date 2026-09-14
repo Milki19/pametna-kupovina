@@ -2,7 +2,7 @@ package rs.pametnakupovina.backend.product;
 
 import java.math.BigDecimal;
 
-record CanonicalProductSearchRow(
+public record ProductSearchCandidate(
         Long productFamilyId,
         Long canonicalProductId,
         String name,
@@ -10,13 +10,7 @@ record CanonicalProductSearchRow(
         String barcode,
         BigDecimal quantityValue,
         String baseUnit,
-        String categoryCode,
-        String categoryName,
-        int variantCount,
         BigDecimal nameSimilarity,
-        boolean exactEanMatch,
-        boolean hasUsablePrice,
-        Long productTypeId,
         int packageCount
 ) {
 }

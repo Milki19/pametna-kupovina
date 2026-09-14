@@ -6,12 +6,14 @@ import rs.pametnakupovina.backend.matching.ParsedQuantity;
 import rs.pametnakupovina.backend.matching.ProductMatchScorer;
 import rs.pametnakupovina.backend.matching.ProductNameNormalizer;
 import rs.pametnakupovina.backend.matching.ProductQuantityParser;
+import rs.pametnakupovina.backend.shoppinglist.ShoppingIntentResolver;
 
 import java.math.BigDecimal;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Service
@@ -21,25 +23,30 @@ public class CanonicalProductSearchService {
     private static final int MAX_LIMIT = 100;
     private static final BigDecimal EXACT_EAN_SCORE =
             new BigDecimal("1.0000");
+    private static final Pattern PACKAGE_WORD =
+            Pattern.compile("(?<= )([0-9]+|l|ml|lit|g|gr|kg|kom|x)(?= )");
 
     private final CanonicalProductSearchRepository searchRepository;
     private final ProductNameNormalizer productNameNormalizer;
     private final ProductQuantityParser productQuantityParser;
     private final ProductMatchScorer productMatchScorer;
     private final EanValidator eanValidator;
+    private final ShoppingIntentResolver shoppingIntentResolver;
 
     public CanonicalProductSearchService(
             CanonicalProductSearchRepository searchRepository,
             ProductNameNormalizer productNameNormalizer,
             ProductQuantityParser productQuantityParser,
             ProductMatchScorer productMatchScorer,
-            EanValidator eanValidator
+            EanValidator eanValidator,
+            ShoppingIntentResolver shoppingIntentResolver
     ) {
         this.searchRepository = searchRepository;
         this.productNameNormalizer = productNameNormalizer;
         this.productQuantityParser = productQuantityParser;
         this.productMatchScorer = productMatchScorer;
         this.eanValidator = eanValidator;
+        this.shoppingIntentResolver = shoppingIntentResolver;
     }
 
     public CanonicalProductSearchPage search(
@@ -54,47 +61,7 @@ public class CanonicalProductSearchService {
         validate(query, page, limit);
 
         String strippedQuery = query.strip();
-        String normalizedQuery = productNameNormalizer.normalize(query);
-
-        if (normalizedQuery.isBlank()) {
-            throw new IllegalArgumentException(
-                    "Parametar query mora sadržati slovo ili broj"
-            );
-        }
-
-        Optional<ParsedQuantity> queryQuantity =
-                productQuantityParser.parse(query);
-
-        String validEan = eanValidator.normalize(strippedQuery)
-                .orElse(null);
-
-        List<ScoredRow> scoredRows = searchRepository.findCandidates(
-                        normalizedQuery,
-                        validEan
-                ).stream()
-                .filter(row -> includeWithoutPrice || row.hasUsablePrice() || row.exactEanMatch())
-                .map(row -> score(
-                        normalizedQuery,
-                        queryQuantity,
-                        row
-                ))
-                .sorted(
-                        Comparator.<ScoredRow, Boolean>comparing(row -> row.source().exactEanMatch(), Comparator.reverseOrder())
-                                .thenComparing(row -> row.source().hasUsablePrice(), Comparator.reverseOrder())
-                                .thenComparing(
-                                        ScoredRow::score,
-                                        Comparator.reverseOrder()
-                                )
-                                .thenComparing(
-                                        row -> row.source()
-                                                .nameSimilarity(),
-                                        Comparator.reverseOrder()
-                                )
-                                .thenComparing(row -> row.source().name())
-                                .thenComparing(row -> row.source()
-                                        .productFamilyId())
-                )
-                .toList();
+        List<ScoredRow> scoredRows = rank(query, includeWithoutPrice);
 
         int totalElements = scoredRows.size();
         long offset = (long) page * limit;
@@ -151,6 +118,78 @@ public class CanonicalProductSearchService {
         );
     }
 
+    // The shopping list's product check picks from these same ranked
+    // products, so an item can match anything a shopper can find here.
+    public List<ProductSearchCandidate> candidates(String query, int limit) {
+        validate(query, 0, limit);
+
+        return rank(query, true).stream()
+                .limit(limit)
+                .map(ScoredRow::source)
+                .map(row -> new ProductSearchCandidate(
+                        row.productFamilyId(),
+                        row.canonicalProductId(),
+                        row.name(),
+                        row.brand(),
+                        row.barcode(),
+                        row.quantityValue(),
+                        row.baseUnit(),
+                        row.nameSimilarity(),
+                        row.packageCount()
+                ))
+                .toList();
+    }
+
+    private List<ScoredRow> rank(String query, boolean includeWithoutPrice) {
+        String normalizedQuery = productNameNormalizer.normalize(query);
+
+        if (normalizedQuery.isBlank()) {
+            throw new IllegalArgumentException(
+                    "Parametar query mora sadržati slovo ili broj"
+            );
+        }
+
+        Optional<ParsedQuantity> queryQuantity =
+                productQuantityParser.parse(query);
+
+        String validEan = eanValidator.normalize(query.strip())
+                .orElse(null);
+
+        Map<Long, Integer> typePriorities = typePriorities(normalizedQuery);
+
+        return searchRepository.findCandidates(
+                        normalizedQuery,
+                        validEan
+                ).stream()
+                .filter(row -> includeWithoutPrice || row.hasUsablePrice() || row.exactEanMatch())
+                .map(row -> score(
+                        normalizedQuery,
+                        queryQuantity,
+                        row
+                ))
+                .sorted(
+                        Comparator.<ScoredRow, Boolean>comparing(row -> row.source().exactEanMatch(), Comparator.reverseOrder())
+                                .thenComparing(row -> row.source().hasUsablePrice(), Comparator.reverseOrder())
+                                .thenComparing(row -> typeRank(
+                                        typePriorities,
+                                        row.source()
+                                ))
+                                .thenComparing(
+                                        ScoredRow::score,
+                                        Comparator.reverseOrder()
+                                )
+                                .thenComparing(
+                                        row -> row.source()
+                                                .nameSimilarity(),
+                                        Comparator.reverseOrder()
+                                )
+                                .thenComparing(row -> row.source().name())
+                                .thenComparing(row -> row.source()
+                                        .productFamilyId())
+                )
+                .toList();
+    }
+
     private void validate(String query, int page, int limit) {
         if (query == null || query.isBlank()) {
             throw new IllegalArgumentException(
@@ -175,6 +214,38 @@ public class CanonicalProductSearchService {
                     "Limit mora biti između 1 i 100"
             );
         }
+    }
+
+    // Someone who types "mleko" wants milk, not chocolate milk or a lotion
+    // that shares the word, so products of that type lead. Only when the
+    // query names nothing but the thing and perhaps a size: "cokoladno mleko"
+    // already says more than the type does and is left to the text.
+    private Map<Long, Integer> typePriorities(String normalizedQuery) {
+        return shoppingIntentResolver.resolve(normalizedQuery)
+                .filter(intent -> PACKAGE_WORD.matcher(
+                                (" " + normalizedQuery + " ").replace(
+                                        " " + intent.normalizedAlias() + " ",
+                                        " "
+                                )
+                        )
+                        .replaceAll(" ")
+                        .isBlank())
+                .map(intent -> searchRepository.findProductTypePriorities(
+                        intent.shoppingIntentId()
+                ))
+                .orElse(Map.of());
+    }
+
+    private static int typeRank(
+            Map<Long, Integer> typePriorities,
+            CanonicalProductSearchRow row
+    ) {
+        return row.productTypeId() == null
+                ? Integer.MAX_VALUE
+                : typePriorities.getOrDefault(
+                        row.productTypeId(),
+                        Integer.MAX_VALUE
+                );
     }
 
     private ScoredRow score(
@@ -217,7 +288,8 @@ public class CanonicalProductSearchService {
                 availability,
                 scoredRow.score(),
                 row.hasUsablePrice(),
-                knownRetailers
+                knownRetailers,
+                row.packageCount()
         );
     }
 

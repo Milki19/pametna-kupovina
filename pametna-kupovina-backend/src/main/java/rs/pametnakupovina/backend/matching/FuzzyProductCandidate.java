@@ -10,6 +10,8 @@ public record FuzzyProductCandidate(
         BigDecimal quantityValue,
         String baseUnit,
         BigDecimal nameSimilarity,
-        ProductMatchScore score
+        ProductMatchScore score,
+        Long productFamilyId,
+        int packageCount
 ) {
 }

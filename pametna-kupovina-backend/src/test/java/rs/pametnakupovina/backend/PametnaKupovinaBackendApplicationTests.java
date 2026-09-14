@@ -3805,6 +3805,54 @@ class PametnaKupovinaBackendApplicationTests {
                 .query(Long.class)
                 .single();
 
+        // List matching picks from the product search, which lists merged
+        // products (families), not bare canonical rows.
+        Long brandId = jdbcClient.sql("""
+                        INSERT INTO app.brand (normalized_name, display_name)
+                        VALUES ('imlek', 'Imlek')
+                        ON CONFLICT (normalized_name) DO UPDATE
+                        SET display_name = EXCLUDED.display_name
+                        RETURNING id
+                        """)
+                .query(Long.class)
+                .single();
+
+        Long familyId = jdbcClient.sql("""
+                        INSERT INTO app.product_family (
+                            family_key,
+                            display_name,
+                            normalized_name,
+                            brand_id,
+                            quantity_value,
+                            base_unit
+                        )
+                        VALUES (
+                            'PK046-AUTO-MILK',
+                            'PK046 Imlek mleko 1 l',
+                            'pk 046 imlek mleko 1 l',
+                            ?,
+                            1000,
+                            'ml'
+                        )
+                        RETURNING id
+                        """)
+                .param(1, brandId)
+                .query(Long.class)
+                .single();
+
+        jdbcClient.sql("""
+                        INSERT INTO app.product_family_member (
+                            family_id,
+                            canonical_product_id,
+                            relation_type,
+                            confidence
+                        )
+                        VALUES (?, ?, 'SINGLE_GTIN', 1.0000)
+                        """)
+                .param(1, familyId)
+                .param(2, canonicalProductId)
+                .update();
+
         ShoppingListSummary shoppingList = shoppingListService.create(
                 new CreateShoppingListRequest("Matching korpa"),
                 clientToken

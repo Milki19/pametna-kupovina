@@ -62,7 +62,8 @@ public class CanonicalProductDetailsService {
                     date,
                     latestPriceDate,
                     offers,
-                    history
+                    history,
+                    product.packageCount()
             );
         });
     }

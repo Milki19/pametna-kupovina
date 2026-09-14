@@ -1,6 +1,7 @@
 package rs.pametnakupovina.backend.matching;
 
 import org.springframework.stereotype.Service;
+import rs.pametnakupovina.backend.product.CanonicalProductSearchService;
 
 import java.util.Comparator;
 import java.util.List;
@@ -17,42 +18,27 @@ public class FuzzyProductCandidateService {
     private final ProductNameNormalizer productNameNormalizer;
     private final ProductQuantityParser productQuantityParser;
     private final ProductMatchScorer productMatchScorer;
+    private final CanonicalProductSearchService productSearchService;
 
     public FuzzyProductCandidateService(
             FuzzyProductCandidateRepository candidateRepository,
             ProductNameNormalizer productNameNormalizer,
             ProductQuantityParser productQuantityParser,
-            ProductMatchScorer productMatchScorer
+            ProductMatchScorer productMatchScorer,
+            CanonicalProductSearchService productSearchService
     ) {
         this.candidateRepository = candidateRepository;
         this.productNameNormalizer = productNameNormalizer;
         this.productQuantityParser = productQuantityParser;
         this.productMatchScorer = productMatchScorer;
+        this.productSearchService = productSearchService;
     }
 
     public List<FuzzyProductCandidate> findCandidates(
             String query,
             int limit
     ) {
-        if (query == null || query.isBlank()) {
-            throw new IllegalArgumentException(
-                    "Parametar query ne sme biti prazan"
-            );
-        }
-
-        if (limit < MIN_LIMIT || limit > MAX_LIMIT) {
-            throw new IllegalArgumentException(
-                    "Limit za matching kandidate mora biti između 3 i 5"
-            );
-        }
-
-        String normalizedQuery = productNameNormalizer.normalize(query);
-
-        if (normalizedQuery.isBlank()) {
-            throw new IllegalArgumentException(
-                    "Parametar query mora sadržati slovo ili broj"
-            );
-        }
+        String normalizedQuery = validatedNormalizedQuery(query, limit);
 
         Optional<ParsedQuantity> queryQuantity =
                 productQuantityParser.parse(query);
@@ -87,6 +73,76 @@ public class FuzzyProductCandidateService {
                 .toList();
     }
 
+    // Shopping list matching picks from what the search box finds, merged
+    // across chains. Products sold without a barcode have no canonical
+    // product, so only clients that can confirm a family receive them.
+    public List<FuzzyProductCandidate> findProductSearchCandidates(
+            String query,
+            int limit,
+            boolean includeWithoutBarcode
+    ) {
+        String normalizedQuery = validatedNormalizedQuery(query, limit);
+
+        Optional<ParsedQuantity> queryQuantity =
+                productQuantityParser.parse(query);
+
+        return productSearchService.candidates(
+                        query,
+                        CANDIDATE_POOL_LIMIT
+                ).stream()
+                .filter(candidate -> includeWithoutBarcode
+                        || candidate.canonicalProductId() != null)
+                .map(candidate -> new FuzzyProductCandidate(
+                        candidate.canonicalProductId(),
+                        candidate.name(),
+                        candidate.brand(),
+                        candidate.barcode(),
+                        candidate.quantityValue(),
+                        candidate.baseUnit(),
+                        candidate.nameSimilarity(),
+                        productMatchScorer.score(
+                                normalizedQuery,
+                                queryQuantity,
+                                candidate.nameSimilarity(),
+                                candidate.brand(),
+                                candidate.quantityValue(),
+                                candidate.baseUnit()
+                        ),
+                        candidate.productFamilyId(),
+                        candidate.packageCount()
+                ))
+                .sorted(Comparator.comparing(
+                        (FuzzyProductCandidate candidate) ->
+                                candidate.score().totalScore()
+                ).reversed())
+                .limit(limit)
+                .toList();
+    }
+
+    private String validatedNormalizedQuery(String query, int limit) {
+        if (query == null || query.isBlank()) {
+            throw new IllegalArgumentException(
+                    "Parametar query ne sme biti prazan"
+            );
+        }
+
+        if (limit < MIN_LIMIT || limit > MAX_LIMIT) {
+            throw new IllegalArgumentException(
+                    "Limit za matching kandidate mora biti između 3 i 5"
+            );
+        }
+
+        String normalizedQuery = productNameNormalizer.normalize(query);
+
+        if (normalizedQuery.isBlank()) {
+            throw new IllegalArgumentException(
+                    "Parametar query mora sadržati slovo ili broj"
+            );
+        }
+
+        return normalizedQuery;
+    }
+
     private FuzzyProductCandidate toScoredCandidate(
             String normalizedQuery,
             Optional<ParsedQuantity> queryQuantity,
@@ -109,7 +165,9 @@ public class FuzzyProductCandidateService {
                 candidate.quantityValue(),
                 candidate.baseUnit(),
                 candidate.nameSimilarity(),
-                score
+                score,
+                null,
+                1
         );
     }
 }

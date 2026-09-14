@@ -19,6 +19,7 @@ public class ProductMatchDecisionRepository {
             String rawQuery,
             String normalizedQuery,
             Long topCandidateId,
+            Long topCandidateFamilyId,
             Long matchedCanonicalProductId,
             BigDecimal score,
             ProductMatchStatus status,
@@ -30,27 +31,29 @@ public class ProductMatchDecisionRepository {
                             raw_query,
                             normalized_query,
                             top_candidate_id,
+                            top_candidate_family_id,
                             matched_canonical_product_id,
                             score,
                             status,
                             algorithm_version,
                             client_token
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                         RETURNING id
                         """)
                 .param(1, rawQuery)
                 .param(2, normalizedQuery)
                 .param(3, topCandidateId, Types.BIGINT)
+                .param(4, topCandidateFamilyId, Types.BIGINT)
                 .param(
-                        4,
+                        5,
                         matchedCanonicalProductId,
                         Types.BIGINT
                 )
-                .param(5, score)
-                .param(6, status.name())
-                .param(7, algorithmVersion)
-                .param(8, clientToken, Types.VARCHAR)
+                .param(6, score)
+                .param(7, status.name())
+                .param(8, algorithmVersion)
+                .param(9, clientToken, Types.VARCHAR)
                 .query(Long.class)
                 .single();
     }
