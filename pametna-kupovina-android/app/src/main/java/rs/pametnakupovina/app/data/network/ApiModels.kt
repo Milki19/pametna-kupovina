@@ -138,7 +138,8 @@ data class CanonicalProductSearchItemDto(
     val availability: List<ProductRetailerAvailabilityDto> = emptyList(),
     val score: Double,
     val hasUsablePrice: Boolean = false,
-    val knownRetailers: List<String> = emptyList()
+    val knownRetailers: List<String> = emptyList(),
+    val packageCount: Int = 1
 )
 
 @Serializable
@@ -148,7 +149,8 @@ data class ProductRetailerAvailabilityDto(
     val latestPriceDate: String,
     val storeCount: Int = 0,
     val formatCount: Int = 0,
-    val minimumEffectivePrice: Double? = null
+    val minimumEffectivePrice: Double? = null,
+    val priceNeedsCheck: Boolean = false
 )
 
 @Serializable
@@ -176,7 +178,8 @@ data class CanonicalProductOfferDto(
     val discountedPrice: Double? = null,
     val effectivePrice: Double,
     val unitPrice: Double? = null,
-    val priceScope: String
+    val priceScope: String,
+    val priceNeedsCheck: Boolean = false
 )
 
 @Serializable
@@ -205,7 +208,8 @@ data class CanonicalProductDetailsDto(
     val requestedDate: String,
     val latestPriceDate: String? = null,
     val offers: List<CanonicalProductOfferDto> = emptyList(),
-    val priceHistory: List<CanonicalProductPricePointDto> = emptyList()
+    val priceHistory: List<CanonicalProductPricePointDto> = emptyList(),
+    val packageCount: Int = 1
 )
 
 @Serializable
@@ -219,14 +223,16 @@ data class ProductMatchScoreDto(
 
 @Serializable
 data class ProductCandidateDto(
-    val canonicalProductId: Long,
+    val canonicalProductId: Long? = null,
+    val productFamilyId: Long? = null,
     val name: String,
     val brand: String? = null,
     val barcode: String? = null,
     val quantityValue: Double? = null,
     val baseUnit: String? = null,
     val nameSimilarity: Double,
-    val score: ProductMatchScoreDto
+    val score: ProductMatchScoreDto,
+    val packageCount: Int = 1
 )
 
 @Serializable
@@ -261,6 +267,7 @@ data class ShoppingListMatchingDto(
 data class ResolveShoppingItemMatchRequestDto(
     val action: ShoppingItemMatchActionDto,
     val canonicalProductId: Long? = null,
+    val productFamilyId: Long? = null,
     val note: String? = null
 )
 

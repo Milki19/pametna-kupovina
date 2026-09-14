@@ -66,7 +66,8 @@ interface ShoppingApiService {
 
     @POST("api/v1/shopping-lists/{listId}/matching")
     suspend fun matchShoppingList(
-        @Path("listId") listId: Long
+        @Path("listId") listId: Long,
+        @Query("includeProductsWithoutBarcode") includeProductsWithoutBarcode: Boolean = true
     ): ShoppingListMatchingDto
 
     @PUT("api/v1/shopping-lists/{listId}/items/{itemId}/match")

@@ -9,6 +9,7 @@ import retrofit2.HttpException
 import rs.pametnakupovina.app.data.local.DraftItemDao
 import rs.pametnakupovina.app.data.local.DraftItemEntity
 import rs.pametnakupovina.app.data.local.SyncState
+import rs.pametnakupovina.app.data.network.ProductCandidateDto
 import rs.pametnakupovina.app.data.network.AddShoppingListItemRequestDto
 import rs.pametnakupovina.app.data.network.CanonicalProductSearchPageDto
 import rs.pametnakupovina.app.data.network.CanonicalProductDetailsDto
@@ -269,9 +270,9 @@ class ShoppingRepository @Inject constructor(
     suspend fun resolveMatch(
         listId: Long,
         itemId: Long,
-        candidateId: Long?
+        candidate: ProductCandidateDto?
     ): ShoppingListItemDto {
-        val action = if (candidateId == null) {
+        val action = if (candidate == null) {
             ShoppingItemMatchActionDto.REJECT
         } else {
             ShoppingItemMatchActionDto.CONFIRM
@@ -281,8 +282,12 @@ class ShoppingRepository @Inject constructor(
             itemId = itemId,
             request = ResolveShoppingItemMatchRequestDto(
                 action = action,
-                canonicalProductId = candidateId,
-                note = if (candidateId == null) {
+                canonicalProductId = candidate?.canonicalProductId,
+                // Sold without a barcode: confirmed as the merged product.
+                productFamilyId = candidate
+                    ?.takeIf { it.canonicalProductId == null }
+                    ?.productFamilyId,
+                note = if (candidate == null) {
                     "Korisnik je izabrao opciju neupareno u Android aplikaciji."
                 } else {
                     "Korisnik je potvrdio kandidata u Android aplikaciji."

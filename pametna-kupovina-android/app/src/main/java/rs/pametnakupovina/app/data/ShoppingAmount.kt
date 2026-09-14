@@ -36,7 +36,9 @@ fun parseShoppingAmount(input: String): RequestedShoppingAmount? {
     }))
 }
 
-fun amountLabel(value: Double, unit: String?): String {
+/** A package of several units reads "2 × 1,5 l"; its value is the whole package. */
+fun amountLabel(value: Double, unit: String?, packageCount: Int = 1): String {
+    if (packageCount > 1) return "$packageCount × ${amountLabel(value / packageCount, unit)}"
     val large = unit in setOf("g", "ml") && value >= 1000
     val number = BigDecimal.valueOf(if (large) value / 1000 else value).stripTrailingZeros().toPlainString().replace('.', ',')
     val label = when {
