@@ -15,6 +15,8 @@ import rs.pametnakupovina.app.data.network.CanonicalProductSearchPageDto
 import rs.pametnakupovina.app.data.network.CanonicalProductDetailsDto
 import rs.pametnakupovina.app.data.network.CreateShoppingListRequestDto
 import rs.pametnakupovina.app.data.network.FlexibleItemConstraintsDto
+import rs.pametnakupovina.app.data.network.PasteShoppingListItemsRequestDto
+import rs.pametnakupovina.app.data.network.serverMessage
 import rs.pametnakupovina.app.data.network.ResolveShoppingItemMatchRequestDto
 import rs.pametnakupovina.app.data.network.ShoppingApiService
 import rs.pametnakupovina.app.data.network.ShoppingItemMatchActionDto
@@ -86,6 +88,13 @@ data class DraftItemInput(
                 }
                 require(maxPackageQuantity == null || maxPackageQuantity > 0) {
                     "Maksimalno pakovanje mora biti veće od nule."
+                }
+                // "Pakovanje od 6" alone was read as 6 ml or 6 g.
+                require(
+                    (minPackageQuantity == null && maxPackageQuantity == null) ||
+                        !requiredBaseUnit.isNullOrBlank()
+                ) {
+                    "Za veličinu pakovanja izaberi jedinicu: kg, g, l, ml ili kom."
                 }
             }
         }
@@ -165,12 +174,17 @@ class ShoppingRepository @Inject constructor(
             matchingRule=ShoppingItemRuleDto.PRODUCT_FAMILY))
     }
 
+    /**
+     * A pasted line waits on this device as written, and the server reads it
+     * when it is sent, so "Pivo Zaječarsko 0.5" means the same here as
+     * anywhere. Until then the row shows the phone's rough reading.
+     */
     suspend fun pasteItems(text: String): Int {
         val parsed = PastedListParser.parse(text)
         require(parsed.isNotEmpty()) { "Unesi bar jednu nepraznu stavku." }
 
         parsed.forEach { line ->
-            dao.insert(line.toFlexibleDraftInput().toEntity())
+            dao.insert(line.toFlexibleDraftInput().toEntity(syncState = SyncState.PENDING_PASTE))
         }
         return parsed.size
     }
@@ -245,17 +259,30 @@ class ShoppingRepository @Inject constructor(
             val remote = api.getShoppingList(listId)
             dao.replaceWithRemote(remote.items.map { it.toEntity() })
             listId
+        } catch (error: ItemSyncValidationException) {
+            // Show what the server made of the rest; keep the refused rows.
+            val remote = api.getShoppingList(error.listId)
+            dao.replaceSyncedWithRemote(remote.items.map { it.toEntity() })
+            throw error
         } catch (error: HttpException) {
             if (error.code() != 404) throw error
             recreateListAndPush()
         }
     }
 
-    suspend fun synchronizePending(): Long = syncMutex.withLock {
+    /**
+     * With [allowRejected] the rows the server refused stay on this device,
+     * marked with the reason, and the rest of the list is used: the shopper
+     * has already chosen to go on without them.
+     */
+    suspend fun synchronizePending(allowRejected: Boolean = false): Long = syncMutex.withLock {
         val listId = ensureActiveList()
         try {
             pushPending(listId)
             listId
+        } catch (error: ItemSyncValidationException) {
+            if (!allowRejected) throw error
+            error.listId
         } catch (error: HttpException) {
             if (error.code() != 404) throw error
             recreateListAndPush()
@@ -263,7 +290,7 @@ class ShoppingRepository @Inject constructor(
     }
 
     suspend fun matchItems(): ShoppingListMatchingDto {
-        val listId = synchronizePending()
+        val listId = synchronizePending(allowRejected = true)
         return api.matchShoppingList(listId)
     }
 
@@ -307,7 +334,7 @@ class ShoppingRepository @Inject constructor(
     ): ShoppingRecommendationDto {
         // Pre računanja guramo sve lokalne izmene. Ako je server u međuvremenu
         // obrisao spisak, synchronizePending kreira novi i vraća njegov ID.
-        val synchronizedListId = synchronizePending()
+        val synchronizedListId = synchronizePending(allowRejected = true)
         val recommendationListId = if (synchronizedListId == listId) {
             listId
         } else {
@@ -343,17 +370,41 @@ class ShoppingRepository @Inject constructor(
     private suspend fun pushPending(listId: Long) = pushPendingItems(api, dao, listId)
 }
 
-class ItemSyncValidationException(val itemNames: List<String>) : IllegalArgumentException(
-    "Proveri stavke: ${itemNames.joinToString(", ")}. Opis ili količina nisu podržani. " +
-        "Izmeni stavku ili izaberi tačan proizvod. Ostale ispravne stavke su poslate."
-)
+data class RejectedItem(val name: String, val reason: String?)
 
-// Keep invalid rows locally, but do not let one rejected row block the rest of the list.
+class ItemSyncValidationException(
+    val rejected: List<RejectedItem>,
+    val listId: Long
+) : IllegalArgumentException(
+    "Server nije prihvatio: " + rejected.joinToString("; ") { item ->
+        item.reason?.let { "${item.name} (${it.trimEnd('.')})" } ?: item.name
+    } + ". Ostale stavke su poslate."
+) {
+    val itemNames: List<String> get() = rejected.map { it.name }
+}
+
+// A refused row stays on this device with the server's reason, and does not
+// stop the rows after it from being sent.
 internal suspend fun pushPendingItems(api: ShoppingApiService, dao: DraftItemDao, listId: Long) {
-        val rejected = mutableListOf<String>()
-        dao.getAllItems().forEach { item ->
-          try {
+    val rejected = mutableListOf<RejectedItem>()
+    dao.getAllItems().forEach { item ->
+        try {
             when (SyncState.valueOf(item.syncState)) {
+                SyncState.PENDING_PASTE -> {
+                    val response = api.pasteShoppingListItems(
+                        listId,
+                        PasteShoppingListItemsRequestDto(
+                            text = item.rawInput?.takeIf(String::isNotBlank) ?: item.name
+                        )
+                    )
+                    if (response.items.isEmpty()) {
+                        dao.deleteByLocalId(item.localId)
+                    }
+                    response.items.forEachIndexed { index, saved ->
+                        dao.insert(saved.toEntity(localId = if (index == 0) item.localId else 0))
+                    }
+                }
+
                 SyncState.PENDING_CREATE -> {
                     val saved = api.addShoppingListItem(
                         listId,
@@ -394,19 +445,21 @@ internal suspend fun pushPendingItems(api: ShoppingApiService, dao: DraftItemDao
 
                 SyncState.SYNCED -> Unit
             }
-          } catch (error: HttpException) {
-              if (error.code() !in setOf(400, 422)) throw error
-              rejected += item.name
-          }
+        } catch (error: HttpException) {
+            if (error.code() !in setOf(400, 422)) throw error
+            val reason = error.serverMessage()
+            dao.update(item.copy(syncError = reason ?: "Server nije prihvatio ovu stavku."))
+            rejected += RejectedItem(item.name, reason)
         }
-        // Prevent calculation/remote replacement until every local row is represented.
-        if (rejected.isNotEmpty()) throw ItemSyncValidationException(rejected)
+    }
+    // Calculation waits for the shopper to choose to go on without these rows.
+    if (rejected.isNotEmpty()) throw ItemSyncValidationException(rejected, listId)
 }
 
 internal fun ParsedDraftLine.toFlexibleDraftInput(): DraftItemInput {
     val requested = parseShoppingAmount(name)
     val categoryName = requested?.name ?: name
-    val amount = requested?.amount ?: suggestedAmount(categoryName)
+    val amount = requested?.amount
     return DraftItemInput(
         name = categoryName, rawInput = rawInput, quantity = quantity,
         matchingRule = ShoppingItemRuleDto.FLEXIBLE_CATEGORY, category = categoryName,

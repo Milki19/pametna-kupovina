@@ -39,9 +39,12 @@ interface DraftItemDao {
     @Query("DELETE FROM draft_items")
     suspend fun deleteAll()
 
+    // A new list on the server: everything is sent again, except a pasted
+    // line still waiting to be read and a row already deleted here.
     @Query(
-        "UPDATE draft_items SET remoteId = NULL, " +
-            "matchingStatus = 'PENDING', syncState = 'PENDING_CREATE'"
+        "UPDATE draft_items SET remoteId = NULL, matchingStatus = 'PENDING', " +
+            "syncState = CASE WHEN syncState IN ('PENDING_PASTE', 'PENDING_DELETE') " +
+            "THEN syncState ELSE 'PENDING_CREATE' END"
     )
     suspend fun resetRemoteState()
 
@@ -49,5 +52,19 @@ interface DraftItemDao {
     suspend fun replaceWithRemote(items: List<DraftItemEntity>) {
         deleteAll()
         insertAll(items)
+    }
+
+    @Query("DELETE FROM draft_items WHERE syncState = 'SYNCED'")
+    suspend fun deleteSynced()
+
+    @Query("SELECT remoteId FROM draft_items WHERE remoteId IS NOT NULL")
+    suspend fun remoteIdsKeptLocally(): List<Long>
+
+    /** What the server holds, next to the rows it has not accepted yet. */
+    @Transaction
+    suspend fun replaceSyncedWithRemote(items: List<DraftItemEntity>) {
+        deleteSynced()
+        val kept = remoteIdsKeptLocally().toSet()
+        insertAll(items.filter { it.remoteId !in kept })
     }
 }

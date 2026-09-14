@@ -6,7 +6,7 @@ import androidx.room.migration.Migration
 
 @Database(
     entities = [DraftItemEntity::class, PurchaseSessionEntity::class],
-    version = 4,
+    version = 5,
     exportSchema = true
 )
 abstract class PametnaKupovinaDatabase : RoomDatabase() {
@@ -21,6 +21,10 @@ val MIGRATION_3_4 = Migration(3, 4) { database ->
         listName TEXT NOT NULL, itemCount INTEGER NOT NULL, purchasedCount INTEGER NOT NULL,
         archivedAt INTEGER, snapshotJson TEXT NOT NULL, progressJson TEXT NOT NULL
     )""")
+}
+
+val MIGRATION_4_5 = Migration(4, 5) { database ->
+    database.execSQL("ALTER TABLE draft_items ADD COLUMN syncError TEXT")
 }
 
 val MIGRATION_1_2 = Migration(1, 2) { database ->

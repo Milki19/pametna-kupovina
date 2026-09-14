@@ -1,0 +1,186 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 5,
+    "identityHash": "28c85205302c98e9014794f0fa79a414",
+    "entities": [
+      {
+        "tableName": "draft_items",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`localId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `remoteId` INTEGER, `name` TEXT NOT NULL, `rawInput` TEXT, `barcode` TEXT, `canonicalProductId` INTEGER, `productFamilyId` INTEGER, `quantity` REAL NOT NULL, `matchingRule` TEXT NOT NULL, `matchingStatus` TEXT NOT NULL, `category` TEXT, `requiredBrand` TEXT, `minPackageQuantity` REAL, `maxPackageQuantity` REAL, `requiredBaseUnit` TEXT, `targetQuantity` REAL, `syncState` TEXT NOT NULL, `syncError` TEXT, `updatedAtEpochMillis` INTEGER NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "localId",
+            "columnName": "localId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "remoteId",
+            "columnName": "remoteId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rawInput",
+            "columnName": "rawInput",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "barcode",
+            "columnName": "barcode",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "canonicalProductId",
+            "columnName": "canonicalProductId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "productFamilyId",
+            "columnName": "productFamilyId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "quantity",
+            "columnName": "quantity",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "matchingRule",
+            "columnName": "matchingRule",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "matchingStatus",
+            "columnName": "matchingStatus",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "category",
+            "columnName": "category",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "requiredBrand",
+            "columnName": "requiredBrand",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "minPackageQuantity",
+            "columnName": "minPackageQuantity",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "maxPackageQuantity",
+            "columnName": "maxPackageQuantity",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "requiredBaseUnit",
+            "columnName": "requiredBaseUnit",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "targetQuantity",
+            "columnName": "targetQuantity",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "syncState",
+            "columnName": "syncState",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncError",
+            "columnName": "syncError",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "updatedAtEpochMillis",
+            "columnName": "updatedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "localId"
+          ]
+        }
+      },
+      {
+        "tableName": "purchase_sessions",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `listName` TEXT NOT NULL, `itemCount` INTEGER NOT NULL, `purchasedCount` INTEGER NOT NULL, `archivedAt` INTEGER, `snapshotJson` TEXT NOT NULL, `progressJson` TEXT NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "listName",
+            "columnName": "listName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "itemCount",
+            "columnName": "itemCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "purchasedCount",
+            "columnName": "purchasedCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "archivedAt",
+            "columnName": "archivedAt",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "snapshotJson",
+            "columnName": "snapshotJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "progressJson",
+            "columnName": "progressJson",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '28c85205302c98e9014794f0fa79a414')"
+    ]
+  }
+}

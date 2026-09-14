@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -59,6 +60,7 @@ import rs.pametnakupovina.app.ui.components.StatusPill
 import rs.pametnakupovina.app.ui.components.StatusTone
 import rs.pametnakupovina.app.ui.decimal
 import rs.pametnakupovina.app.ui.items
+import rs.pametnakupovina.app.ui.plural
 
 @Composable
 fun ShoppingListScreen(
@@ -154,7 +156,7 @@ fun ShoppingListScreen(
                         )
                     }
                     PrimaryActionButton(
-                        text = "Izračunaj",
+                        text = if (state.isSyncing) "Šaljem spisak…" else "Izračunaj",
                         enabled = state.items.isNotEmpty() && !state.isSyncing,
                         onClick = { viewModel.prepareMatching(onOpenMatching) }
                     )
@@ -240,6 +242,29 @@ fun ShoppingListScreen(
         )
     }
 
+    state.skippedItems?.let { skipped ->
+        AlertDialog(
+            onDismissRequest = viewModel::dismissSkipped,
+            title = { Text("Neke stavke nisu poslate") },
+            text = {
+                Text(
+                    "Server nije prihvatio: ${skipped.names.joinToString(", ")}. " +
+                        "Razlog piše ispod stavke. Možeš da računaš bez " +
+                        plural(skipped.names.size, "nje", "njih", "njih") +
+                        " ili da prvo izmeniš stavke."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { viewModel.calculateWithoutSkipped(onOpenMatching) }) {
+                    Text("Računaj bez " + plural(skipped.names.size, "nje", "njih", "njih"))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::dismissSkipped) { Text("Izmeni") }
+            }
+        )
+    }
+
     if (showPasteDialog) {
         PasteItemsDialog(
             onDismiss = { showPasteDialog = false },
@@ -314,7 +339,11 @@ private fun DraftItemRow(
         isLast -> RoundedCornerShape(bottomStart = corner, bottomEnd = corner)
         else -> RectangleShape
     }
-    val attention = draftAttention(item.matchingStatus)
+    val attention = if (item.syncError != null) {
+        "Nije poslato" to StatusTone.ERROR
+    } else {
+        draftAttention(item.matchingStatus)
+    }
 
     Surface(
         onClick = onEdit,
@@ -347,6 +376,13 @@ private fun DraftItemRow(
                     attention?.let { (text, tone) ->
                         Spacer(Modifier.size(AppSpacing.xs))
                         StatusPill(text, tone)
+                    }
+                    item.syncError?.let { reason ->
+                        Text(
+                            reason,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error
+                        )
                     }
                 }
                 Text(
