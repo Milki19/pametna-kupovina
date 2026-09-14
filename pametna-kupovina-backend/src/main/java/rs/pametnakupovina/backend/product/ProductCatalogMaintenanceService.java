@@ -498,6 +498,45 @@ public class ProductCatalogMaintenanceService {
                     """)
                 .param(1, retailerId)
                 .update();
+
+        // A pack whose name does not say what it holds, like METRO's
+        // "0.33L CORONA NB 6/1", is the type of the single bottle it was
+        // read against (V73), unless the taxonomy still waits for a review.
+        jdbcClient.sql("""
+                    INSERT INTO app.retailer_product_type (
+                        retailer_product_id,
+                        product_type_id,
+                        confidence,
+                        assignment_source,
+                        evidence,
+                        algorithm_version
+                    )
+                    SELECT pack.id,
+                           unit_type.product_type_id,
+                           unit_type.confidence,
+                           'PACKAGE_UNIT',
+                           LEFT(
+                               'Pakovanje od ' || pack.package_count
+                                   || ' kom: ' || unit.name,
+                               1000
+                           ),
+                           unit_type.algorithm_version
+                    FROM app.retailer_product AS pack
+                    JOIN app.retailer_product AS unit
+                      ON unit.id = pack.package_unit_product_id
+                    JOIN app.retailer_product_type AS unit_type
+                      ON unit_type.retailer_product_id = unit.id
+                    WHERE pack.retailer_id = ?
+                      AND NOT EXISTS (
+                          SELECT 1
+                          FROM app.product_type_candidate AS candidate
+                          WHERE candidate.retailer_product_id = pack.id
+                            AND candidate.status = 'PENDING'
+                      )
+                    ON CONFLICT (retailer_product_id) DO NOTHING
+                    """)
+                .param(1, retailerId)
+                .update();
     }
 
     private void synchronizeProductAttributes(long retailerId) {
