@@ -251,7 +251,7 @@ fun ShoppingListScreen(
                     "Server nije prihvatio: ${skipped.names.joinToString(", ")}. " +
                         "Razlog piše ispod stavke. Možeš da računaš bez " +
                         plural(skipped.names.size, "nje", "njih", "njih") +
-                        " ili da prvo izmeniš stavke."
+                        " ili da prvo " + plural(skipped.names.size, "izmeniš stavku.", "izmeniš stavke.", "izmeniš stavke.")
                 )
             },
             confirmButton = {
@@ -422,7 +422,9 @@ internal fun draftAmountLabel(item: DraftItemEntity): String =
  * taking the best offer, which is what most of a pasted list is.
  */
 internal fun draftRuleLabel(item: DraftItemEntity): String? = when (item.matchingRule) {
-    ShoppingItemRuleDto.EXACT_PRODUCT.name -> "Tačan barkod"
+    // A pasted line that names one product has no barcode until one is found.
+    ShoppingItemRuleDto.EXACT_PRODUCT.name ->
+        "Tačan barkod".takeIf { item.canonicalProductId != null || !item.barcode.isNullOrBlank() }
     ShoppingItemRuleDto.PRODUCT_FAMILY.name -> "Isti proizvod, sve varijante"
     else -> {
         val category = item.category?.trim().orEmpty()

@@ -41,7 +41,12 @@ class DraftItemRowTest {
     fun `porodica i tacan barkod imaju svoje oznake`() {
         val family = DraftItemEntity(name = "Pilos", quantity = 1.0, matchingRule = "PRODUCT_FAMILY")
         assertEquals("Isti proizvod, sve varijante", draftRuleLabel(family))
-        assertEquals("Tačan barkod", draftRuleLabel(family.copy(matchingRule = "EXACT_PRODUCT")))
+        assertEquals(
+            "Tačan barkod",
+            draftRuleLabel(family.copy(matchingRule = "EXACT_PRODUCT", canonicalProductId = 42))
+        )
+        // "Plastični tanjiri" pasted as a product search is not a chosen barcode.
+        assertNull(draftRuleLabel(family.copy(name = "Plastični tanjiri", matchingRule = "EXACT_PRODUCT")))
     }
 
     @Test
