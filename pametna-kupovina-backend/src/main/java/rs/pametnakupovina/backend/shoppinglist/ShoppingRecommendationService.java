@@ -323,8 +323,11 @@ public class ShoppingRecommendationService {
                     comparable.size(),
                     comparable.size() > 1
                             ? "Ovaj lanac ne objavljuje adrese objekata, a ima "
-                                    + comparable.size()
-                                    + " različitih cenovnika. Ne znamo koji"
+                                    + counted(comparable.size(),
+                                            "različit cenovnik",
+                                            "različita cenovnika",
+                                            "različitih cenovnika")
+                                    + ". Ne znamo koji"
                                     + " važi za prodavnicu kod tebe."
                             : "Ovaj lanac ne objavljuje adrese objekata, pa ne"
                                     + " možemo da ti kažemo u koju prodavnicu"
@@ -715,30 +718,51 @@ public class ShoppingRecommendationService {
             RecommendationItemStatus status;
             String explanation;
 
+            boolean flexible = item.matchingRule()
+                    == ShoppingItemRule.FLEXIBLE_CATEGORY;
+            // A kind of product the words name is stored as confirmed; any
+            // other status means the words were not recognised.
+            boolean unknownKind = flexible
+                    && item.matchingStatus()
+                    != ShoppingItemMatchingStatus.CONFIRMED
+                    && !itemsWithAnyNearbyOffer.contains(item.id());
+            String unknownKindText = "Ne prepoznajemo „" + item.name()
+                    + "“ kao vrstu proizvoda. Izmeni stavku i izaberi"
+                    + " proizvod iz pretrage.";
+
             if (item.matchingStatus()
                     == ShoppingItemMatchingStatus.NEEDS_CONFIRMATION
                     || item.matchingStatus()
                     == ShoppingItemMatchingStatus.PENDING) {
                 status = RecommendationItemStatus.NEEDS_CONFIRMATION;
-                explanation = "Stavka čeka potvrdu uparivanja.";
+                explanation = flexible
+                        ? unknownKindText
+                        : "Izaberi proizvod na ekranu Provera proizvoda.";
                 unmatchedItems++;
             } else if (item.matchingRule()
                     == ShoppingItemRule.EXACT_PRODUCT
                     && item.matchingStatus()
                     == ShoppingItemMatchingStatus.UNMATCHED) {
                 status = RecommendationItemStatus.UNMATCHED;
-                explanation = "Stavka nije povezana sa proizvodom.";
+                explanation = "Ne nalazimo ovaj proizvod u cenovnicima, "
+                        + "pa nije u računu.";
                 unmatchedItems++;
             } else {
                 status = RecommendationItemStatus.NO_VALID_PRICE;
-                explanation = itemsWithAnyNearbyOffer.contains(item.id())
-                        ? "Stavka nema cenu u prodavnicama ovog scenarija, "
-                        + "ali je dostupna u drugom razmatranom scenariju."
-                        : "Nema važeće cene ni u jednoj razmatranoj "
-                        + "obližnjoj prodavnici za traženi datum.";
-                if (item.flexibleConstraints() != null && item.flexibleConstraints().targetQuantity() != null) {
-                    explanation += " Potrebno je poznato pakovanje u traženoj jedinici, sa najviše 25% viška. "
-                            + "Proveri količinu, jedinicu ili ograničenja pakovanja; odsustvo ponude ne znači da nema zaliha.";
+                if (unknownKind) {
+                    explanation = unknownKindText;
+                } else if (itemsWithAnyNearbyOffer.contains(item.id())) {
+                    explanation = "U prodavnicama ovog plana nema cene, "
+                            + "a ima je u drugom planu.";
+                } else if (item.flexibleConstraints() != null
+                        && item.flexibleConstraints().targetQuantity() != null) {
+                    explanation = "Nijedna obližnja prodavnica nema pakovanja"
+                            + " od kojih se sastavlja tražena količina bez"
+                            + " više od četvrtine viška. To ne znači da"
+                            + " proizvoda nema na polici.";
+                } else {
+                    explanation = "Nijedna obližnja prodavnica nema cenu za"
+                            + " ovo. To ne znači da proizvoda nema na polici.";
                 }
                 unavailableItems++;
             }
@@ -904,11 +928,8 @@ public class ShoppingRecommendationService {
             int unavailableItems
     ) {
         if (!available) {
-            return "Scenario nije dostupan: "
-                    + unmatchedItems
-                    + " stavki nije upareno, a za "
-                    + unavailableItems
-                    + " stavki nema važeće cene u prodavnicama u radijusu.";
+            return "Plan nije moguć: nijedna stavka nema cenu u obližnjim"
+                    + " prodavnicama.";
         }
 
         String base = switch (type) {
@@ -924,12 +945,36 @@ public class ShoppingRecommendationService {
             return base;
         }
 
-        return base
-                + " Rezultat nije kompletan: "
-                + unmatchedItems
-                + " neuparenih i "
-                + unavailableItems
-                + " stavki bez važeće cene.";
+        return base + " " + missingItems(unmatchedItems, unavailableItems);
+    }
+
+    static String missingItems(int unmatchedItems, int unavailableItems) {
+        List<String> parts = new ArrayList<>();
+
+        if (unmatchedItems > 0) {
+            parts.add(counted(unmatchedItems, "stavka nije prepoznata",
+                    "stavke nisu prepoznate", "stavki nije prepoznato"));
+        }
+
+        if (unavailableItems > 0) {
+            parts.add(counted(unavailableItems, "stavka nema cenu",
+                    "stavke nemaju cenu", "stavki nema cenu"));
+        }
+
+        return "Nije sve u računu: " + String.join(", a ", parts) + ".";
+    }
+
+    /** Serbian counts: 1 stavka, 2 stavke, 5 stavki, 21 stavka. */
+    static String counted(int count, String one, String few, String many) {
+        int lastDigit = count % 10;
+        int lastTwoDigits = count % 100;
+        String word = lastDigit == 1 && lastTwoDigits != 11
+                ? one
+                : lastDigit >= 2 && lastDigit <= 4
+                && (lastTwoDigits < 12 || lastTwoDigits > 14)
+                ? few
+                : many;
+        return count + " " + word;
     }
 
     private RouteMatrix createRouteMatrix(

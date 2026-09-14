@@ -74,6 +74,41 @@ class ShoppingListTextParserTest {
     }
 
     @Test
+    void aCountAndAnAmountShareOneLine() {
+        ParsedShoppingListLine line = parseOne("2x ćevapi 3kg");
+        assertThat(line.quantity()).isEqualByComparingTo("2");
+        assertThat(line.name()).isEqualTo("ćevapi");
+        assertThat(line.targetQuantity()).isEqualByComparingTo("3000");
+    }
+
+    @Test
+    void listMarksFromNotesAreNotPartOfTheName() {
+        assertThat(parseOne("• mleko").name()).isEqualTo("mleko");
+        assertThat(parseOne("- hleb").name()).isEqualTo("hleb");
+        ParsedShoppingListLine numbered = parseOne("1. jaja 10 kom");
+        assertThat(numbered.name()).isEqualTo("jaja");
+        assertThat(numbered.quantity()).isEqualByComparingTo("10");
+    }
+
+    @Test
+    void aNumberWithoutAUnitWaitsForTheKindOfProductToExplainIt() {
+        ParsedShoppingListLine water = parseOne("Kisela voda 1.75");
+        assertThat(water.name()).isEqualTo("Kisela voda");
+        assertThat(water.bareNumber()).isEqualByComparingTo("1.75");
+        assertThat(water.targetQuantity()).isNull();
+        assertThat(water.nameWithAmount()).isEqualTo("Kisela voda 1.75");
+
+        assertThat(parseOne("jaja 10").bareNumber()).isNull();
+    }
+
+    @Test
+    void theWrittenSizeStaysAvailableForALineThatNamesOneProduct() {
+        ParsedShoppingListLine wine = parseOne("Rubin roze 1l");
+        assertThat(wine.name()).isEqualTo("Rubin roze");
+        assertThat(wine.nameWithAmount()).isEqualTo("Rubin roze 1l");
+    }
+
+    @Test
     void anAmountWithNoProductNameIsNotAnItem() {
         assertThat(parseOne("3kg").name()).isEqualTo("3kg");
         assertThat(parseOne("3kg").targetQuantity()).isNull();

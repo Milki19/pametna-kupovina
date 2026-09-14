@@ -24,19 +24,22 @@ public class ShoppingListService {
     private final ShoppingListTextParser textParser;
     private final ProductNameNormalizer productNameNormalizer;
     private final ShoppingIntentResolver shoppingIntentResolver;
+    private final ShoppingLineInterpreter lineInterpreter;
 
     public ShoppingListService(
             ShoppingListRepository repository,
             ShoppingListClientTokenPolicy clientTokenPolicy,
             ShoppingListTextParser textParser,
             ProductNameNormalizer productNameNormalizer,
-            ShoppingIntentResolver shoppingIntentResolver
+            ShoppingIntentResolver shoppingIntentResolver,
+            ShoppingLineInterpreter lineInterpreter
     ) {
         this.repository = repository;
         this.clientTokenPolicy = clientTokenPolicy;
         this.textParser = textParser;
         this.productNameNormalizer = productNameNormalizer;
         this.shoppingIntentResolver = shoppingIntentResolver;
+        this.lineInterpreter = lineInterpreter;
     }
 
     @Transactional
@@ -269,7 +272,7 @@ public class ShoppingListService {
                                 item.flexibleCategory(),
                                 item.flexibleCategoryNormalized(),
                                 item.shoppingIntentId(),
-                                null,
+                                item.requiredBrand(),
                                 null,
                                 null,
                                 item.requiredBaseUnit(),
@@ -566,17 +569,40 @@ public class ShoppingListService {
         ShoppingIntentResolver.ResolvedShoppingIntent resolvedIntent =
                 shoppingIntentResolver.resolve(category).orElse(null);
 
-        rs.pametnakupovina.backend.matching.ParsedQuantity inlineAmount = null;
+        BigDecimal inlineTarget = null;
+        String inlineUnit = null;
+        String inlineBrand = null;
         if (resolvedIntent != null && !resolvedIntent.exactAlias()) {
             String remainder = normalizedCategory.replaceFirst(
                     java.util.regex.Pattern.quote(resolvedIntent.normalizedAlias()), "").trim();
             if (remainder.matches("[0-9]+(?: [0-9]+)? (g|gr|kg|ml|l|kom|komada)")) {
-                inlineAmount = new rs.pametnakupovina.backend.matching.ProductQuantityParser()
+                var inlineAmount = new rs.pametnakupovina.backend.matching.ProductQuantityParser()
                         .parse(category).orElse(null);
+                if (inlineAmount != null) {
+                    inlineTarget = inlineAmount.value();
+                    inlineUnit = inlineAmount.unit().databaseValue();
+                }
             }
-            if (inlineAmount == null) {
-                throw badRequest("Dodatni opis kategorije nije podržan: izaberi tačan proizvod "
-                        + "ili opštu kategoriju, pa posebno zadaj brend i količinu.");
+            if (inlineTarget == null) {
+                // "Pivo Zaječarsko 0.5" typed as any beer reads as a pasted
+                // line would: beer of that brand, half a litre.
+                ShoppingLineInterpreter.InterpretedLine line =
+                        lineInterpreter.interpret(category);
+                var reread = line.matchingRule() == ShoppingItemRule.FLEXIBLE_CATEGORY
+                        ? shoppingIntentResolver.resolve(line.category())
+                                .filter(ShoppingIntentResolver.ResolvedShoppingIntent::exactAlias)
+                                .orElse(null)
+                        : null;
+                if (reread == null) {
+                    throw badRequest("„" + category + "“ nije samo vrsta proizvoda. "
+                            + "Izaberi proizvod iz pretrage, ili upiši vrstu (npr. „pivo“), "
+                            + "a brend i količinu posebno.");
+                }
+                category = line.category();
+                resolvedIntent = reread;
+                inlineBrand = line.requiredBrand();
+                inlineTarget = line.targetQuantity();
+                inlineUnit = line.baseUnit();
             }
         }
 
@@ -589,6 +615,10 @@ public class ShoppingListService {
                         ? null
                         : constraints.requiredBrand()
         );
+
+        if (requiredBrand == null) {
+            requiredBrand = inlineBrand;
+        }
 
         if (requiredBrand != null && requiredBrand.length() > 200) {
             throw badRequest(
@@ -629,8 +659,8 @@ public class ShoppingListService {
                         ? null
                         : constraints.requiredBaseUnit()
         );
-        if (requiredBaseUnit == null && inlineAmount != null) {
-            requiredBaseUnit = inlineAmount.unit().databaseValue();
+        if (requiredBaseUnit == null && inlineUnit != null) {
+            requiredBaseUnit = inlineUnit;
         }
 
         if (requiredBaseUnit != null) {
@@ -645,13 +675,22 @@ public class ShoppingListService {
             }
         }
 
+        // "Pakovanje od 6" alone was read as 6 ml or 6 g of whatever the
+        // product is measured in, never as six pieces.
+        if ((minPackageQuantity != null || maxPackageQuantity != null)
+                && requiredBaseUnit == null) {
+            throw badRequest(
+                    "Za veličinu pakovanja izaberi jedinicu: g, ml ili kom."
+            );
+        }
+
         BigDecimal targetQuantity = constraints == null ? null : constraints.targetQuantity();
-        if (inlineAmount != null) {
-            if ((targetQuantity != null && targetQuantity.compareTo(inlineAmount.value()) != 0)
-                    || !requiredBaseUnit.equals(inlineAmount.unit().databaseValue())) {
+        if (inlineTarget != null) {
+            if ((targetQuantity != null && targetQuantity.compareTo(inlineTarget) != 0)
+                    || !requiredBaseUnit.equals(inlineUnit)) {
                 throw badRequest("Količina u nazivu i zadato ograničenje se razlikuju.");
             }
-            targetQuantity = inlineAmount.value();
+            targetQuantity = inlineTarget;
         }
         validatePackageQuantity(targetQuantity, "Tražena ukupna količina");
         if (targetQuantity != null && requiredBaseUnit == null) {
@@ -749,32 +788,29 @@ public class ShoppingListService {
             );
         }
 
-        ShoppingIntentResolver.ResolvedShoppingIntent intent =
-                shoppingIntentResolver.resolve(name)
-                        .filter(ShoppingIntentResolver
-                                .ResolvedShoppingIntent::exactAlias)
-                        .orElse(null);
-
-        ShoppingItemRule matchingRule = intent == null
-                ? ShoppingItemRule.EXACT_PRODUCT
-                : ShoppingItemRule.FLEXIBLE_CATEGORY;
-
         // A total amount only means something once the line resolved to a
-        // category: for a specific product the shop's own pack size decides.
-        boolean carriesAmount = intent != null
-                && item.targetQuantity() != null
-                && item.targetQuantity().compareTo(BigDecimal.ZERO) > 0;
+        // kind of product. For one specific product the shop's pack decides,
+        // and the size stays in the name for the search.
+        ShoppingLineInterpreter.InterpretedLine line =
+                lineInterpreter.interpret(item);
+
+        if (line.name().length() > 500) {
+            throw badRequest(
+                    "Naziv artikla može imati najviše 500 karaktera"
+            );
+        }
 
         return new ValidatedShoppingListItem(
-                name,
+                line.name(),
                 rawInput,
                 normalizedQuantity,
-                matchingRule,
-                intent == null ? null : name,
-                intent == null ? null : intent.normalizedAlias(),
-                intent == null ? null : intent.shoppingIntentId(),
-                carriesAmount ? item.targetQuantity() : null,
-                carriesAmount ? item.baseUnit() : null
+                line.matchingRule(),
+                line.category(),
+                line.normalizedCategory(),
+                line.shoppingIntentId(),
+                line.targetQuantity(),
+                line.baseUnit(),
+                line.requiredBrand()
         );
     }
 
@@ -843,7 +879,8 @@ public class ShoppingListService {
             String flexibleCategoryNormalized,
             Long shoppingIntentId,
             BigDecimal targetQuantity,
-            String requiredBaseUnit
+            String requiredBaseUnit,
+            String requiredBrand
     ) {
     }
 
