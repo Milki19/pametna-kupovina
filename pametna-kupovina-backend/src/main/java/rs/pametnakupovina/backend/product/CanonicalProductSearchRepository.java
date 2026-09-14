@@ -51,7 +51,8 @@ public class CanonicalProductSearchRepository {
                             resultSet.getInt("format_count"),
                             resultSet.getBigDecimal(
                                     "minimum_effective_price"
-                            )
+                            ),
+                            resultSet.getBoolean("price_needs_check")
                     )
             );
 
@@ -239,10 +240,49 @@ public class CanonicalProductSearchRepository {
                                presence.latest_price_date,
                                presence.store_count,
                                presence.format_count,
-                               presence.minimum_effective_price
+                               COALESCE(
+                                   checked.minimum_price,
+                                   presence.minimum_effective_price
+                               ) AS minimum_effective_price,
+                               -- Every offer of the chain is far below the
+                               -- other chains' price (V72).
+                               checked.minimum_price IS NULL
+                                   AND checked.offer_count > 0
+                                   AS price_needs_check
                         FROM app.product_retailer_presence AS presence
                         JOIN app.retailer AS retailer
                           ON retailer.id = presence.retailer_id
+                        LEFT JOIN app.product_family_typical_price
+                            AS typical_price
+                          ON typical_price.product_family_id =
+                              presence.product_family_id
+                        -- The chain's lowest price that needs no checking.
+                        -- Only a product several chains price has a
+                        -- typical price to compare with.
+                        CROSS JOIN LATERAL (
+                            SELECT MIN(
+                                       CASE
+                                           WHEN offer.discounted_price > 0
+                                               THEN offer.discounted_price
+                                           WHEN offer.regular_price > 0
+                                               THEN offer.regular_price
+                                       END
+                                   ) FILTER (
+                                       WHERE NOT app.price_needs_check(
+                                           offer.regular_price,
+                                           offer.discounted_price,
+                                           typical_price.typical_price
+                                       )
+                                   ) AS minimum_price,
+                                   COUNT(*) AS offer_count
+                            FROM app.retailer_product AS product
+                            JOIN app.current_price_offer AS offer
+                              ON offer.retailer_product_id = product.id
+                            WHERE typical_price.typical_price IS NOT NULL
+                              AND product.product_family_id =
+                                  presence.product_family_id
+                              AND product.retailer_id = presence.retailer_id
+                        ) AS checked
                         WHERE presence.product_family_id IN (:familyIds)
                         ORDER BY presence.product_family_id,
                                  retailer.name,
