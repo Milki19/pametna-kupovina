@@ -22,7 +22,11 @@ import rs.pametnakupovina.app.data.network.ShoppingItemMatchResultDto
 import rs.pametnakupovina.app.data.network.ShoppingItemRuleDto
 import rs.pametnakupovina.app.data.network.ShoppingListMatchingDto
 import rs.pametnakupovina.app.data.network.ShoppingRecommendationDto
+import rs.pametnakupovina.app.data.network.serverMessage
 import rs.pametnakupovina.app.sync.SyncScheduler
+
+/** Rows the server refused when the shopper asked for a calculation. */
+data class SkippedItems(val listId: Long, val names: List<String>)
 
 data class ShoppingListUiState(
     val items: List<DraftItemEntity> = emptyList(),
@@ -30,7 +34,8 @@ data class ShoppingListUiState(
     val isSyncing: Boolean = false,
     val isOffline: Boolean = false,
     val errorMessage: String? = null,
-    val notice: String? = null
+    val notice: String? = null,
+    val skippedItems: SkippedItems? = null
 )
 
 @HiltViewModel
@@ -111,21 +116,9 @@ class ShoppingListViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val count = repository.pasteItems(text)
-                // Name only the lines that actually received a suggested amount.
-                val suggested = rs.pametnakupovina.app.data.PastedListParser.parse(text)
-                    .map { it.name }
-                    .filter { rs.pametnakupovina.app.data.suggestedAmount(it) != null }
-                    .distinct()
                 onSaved()
                 _uiState.update {
-                    it.copy(
-                        notice = "Dodato: ${items(count)}." + if (suggested.isEmpty()) {
-                            ""
-                        } else {
-                            " Za ${suggested.joinToString(", ")} predložena je ukupna količina, proveri je pre računanja."
-                        },
-                        errorMessage = null
-                    )
+                    it.copy(notice = "Dodato: ${items(count)}.", errorMessage = null)
                 }
                 synchronizeSilently()
             } catch (error: Exception) {
@@ -154,7 +147,16 @@ class ShoppingListViewModel @Inject constructor(
                     )
                 }
                 onReady(listId)
+            } catch (error: ItemSyncValidationException) {
+                _uiState.update {
+                    it.copy(
+                        isSyncing = false,
+                        isOffline = false,
+                        skippedItems = SkippedItems(error.listId, error.itemNames)
+                    )
+                }
             } catch (error: Exception) {
+                if (error is CancellationException) throw error
                 syncScheduler.enqueue()
                 _uiState.update {
                     it.copy(
@@ -167,6 +169,17 @@ class ShoppingListViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    /** The shopper chose to calculate with the rows the server accepted. */
+    fun calculateWithoutSkipped(onReady: (Long) -> Unit) {
+        val skipped = _uiState.value.skippedItems ?: return
+        _uiState.update { it.copy(skippedItems = null) }
+        onReady(skipped.listId)
+    }
+
+    fun dismissSkipped() {
+        _uiState.update { it.copy(skippedItems = null) }
     }
 
     fun clearMessage() {
@@ -419,7 +432,7 @@ class RecommendationViewModel @Inject constructor(
 
 internal fun Throwable.toUserMessage(fallback: String): String = when (this) {
     is IOException -> fallback
-    is HttpException -> when (code()) {
+    is HttpException -> serverMessage()?.takeIf { code() == 400 || code() == 422 } ?: when (code()) {
         400 -> "Proveri unesene podatke i pokušaj ponovo."
         401, 403 -> "Ovaj spisak više nije dostupan na serveru."
         404 -> "Traženi spisak ili stavka više ne postoji."

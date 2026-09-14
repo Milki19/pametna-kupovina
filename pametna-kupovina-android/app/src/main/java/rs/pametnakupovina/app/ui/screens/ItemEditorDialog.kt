@@ -126,11 +126,16 @@ internal fun ItemEditorDialog(
     }
     var category by rememberSaveable(key) { mutableStateOf(item?.category.orEmpty()) }
     var brand by rememberSaveable(key) { mutableStateOf(item?.requiredBrand.orEmpty()) }
+    val storedUnit = AmountUnit.forStored(item?.requiredBaseUnit, item?.targetQuantity)
     var minPackage by rememberSaveable(key) {
-        mutableStateOf(item?.minPackageQuantity?.let(::inputNumber).orEmpty())
+        mutableStateOf(
+            item?.minPackageQuantity?.let { inputNumber(it / (storedUnit?.factor ?: 1.0)) }.orEmpty()
+        )
     }
     var maxPackage by rememberSaveable(key) {
-        mutableStateOf(item?.maxPackageQuantity?.let(::inputNumber).orEmpty())
+        mutableStateOf(
+            item?.maxPackageQuantity?.let { inputNumber(it / (storedUnit?.factor ?: 1.0)) }.orEmpty()
+        )
     }
     var unit by rememberSaveable(key) {
         mutableStateOf(AmountUnit.forStored(item?.requiredBaseUnit, item?.targetQuantity))
@@ -165,6 +170,7 @@ internal fun ItemEditorDialog(
     } else {
         null
     }
+    val packageError = packageSizeError(minPackage, maxPackage, chosenUnit)
     val exactSelection = resolveDraftCanonicalProductId(item, name, rule, selectedProduct)
     val familySelection = resolveDraftProductFamilyId(item, name, rule, selectedProduct)
     val valid = name.isNotBlank() &&
@@ -173,7 +179,7 @@ internal fun ItemEditorDialog(
         when (rule) {
             ShoppingItemRuleDto.EXACT_PRODUCT -> exactSelection != null
             ShoppingItemRuleDto.PRODUCT_FAMILY -> familySelection != null
-            ShoppingItemRuleDto.FLEXIBLE_CATEGORY -> category.isNotBlank()
+            ShoppingItemRuleDto.FLEXIBLE_CATEGORY -> category.isNotBlank() && packageError == null
         }
 
     fun chooseRule(next: ShoppingItemRuleDto) {
@@ -210,8 +216,10 @@ internal fun ItemEditorDialog(
                     matchingRule = rule,
                     category = category.takeIf { isFlexible },
                     requiredBrand = brand.takeIf { isFlexible },
-                    minPackageQuantity = minPackage.toDecimalOrNull()?.takeIf { isFlexible },
-                    maxPackageQuantity = maxPackage.toDecimalOrNull()?.takeIf { isFlexible },
+                    minPackageQuantity = minPackage.toDecimalOrNull()
+                        ?.times(chosenUnit?.factor ?: 1.0)?.takeIf { isFlexible },
+                    maxPackageQuantity = maxPackage.toDecimalOrNull()
+                        ?.times(chosenUnit?.factor ?: 1.0)?.takeIf { isFlexible },
                     targetQuantity = parsedTarget?.takeIf { isFlexible },
                     requiredBaseUnit = chosenUnit?.baseUnit?.takeIf { isFlexible }
                 )
@@ -352,7 +360,7 @@ internal fun ItemEditorDialog(
                 }
 
                 item(key = "advanced") {
-                    val expanded = showAdvanced || category.isBlank()
+                    val expanded = showAdvanced || category.isBlank() || packageError != null
                     Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)) {
                         TextButton(onClick = { showAdvanced = !showAdvanced }) {
                             Text("Napredno: kategorija, brend, pakovanje")
@@ -362,12 +370,7 @@ internal fun ItemEditorDialog(
                             )
                         }
                         if (expanded) {
-                            val unitLabel = when (chosenUnit?.baseUnit) {
-                                "g" -> "g"
-                                "ml" -> "ml"
-                                "piece" -> "kom"
-                                else -> "g, ml ili kom"
-                            }
+                            val unitLabel = chosenUnit?.label.orEmpty()
                             OutlinedTextField(
                                 value = category,
                                 onValueChange = { category = it },
@@ -390,6 +393,7 @@ internal fun ItemEditorDialog(
                                     onValueChange = { minPackage = it },
                                     label = { Text("Pakovanje od") },
                                     suffix = { Text(unitLabel) },
+                                    isError = packageError != null && minPackage.isNotBlank(),
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                     singleLine = true,
                                     modifier = Modifier.weight(1f)
@@ -399,9 +403,17 @@ internal fun ItemEditorDialog(
                                     onValueChange = { maxPackage = it },
                                     label = { Text("do") },
                                     suffix = { Text(unitLabel) },
+                                    isError = packageError != null && maxPackage.isNotBlank(),
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                     singleLine = true,
                                     modifier = Modifier.weight(1f)
+                                )
+                            }
+                            packageError?.let { message ->
+                                Text(
+                                    message,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error
                                 )
                             }
                         }
@@ -526,6 +538,23 @@ internal fun PasteItemsDialog(
                 modifier = Modifier.padding(bottom = AppSpacing.md)
             )
         }
+    }
+}
+
+/**
+ * Why a pack size cannot be saved, or null. A size needs its unit: "Pakovanje
+ * od 6" alone was read as 6 ml or 6 g, never six pieces.
+ */
+internal fun packageSizeError(min: String, max: String, unit: AmountUnit?): String? {
+    if (min.isBlank() && max.isBlank()) return null
+    val low = min.toDecimalOrNull()
+    val high = max.toDecimalOrNull()
+    return when {
+        (min.isNotBlank() && (low == null || low <= 0)) ||
+            (max.isNotBlank() && (high == null || high <= 0)) -> "Upiši broj veći od nule."
+        unit == null -> "Izaberi jedinicu iznad: kg, g, l, ml ili kom."
+        low != null && high != null && low > high -> "„Od“ ne može biti veće od „do“."
+        else -> null
     }
 }
 

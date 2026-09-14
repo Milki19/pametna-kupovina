@@ -11,6 +11,7 @@ import org.junit.runner.RunWith
 import rs.pametnakupovina.app.data.local.MIGRATION_1_2
 import rs.pametnakupovina.app.data.local.MIGRATION_2_3
 import rs.pametnakupovina.app.data.local.MIGRATION_3_4
+import rs.pametnakupovina.app.data.local.MIGRATION_4_5
 
 @RunWith(AndroidJUnit4::class)
 @Suppress("DEPRECATION")
@@ -119,6 +120,23 @@ class RoomMigrationInstrumentedTest {
             }
             database.query("SELECT COUNT(*) FROM purchase_sessions").use {
                 it.moveToFirst(); assertEquals(0, it.getInt(0))
+            }
+        }
+    }
+
+    @Test
+    fun migrationTo5KeepsItemsWithoutARefusalReason() {
+        val name = "migration-test-v5"
+        helper.createDatabase(name, 4).apply {
+            execSQL("""INSERT INTO draft_items(name, quantity, matchingRule, matchingStatus, syncState, updatedAtEpochMillis)
+                VALUES('pivo', 1, 'FLEXIBLE_CATEGORY', 'CONFIRMED', 'SYNCED', 1)""")
+            close()
+        }
+        helper.runMigrationsAndValidate(name, 5, true, MIGRATION_4_5).use { database ->
+            database.query("SELECT name, syncError FROM draft_items").use {
+                it.moveToFirst()
+                assertEquals("pivo", it.getString(0))
+                assertEquals(true, it.isNull(1))
             }
         }
     }

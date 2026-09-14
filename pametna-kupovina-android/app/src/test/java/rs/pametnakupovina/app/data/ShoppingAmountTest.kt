@@ -15,10 +15,11 @@ class ShoppingAmountTest {
         assertEquals(ShoppingAmount(1000.0, "g"), suggestedAmount("Jogurt"))
         assertNull(suggestedAmount("voćni jogurt"))
         assertNull(suggestedAmount("čokoladno mleko"))
+        // A pasted line is read by the server, which suggests nothing: the
+        // usual pack size already ranks first when no amount is written.
         val input = PastedListParser.parse("2x jogurt").single().toFlexibleDraftInput().validated()
-        assertEquals(1000.0, input.targetQuantity!!, 0.0)
+        assertNull(input.targetQuantity)
         assertEquals(2.0, input.quantity, 0.0)
-        assertEquals("2 kg", amountLabel(input.targetQuantity * input.quantity, input.requiredBaseUnit))
     }
     @Test fun packageOfSeveralUnitsShowsTheCount() {
         assertEquals("2 × 1,5 l", amountLabel(3000.0, "ml", 2))

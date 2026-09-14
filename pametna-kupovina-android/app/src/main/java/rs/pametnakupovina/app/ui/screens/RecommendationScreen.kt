@@ -870,11 +870,24 @@ private fun scenarioWarnings(
     if (!scenario.available) return@buildList
     val missing = scenario.items.size - scenario.coveredItems
     if (!scenario.complete && missing > 0) {
-        add(
-            "Plan je nepotpun: " +
-                counted(missing, "stavka nema", "stavke nemaju", "stavki nema") +
-                " ponudu u ovim prodavnicama."
-        )
+        // Not recognising an item and a shop not selling it ask for different
+        // things: editing the item, or another shop.
+        val unrecognised = scenario.unmatchedItems.coerceAtMost(missing)
+        val unpriced = missing - unrecognised
+        if (unrecognised > 0) {
+            add(
+                "Ne prepoznajemo " +
+                    counted(unrecognised, "stavku", "stavke", "stavki") + ", pa " +
+                    plural(unrecognised, "nije", "nisu", "nisu") + " u računu."
+            )
+        }
+        if (unpriced > 0) {
+            add(
+                "Plan je nepotpun: " +
+                    counted(unpriced, "stavka nema", "stavke nemaju", "stavki nema") +
+                    " ponudu u ovim prodavnicama."
+            )
+        }
     }
     val asOf = scenario.dataAsOf
     if (asOf != null && asOf != result.requestedDate) {
