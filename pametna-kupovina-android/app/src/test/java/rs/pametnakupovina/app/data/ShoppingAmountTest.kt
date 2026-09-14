@@ -20,6 +20,11 @@ class ShoppingAmountTest {
         assertEquals(2.0, input.quantity, 0.0)
         assertEquals("2 kg", amountLabel(input.targetQuantity * input.quantity, input.requiredBaseUnit))
     }
+    @Test fun packageOfSeveralUnitsShowsTheCount() {
+        assertEquals("2 × 1,5 l", amountLabel(3000.0, "ml", 2))
+        assertEquals("8 × 2 l", amountLabel(16000.0, "ml", 8))
+        assertEquals("3 l", amountLabel(3000.0, "ml"))
+    }
     @Test fun explicitQuantityOverridesSuggestion() {
         val input = PastedListParser.parse("jogurt 400g").single().toFlexibleDraftInput()
         assertEquals("jogurt", input.category)

@@ -335,7 +335,11 @@ private fun ProductPriceSummary(
         )
         return
     }
-    val offers = product.availability.sortedBy { it.minimumEffectivePrice ?: Double.MAX_VALUE }
+    // A chain whose every price is to be checked goes last however cheap it
+    // looks, and says so where the price list's date would be.
+    val offers = product.availability.sortedWith(
+        compareBy({ it.priceNeedsCheck }, { it.minimumEffectivePrice ?: Double.MAX_VALUE })
+    )
     val shown = if (showAll) offers else offers.take(3)
     Column {
         shown.forEach { offer ->
@@ -346,9 +350,13 @@ private fun ProductPriceSummary(
                     modifier = Modifier.weight(1f)
                 )
                 Text(
-                    shortDate(offer.latestPriceDate),
+                    if (offer.priceNeedsCheck) "proveri cenu" else shortDate(offer.latestPriceDate),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (offer.priceNeedsCheck) {
+                        MaterialTheme.colorScheme.tertiary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
                     modifier = Modifier.padding(horizontal = AppSpacing.sm)
                 )
                 offer.minimumEffectivePrice?.let {
@@ -370,7 +378,7 @@ private fun productDetails(product: CanonicalProductSearchItemDto): String =
     listOfNotNull(
         product.brand,
         product.quantityValue?.let { quantity ->
-            product.baseUnit?.let { amountLabel(quantity, it) }
+            product.baseUnit?.let { amountLabel(quantity, it, product.packageCount) }
         }
     ).joinToString(" · ")
 

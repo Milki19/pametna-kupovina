@@ -63,10 +63,16 @@ fun ProductDetailsScreen(
     }
 }
 
-/** Cheapest first, so the answer to "where" is the top row. */
+/**
+ * Cheapest first, so the answer to "where" is the top row. A price to be
+ * checked goes last however low it is: it is most likely for one piece or one
+ * kilogram of a bigger pack.
+ */
 @Composable
 private fun ProductDetailsContent(product: CanonicalProductDetailsDto) {
-    val offers = product.offers.sortedBy { it.effectivePrice }
+    val offers = product.offers.sortedWith(
+        compareBy({ it.priceNeedsCheck }, { it.effectivePrice })
+    )
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
@@ -104,7 +110,9 @@ private fun ProductDetailsContent(product: CanonicalProductDetailsDto) {
             }
         } else {
             item(key = "offers") {
-                GroupedRows(offers) { index, offer -> OfferRow(offer, cheapest = index == 0 && offers.size > 1) }
+                GroupedRows(offers) { index, offer ->
+                    OfferRow(offer, cheapest = index == 0 && offers.size > 1 && !offer.priceNeedsCheck)
+                }
             }
         }
 
@@ -165,6 +173,14 @@ private fun OfferRow(offer: CanonicalProductOfferDto, cheapest: Boolean) {
                     color = MaterialTheme.colorScheme.tertiary
                 )
             }
+            if (offer.priceNeedsCheck) {
+                Text(
+                    "Manje od pola uobičajene cene u drugim lancima",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                StatusPill("Proveri cenu", StatusTone.WARNING)
+            }
             if (cheapest) {
                 StatusPill("Najjeftinije", StatusTone.POSITIVE)
             }
@@ -209,7 +225,7 @@ private fun productMetadata(product: CanonicalProductDetailsDto): String =
     listOfNotNull(
         product.brand,
         product.quantityValue?.let { quantity ->
-            product.baseUnit?.let { amountLabel(quantity, it) }
+            product.baseUnit?.let { amountLabel(quantity, it, product.packageCount) }
         },
         product.barcode?.let { "barkod $it" }
     ).joinToString(" · ")

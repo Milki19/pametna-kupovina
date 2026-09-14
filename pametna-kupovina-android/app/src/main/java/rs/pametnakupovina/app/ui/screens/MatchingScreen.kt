@@ -276,7 +276,7 @@ private fun CandidateRow(
                     listOfNotNull(
                         candidate.brand,
                         candidate.quantityValue?.let { quantity ->
-                            candidate.baseUnit?.let { amountLabel(quantity, it) }
+                            candidate.baseUnit?.let { amountLabel(quantity, it, candidate.packageCount) }
                         },
                         "poklapanje ${(candidate.score.totalScore * 100).toInt()}%"
                     ).joinToString(" · "),

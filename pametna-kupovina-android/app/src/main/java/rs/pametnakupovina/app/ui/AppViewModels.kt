@@ -296,7 +296,7 @@ class MatchingViewModel @Inject constructor(
                 repository.resolveMatch(
                     listId = _uiState.value.result?.listId ?: listId,
                     itemId = item.itemId,
-                    candidateId = candidate?.canonicalProductId
+                    candidate = candidate
                 )
                 val refreshed = repository.matchItems()
                 _uiState.value = MatchingUiState(
