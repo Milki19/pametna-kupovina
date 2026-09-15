@@ -79,6 +79,435 @@ public class StoreShoppingOfferRepository {
         }
 
         return jdbcClient.sql("""
+                        -- Which products can answer each item in each chain, worked
+                        -- out once per chain instead of once per store: twenty
+                        -- stores of a few chains asked the same question twenty
+                        -- times, 5.7 s of a 6.5 s query. An item with an intent
+                        -- starts from the products of its types. The offer below
+                        -- still checks every condition.
+                        WITH candidate AS MATERIALIZED (
+                            SELECT item.id AS item_id,
+                                   product.id AS retailer_product_id
+                            FROM (
+                                SELECT DISTINCT requested_store.retailer_id
+                                FROM app.store AS requested_store
+                                WHERE requested_store.id IN (:storeIds)
+                            ) AS chain
+                            CROSS JOIN app.shopping_list_item AS item
+                        LEFT JOIN LATERAL (
+                            SELECT intent.id AS shopping_intent_id,
+                                   intent.default_min_package_quantity,
+                                   intent.default_max_package_quantity,
+                                   intent.default_base_unit,
+                                   alias.required_name_pattern
+                            FROM app.shopping_intent AS intent
+                            LEFT JOIN app.shopping_intent_alias AS alias
+                              ON alias.shopping_intent_id = intent.id
+                             AND alias.normalized_alias = item.flexible_category_normalized
+                            WHERE item.matching_rule =
+                                  'FLEXIBLE_CATEGORY'
+                              AND intent.id = item.shopping_intent_id
+                              AND intent.active = TRUE
+                        ) AS requested_intent ON TRUE
+                            JOIN app.shopping_intent_product_type AS candidate_type
+                              ON candidate_type.shopping_intent_id =
+                                 requested_intent.shopping_intent_id
+                             AND candidate_type.enabled_by_default = TRUE
+                            JOIN app.retailer_product_type AS candidate_assignment
+                              ON candidate_assignment.product_type_id =
+                                 candidate_type.product_type_id
+                            JOIN app.retailer_product AS product
+                              ON product.id = candidate_assignment.retailer_product_id
+                             AND product.retailer_id = chain.retailer_id
+                            LEFT JOIN app.canonical_product AS canonical
+                              ON canonical.id = product.canonical_product_id
+                            CROSS JOIN LATERAL (
+                                SELECT CASE WHEN counted.by_piece
+                                            THEN product.package_count::NUMERIC
+                                            ELSE product.quantity_value
+                                       END AS size,
+                                       CASE WHEN counted.by_piece
+                                            THEN 'piece'
+                                            ELSE product.base_unit
+                                       END AS unit,
+                                       -- One bottle or can, for the usual size.
+                                       CASE WHEN counted.by_piece
+                                            THEN product.quantity_value
+                                                 / product.package_count
+                                            ELSE product.quantity_value
+                                       END AS one_size,
+                                       product.base_unit AS one_unit,
+                                       counted.by_piece
+                                FROM (
+                                    SELECT COALESCE(
+                                               item.required_base_unit = 'piece'
+                                               AND product.base_unit IN ('g', 'ml')
+                                               AND requested_intent.default_base_unit
+                                                   IS DISTINCT FROM 'piece'
+                                               AND product.name !~* '\\m(rinfuz|cca)\\M',
+                                               FALSE
+                                           ) AS by_piece
+                                ) AS counted
+                            ) pack
+                            CROSS JOIN LATERAL (
+                                SELECT CASE WHEN item.target_quantity IS NULL THEN item.quantity
+                                    ELSE CEIL(item.target_quantity * item.quantity / NULLIF(pack.size, 0))
+                                END AS packages
+                            ) need
+                            WHERE item.shopping_list_id = :listId
+                              AND item.matching_rule = 'FLEXIBLE_CATEGORY'
+                              AND requested_intent.shopping_intent_id IS NOT NULL
+                              AND (item.target_quantity IS NULL OR (
+                                  pack.size > 0 AND pack.unit = item.required_base_unit
+                                  AND need.packages * pack.size <= item.target_quantity * item.quantity * 1.25
+                              ))
+                              AND (
+                                  (
+                                      item.matching_rule = 'EXACT_PRODUCT'
+                                      AND item.matching_status IN (
+                                          'AUTO_MATCHED',
+                                          'CONFIRMED'
+                                      )
+                                      -- A case of twenty sharing the
+                                      -- bottle's barcode is not one bottle (V77).
+                                      AND NOT EXISTS (
+                                          SELECT 1
+                                          FROM app.retailer_product AS single_piece
+                                          WHERE single_piece.product_family_id =
+                                                product.product_family_id
+                                            AND single_piece.package_count <
+                                                product.package_count
+                                      )
+                                      AND (
+                                          product.canonical_product_id =
+                                              item.matched_canonical_product_id
+                                          -- The same product under another
+                                          -- chain's barcode.
+                                          OR product.product_family_id IN (
+                                              SELECT member.family_id
+                                              FROM app.product_family_member
+                                                  AS member
+                                              WHERE member.canonical_product_id =
+                                                  item.matched_canonical_product_id
+                                          )
+                                          OR (
+                                              item.barcode IS NOT NULL
+                                              AND product.barcode = item.barcode
+                                          )
+                                      )
+                                  )
+                                  OR
+                                  (
+                                      item.matching_rule = 'PRODUCT_FAMILY'
+                                      AND item.matching_status = 'CONFIRMED'
+                                      AND product.product_family_id =
+                                          item.matched_product_family_id
+                                      -- A case of twenty sharing the
+                                      -- bottle's barcode is not one bottle (V77).
+                                      AND NOT EXISTS (
+                                          SELECT 1
+                                          FROM app.retailer_product AS single_piece
+                                          WHERE single_piece.product_family_id =
+                                                product.product_family_id
+                                            AND single_piece.package_count <
+                                                product.package_count
+                                      )
+                                  )
+                                  OR
+                                  (
+                                      item.matching_rule = 'FLEXIBLE_CATEGORY'
+                                      AND (
+                                          EXISTS (
+                                              SELECT 1
+                                              FROM app.retailer_product_type
+                                                  AS assignment
+                                              JOIN app.shopping_intent_product_type
+                                                  AS allowed_type
+                                                ON allowed_type.product_type_id =
+                                                   assignment.product_type_id
+                                              WHERE assignment.retailer_product_id =
+                                                    product.id
+                                                AND allowed_type.shopping_intent_id =
+                                                    requested_intent.shopping_intent_id
+                                                AND allowed_type.enabled_by_default =
+                                                    TRUE
+                                          )
+                                          OR (
+                                              requested_intent.shopping_intent_id
+                                                  IS NULL
+                                              AND
+                                              NOT EXISTS (
+                                                  SELECT 1
+                                                  FROM app.retailer_product_type
+                                                      AS known_type
+                                                  WHERE known_type.retailer_product_id =
+                                                        product.id
+                                              )
+                                              AND (
+                                                  COALESCE(
+                                                      product.normalized_name,
+                                                      LOWER(product.name)
+                                                  ) = item.flexible_category_normalized
+                                                  OR COALESCE(
+                                                      product.normalized_name,
+                                                      LOWER(product.name)
+                                                  ) LIKE
+                                                      item.flexible_category_normalized
+                                                      || ' %'
+                                              )
+                                          )
+                                      )
+                                  )
+                              )
+                              AND (
+                                  item.matching_rule <> 'FLEXIBLE_CATEGORY'
+                                  OR (
+                                      (requested_intent.required_name_pattern IS NULL
+                                       OR product.normalized_name ~ requested_intent.required_name_pattern)
+                                      AND
+                                      (
+                                          item.required_brand IS NULL
+                                          OR LOWER(BTRIM(COALESCE(
+                                              canonical.brand,
+                                              product.brand,
+                                              ''
+                                          ))) = LOWER(BTRIM(
+                                              item.required_brand
+                                          ))
+                                          -- One brand, several spellings:
+                                          -- "Zaječarsko", "ZAJEČARSKO",
+                                          -- "Zajecarsko".
+                                          OR (
+                                              app.product_match_brand_key(item.required_brand) <> ''
+                                              AND app.product_match_brand_key(item.required_brand) IN (
+                                                  app.product_match_brand_key(canonical.brand),
+                                                  app.product_match_brand_key(product.brand)
+                                              )
+                                          )
+                                      )
+                                      AND (
+                                          item.required_base_unit IS NULL
+                                          OR pack.unit = item.required_base_unit
+                                      )
+                                      AND (
+                                          item.min_package_quantity IS NULL
+                                          OR pack.size >= item.min_package_quantity
+                                      )
+                                      AND (
+                                          item.max_package_quantity IS NULL
+                                          OR pack.size <= item.max_package_quantity
+                                      )
+                                  )
+                              )
+                            UNION
+                            SELECT item.id,
+                                   product.id
+                            FROM (
+                                SELECT DISTINCT requested_store.retailer_id
+                                FROM app.store AS requested_store
+                                WHERE requested_store.id IN (:storeIds)
+                            ) AS chain
+                            CROSS JOIN app.shopping_list_item AS item
+                        LEFT JOIN LATERAL (
+                            SELECT intent.id AS shopping_intent_id,
+                                   intent.default_min_package_quantity,
+                                   intent.default_max_package_quantity,
+                                   intent.default_base_unit,
+                                   alias.required_name_pattern
+                            FROM app.shopping_intent AS intent
+                            LEFT JOIN app.shopping_intent_alias AS alias
+                              ON alias.shopping_intent_id = intent.id
+                             AND alias.normalized_alias = item.flexible_category_normalized
+                            WHERE item.matching_rule =
+                                  'FLEXIBLE_CATEGORY'
+                              AND intent.id = item.shopping_intent_id
+                              AND intent.active = TRUE
+                        ) AS requested_intent ON TRUE
+                            JOIN app.retailer_product AS product
+                              ON product.retailer_id = chain.retailer_id
+                            LEFT JOIN app.canonical_product AS canonical
+                              ON canonical.id = product.canonical_product_id
+                            CROSS JOIN LATERAL (
+                                SELECT CASE WHEN counted.by_piece
+                                            THEN product.package_count::NUMERIC
+                                            ELSE product.quantity_value
+                                       END AS size,
+                                       CASE WHEN counted.by_piece
+                                            THEN 'piece'
+                                            ELSE product.base_unit
+                                       END AS unit,
+                                       -- One bottle or can, for the usual size.
+                                       CASE WHEN counted.by_piece
+                                            THEN product.quantity_value
+                                                 / product.package_count
+                                            ELSE product.quantity_value
+                                       END AS one_size,
+                                       product.base_unit AS one_unit,
+                                       counted.by_piece
+                                FROM (
+                                    SELECT COALESCE(
+                                               item.required_base_unit = 'piece'
+                                               AND product.base_unit IN ('g', 'ml')
+                                               AND requested_intent.default_base_unit
+                                                   IS DISTINCT FROM 'piece'
+                                               AND product.name !~* '\\m(rinfuz|cca)\\M',
+                                               FALSE
+                                           ) AS by_piece
+                                ) AS counted
+                            ) pack
+                            CROSS JOIN LATERAL (
+                                SELECT CASE WHEN item.target_quantity IS NULL THEN item.quantity
+                                    ELSE CEIL(item.target_quantity * item.quantity / NULLIF(pack.size, 0))
+                                END AS packages
+                            ) need
+                            WHERE item.shopping_list_id = :listId
+                              AND NOT (
+                                  item.matching_rule = 'FLEXIBLE_CATEGORY'
+                                  AND requested_intent.shopping_intent_id IS NOT NULL
+                              )
+                              AND (item.target_quantity IS NULL OR (
+                                  pack.size > 0 AND pack.unit = item.required_base_unit
+                                  AND need.packages * pack.size <= item.target_quantity * item.quantity * 1.25
+                              ))
+                              AND (
+                                  (
+                                      item.matching_rule = 'EXACT_PRODUCT'
+                                      AND item.matching_status IN (
+                                          'AUTO_MATCHED',
+                                          'CONFIRMED'
+                                      )
+                                      -- A case of twenty sharing the
+                                      -- bottle's barcode is not one bottle (V77).
+                                      AND NOT EXISTS (
+                                          SELECT 1
+                                          FROM app.retailer_product AS single_piece
+                                          WHERE single_piece.product_family_id =
+                                                product.product_family_id
+                                            AND single_piece.package_count <
+                                                product.package_count
+                                      )
+                                      AND (
+                                          product.canonical_product_id =
+                                              item.matched_canonical_product_id
+                                          -- The same product under another
+                                          -- chain's barcode.
+                                          OR product.product_family_id IN (
+                                              SELECT member.family_id
+                                              FROM app.product_family_member
+                                                  AS member
+                                              WHERE member.canonical_product_id =
+                                                  item.matched_canonical_product_id
+                                          )
+                                          OR (
+                                              item.barcode IS NOT NULL
+                                              AND product.barcode = item.barcode
+                                          )
+                                      )
+                                  )
+                                  OR
+                                  (
+                                      item.matching_rule = 'PRODUCT_FAMILY'
+                                      AND item.matching_status = 'CONFIRMED'
+                                      AND product.product_family_id =
+                                          item.matched_product_family_id
+                                      -- A case of twenty sharing the
+                                      -- bottle's barcode is not one bottle (V77).
+                                      AND NOT EXISTS (
+                                          SELECT 1
+                                          FROM app.retailer_product AS single_piece
+                                          WHERE single_piece.product_family_id =
+                                                product.product_family_id
+                                            AND single_piece.package_count <
+                                                product.package_count
+                                      )
+                                  )
+                                  OR
+                                  (
+                                      item.matching_rule = 'FLEXIBLE_CATEGORY'
+                                      AND (
+                                          EXISTS (
+                                              SELECT 1
+                                              FROM app.retailer_product_type
+                                                  AS assignment
+                                              JOIN app.shopping_intent_product_type
+                                                  AS allowed_type
+                                                ON allowed_type.product_type_id =
+                                                   assignment.product_type_id
+                                              WHERE assignment.retailer_product_id =
+                                                    product.id
+                                                AND allowed_type.shopping_intent_id =
+                                                    requested_intent.shopping_intent_id
+                                                AND allowed_type.enabled_by_default =
+                                                    TRUE
+                                          )
+                                          OR (
+                                              requested_intent.shopping_intent_id
+                                                  IS NULL
+                                              AND
+                                              NOT EXISTS (
+                                                  SELECT 1
+                                                  FROM app.retailer_product_type
+                                                      AS known_type
+                                                  WHERE known_type.retailer_product_id =
+                                                        product.id
+                                              )
+                                              AND (
+                                                  COALESCE(
+                                                      product.normalized_name,
+                                                      LOWER(product.name)
+                                                  ) = item.flexible_category_normalized
+                                                  OR COALESCE(
+                                                      product.normalized_name,
+                                                      LOWER(product.name)
+                                                  ) LIKE
+                                                      item.flexible_category_normalized
+                                                      || ' %'
+                                              )
+                                          )
+                                      )
+                                  )
+                              )
+                              AND (
+                                  item.matching_rule <> 'FLEXIBLE_CATEGORY'
+                                  OR (
+                                      (requested_intent.required_name_pattern IS NULL
+                                       OR product.normalized_name ~ requested_intent.required_name_pattern)
+                                      AND
+                                      (
+                                          item.required_brand IS NULL
+                                          OR LOWER(BTRIM(COALESCE(
+                                              canonical.brand,
+                                              product.brand,
+                                              ''
+                                          ))) = LOWER(BTRIM(
+                                              item.required_brand
+                                          ))
+                                          -- One brand, several spellings:
+                                          -- "Zaječarsko", "ZAJEČARSKO",
+                                          -- "Zajecarsko".
+                                          OR (
+                                              app.product_match_brand_key(item.required_brand) <> ''
+                                              AND app.product_match_brand_key(item.required_brand) IN (
+                                                  app.product_match_brand_key(canonical.brand),
+                                                  app.product_match_brand_key(product.brand)
+                                              )
+                                          )
+                                      )
+                                      AND (
+                                          item.required_base_unit IS NULL
+                                          OR pack.unit = item.required_base_unit
+                                      )
+                                      AND (
+                                          item.min_package_quantity IS NULL
+                                          OR pack.size >= item.min_package_quantity
+                                      )
+                                      AND (
+                                          item.max_package_quantity IS NULL
+                                          OR pack.size <= item.max_package_quantity
+                                      )
+                                  )
+                              )
+                        )
                         SELECT store.id AS store_id,
                                retailer.code AS retailer_code,
                                retailer.name AS retailer_name,
@@ -159,7 +588,10 @@ public class StoreShoppingOfferRepository {
                                    selected_price.price_scope,
                                    pack.size AS package_size, pack.unit AS package_unit,
                                    need.packages
-                            FROM app.retailer_product AS product
+                            FROM candidate
+                            JOIN app.retailer_product AS product
+                              ON product.id = candidate.retailer_product_id
+                             AND candidate.item_id = item.id
                             LEFT JOIN app.canonical_product AS canonical
                               ON canonical.id =
                                   product.canonical_product_id
