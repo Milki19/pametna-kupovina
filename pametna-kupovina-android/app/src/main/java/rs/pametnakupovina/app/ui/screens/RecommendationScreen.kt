@@ -681,6 +681,9 @@ private fun PlanItemRow(item: RecommendationItemDto) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+            if (manySmallPacks(item)) {
+                StatusPill("Mnogo malih pakovanja", StatusTone.WARNING)
+            }
         }
         Text(
             item.lineTotal?.let(::money) ?: "nema",
@@ -889,6 +892,15 @@ private fun scenarioWarnings(
             )
         }
     }
+    // "Šećer 25 kg" as fifty half-kilo bags is cheaper but rarely what anyone
+    // wants to carry, so the plan says so instead of hiding it.
+    val smallPacks = scenario.items.filter(::manySmallPacks).map { it.requestedName }
+    if (smallPacks.isNotEmpty()) {
+        add(
+            "Od mnogo malih pakovanja: ${smallPacks.joinToString(", ")}. " +
+                "Proveri da li ti tako odgovara ili izaberi veće pakovanje."
+        )
+    }
     val asOf = scenario.dataAsOf
     if (asOf != null && asOf != result.requestedDate) {
         add("Cene su iz cenovnika od ${date(asOf)}, ne od danas. Proveri ih pre kupovine.")
@@ -942,6 +954,19 @@ internal fun scenarioShortTitle(type: RecommendationScenarioTypeDto): String = w
     RecommendationScenarioTypeDto.SINGLE_STORE -> "Jedna stanica"
     RecommendationScenarioTypeDto.RECOMMENDED_BALANCE -> "Najbolje ukupno"
     RecommendationScenarioTypeDto.LOWEST_PRICE -> "Najjeftinija korpa"
+}
+
+/**
+ * Ten or more packs make up an amount the shopper wrote ("šećer 25 kg" as 50 ×
+ * 500 g). Not a count they asked for themselves, and not bottles or cans
+ * asked for by the piece.
+ */
+internal fun manySmallPacks(item: RecommendationItemDto): Boolean {
+    val quantity = item.purchaseQuantity ?: return false
+    val packages = quantity.packages ?: return false
+    return packages >= 10.0 &&
+        quantity.baseUnit != null && quantity.baseUnit != "piece" &&
+        packages != item.requestedQuantity
 }
 
 internal fun itemPriceBreakdown(item: RecommendationItemDto): String? {
