@@ -45,6 +45,7 @@ public class ProductCatalogMaintenanceService {
         synchronizeIdentityCandidates(retailerId);
         synchronizePresence(retailerId);
         synchronizeTypicalPrices();
+        synchronizeMergeSuggestions();
 
         return readResult(retailerId, retailerCode);
     }
@@ -935,6 +936,14 @@ public class ProductCatalogMaintenanceService {
         // offer too cheap to believe (V72). One chain's new prices move it
         // for every chain.
         jdbcClient.sql("SELECT app.refresh_typical_prices()")
+                .query((resultSet, rowNumber) -> true)
+                .single();
+    }
+
+    private void synchronizeMergeSuggestions() {
+        // Products that look like one product under two names, for the owner
+        // to confirm (V80).
+        jdbcClient.sql("SELECT app.refresh_product_merge_suggestions()")
                 .query((resultSet, rowNumber) -> true)
                 .single();
     }
