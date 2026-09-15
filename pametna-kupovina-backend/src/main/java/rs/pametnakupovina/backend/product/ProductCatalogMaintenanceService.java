@@ -34,6 +34,7 @@ public class ProductCatalogMaintenanceService {
                 ));
 
         synchronizeBrands(retailerId);
+        remapTruncatedBrands();
         synchronizePackageSizes(retailerId);
         synchronizeFamilies(retailerId);
         synchronizeProductCategories(retailerId);
@@ -156,12 +157,18 @@ public class ProductCatalogMaintenanceService {
                     SET brand_id = (
                         SELECT brand.id
                         FROM app.brand
-                        WHERE brand.normalized_name = LOWER(REGEXP_REPLACE(
-                                  BTRIM(product.brand),
-                                  '[^[:alnum:]]+',
-                                  ' ',
-                                  'g'
-                              ))
+                        -- Through the aliases: Univerexport's "ZAJECARS" is
+                        -- an alias of Zaječarsko (V79).
+                        WHERE brand.id = (
+                                  SELECT alias.brand_id
+                                  FROM app.brand_alias AS alias
+                                  WHERE alias.normalized_alias = LOWER(REGEXP_REPLACE(
+                                            BTRIM(product.brand),
+                                            '[^[:alnum:]]+',
+                                            ' ',
+                                            'g'
+                                        ))
+                              )
                            OR (
                                 NULLIF(BTRIM(product.brand), '') IS NULL
                                 AND (
@@ -194,12 +201,16 @@ public class ProductCatalogMaintenanceService {
                     SET brand_id = (
                         SELECT brand.id
                         FROM app.brand
-                        WHERE brand.normalized_name = LOWER(REGEXP_REPLACE(
-                                  BTRIM(canonical.brand),
-                                  '[^[:alnum:]]+',
-                                  ' ',
-                                  'g'
-                              ))
+                        WHERE brand.id = (
+                                  SELECT alias.brand_id
+                                  FROM app.brand_alias AS alias
+                                  WHERE alias.normalized_alias = LOWER(REGEXP_REPLACE(
+                                            BTRIM(canonical.brand),
+                                            '[^[:alnum:]]+',
+                                            ' ',
+                                            'g'
+                                        ))
+                              )
                            OR (
                                 NULLIF(BTRIM(canonical.brand), '') IS NULL
                                 AND (
@@ -231,6 +242,12 @@ public class ProductCatalogMaintenanceService {
                     """)
                 .param(1, retailerId)
                 .update();
+    }
+
+    private void remapTruncatedBrands() {
+        jdbcClient.sql("SELECT app.remap_truncated_brands()")
+                .query((resultSet, rowNumber) -> true)
+                .single();
     }
 
     private void synchronizePackageSizes(long retailerId) {
