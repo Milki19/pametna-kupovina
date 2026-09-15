@@ -205,6 +205,7 @@ private fun ProductDetailsContent(product: CanonicalProductDetailsDto) {
                 GroupedRows(offers) { index, offer ->
                     OfferRow(
                         offer,
+                        product = product,
                         cheapest = index == 0 && offers.size > 1 && !offer.priceNeedsCheck &&
                             !isCaseOf(offer, product),
                         caseOf = product.packageCount.takeIf { isCaseOf(offer, product) }
@@ -244,7 +245,12 @@ private fun <T> GroupedRows(
 }
 
 @Composable
-private fun OfferRow(offer: CanonicalProductOfferDto, cheapest: Boolean, caseOf: Int? = null) {
+private fun OfferRow(
+    offer: CanonicalProductOfferDto,
+    product: CanonicalProductDetailsDto,
+    cheapest: Boolean,
+    caseOf: Int? = null
+) {
     Row(
         modifier = Modifier.padding(horizontal = AppSpacing.lg, vertical = AppSpacing.md),
         verticalAlignment = Alignment.Top
@@ -296,9 +302,9 @@ private fun OfferRow(offer: CanonicalProductOfferDto, cheapest: Boolean, caseOf:
                 style = MaterialTheme.typography.titleMedium,
                 color = if (cheapest) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
             )
-            offer.unitPrice?.let {
+            offerUnitPriceLabel(offer, product)?.let {
                 Text(
-                    "jed. ${money(it)}",
+                    it,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -323,6 +329,27 @@ private fun PriceHistoryRow(point: CanonicalProductPricePointDto) {
             )
         }
         Text(money(point.effectivePrice), style = MaterialTheme.typography.bodyLarge)
+    }
+}
+
+/**
+ * The price per litre, kilo or piece, read from the size of what is sold, so
+ * every chain is compared the same way. A chain's own figure is often per
+ * piece ("jed. 85,99" for a half-litre bottle) and is shown only when the size
+ * is unknown.
+ */
+internal fun offerUnitPriceLabel(offer: CanonicalProductOfferDto, product: CanonicalProductDetailsDto): String? {
+    val quantity = product.quantityValue?.takeIf { it > 0 }
+    val unit = product.baseUnit
+    if (quantity == null || unit == null) {
+        return offer.unitPrice?.let { "jed. ${money(it)}" }
+    }
+    val amount = quantity / product.packageCount.coerceAtLeast(1) * offer.packageCount.coerceAtLeast(1)
+    return when (unit) {
+        "g" -> "${money(offer.effectivePrice * 1000 / amount)}/kg"
+        "ml" -> "${money(offer.effectivePrice * 1000 / amount)}/l"
+        "piece" -> if (amount > 1) "${money(offer.effectivePrice / amount)}/kom" else null
+        else -> offer.unitPrice?.let { "jed. ${money(it)}" }
     }
 }
 
