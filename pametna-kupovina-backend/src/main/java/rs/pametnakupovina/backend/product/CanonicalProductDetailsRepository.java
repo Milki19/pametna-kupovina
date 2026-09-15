@@ -37,7 +37,8 @@ public class CanonicalProductDetailsRepository {
                     resultSet.getBigDecimal("effective_price"),
                     resultSet.getBigDecimal("unit_price"),
                     resultSet.getString("price_scope"),
-                    resultSet.getBoolean("price_needs_check")
+                    resultSet.getBoolean("price_needs_check"),
+                    resultSet.getInt("package_count")
             );
 
     private static final RowMapper<CanonicalProductPricePoint> HISTORY_MAPPER =
@@ -92,6 +93,7 @@ public class CanonicalProductDetailsRepository {
         return jdbcClient.sql("""
                         WITH ranked AS (
                             SELECT retailer_product.id AS retailer_product_id,
+                                   retailer_product.package_count,
                                    retailer.code AS retailer_code,
                                    retailer.name AS retailer_name,
                                    observation.store_id,
@@ -274,7 +276,8 @@ public class CanonicalProductDetailsRepository {
                                effective_price,
                                unit_price,
                                price_scope,
-                               price_needs_check
+                               price_needs_check,
+                               package_count
                         FROM ranked
                         WHERE rank_number = 1
                           AND effective_price > 0

@@ -469,6 +469,16 @@ public class StoreShoppingOfferRepository {
                                           'AUTO_MATCHED',
                                           'CONFIRMED'
                                       )
+                                      -- A case of twenty sharing the
+                                      -- bottle's barcode is not one bottle (V77).
+                                      AND NOT EXISTS (
+                                          SELECT 1
+                                          FROM app.retailer_product AS single_piece
+                                          WHERE single_piece.product_family_id =
+                                                product.product_family_id
+                                            AND single_piece.package_count <
+                                                product.package_count
+                                      )
                                       AND (
                                           product.canonical_product_id =
                                               item.matched_canonical_product_id
@@ -493,6 +503,16 @@ public class StoreShoppingOfferRepository {
                                       AND item.matching_status = 'CONFIRMED'
                                       AND product.product_family_id =
                                           item.matched_product_family_id
+                                      -- A case of twenty sharing the
+                                      -- bottle's barcode is not one bottle (V77).
+                                      AND NOT EXISTS (
+                                          SELECT 1
+                                          FROM app.retailer_product AS single_piece
+                                          WHERE single_piece.product_family_id =
+                                                product.product_family_id
+                                            AND single_piece.package_count <
+                                                product.package_count
+                                      )
                                   )
                                   OR
                                   (

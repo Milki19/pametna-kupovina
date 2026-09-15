@@ -288,6 +288,8 @@ public class CanonicalProductSearchRepository {
                                   offer.price_date,
                                   CURRENT_DATE
                               )
+                              AND product.package_count =
+                                  app.family_base_package_count(product.product_family_id)
                         ) AS checked
                         WHERE presence.product_family_id IN (:familyIds)
                         ORDER BY presence.product_family_id,
