@@ -5,17 +5,22 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import rs.pametnakupovina.app.data.ShoppingRepository
 import rs.pametnakupovina.app.data.network.CanonicalProductDetailsDto
+import rs.pametnakupovina.app.data.network.ProductReportReasonDto
 
 data class ProductDetailsUiState(
     val isLoading: Boolean = true,
     val product: CanonicalProductDetailsDto? = null,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val reportMessage: String? = null,
+    val isReporting: Boolean = false
 )
 
 @HiltViewModel
@@ -52,5 +57,26 @@ class ProductDetailsViewModel @Inject constructor(
                 )
             }
         }
+    }
+
+    /** A wrong price or a listing that is not this product goes to review. */
+    fun report(reason: ProductReportReasonDto, note: String, onSent: () -> Unit) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isReporting = true, reportMessage = null) }
+            val message = try {
+                repository.reportProduct(canonicalProductId, reason, note)
+                onSent()
+                "Hvala, proverićemo."
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                error.toUserMessage("Prijava nije poslata. Pokušaj ponovo.")
+            }
+            _uiState.update { it.copy(isReporting = false, reportMessage = message) }
+        }
+    }
+
+    fun clearReportMessage() {
+        _uiState.update { it.copy(reportMessage = null) }
     }
 }

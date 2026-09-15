@@ -179,7 +179,8 @@ data class CanonicalProductOfferDto(
     val effectivePrice: Double,
     val unitPrice: Double? = null,
     val priceScope: String,
-    val priceNeedsCheck: Boolean = false
+    val priceNeedsCheck: Boolean = false,
+    val packageCount: Int = 1
 )
 
 @Serializable
@@ -394,3 +395,16 @@ data class ShoppingRecommendationDto(
     val disclaimer: String,
     val unlocatedPriceOptions: List<UnlocatedPriceOptionDto> = emptyList()
 )
+
+@Serializable
+enum class ProductReportReasonDto { WRONG_PRICE, NOT_SAME_PRODUCT, OTHER }
+
+@Serializable
+data class ProductReportRequestDto(
+    val reason: ProductReportReasonDto,
+    val note: String? = null,
+    val retailerProductId: Long? = null
+)
+
+@Serializable
+data class ProductReportResponseDto(val id: Long, val status: String)

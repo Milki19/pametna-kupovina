@@ -8,7 +8,20 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import rs.pametnakupovina.app.data.network.ProductReportReasonDto
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -43,8 +56,30 @@ fun ProductDetailsScreen(
     viewModel: ProductDetailsViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    var showReport by rememberSaveable { mutableStateOf(false) }
+    val snackbar = remember { SnackbarHostState() }
 
-    Scaffold(topBar = { AppTopBar(title = "Cene proizvoda", onBack = onBack) }) { padding ->
+    LaunchedEffect(state.reportMessage) {
+        state.reportMessage?.let {
+            snackbar.showSnackbar(it)
+            viewModel.clearReportMessage()
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            AppTopBar(
+                title = "Cene proizvoda",
+                onBack = onBack,
+                actions = {
+                    if (state.product != null) {
+                        TextButton(onClick = { showReport = true }) { Text("Prijavi grešku") }
+                    }
+                }
+            )
+        },
+        snackbarHost = { SnackbarHost(snackbar) }
+    ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -61,6 +96,63 @@ fun ProductDetailsScreen(
             }
         }
     }
+
+    if (showReport) {
+        ReportDialog(
+            sending = state.isReporting,
+            onDismiss = { showReport = false },
+            onSend = { reason, note -> viewModel.report(reason, note) { showReport = false } }
+        )
+    }
+}
+
+private val ReportReasons = listOf(
+    ProductReportReasonDto.WRONG_PRICE to "Cena nije tačna",
+    ProductReportReasonDto.NOT_SAME_PRODUCT to "Ovo nisu isti proizvodi",
+    ProductReportReasonDto.OTHER to "Nešto drugo"
+)
+
+/** What is wrong, in one tap, and a note only if the reader wants to add one. */
+@Composable
+private fun ReportDialog(
+    sending: Boolean,
+    onDismiss: () -> Unit,
+    onSend: (ProductReportReasonDto, String) -> Unit
+) {
+    var reason by rememberSaveable { mutableStateOf<ProductReportReasonDto?>(null) }
+    var note by rememberSaveable { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Prijavi grešku") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.xs)) {
+                ReportReasons.forEach { (value, label) ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .selectable(selected = reason == value, onClick = { reason = value })
+                    ) {
+                        RadioButton(selected = reason == value, onClick = { reason = value })
+                        Text(label, style = MaterialTheme.typography.bodyLarge)
+                    }
+                }
+                OutlinedTextField(
+                    value = note,
+                    onValueChange = { if (it.length <= 500) note = it },
+                    label = { Text("Napomena (opciono)") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = reason != null && !sending,
+                onClick = { reason?.let { onSend(it, note) } }
+            ) { Text(if (sending) "Šaljem…" else "Pošalji") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Otkaži") } }
+    )
 }
 
 /**
@@ -71,7 +163,7 @@ fun ProductDetailsScreen(
 @Composable
 private fun ProductDetailsContent(product: CanonicalProductDetailsDto) {
     val offers = product.offers.sortedWith(
-        compareBy({ it.priceNeedsCheck }, { it.effectivePrice })
+        compareBy({ it.priceNeedsCheck }, { isCaseOf(it, product) }, { it.effectivePrice })
     )
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -111,7 +203,12 @@ private fun ProductDetailsContent(product: CanonicalProductDetailsDto) {
         } else {
             item(key = "offers") {
                 GroupedRows(offers) { index, offer ->
-                    OfferRow(offer, cheapest = index == 0 && offers.size > 1 && !offer.priceNeedsCheck)
+                    OfferRow(
+                        offer,
+                        cheapest = index == 0 && offers.size > 1 && !offer.priceNeedsCheck &&
+                            !isCaseOf(offer, product),
+                        caseOf = product.packageCount.takeIf { isCaseOf(offer, product) }
+                    )
                 }
             }
         }
@@ -147,7 +244,7 @@ private fun <T> GroupedRows(
 }
 
 @Composable
-private fun OfferRow(offer: CanonicalProductOfferDto, cheapest: Boolean) {
+private fun OfferRow(offer: CanonicalProductOfferDto, cheapest: Boolean, caseOf: Int? = null) {
     Row(
         modifier = Modifier.padding(horizontal = AppSpacing.lg, vertical = AppSpacing.md),
         verticalAlignment = Alignment.Top
@@ -169,6 +266,14 @@ private fun OfferRow(offer: CanonicalProductOfferDto, cheapest: Boolean) {
             ) {
                 Text(
                     "Akcija, redovno ${money(offer.regularPrice)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.tertiary
+                )
+            }
+            caseOf?.let { single ->
+                Text(
+                    "Pakovanje od ${offer.packageCount / single} kom · " +
+                        "${money(offer.effectivePrice * single / offer.packageCount)} po komadu",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.tertiary
                 )
@@ -220,6 +325,10 @@ private fun PriceHistoryRow(point: CanonicalProductPricePointDto) {
         Text(money(point.effectivePrice), style = MaterialTheme.typography.bodyLarge)
     }
 }
+
+/** METRO's case of twenty under one bottle's barcode: priced for all twenty. */
+internal fun isCaseOf(offer: CanonicalProductOfferDto, product: CanonicalProductDetailsDto): Boolean =
+    offer.packageCount > product.packageCount
 
 private fun productMetadata(product: CanonicalProductDetailsDto): String =
     listOfNotNull(

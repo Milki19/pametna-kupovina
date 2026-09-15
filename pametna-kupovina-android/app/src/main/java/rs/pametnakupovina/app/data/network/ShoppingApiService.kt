@@ -84,4 +84,10 @@ interface ShoppingApiService {
         @Query("longitude") longitude: Double,
         @Query("date") date: String? = null
     ): ShoppingRecommendationDto
+
+    @POST("api/v1/products/{canonicalProductId}/reports")
+    suspend fun reportProduct(
+        @Path("canonicalProductId") canonicalProductId: Long,
+        @Body request: ProductReportRequestDto
+    ): ProductReportResponseDto
 }
