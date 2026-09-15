@@ -902,6 +902,10 @@ public class ProductCatalogMaintenanceService {
                           offer.price_date,
                           CURRENT_DATE
                       )
+                      -- A case sharing a bottle's barcode is not the
+                      -- chain's price for the bottle (V77).
+                      AND product.package_count =
+                          app.family_base_package_count(product.product_family_id)
                     GROUP BY product.product_family_id,
                              product.retailer_id
                     """)
