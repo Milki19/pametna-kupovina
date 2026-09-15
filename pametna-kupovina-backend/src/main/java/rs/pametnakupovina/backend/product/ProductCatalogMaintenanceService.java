@@ -37,6 +37,7 @@ public class ProductCatalogMaintenanceService {
         remapTruncatedBrands();
         synchronizePackageSizes(retailerId);
         synchronizeFamilies(retailerId);
+        synchronizeFamilyDisplayNames();
         synchronizeProductCategories(retailerId);
         synchronizeFamilyCategories(retailerId);
         synchronizeProductTypes(retailerId);
@@ -936,6 +937,14 @@ public class ProductCatalogMaintenanceService {
         // offer too cheap to believe (V72). One chain's new prices move it
         // for every chain.
         jdbcClient.sql("SELECT app.refresh_typical_prices()")
+                .query((resultSet, rowNumber) -> true)
+                .single();
+    }
+
+    private void synchronizeFamilyDisplayNames() {
+        // The clearest of the chains' names, without METRO's suffix and
+        // stock codes (V81).
+        jdbcClient.sql("SELECT app.refresh_family_display_names()")
                 .query((resultSet, rowNumber) -> true)
                 .single();
     }
