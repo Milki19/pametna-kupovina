@@ -155,6 +155,20 @@ class ShoppingRepository @Inject constructor(
         historyLimit = historyLimit
     )
 
+    suspend fun reportProduct(
+        canonicalProductId: Long,
+        reason: rs.pametnakupovina.app.data.network.ProductReportReasonDto,
+        note: String?
+    ) {
+        api.reportProduct(
+            canonicalProductId,
+            rs.pametnakupovina.app.data.network.ProductReportRequestDto(
+                reason = reason,
+                note = note?.trim()?.takeIf(String::isNotEmpty)
+            )
+        )
+    }
+
     suspend fun addItem(input: DraftItemInput) {
         val value = input.validated()
         dao.insert(value.toEntity())
