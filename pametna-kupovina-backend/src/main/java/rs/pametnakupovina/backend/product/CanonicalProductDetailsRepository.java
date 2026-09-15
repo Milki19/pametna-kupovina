@@ -65,7 +65,8 @@ public class CanonicalProductDetailsRepository {
     public Optional<CanonicalProductSummary> findProduct(Long productId) {
         return jdbcClient.sql("""
                         SELECT id AS canonical_product_id,
-                               name,
+                               -- Without METRO's suffix and stock codes (V81).
+                               app.clean_product_name(name) AS name,
                                brand,
                                barcode,
                                quantity_value,
