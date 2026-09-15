@@ -103,6 +103,18 @@ class RecommendationScreenTest {
         )
         assertEquals(3, distinctScenarios(threePlans).size)
 
+        // A short list: the cheapest basket is the one store, a nearer store
+        // is the best overall plan.
+        val shortList = recommendation(
+            scenario("SINGLE_STORE", 3250.00, 722),
+            scenario("RECOMMENDED_BALANCE", 3259.98, 650),
+            scenario("LOWEST_PRICE", 3250.00, 722)
+        )
+        assertEquals(
+            listOf(RecommendationScenarioTypeDto.SINGLE_STORE, RecommendationScenarioTypeDto.RECOMMENDED_BALANCE),
+            distinctScenarios(shortList).map { it.type }
+        )
+
         val oneStoreIsBest = recommendation(
             scenario("SINGLE_STORE", 9000.00, 722),
             scenario("RECOMMENDED_BALANCE", 9000.00, 722),

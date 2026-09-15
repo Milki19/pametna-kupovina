@@ -971,20 +971,21 @@ internal fun manySmallPacks(item: RecommendationItemDto): Boolean {
 
 /**
  * The same plan offered twice reads as a choice that is not one: on the slava
- * list the best overall plan was also the cheapest basket, and three boxes
- * showed two plans. The best overall plan stays; a copy of it goes.
+ * list the best overall plan was also the cheapest basket, and on a short list
+ * the cheapest basket was the one store. Three boxes showed two plans. The
+ * best overall plan always stays; a copy of a plan already shown goes.
  */
 internal fun distinctScenarios(result: ShoppingRecommendationDto): List<OptimizationScenarioDto> {
+    fun samePlan(one: OptimizationScenarioDto, other: OptimizationScenarioDto): Boolean =
+        one.available == other.available &&
+            one.basketCost == other.basketCost &&
+            one.stores.map { it.storeId }.toSet() == other.stores.map { it.storeId }.toSet()
     val best = result.recommendedBalance
-    fun samePlan(other: OptimizationScenarioDto): Boolean =
-        other.available == best.available &&
-            other.basketCost == best.basketCost &&
-            other.stores.map { it.storeId }.toSet() == best.stores.map { it.storeId }.toSet()
-    return listOfNotNull(
-        result.singleStore.takeUnless { samePlan(it) },
-        best,
-        result.lowestPrice.takeUnless { samePlan(it) }
-    )
+    val single = result.singleStore.takeUnless { samePlan(it, best) }
+    val lowest = result.lowestPrice.takeUnless { lowest ->
+        samePlan(lowest, best) || (single != null && samePlan(lowest, single))
+    }
+    return listOfNotNull(single, best, lowest)
 }
 
 internal fun itemPriceBreakdown(item: RecommendationItemDto): String? {
