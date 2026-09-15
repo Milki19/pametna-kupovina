@@ -257,7 +257,7 @@ class PametnaKupovinaBackendApplicationTests {
     private javax.sql.DataSource testDataSource;
 
     @Test
-    void dailyRefreshPersistsFiveOutcomesAndDoesNotCountRepeatedRunsAsDays() {
+    void dailyRefreshPersistsEveryOutcomeAndDoesNotCountRepeatedRunsAsDays() {
         var importer = org.mockito.Mockito.mock(PriceImportService.class);
         var maxi = org.mockito.Mockito.mock(rs.pametnakupovina.backend.priceimport.maxi.MaxiPriceImportCoordinator.class);
         var today = LocalDate.now(java.time.ZoneId.of("Europe/Belgrade"));
@@ -268,15 +268,19 @@ class PametnaKupovinaBackendApplicationTests {
         org.mockito.Mockito.when(maxi.importLatest()).thenReturn(
                 new rs.pametnakupovina.backend.priceimport.maxi.MaxiLatestImportResult(today,6,6,"SUCCEEDED",stores));
         var service = new rs.pametnakupovina.backend.priceimport.DailyPriceRefreshService(
-                new org.springframework.jdbc.core.JdbcTemplate(testDataSource),testDataSource,importer,maxi);
+                new org.springframework.jdbc.core.JdbcTemplate(testDataSource),testDataSource,importer,maxi,
+                new rs.pametnakupovina.backend.priceimport.ImportRunRecovery(jdbcClient));
         assertThat(service.refresh(true).get("status")).isEqualTo("SUCCEEDED");
         assertThat(service.refresh(true).get("status")).isEqualTo("SUCCEEDED");
         assertThat(service.refresh(false).get("status")).isEqualTo("NOT_DUE");
         assertThat(service.status().get("consecutiveSuccessfulDays")).isEqualTo(1);
-        assertThat(jdbcClient.sql("SELECT COUNT(*) FROM app.price_refresh_result").query(Integer.class).single()).isEqualTo(10);
+        // Five core sources, then Delhaize's catalogue, METRO and Super Vero.
+        assertThat(jdbcClient.sql("SELECT COUNT(*) FROM app.price_refresh_result").query(Integer.class).single()).isEqualTo(16);
+        org.mockito.Mockito.when(importer.importPrices("METRO")).thenThrow(new IllegalStateException("Test failure"));
+        assertThat(service.refresh(true).get("status")).isEqualTo("WARNING");
         org.mockito.Mockito.when(importer.importPrices("LIDL")).thenThrow(new IllegalStateException("Test failure"));
         assertThat(service.refresh(true).get("status")).isEqualTo("FAILED");
-        assertThat(jdbcClient.sql("SELECT COUNT(*) FROM app.price_refresh_result").query(Integer.class).single()).isEqualTo(15);
+        assertThat(jdbcClient.sql("SELECT COUNT(*) FROM app.price_refresh_result").query(Integer.class).single()).isEqualTo(32);
         assertThat(jdbcClient.sql("SELECT COUNT(*) FROM app.price_refresh_cycle WHERE status='RUNNING'").query(Integer.class).single()).isZero();
     }
 
@@ -285,7 +289,8 @@ class PametnaKupovinaBackendApplicationTests {
         var importer = org.mockito.Mockito.mock(PriceImportService.class);
         var maxi = org.mockito.Mockito.mock(rs.pametnakupovina.backend.priceimport.maxi.MaxiPriceImportCoordinator.class);
         var service = new rs.pametnakupovina.backend.priceimport.DailyPriceRefreshService(
-                new org.springframework.jdbc.core.JdbcTemplate(testDataSource),testDataSource,importer,maxi);
+                new org.springframework.jdbc.core.JdbcTemplate(testDataSource),testDataSource,importer,maxi,
+                new rs.pametnakupovina.backend.priceimport.ImportRunRecovery(jdbcClient));
         jdbcClient.sql("INSERT INTO app.price_refresh_cycle(cycle_date,status) VALUES (CURRENT_DATE,'RUNNING')").update();
         try (var connection = testDataSource.getConnection(); var statement = connection.createStatement()) {
             statement.execute("SELECT pg_advisory_lock(134712,1)");
