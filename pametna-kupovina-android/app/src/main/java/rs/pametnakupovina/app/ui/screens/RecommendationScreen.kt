@@ -233,7 +233,7 @@ internal fun RecommendationContent(
     var selectedTypeName by rememberSaveable {
         mutableStateOf(RecommendationScenarioTypeDto.RECOMMENDED_BALANCE.name)
     }
-    val scenarios = listOf(result.singleStore, result.recommendedBalance, result.lowestPrice)
+    val scenarios = distinctScenarios(result)
     val selected = scenarios.firstOrNull { it.type.name == selectedTypeName }
         ?: result.recommendedBalance
     val unresolved = selected.items.filter {
@@ -967,6 +967,24 @@ internal fun manySmallPacks(item: RecommendationItemDto): Boolean {
     return packages >= 10.0 &&
         quantity.baseUnit != null && quantity.baseUnit != "piece" &&
         packages != item.requestedQuantity
+}
+
+/**
+ * The same plan offered twice reads as a choice that is not one: on the slava
+ * list the best overall plan was also the cheapest basket, and three boxes
+ * showed two plans. The best overall plan stays; a copy of it goes.
+ */
+internal fun distinctScenarios(result: ShoppingRecommendationDto): List<OptimizationScenarioDto> {
+    val best = result.recommendedBalance
+    fun samePlan(other: OptimizationScenarioDto): Boolean =
+        other.available == best.available &&
+            other.basketCost == best.basketCost &&
+            other.stores.map { it.storeId }.toSet() == best.stores.map { it.storeId }.toSet()
+    return listOfNotNull(
+        result.singleStore.takeUnless { samePlan(it) },
+        best,
+        result.lowestPrice.takeUnless { samePlan(it) }
+    )
 }
 
 internal fun itemPriceBreakdown(item: RecommendationItemDto): String? {
