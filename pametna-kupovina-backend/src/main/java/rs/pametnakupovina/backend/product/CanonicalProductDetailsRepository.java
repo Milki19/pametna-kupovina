@@ -246,6 +246,20 @@ public class CanonicalProductDetailsRepository {
                                 )
                             )
                               AND observation.price_date <= :asOfDate
+                              -- A chain's price for a product it no longer
+                              -- lists is history, not an offer (V75).
+                              AND app.in_latest_price_list(
+                                  retailer_product.retailer_id,
+                                  CASE
+                                      WHEN observation.store_id IS NOT NULL
+                                          THEN 'STORE:' || observation.store_id::TEXT
+                                      WHEN NULLIF(BTRIM(observation.retailer_format_name), '') IS NOT NULL
+                                          THEN 'STORE_FORMAT:' || LOWER(BTRIM(observation.retailer_format_name))
+                                      ELSE 'RETAILER'
+                                  END,
+                                  observation.price_date,
+                                  :asOfDate
+                              )
                         )
                         SELECT retailer_product_id,
                                retailer_code,
