@@ -282,6 +282,12 @@ public class CanonicalProductSearchRepository {
                               AND product.product_family_id =
                                   presence.product_family_id
                               AND product.retailer_id = presence.retailer_id
+                              AND app.in_latest_price_list(
+                                  product.retailer_id,
+                                  offer.scope_key,
+                                  offer.price_date,
+                                  CURRENT_DATE
+                              )
                         ) AS checked
                         WHERE presence.product_family_id IN (:familyIds)
                         ORDER BY presence.product_family_id,

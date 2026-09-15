@@ -842,6 +842,12 @@ public class ProductCatalogMaintenanceService {
     }
 
     private void synchronizePresence(long retailerId) {
+        // Which price lists are newest, so presence and typical prices count
+        // only what chains still publish (V75).
+        jdbcClient.sql("SELECT app.refresh_price_list_snapshots()")
+                .query((resultSet, rowNumber) -> true)
+                .single();
+
         jdbcClient.sql("""
                     DELETE FROM app.product_retailer_presence
                     WHERE retailer_id = ?
@@ -890,6 +896,12 @@ public class ProductCatalogMaintenanceService {
                       ON product.id = offer.retailer_product_id
                     WHERE product.retailer_id = ?
                       AND product.product_family_id IS NOT NULL
+                      AND app.in_latest_price_list(
+                          product.retailer_id,
+                          offer.scope_key,
+                          offer.price_date,
+                          CURRENT_DATE
+                      )
                     GROUP BY product.product_family_id,
                              product.retailer_id
                     """)

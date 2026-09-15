@@ -271,6 +271,14 @@ public class StoreShoppingOfferRepository {
                                     WHERE current_offer.retailer_product_id =
                                             product.id
                                       AND current_offer.price_date <= :asOfDate
+                                      -- Only a price in the chain's newest list:
+                                      -- a dropped product keeps its old price (V75).
+                                      AND app.in_latest_price_list(
+                                          product.retailer_id,
+                                          current_offer.scope_key,
+                                          current_offer.price_date,
+                                          :asOfDate
+                                      )
                                       AND (
                                           current_offer.store_id = store.id
                                           OR (
@@ -364,6 +372,18 @@ public class StoreShoppingOfferRepository {
                                     WHERE observation.retailer_product_id =
                                             product.id
                                       AND observation.price_date <= :asOfDate
+                                      AND app.in_latest_price_list(
+                                          product.retailer_id,
+                                          CASE
+                                              WHEN observation.store_id IS NOT NULL
+                                                  THEN 'STORE:' || observation.store_id::TEXT
+                                              WHEN NULLIF(BTRIM(observation.retailer_format_name), '') IS NOT NULL
+                                                  THEN 'STORE_FORMAT:' || LOWER(BTRIM(observation.retailer_format_name))
+                                              ELSE 'RETAILER'
+                                          END,
+                                          observation.price_date,
+                                          :asOfDate
+                                      )
                                       AND NOT EXISTS (
                                           SELECT 1
                                           FROM app.current_price_offer
