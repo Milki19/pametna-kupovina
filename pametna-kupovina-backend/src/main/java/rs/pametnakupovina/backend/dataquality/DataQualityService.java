@@ -525,6 +525,12 @@ public class DataQualityService {
                                latest.stage AS latest_stage,
                                latest.downloaded_bytes,
                                latest.last_progress_at,
+                               EXISTS (
+                                   SELECT 1
+                                   FROM app.store AS store
+                                   WHERE store.retailer_id = source.retailer_id
+                                     AND store.active = TRUE
+                               ) AS retailer_has_stores,
                                CASE
                                    WHEN previous.rows_saved > 0
                                     AND latest_success.rows_saved IS NOT NULL
@@ -610,6 +616,8 @@ public class DataQualityService {
                     );
                     List<String> alerts = sourceAlerts(
                             active,
+                            resultSet.getString("source_type"),
+                            resultSet.getBoolean("retailer_has_stores"),
                             lastStatus,
                             lastSuccessAt,
                             lastRowsSaved,
@@ -659,8 +667,10 @@ public class DataQualityService {
                 .list();
     }
 
-    private List<String> sourceAlerts(
+    static List<String> sourceAlerts(
             boolean active,
+            String sourceType,
+            boolean retailerHasStores,
             String lastStatus,
             Instant lastSuccessAt,
             Integer lastRowsSaved,
@@ -672,6 +682,14 @@ public class DataQualityService {
             Instant generatedAt
     ) {
         if (!active) {
+            return List.of();
+        }
+
+        // A store locator that was never needed: the chain's stores came in
+        // another way (Lidl, DIS). It kept the whole report CRITICAL.
+        if ("STORE_LOCATIONS".equals(sourceType)
+                && "NEVER_RUN".equals(lastStatus)
+                && retailerHasStores) {
             return List.of();
         }
 
