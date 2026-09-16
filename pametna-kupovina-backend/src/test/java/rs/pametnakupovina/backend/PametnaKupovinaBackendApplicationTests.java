@@ -4622,7 +4622,8 @@ class PametnaKupovinaBackendApplicationTests {
                 .hasSize(2).allMatch(item -> "Pilos".equals(item.brand()));
         for (String query : List.of("mleko Pilos", "Pilos mleko", "Пилос млеко")) {
             assertThat(canonicalProductSearchService.search(query,0,20).items())
-                    .anyMatch(item -> "Dugotrajno mleko 1l".equals(item.name()) && "Pilos".equals(item.brand()));
+                    // Shown under its composed name (V84).
+                    .anyMatch(item -> "PILOS dugotrajno mleko 1l".equals(item.name()) && "Pilos".equals(item.brand()));
         }
         assertThat(canonicalProductSearchService.search("Pilos nepostojeci",0,20).items()).isEmpty();
     }

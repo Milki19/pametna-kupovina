@@ -38,6 +38,7 @@ public class ProductCatalogMaintenanceService {
         synchronizePackageSizes(retailerId);
         synchronizeFamilies(retailerId);
         synchronizeFamilyDisplayNames();
+        synchronizeComposedNames(retailerId);
         synchronizeProductCategories(retailerId);
         synchronizeFamilyCategories(retailerId);
         synchronizeProductTypes(retailerId);
@@ -999,6 +1000,18 @@ public class ProductCatalogMaintenanceService {
         // The clearest of the chains' names, without METRO's suffix and
         // stock codes (V81).
         jdbcClient.sql("SELECT app.refresh_family_display_names()")
+                .query((resultSet, rowNumber) -> true)
+                .single();
+    }
+
+    private void synchronizeComposedNames(long retailerId) {
+        // How chains spell each word, then the composed names of this chain's
+        // products (V84).
+        jdbcClient.sql("SELECT app.refresh_product_word_spellings()")
+                .query((resultSet, rowNumber) -> true)
+                .single();
+        jdbcClient.sql("SELECT app.refresh_family_composed_names(?)")
+                .param(1, retailerId)
                 .query((resultSet, rowNumber) -> true)
                 .single();
     }

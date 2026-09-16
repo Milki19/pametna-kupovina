@@ -32,7 +32,7 @@ public class ProductFamilyDetailsService {
 
         Optional<FamilyHeader> header = jdbcClient.sql("""
                         SELECT family.id,
-                               family.display_name,
+                               COALESCE(family.composed_name, family.display_name) AS display_name,
                                brand.display_name AS brand,
                                category.code AS category_code,
                                category.name AS category_name,
