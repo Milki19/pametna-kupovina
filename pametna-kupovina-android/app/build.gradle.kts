@@ -84,6 +84,11 @@ ksp {
 }
 
 dependencies {
+    constraints {
+        // 16 KB pages (Google Play): graphics-path 1.0.1, which Compose pulls
+        // in, ships a native library with its RELRO segment aligned to 4 KB.
+        implementation(libs.androidx.graphics.path)
+    }
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)
