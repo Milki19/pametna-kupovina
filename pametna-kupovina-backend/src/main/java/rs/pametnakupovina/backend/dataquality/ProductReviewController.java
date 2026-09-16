@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
-/** What the owner decides about products: look-alikes and shoppers' reports. */
+/** What the owner decides about products: look-alikes, shoppers' reports and types. */
 @Validated
 @RestController
 @RequestMapping("/api/v1/imports/quality")
@@ -38,6 +38,23 @@ public class ProductReviewController {
             @RequestBody ProductMergeDecisionRequest request
     ) {
         return service.decideMerge(suggestionId, request);
+    }
+
+    @GetMapping("/product-types/assigned")
+    public List<ProductTypeAssignmentReview> reviewTypeAssignments(
+            @RequestParam String typeCode,
+            @RequestParam(required = false) String query,
+            @RequestParam(defaultValue = "100") @Min(1) @Max(500) int limit
+    ) {
+        return service.reviewTypeAssignments(typeCode, query, limit);
+    }
+
+    @PostMapping("/product-types/{retailerProductId}/rejection")
+    public ProductTypeRejectionResult rejectTypeAssignment(
+            @PathVariable long retailerProductId,
+            @RequestBody ProductTypeRejectionRequest request
+    ) {
+        return service.rejectTypeAssignment(retailerProductId, request);
     }
 
     @GetMapping("/reports")

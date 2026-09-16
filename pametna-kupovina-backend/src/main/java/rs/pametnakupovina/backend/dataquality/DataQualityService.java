@@ -122,6 +122,11 @@ public class DataQualityService {
     }
 
     public List<ProductTypeCandidateReview> reviewProductTypes(int limit) {
+        return reviewProductTypes(limit, null);
+    }
+
+    /** Suggestions waiting for review, of one type when a code is given. */
+    public List<ProductTypeCandidateReview> reviewProductTypes(int limit, String typeCode) {
         return jdbcClient.sql("""
                         SELECT product.id AS retailer_product_id,
                                retailer.code AS retailer_code,
@@ -143,6 +148,7 @@ public class DataQualityService {
                         JOIN app.product_type AS type
                           ON type.id = candidate.product_type_id
                         WHERE candidate.status = 'PENDING'
+                          AND (CAST(:typeCode AS TEXT) IS NULL OR type.code = CAST(:typeCode AS TEXT))
                         ORDER BY candidate.confidence DESC,
                                  retailer.code,
                                  product.name,
@@ -150,6 +156,9 @@ public class DataQualityService {
                         LIMIT :limit
                         """)
                 .param("limit", limit)
+                .param("typeCode", typeCode == null || typeCode.isBlank()
+                        ? null
+                        : typeCode.trim().toUpperCase(Locale.ROOT))
                 .query((resultSet, rowNumber) ->
                         new ProductTypeCandidateReview(
                                 resultSet.getLong("retailer_product_id"),
@@ -257,6 +266,16 @@ public class DataQualityService {
                     .param("algorithmVersion", candidate.algorithmVersion())
                     .update();
 
+            // Accepted after all: an earlier rejection no longer holds.
+            jdbcClient.sql("""
+                        DELETE FROM app.retailer_product_type_rejection
+                        WHERE retailer_product_id = :productId
+                          AND product_type_id = :typeId
+                        """)
+                    .param("productId", retailerProductId)
+                    .param("typeId", candidate.productTypeId())
+                    .update();
+
             jdbcClient.sql("""
                         UPDATE app.product_type_candidate
                         SET status = CASE
@@ -281,6 +300,19 @@ public class DataQualityService {
                         WHERE id = :candidateId
                         """)
                     .param("candidateId", candidate.id())
+                    .update();
+
+            // Not suggested again by a later version of the taxonomy (V83).
+            jdbcClient.sql("""
+                        INSERT INTO app.retailer_product_type_rejection (
+                            retailer_product_id,
+                            product_type_id
+                        )
+                        VALUES (:productId, :typeId)
+                        ON CONFLICT DO NOTHING
+                        """)
+                    .param("productId", retailerProductId)
+                    .param("typeId", candidate.productTypeId())
                     .update();
         }
 

@@ -8,6 +8,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 
 @Service
@@ -191,6 +192,140 @@ public class ProductReviewService {
                 .param(1, reportId)
                 .query((resultSet, rowNumber) -> readReport(resultSet))
                 .single();
+    }
+
+    /** Products of one type, to find the ones that are not that type. */
+    public List<ProductTypeAssignmentReview> reviewTypeAssignments(String typeCode, String query, int limit) {
+        String code = requireTypeCode(typeCode);
+        String search = query == null || query.isBlank() ? null : query.trim();
+        return jdbcClient.sql("""
+                        SELECT product.id AS retailer_product_id,
+                               retailer.name AS retailer_name,
+                               product.name AS product_name,
+                               category.name AS category_name,
+                               assignment.assignment_source,
+                               assignment.confidence,
+                               assignment.reviewed
+                        FROM app.retailer_product_type AS assignment
+                        JOIN app.product_type AS type
+                          ON type.id = assignment.product_type_id
+                        JOIN app.retailer_product AS product
+                          ON product.id = assignment.retailer_product_id
+                        JOIN app.retailer AS retailer
+                          ON retailer.id = product.retailer_id
+                        LEFT JOIN LATERAL (
+                            SELECT product_category.name
+                            FROM app.retailer_product_category AS category_assignment
+                            JOIN app.product_category AS product_category
+                              ON product_category.id = category_assignment.product_category_id
+                            WHERE category_assignment.retailer_product_id = product.id
+                            LIMIT 1
+                        ) AS category ON TRUE
+                        WHERE type.code = :typeCode
+                          AND (
+                              CAST(:search AS TEXT) IS NULL
+                              OR product.normalized_name LIKE
+                                  '%' || app.fold_match_text(CAST(:search AS TEXT)) || '%'
+                          )
+                        ORDER BY assignment.reviewed, product.name, product.id
+                        LIMIT :limit
+                        """)
+                .param("typeCode", code)
+                .param("search", search)
+                .param("limit", limit)
+                .query((resultSet, rowNumber) -> new ProductTypeAssignmentReview(
+                        resultSet.getLong("retailer_product_id"),
+                        resultSet.getString("retailer_name"),
+                        resultSet.getString("product_name"),
+                        resultSet.getString("category_name"),
+                        resultSet.getString("assignment_source"),
+                        resultSet.getBigDecimal("confidence"),
+                        resultSet.getBoolean("reviewed")
+                ))
+                .list();
+    }
+
+    /**
+     * Sheba cat food is not fish. The type goes, and a later catalogue
+     * refresh does not give it back (V83).
+     */
+    @Transactional
+    public ProductTypeRejectionResult rejectTypeAssignment(long retailerProductId, ProductTypeRejectionRequest request) {
+        String code = requireTypeCode(request == null ? null : request.productTypeCode());
+        long typeId = jdbcClient.sql("""
+                        DELETE FROM app.retailer_product_type AS assignment
+                        USING app.product_type AS type
+                        WHERE assignment.retailer_product_id = ?
+                          AND assignment.product_type_id = type.id
+                          AND type.code = ?
+                        RETURNING type.id
+                        """)
+                .param(1, retailerProductId)
+                .param(2, code)
+                .query(Long.class)
+                .optional()
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Taj proizvod nema tu vrstu."
+                ));
+
+        jdbcClient.sql("""
+                        INSERT INTO app.retailer_product_type_rejection (retailer_product_id, product_type_id)
+                        VALUES (?, ?)
+                        ON CONFLICT DO NOTHING
+                        """)
+                .param(1, retailerProductId)
+                .param(2, typeId)
+                .update();
+
+        jdbcClient.sql("""
+                        UPDATE app.product_type_candidate
+                        SET status = 'REJECTED',
+                            reviewed_at = NOW(),
+                            updated_at = NOW()
+                        WHERE retailer_product_id = ?
+                          AND product_type_id = ?
+                          AND status = 'PENDING'
+                        """)
+                .param(1, retailerProductId)
+                .param(2, typeId)
+                .update();
+
+        // The product's family takes the type most of its products still have.
+        jdbcClient.sql("""
+                        UPDATE app.product_family AS family
+                        SET product_type_id = (
+                                SELECT assignment.product_type_id
+                                FROM app.retailer_product AS member
+                                JOIN app.retailer_product_type AS assignment
+                                  ON assignment.retailer_product_id = member.id
+                                WHERE member.product_family_id = family.id
+                                GROUP BY assignment.product_type_id
+                                ORDER BY COUNT(*) DESC,
+                                         MAX(assignment.confidence) DESC,
+                                         assignment.product_type_id
+                                LIMIT 1
+                            ),
+                            updated_at = NOW()
+                        FROM app.retailer_product AS product
+                        WHERE product.id = ?
+                          AND family.id = product.product_family_id
+                        """)
+                .param(1, retailerProductId)
+                .update();
+
+        return new ProductTypeRejectionResult(
+                retailerProductId,
+                code,
+                "Uklonjeno. Proizvod više neće dobiti tu vrstu."
+        );
+    }
+
+    private static String requireTypeCode(String typeCode) {
+        if (typeCode == null || typeCode.isBlank()) {
+            throw badRequest("Izaberi vrstu proizvoda.");
+        }
+        return typeCode.trim().toUpperCase(Locale.ROOT);
     }
 
     private static final String REPORT_SELECT = """

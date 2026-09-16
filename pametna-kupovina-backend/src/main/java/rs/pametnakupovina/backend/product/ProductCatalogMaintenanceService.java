@@ -479,6 +479,13 @@ public class ProductCatalogMaintenanceService {
                           WHERE assignment.retailer_product_id = product.id
                             AND assignment.reviewed = TRUE
                       )
+                      -- Removed on the admin page: never suggested again (V83).
+                      AND NOT EXISTS (
+                          SELECT 1
+                          FROM app.retailer_product_type_rejection AS rejected
+                          WHERE rejected.retailer_product_id = product.id
+                            AND rejected.product_type_id = prediction.product_type_id
+                      )
                     ON CONFLICT (
                         retailer_product_id,
                         product_type_id,
@@ -513,10 +520,23 @@ public class ProductCatalogMaintenanceService {
                       ON product.id = prediction.retailer_product_id
                     WHERE product.retailer_id = ?
                       AND prediction.confidence >= 0.9500
+                      AND NOT EXISTS (
+                          SELECT 1
+                          FROM app.retailer_product_type_rejection AS rejected
+                          WHERE rejected.retailer_product_id = product.id
+                            AND rejected.product_type_id = prediction.product_type_id
+                      )
                     ON CONFLICT (retailer_product_id) DO NOTHING
                     """)
                 .param(1, retailerId)
                 .update();
+
+        // "so", "riba", "meso", "voće", "povrće": a product the chain files
+        // under the category its name says (V83).
+        jdbcClient.sql("SELECT app.assign_generic_product_types(?)")
+                .param(1, retailerId)
+                .query((resultSet, rowNumber) -> true)
+                .single();
 
         // A pack whose name does not say what it holds, like METRO's
         // "0.33L CORONA NB 6/1", is the type of the single bottle it was
@@ -552,7 +572,41 @@ public class ProductCatalogMaintenanceService {
                           WHERE candidate.retailer_product_id = pack.id
                             AND candidate.status = 'PENDING'
                       )
+                      AND NOT EXISTS (
+                          SELECT 1
+                          FROM app.retailer_product_type_rejection AS rejected
+                          WHERE rejected.retailer_product_id = pack.id
+                            AND rejected.product_type_id = unit_type.product_type_id
+                      )
                     ON CONFLICT (retailer_product_id) DO NOTHING
+                    """)
+                .param(1, retailerId)
+                .update();
+
+        // A suggestion waits for review only while the taxonomy still makes
+        // it and the product does not already have that type: a rule that
+        // now leaves pet food out takes its suggestions with it (V83).
+        jdbcClient.sql("""
+                    DELETE FROM app.product_type_candidate AS candidate
+                    USING app.retailer_product AS product
+                    WHERE candidate.retailer_product_id = product.id
+                      AND product.retailer_id = ?
+                      AND candidate.status = 'PENDING'
+                      AND (
+                          EXISTS (
+                              SELECT 1
+                              FROM app.retailer_product_type AS assignment
+                              WHERE assignment.retailer_product_id = candidate.retailer_product_id
+                                AND assignment.product_type_id = candidate.product_type_id
+                          )
+                          OR NOT EXISTS (
+                              SELECT 1
+                              FROM app.product_type_prediction AS prediction
+                              WHERE prediction.retailer_product_id = candidate.retailer_product_id
+                                AND prediction.product_type_id = candidate.product_type_id
+                                AND prediction.confidence >= 0.7500
+                          )
+                      )
                     """)
                 .param(1, retailerId)
                 .update();
