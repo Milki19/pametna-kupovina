@@ -355,6 +355,7 @@ class PametnaKupovinaBackendApplicationTests {
                             app.product_family_member,
                             app.retailer_product_attribute,
                             app.product_type_candidate,
+                            app.retailer_product_type_rejection,
                             app.retailer_product_type,
                             app.retailer_product_category,
                             app.current_price_offer,

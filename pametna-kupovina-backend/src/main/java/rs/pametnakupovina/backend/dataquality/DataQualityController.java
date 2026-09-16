@@ -46,9 +46,10 @@ public class DataQualityController {
             @RequestParam(defaultValue = "100")
             @Min(1)
             @Max(500)
-            int limit
+            int limit,
+            @RequestParam(required = false) String typeCode
     ) {
-        return service.reviewProductTypes(limit);
+        return service.reviewProductTypes(limit, typeCode);
     }
 
     @PostMapping("/product-types/{retailerProductId}")
