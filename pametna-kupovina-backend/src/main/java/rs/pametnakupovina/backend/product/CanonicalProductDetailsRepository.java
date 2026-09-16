@@ -65,8 +65,15 @@ public class CanonicalProductDetailsRepository {
     public Optional<CanonicalProductSummary> findProduct(Long productId) {
         return jdbcClient.sql("""
                         SELECT id AS canonical_product_id,
-                               -- Without METRO's suffix and stock codes (V81).
-                               app.clean_product_name(name) AS name,
+                               -- The product's composed name (V84), else the chain's
+                               -- name without METRO's suffix and stock codes (V81).
+                               COALESCE((
+                                   SELECT family.composed_name
+                                   FROM app.product_family_member AS member
+                                   JOIN app.product_family AS family
+                                     ON family.id = member.family_id
+                                   WHERE member.canonical_product_id = canonical_product.id
+                               ), app.clean_product_name(name)) AS name,
                                brand,
                                barcode,
                                quantity_value,

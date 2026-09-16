@@ -79,7 +79,8 @@ public class CanonicalProductSearchRepository {
                         )
                         SELECT family.id AS product_family_id,
                                representative.id AS canonical_product_id,
-                               family.display_name AS name,
+                               -- Composed the way Cenoteka writes it (V84).
+                               COALESCE(family.composed_name, family.display_name) AS name,
                                brand.display_name AS brand,
                                representative.barcode,
                                family.quantity_value,
