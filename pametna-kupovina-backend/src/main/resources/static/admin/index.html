@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="sr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pregled · Pametna kupovina</title>
+<style>
+  :root {
+    --bg: #f6f8f7;
+    --surface: #ffffff;
+    --soft: #e9efec;
+    --line: #d5ddd9;
+    --text: #17201c;
+    --muted: #57635e;
+    --primary: #1b6b56;
+    --primary-soft: #d3ede4;
+    --warning: #7a5a00;
+    --warning-soft: #fde3a1;
+    --error: #a33a2c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--bg);
+    border-bottom: 1px solid var(--line);
+    padding: 14px 20px 0;
+  }
+  h1 { margin: 0 0 10px; font-size: 20px; }
+  main { max-width: 980px; margin: 0 auto; padding: 16px 20px 80px; }
+  nav { display: flex; gap: 6px; flex-wrap: wrap; }
+  nav button {
+    border: 0;
+    border-bottom: 3px solid transparent;
+    background: none;
+    padding: 8px 10px 9px;
+    font: inherit;
+    font-weight: 600;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  nav button[aria-selected="true"] { color: var(--primary); border-bottom-color: var(--primary); }
+  .count { font-weight: 400; color: var(--muted); }
+  .intro { color: var(--muted); margin: 4px 0 14px; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 12px; }
+  .chip {
+    border: 1px solid var(--line);
+    background: var(--surface);
+    border-radius: 999px;
+    padding: 6px 14px;
+    font: inherit;
+    cursor: pointer;
+  }
+  .chip[aria-pressed="true"] { background: var(--primary-soft); border-color: var(--primary); color: var(--primary); font-weight: 600; }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+  }
+  .card-head { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 13px; margin-bottom: 8px; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .side { background: var(--soft); border-radius: 10px; padding: 10px 12px; }
+  .name { font-weight: 600; }
+  .meta { color: var(--muted); font-size: 13px; }
+  .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; flex-wrap: wrap; }
+  .row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--soft); }
+  .row:first-child { border-top: 0; }
+  .row .actions { margin-top: 0; }
+  button.primary, button.secondary {
+    border-radius: 999px;
+    padding: 7px 16px;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  button.primary { background: var(--primary); color: #fff; border: 1px solid var(--primary); }
+  button.secondary { background: var(--surface); color: var(--text); border: 1px solid var(--line); }
+  button:disabled { opacity: .5; cursor: default; }
+  input[type="search"] {
+    width: 100%;
+    max-width: 360px;
+    padding: 8px 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    font: inherit;
+    margin-bottom: 10px;
+  }
+  h2 { font-size: 16px; margin: 20px 0 8px; }
+  .empty { color: var(--muted); padding: 18px 0; }
+  .note { font-style: italic; }
+  .pill { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; background: var(--soft); color: var(--muted); }
+  .banner { border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; }
+  .banner.error { background: #f8dcd7; color: var(--error); }
+  .banner.warning { background: var(--warning-soft); color: var(--warning); }
+  #toast {
+    position: fixed;
+    left: 50%;
+    bottom: 20px;
+    transform: translateX(-50%);
+    background: var(--text);
+    color: #fff;
+    padding: 10px 16px;
+    border-radius: 10px;
+    max-width: calc(100% - 32px);
+    display: none;
+  }
+  .key { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .key input { padding: 7px 10px; border: 1px solid var(--line); border-radius: 10px; font: inherit; }
+  @media (max-width: 640px) {
+    .pair { grid-template-columns: 1fr; }
+    .row { flex-direction: column; align-items: stretch; }
+    .row .actions { justify-content: flex-start; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Pametna kupovina · pregled</h1>
+  <nav role="tablist">
+    <button role="tab" data-tab="duplicates" aria-selected="true">Isti proizvodi? <span class="count" id="count-duplicates"></span></button>
+    <button role="tab" data-tab="reports" aria-selected="false">Prijave <span class="count" id="count-reports"></span></button>
+    <button role="tab" data-tab="types" aria-selected="false">Vrste proizvoda</button>
+  </nav>
+</header>
+<main>
+  <div id="key-banner" class="banner warning" hidden>
+    <div class="key">
+      <span>Server traži administratorski ključ.</span>
+      <input id="key-input" type="password" autocomplete="off" placeholder="Ključ">
+      <button class="primary" id="key-save">Sačuvaj</button>
+    </div>
+  </div>
+  <div id="error" class="banner error" hidden></div>
+
+  <section id="tab-duplicates">
+    <p class="intro">Dva proizvoda istog brenda i veličine koja izgledaju kao jedan. „Isti proizvod“ ih spaja pri sledećem osvežavanju kataloga, „Različiti“ se više ne pitaju.</p>
+    <div id="duplicates"></div>
+    <div class="actions"><button class="secondary" id="duplicates-more">Učitaj sledeće</button></div>
+  </section>
+
+  <section id="tab-reports" hidden>
+    <p class="intro">Šta su kupci prijavili sa ekrana proizvoda.</p>
+    <div class="chips" id="report-status">
+      <button class="chip" data-status="NEW" aria-pressed="true">Nove</button>
+      <button class="chip" data-status="CONFIRMED" aria-pressed="false">Tačne</button>
+      <button class="chip" data-status="REJECTED" aria-pressed="false">Odbijene</button>
+    </div>
+    <div class="card" id="reports"></div>
+  </section>
+
+  <section id="tab-types" hidden>
+    <p class="intro">Proizvodi koje „so“, „riba“, „meso“, „voće“ i „povrće“ na spisku pronalaze. Ukloni one koji ne pripadaju; uklonjeni se ne vraćaju.</p>
+    <div class="chips" id="type-choice">
+      <button class="chip" data-type="SALT" data-label="so" aria-pressed="true">So</button>
+      <button class="chip" data-type="FISH" data-label="riba" aria-pressed="false">Riba</button>
+      <button class="chip" data-type="MEAT" data-label="meso" aria-pressed="false">Meso</button>
+      <button class="chip" data-type="FRESH_PRODUCE" data-label="voće i povrće" aria-pressed="false">Voće i povrće</button>
+    </div>
+    <h2>Čeka odluku <span class="count" id="count-candidates"></span></h2>
+    <div class="card" id="candidates"></div>
+    <h2>Označeno <span class="count" id="count-assigned"></span></h2>
+    <input type="search" id="assigned-search" placeholder="Traži po nazivu, npr. sheba">
+    <div class="card" id="assigned"></div>
+  </section>
+</main>
+<div id="toast" role="status"></div>
+
+<script>
+(() => {
+  const API = '/api/v1/imports/quality';
+  const KEY_STORAGE = 'pk-admin-key';
+  const money = new Intl.NumberFormat('sr-RS', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const state = { reportStatus: 'NEW', type: 'SALT', typeLabel: 'so' };
+
+  function adminKey() {
+    try { return sessionStorage.getItem(KEY_STORAGE) || ''; } catch (e) { return ''; }
+  }
+
+  async function api(path, options = {}) {
+    const headers = { 'Content-Type': 'application/json' };
+    const key = adminKey();
+    if (key) headers['X-Admin-Key'] = key;
+    const response = await fetch(API + path, { ...options, headers });
+    if (response.status === 401 || response.status === 503) {
+      document.getElementById('key-banner').hidden = false;
+      throw new Error('Potreban je administratorski ključ.');
+    }
+    const body = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new Error((body && body.message) || 'Zahtev nije uspeo (' + response.status + ').');
+    }
+    return body;
+  }
+
+  function el(tag, attributes = {}, ...children) {
+    const node = document.createElement(tag);
+    for (const [name, value] of Object.entries(attributes)) {
+      if (name === 'class') node.className = value;
+      else if (name.startsWith('on')) node.addEventListener(name.slice(2), value);
+      else node.setAttribute(name, value);
+    }
+    for (const child of children) {
+      if (child == null) continue;
+      node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+    }
+    return node;
+  }
+
+  function showError(error) {
+    const banner = document.getElementById('error');
+    banner.textContent = error ? error.message : '';
+    banner.hidden = !error;
+  }
+
+  let toastTimer;
+  function toast(message) {
+    const node = document.getElementById('toast');
+    node.textContent = message;
+    node.style.display = 'block';
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { node.style.display = 'none'; }, 3500);
+  }
+
+  function amount(value, unit) {
+    if (value == null) return '';
+    const large = (unit === 'g' || unit === 'ml') && value >= 1000;
+    const number = (large ? value / 1000 : value).toLocaleString('sr-RS');
+    const label = unit === 'g' ? (large ? 'kg' : 'g') : unit === 'ml' ? (large ? 'l' : 'ml') : unit === 'piece' ? 'kom' : (unit || '');
+    return number + ' ' + label;
+  }
+
+  async function act(button, request, onDone) {
+    const buttons = button.parentElement.querySelectorAll('button');
+    buttons.forEach(b => { b.disabled = true; });
+    try {
+      const result = await request();
+      showError(null);
+      onDone(result);
+    } catch (error) {
+      showError(error);
+      buttons.forEach(b => { b.disabled = false; });
+    }
+  }
+
+  // Isti proizvodi?
+  async function loadDuplicates() {
+    const container = document.getElementById('duplicates');
+    container.textContent = 'Učitavam…';
+    try {
+      const pairs = await api('/duplicates?limit=30');
+      showError(null);
+      container.textContent = '';
+      document.getElementById('count-duplicates').textContent = pairs.length ? '(' + pairs.length + (pairs.length === 30 ? '+' : '') + ')' : '';
+      if (!pairs.length) {
+        container.append(el('p', { class: 'empty' }, 'Nema parova za pregled.'));
+        return;
+      }
+      for (const pair of pairs) container.append(duplicateCard(pair));
+    } catch (error) {
+      container.textContent = '';
+      showError(error);
+    }
+  }
+
+  function side(item) {
+    return el('div', { class: 'side' },
+      el('div', { class: 'name' }, item.name),
+      el('div', { class: 'meta' }, item.retailers || 'nema lanaca'),
+      item.lowestPrice != null ? el('div', { class: 'meta' }, 'od ' + money.format(item.lowestPrice) + ' RSD') : null);
+  }
+
+  function duplicateCard(pair) {
+    const card = el('div', { class: 'card' });
+    const decide = same => button => act(button,
+      () => api('/duplicates/' + pair.id, { method: 'POST', body: JSON.stringify({ same }) }),
+      result => { card.remove(); toast(result.message); });
+    const sameButton = el('button', { class: 'primary' }, 'Isti proizvod');
+    const differentButton = el('button', { class: 'secondary' }, 'Različiti');
+    sameButton.addEventListener('click', () => decide(true)(sameButton));
+    differentButton.addEventListener('click', () => decide(false)(differentButton));
+    card.append(
+      el('div', { class: 'card-head' },
+        el('span', {}, [pair.brand, amount(pair.quantityValue, pair.baseUnit)].filter(Boolean).join(' · ')),
+        el('span', {}, 'sličnost naziva ' + Number(pair.score).toLocaleString('sr-RS', { maximumFractionDigits: 2 }))),
+      el('div', { class: 'pair' }, side(pair.left), side(pair.right)),
+      el('div', { class: 'actions' }, differentButton, sameButton));
+    return card;
+  }
+
+  // Prijave
+  const REASONS = { WRONG_PRICE: 'Cena nije tačna', NOT_SAME_PRODUCT: 'Ovo nisu isti proizvodi', OTHER: 'Nešto drugo' };
+
+  async function loadReports() {
+    const container = document.getElementById('reports');
+    container.textContent = 'Učitavam…';
+    try {
+      const reports = await api('/reports?limit=200&status=' + state.reportStatus);
+      showError(null);
+      container.textContent = '';
+      if (state.reportStatus === 'NEW') {
+        document.getElementById('count-reports').textContent = reports.length ? '(' + reports.length + ')' : '';
+      }
+      if (!reports.length) {
+        container.append(el('p', { class: 'empty' }, 'Nema prijava.'));
+        return;
+      }
+      for (const report of reports) container.append(reportRow(report));
+    } catch (error) {
+      container.textContent = '';
+      showError(error);
+    }
+  }
+
+  function reportRow(report) {
+    const created = new Date(report.createdAt);
+    const row = el('div', { class: 'row' },
+      el('div', {},
+        el('div', { class: 'name' }, report.productName),
+        el('div', { class: 'meta' }, [REASONS[report.reason] || report.reason, report.retailerName, created.toLocaleString('sr-RS')].filter(Boolean).join(' · ')),
+        report.listingName ? el('div', { class: 'meta' }, report.listingName) : null,
+        report.note ? el('div', { class: 'meta note' }, '„' + report.note + '“') : null));
+    if (report.status === 'NEW') {
+      const decide = status => button => act(button,
+        () => api('/reports/' + report.id, { method: 'POST', body: JSON.stringify({ status }) }),
+        () => { row.remove(); toast(status === 'CONFIRMED' ? 'Označeno kao tačno.' : 'Označeno kao netačno.'); });
+      const right = el('button', { class: 'primary' }, 'Tačno');
+      const wrong = el('button', { class: 'secondary' }, 'Nije tačno');
+      right.addEventListener('click', () => decide('CONFIRMED')(right));
+      wrong.addEventListener('click', () => decide('REJECTED')(wrong));
+      row.append(el('div', { class: 'actions' }, wrong, right));
+    }
+    return row;
+  }
+
+  // Vrste proizvoda
+  async function loadCandidates() {
+    const container = document.getElementById('candidates');
+    container.textContent = 'Učitavam…';
+    try {
+      const candidates = await api('/product-types?limit=200&typeCode=' + state.type);
+      showError(null);
+      container.textContent = '';
+      document.getElementById('count-candidates').textContent = '(' + candidates.length + (candidates.length === 200 ? '+' : '') + ')';
+      if (!candidates.length) {
+        container.append(el('p', { class: 'empty' }, 'Ništa ne čeka odluku.'));
+        return;
+      }
+      for (const candidate of candidates) container.append(candidateRow(candidate));
+    } catch (error) {
+      container.textContent = '';
+      showError(error);
+    }
+  }
+
+  function candidateRow(candidate) {
+    const row = el('div', { class: 'row' },
+      el('div', {},
+        el('div', { class: 'name' }, candidate.productName),
+        el('div', { class: 'meta' }, [candidate.retailerCode, candidate.sourceCategoryName].filter(Boolean).join(' · '))));
+    const decide = action => button => act(button,
+      () => api('/product-types/' + candidate.retailerProductId, { method: 'POST', body: JSON.stringify({ action, productTypeCode: state.type }) }),
+      () => { row.remove(); toast(action === 'ACCEPT' ? 'Dodato.' : 'Neće se više predlagati.'); if (action === 'ACCEPT') loadAssigned(); });
+    const yes = el('button', { class: 'primary' }, 'Jeste ' + state.typeLabel);
+    const no = el('button', { class: 'secondary' }, 'Nije');
+    yes.addEventListener('click', () => decide('ACCEPT')(yes));
+    no.addEventListener('click', () => decide('REJECT')(no));
+    row.append(el('div', { class: 'actions' }, no, yes));
+    return row;
+  }
+
+  async function loadAssigned() {
+    const container = document.getElementById('assigned');
+    const query = document.getElementById('assigned-search').value.trim();
+    container.textContent = 'Učitavam…';
+    try {
+      const products = await api('/product-types/assigned?limit=200&typeCode=' + state.type + (query ? '&query=' + encodeURIComponent(query) : ''));
+      showError(null);
+      container.textContent = '';
+      document.getElementById('count-assigned').textContent = '(' + products.length + (products.length === 200 ? '+' : '') + ')';
+      if (!products.length) {
+        container.append(el('p', { class: 'empty' }, query ? 'Ništa ne odgovara pretrazi.' : 'Još nema označenih proizvoda.'));
+        return;
+      }
+      for (const product of products) container.append(assignedRow(product));
+    } catch (error) {
+      container.textContent = '';
+      showError(error);
+    }
+  }
+
+  function assignedRow(product) {
+    const row = el('div', { class: 'row' },
+      el('div', {},
+        el('div', { class: 'name' }, product.productName),
+        el('div', { class: 'meta' }, [product.retailerName, product.categoryName].filter(Boolean).join(' · '), ' ',
+          el('span', { class: 'pill' }, product.reviewed ? 'ručno' : 'automatski'))));
+    const remove = el('button', { class: 'secondary' }, 'Nije ' + state.typeLabel);
+    remove.addEventListener('click', () => act(remove,
+      () => api('/product-types/' + product.retailerProductId + '/rejection', { method: 'POST', body: JSON.stringify({ productTypeCode: state.type }) }),
+      result => { row.remove(); toast(result.message); }));
+    row.append(el('div', { class: 'actions' }, remove));
+    return row;
+  }
+
+  // Navigation
+  const loaders = { duplicates: loadDuplicates, reports: loadReports, types: () => { loadCandidates(); loadAssigned(); } };
+  const loaded = new Set();
+
+  function openTab(name) {
+    document.querySelectorAll('nav button').forEach(button => {
+      const selected = button.dataset.tab === name;
+      button.setAttribute('aria-selected', String(selected));
+      document.getElementById('tab-' + button.dataset.tab).hidden = !selected;
+    });
+    if (!loaded.has(name)) { loaded.add(name); loaders[name](); }
+  }
+
+  document.querySelectorAll('nav button').forEach(button => button.addEventListener('click', () => openTab(button.dataset.tab)));
+  document.getElementById('duplicates-more').addEventListener('click', loadDuplicates);
+  document.querySelectorAll('#report-status .chip').forEach(chip => chip.addEventListener('click', () => {
+    document.querySelectorAll('#report-status .chip').forEach(other => other.setAttribute('aria-pressed', String(other === chip)));
+    state.reportStatus = chip.dataset.status;
+    loadReports();
+  }));
+  document.querySelectorAll('#type-choice .chip').forEach(chip => chip.addEventListener('click', () => {
+    document.querySelectorAll('#type-choice .chip').forEach(other => other.setAttribute('aria-pressed', String(other === chip)));
+    state.type = chip.dataset.type;
+    state.typeLabel = chip.dataset.label;
+    loadCandidates();
+    loadAssigned();
+  }));
+  let searchTimer;
+  document.getElementById('assigned-search').addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(loadAssigned, 300);
+  });
+  document.getElementById('key-save').addEventListener('click', () => {
+    try { sessionStorage.setItem(KEY_STORAGE, document.getElementById('key-input').value); } catch (e) { /* session only */ }
+    document.getElementById('key-banner').hidden = true;
+    loaded.clear();
+    openTab(document.querySelector('nav button[aria-selected="true"]').dataset.tab);
+  });
+
+  openTab('duplicates');
+  api('/reports?limit=200&status=NEW')
+    .then(reports => { document.getElementById('count-reports').textContent = reports.length ? '(' + reports.length + ')' : ''; })
+    .catch(() => {});
+})();
+</script>
+</body>
+</html>
