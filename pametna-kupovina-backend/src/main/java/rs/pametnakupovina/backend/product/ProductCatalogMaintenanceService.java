@@ -585,29 +585,17 @@ public class ProductCatalogMaintenanceService {
                 .update();
 
         // A suggestion waits for review only while the taxonomy still makes
-        // it and the product does not already have that type: a rule that
-        // now leaves pet food out takes its suggestions with it (V83).
+        // it: a rule that now leaves pet food out takes its suggestions with
+        // it (V83). Every suggestion still made was written above in this
+        // transaction, so one untouched since is no longer made. Asking the
+        // prediction view per suggestion instead ran for minutes.
         jdbcClient.sql("""
                     DELETE FROM app.product_type_candidate AS candidate
                     USING app.retailer_product AS product
                     WHERE candidate.retailer_product_id = product.id
                       AND product.retailer_id = ?
                       AND candidate.status = 'PENDING'
-                      AND (
-                          EXISTS (
-                              SELECT 1
-                              FROM app.retailer_product_type AS assignment
-                              WHERE assignment.retailer_product_id = candidate.retailer_product_id
-                                AND assignment.product_type_id = candidate.product_type_id
-                          )
-                          OR NOT EXISTS (
-                              SELECT 1
-                              FROM app.product_type_prediction AS prediction
-                              WHERE prediction.retailer_product_id = candidate.retailer_product_id
-                                AND prediction.product_type_id = candidate.product_type_id
-                                AND prediction.confidence >= 0.7500
-                          )
-                      )
+                      AND candidate.updated_at < NOW()
                     """)
                 .param(1, retailerId)
                 .update();
