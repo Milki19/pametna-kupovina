@@ -747,18 +747,26 @@ private fun UnresolvedSection(
  * cheaper basket would be worse.
  */
 @Composable
-private fun UnlocatedOptionsSection(
+internal fun UnlocatedOptionsSection(
     options: List<UnlocatedPriceOptionDto>,
     selected: OptimizationScenarioDto
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)) {
         SectionHeader("Lanci bez poznate adrese")
-        Text(
-            "Objavljuju cene, ali ne i gde su im prodavnice, pa ne ulaze u plan." +
-                if (selected.available) " Korpa u izabranom planu: ${money(selected.basketCost)}." else "",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+        NoticeBanner(
+            title = "Ne znamo u kojoj prodavnici važi ova cena",
+            text = "Ovi lanci objavljuju cene, ali ne i adrese prodavnica. Zato " +
+                "nisu u planu i ne možemo da potvrdimo da prodavnica kod tebe " +
+                "ima ovaj proizvod po ovoj ceni.",
+            tone = StatusTone.WARNING
         )
+        if (selected.available) {
+            Text(
+                "Korpa u izabranom planu: ${money(selected.basketCost)}.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
         Surface(
             shape = MaterialTheme.shapes.medium,
             color = MaterialTheme.colorScheme.surfaceContainer,
@@ -791,6 +799,7 @@ private fun UnlocatedOptionsSection(
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                            StatusPill("Nepotvrđena prodavnica", StatusTone.WARNING)
                             if (cheaper) {
                                 StatusPill("Jeftinija korpa", StatusTone.POSITIVE)
                             }
@@ -838,7 +847,10 @@ private fun CalculationDetails(
                 ) {
                     listOfNotNull(
                         // date() already ends with the ordinal full stop.
-                        scenario.dataAsOf?.let { "Cene su iz cenovnika od ${date(it)}" }
+                        scenario.dataAsOf?.let {
+                            "Cene su iz cenovnika od ${date(it)}; cenovnik ne " +
+                                "govori da li je artikal na polici."
+                        }
                             ?: "Za ovaj scenario nema važećih cena.",
                         scenario.disclaimer.ifBlank { result.disclaimer },
                         scenario.takeIf { it.available }?.let {
