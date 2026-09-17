@@ -30,6 +30,16 @@ najave, pa ih pre otvaranja naloga proveriti na
    Ako piše „Out of capacity", pokušati drugi availability domain ili kasnije.
 4. Zapisati javnu IP adresu mašine.
 
+   Zamke u Oracle čarobnjaku (provereno 17.09.2026.):
+   - **prvo shape, pa image**: svaka promena shape-a vraća image na Oracle
+     Linux;
+   - broj OCPU-a i memorija se ne kucaju u tabelu, nego posle klika na
+     strelicu ▸ pored `VM.Standard.A1.Flex`;
+   - ako je prekidač „Assign a public IPv4 address" zaključan, podmreža nije
+     javna. Najlakše: ☰ → Networking → Virtual cloud networks → **Start VCN
+     Wizard → VCN with Internet Connectivity**, pa u čarobnjaku za mašinu
+     izabrati tu mrežu i podmrežu sa `public` u imenu.
+
 ## 2. Mreža: portovi 80 i 443
 
 Oracle ima dve brane i obe moraju da propuste saobraćaj:
