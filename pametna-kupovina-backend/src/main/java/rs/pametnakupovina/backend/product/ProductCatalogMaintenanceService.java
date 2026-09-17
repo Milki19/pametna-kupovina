@@ -539,8 +539,8 @@ public class ProductCatalogMaintenanceService {
                 .param(1, retailerId)
                 .update();
 
-        // "so", "meso", "riba", "voće", "povrće": a product the chain files
-        // under the category its name says (V83, V87).
+        // "so", "meso", "riba", "tuna", "voće", "povrće": a product the chain
+        // files under the category its name says (V83, V87, V88).
         jdbcClient.sql("SELECT app.assign_generic_product_types(?)")
                 .param(1, retailerId)
                 .query((resultSet, rowNumber) -> true)
