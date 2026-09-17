@@ -74,6 +74,7 @@ class IntentDefaultSizesTest {
                         """)
                 .query(String.class)
                 .list();
-        assertThat(withoutSize).containsExactly("BAKERY_ROLL", "FISH", "FRUIT", "MEAT", "VEGETABLE");
+        assertThat(withoutSize).containsExactly(
+                "BAKERY_ROLL", "FISH", "FRESH_FISH", "FRESH_MEAT", "FRUIT", "MEAT", "VEGETABLE");
     }
 }
