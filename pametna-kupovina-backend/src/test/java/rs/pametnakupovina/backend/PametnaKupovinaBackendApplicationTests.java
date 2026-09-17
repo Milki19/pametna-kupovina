@@ -4816,7 +4816,7 @@ class PametnaKupovinaBackendApplicationTests {
                 .containsExactly(
                         org.assertj.core.groups.Tuple.tuple(
                                 productId,
-                                "FRESH_PRODUCE"
+                                "FRUIT"
                         )
                 );
 
@@ -4825,7 +4825,7 @@ class PametnaKupovinaBackendApplicationTests {
                         productId,
                         new ProductTypeReviewRequest(
                                 "ACCEPT",
-                                "FRESH_PRODUCE"
+                                "FRUIT"
                         )
                 );
 
@@ -4842,7 +4842,7 @@ class PametnaKupovinaBackendApplicationTests {
                         """)
                 .param(1, productId)
                 .query(String.class)
-                .single()).isEqualTo("FRESH_PRODUCE");
+                .single()).isEqualTo("FRUIT");
     }
 
     @Test

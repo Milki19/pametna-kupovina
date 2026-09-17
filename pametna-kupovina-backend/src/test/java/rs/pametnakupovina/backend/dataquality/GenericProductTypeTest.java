@@ -36,10 +36,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * "so", "riba", "meso", "voće" and "povrće" on a list find products: a product
- * gets the type when its name and the chain's category agree. Galettes with sea
- * salt, cat food with salmon, dog pâté and sauerkraut do not. A type removed on
- * the admin page stays removed after the next catalogue refresh.
+ * Everyday words on a list find the right products: a product gets such a type
+ * when its name and the chain's category agree. "meso" is fresh meat, not
+ * salami, and not trotters either; "voće" is fruit and "povrće" vegetables.
+ * Galettes with sea salt, cat food with salmon, dog pâté and sauerkraut get
+ * none of them. A type removed on the admin page stays removed after the next
+ * catalogue refresh, and nothing waits for a decision that is already made.
  */
 @SpringBootTest(properties = {
         "price-import.http.request-timeout-seconds=5",
@@ -68,11 +70,16 @@ class GenericProductTypeTest {
 
     private static final String SALT = "SO KUHINJSKA 1KG SOPRODUKT";
     private static final String GALETTES = "KUKURUZNE GALETE MORSKA SO 130G";
-    private static final String TUNA = "TUNA KOMADI U ULJU 160G BARBA";
+    private static final String PADS = "ULOŠCI DNEVNI SO SLIM 32/1";
+    private static final String CANNED_TUNA = "TUNJEVINA KOMADI U ULJU 160G BARBA";
+    private static final String SEA_BREAM = "ORADA SVEŽA 400/600";
     private static final String CAT_FOOD = "SHEBA KESICA LOSOS SOS 85G";
     private static final String SALAMI = "SALAMA BUDIMSKA 100G ZLATIBORAC";
     private static final String DOG_PATE = "PASTETA ZA PSE 300G";
+    private static final String BEEF = "JUNEĆI BUT BEZ KOSTI 1KG";
+    private static final String TROTTERS = "SVINJSKE NOGICE SVEŽE 1KG";
     private static final String APPLE = "JABUKA GLOSTER";
+    private static final String CARROT = "ŠARGAREPA 1KG";
     private static final String SAUERKRAUT = "KUPUS KISELI RIBANAC 500G";
 
     private static final LocalDate PRICE_DAY = LocalDate.of(2026, 9, 13);
@@ -107,12 +114,17 @@ class GenericProductTypeTest {
         String csv = HEADER
                 + row("18", "So i začini", SALT, "8600000001011", "59,99")
                 + row("18", "So i začini", GALETTES, "8600000001028", "129,99")
-                + row("9", "Riba", TUNA, "8600000001035", "189,99")
-                + row("9", "Riba", CAT_FOOD, "8600000001042", "79,99")
-                + row("8", "Meso", SALAMI, "8600000001059", "149,99")
-                + row("8", "Meso", DOG_PATE, "8600000001066", "199,99")
-                + row("3", "Voće i povrće", APPLE, "8600000001073", "119,99")
-                + row("3", "Voće i povrće", SAUERKRAUT, "8600000001080", "139,99");
+                + row("21", "Lična higijena i kozmetika", PADS, "8600000001097", "299,99")
+                + row("9", "Sveža i prerađena riba", CANNED_TUNA, "8600000001035", "189,99")
+                + row("9", "Sveža i prerađena riba", SEA_BREAM, "8600000001103", "699,99")
+                + row("9", "Sveža i prerađena riba", CAT_FOOD, "8600000001042", "79,99")
+                + row("8", "Sveže i prerađeno meso", SALAMI, "8600000001059", "149,99")
+                + row("8", "Sveže i prerađeno meso", DOG_PATE, "8600000001066", "199,99")
+                + row("8", "Sveže i prerađeno meso", BEEF, "8600000001110", "899,99")
+                + row("8", "Sveže i prerađeno meso", TROTTERS, "8600000001127", "199,99")
+                + row("3", "Sveže voće i povrće", APPLE, "8600000001073", "119,99")
+                + row("3", "Sveže voće i povrće", CARROT, "8600000001134", "69,99")
+                + row("3", "Sveže voće i povrće", SAUERKRAUT, "8600000001080", "139,99");
         csvServer = HttpServer.create(new InetSocketAddress(0), 0);
         csvServer.createContext("/generic.csv", exchange -> {
             byte[] body = csv.getBytes(StandardCharsets.UTF_8);
@@ -155,8 +167,21 @@ class GenericProductTypeTest {
                 .single();
     }
 
+    private String chosenFor(String word, long listId, long shop) {
+        shoppingListService.addItem(listId, "generic", new AddShoppingListItemRequest(
+                word, word, null, BigDecimal.ONE, ShoppingItemRule.FLEXIBLE_CATEGORY,
+                new FlexibleItemConstraints(word, null, null, null, null)));
+        return offerRepository.findPriceListOffers(listId, List.of(shop), PRICE_DAY)
+                .stream()
+                .filter(offer -> offer.requestedName().equals(word))
+                .filter(StoreItemOffer::available)
+                .map(StoreItemOffer::productName)
+                .findFirst()
+                .orElse(null);
+    }
+
     @Test
-    void everydayWordsFindProductsAndARemovedTypeStaysRemoved() {
+    void everydayWordsFindFreshFoodAndARemovedTypeStaysRemoved() {
         long retailerId = jdbcClient.sql("""
                         INSERT INTO app.retailer (code, name, dataset_url)
                         VALUES ('GENERIC', 'Generic', ?)
@@ -168,15 +193,17 @@ class GenericProductTypeTest {
         assertThat(priceImportService.importPrices("GENERIC").status()).isEqualTo("SUCCEEDED");
 
         assertThat(typeOf(SALT)).isEqualTo("SALT");
-        assertThat(typeOf(TUNA)).isEqualTo("FISH");
-        assertThat(typeOf(SALAMI)).isEqualTo("MEAT");
-        assertThat(typeOf(APPLE)).isEqualTo("FRESH_PRODUCE");
-        assertThat(typeOf(GALETTES)).isNotEqualTo("SALT");
-        assertThat(typeOf(CAT_FOOD)).isNotEqualTo("FISH");
-        assertThat(typeOf(DOG_PATE)).isNotEqualTo("MEAT");
-        assertThat(typeOf(SAUERKRAUT)).isNotEqualTo("FRESH_PRODUCE");
+        assertThat(typeOf(BEEF)).isEqualTo("MEAT");
+        assertThat(typeOf(TROTTERS)).isEqualTo("MEAT");
+        assertThat(typeOf(APPLE)).isEqualTo("FRUIT");
+        assertThat(typeOf(CARROT)).isEqualTo("VEGETABLE");
+        assertThat(typeOf(GALETTES)).isNull();
+        assertThat(typeOf(PADS)).isNull();
+        assertThat(typeOf(CAT_FOOD)).isNull();
+        assertThat(typeOf(SALAMI)).isNull();
+        assertThat(typeOf(DOG_PATE)).isNull();
+        assertThat(typeOf(SAUERKRAUT)).isNull();
 
-        // "so" on a list is priced.
         long formatId = jdbcClient.sql("""
                         INSERT INTO app.store_format (retailer_id, code, name)
                         VALUES (?, 'TEST', 'Test format')
@@ -194,31 +221,52 @@ class GenericProductTypeTest {
                 .param(formatId)
                 .query(Long.class)
                 .single();
-        var list = shoppingListService.create(new CreateShoppingListRequest("Opšte reči"), "generic");
-        shoppingListService.addItem(list.id(), "generic", new AddShoppingListItemRequest(
-                "so", "so", null, BigDecimal.ONE, ShoppingItemRule.FLEXIBLE_CATEGORY,
-                new FlexibleItemConstraints("so", null, null, null, null)));
-        StoreItemOffer salt = offerRepository.findPriceListOffers(list.id(), List.of(shop), PRICE_DAY)
-                .stream()
-                .filter(offer -> offer.requestedName().equals("so"))
-                .findFirst()
-                .orElseThrow();
-        assertThat(salt.available()).isTrue();
-        assertThat(salt.productName()).isEqualTo(SALT);
+        long list = shoppingListService.create(new CreateShoppingListRequest("Opšte reči"), "generic").id();
 
-        // The owner removes the fish type from the tuna on the admin page.
-        assertThat(reviewService.reviewTypeAssignments("FISH", "tuna", 10))
+        assertThat(chosenFor("so", list, shop)).isEqualTo(SALT);
+        // Fresh beef, not the cheaper salami or trotters.
+        assertThat(chosenFor("meso", list, shop)).isEqualTo(BEEF);
+        assertThat(chosenFor("voće", list, shop)).isEqualTo(APPLE);
+        assertThat(chosenFor("povrće", list, shop)).isEqualTo(CARROT);
+        assertThat(chosenFor("jabuke", list, shop)).isEqualTo(APPLE);
+        assertThat(chosenFor("šargarepa", list, shop)).isEqualTo(CARROT);
+
+        // The owner removes the fruit type from the apple on the admin page.
+        assertThat(reviewService.reviewTypeAssignments("FRUIT", "jabuka", 10))
                 .extracting(ProductTypeAssignmentReview::productName)
-                .containsExactly(TUNA);
-        long tuna = productId(TUNA);
-        assertThat(reviewService.rejectTypeAssignment(tuna, new ProductTypeRejectionRequest("fish")).message())
+                .containsExactly(APPLE);
+        long apple = productId(APPLE);
+        assertThat(reviewService.rejectTypeAssignment(apple, new ProductTypeRejectionRequest("fruit")).message())
                 .contains("Uklonjeno");
-        assertThat(typeOf(TUNA)).isNull();
-        assertThatThrownBy(() -> reviewService.rejectTypeAssignment(tuna, new ProductTypeRejectionRequest("FISH")))
+        assertThat(typeOf(APPLE)).isNull();
+        assertThatThrownBy(() -> reviewService.rejectTypeAssignment(apple, new ProductTypeRejectionRequest("FRUIT")))
                 .isInstanceOf(ResponseStatusException.class);
 
         catalogMaintenanceService.refreshAll();
-        assertThat(typeOf(TUNA)).isNull();
+        assertThat(typeOf(APPLE)).isNull();
         assertThat(typeOf(SALT)).isEqualTo("SALT");
+        assertThat(typeOf(BEEF)).isEqualTo("MEAT");
+
+        // Nothing waits for a type the product already has, and panty liners
+        // named "so slim" are not suggested as salt.
+        assertThat(jdbcClient.sql("""
+                        SELECT COUNT(*)
+                        FROM app.product_type_candidate AS candidate
+                        JOIN app.retailer_product_type AS assignment
+                          ON assignment.retailer_product_id = candidate.retailer_product_id
+                         AND assignment.product_type_id = candidate.product_type_id
+                        WHERE candidate.status = 'PENDING'
+                        """)
+                .query(Long.class)
+                .single()).isZero();
+        assertThat(jdbcClient.sql("""
+                        SELECT COUNT(*)
+                        FROM app.product_type_candidate
+                        WHERE retailer_product_id = ?
+                          AND status = 'PENDING'
+                        """)
+                .param(productId(PADS))
+                .query(Long.class)
+                .single()).isZero();
     }
 }
