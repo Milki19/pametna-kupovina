@@ -468,11 +468,11 @@ public class ProductCatalogMaintenanceService {
                            prediction.prediction_source,
                            prediction.evidence,
                            prediction.algorithm_version
-                    FROM app.product_type_prediction AS prediction
+                    -- One chain's predictions, rule by rule (V86).
+                    FROM app.predict_product_types(?) AS prediction
                     JOIN app.retailer_product AS product
                       ON product.id = prediction.retailer_product_id
-                    WHERE product.retailer_id = ?
-                      AND prediction.confidence >= 0.7500
+                    WHERE prediction.confidence >= 0.7500
                       AND prediction.confidence < 0.9500
                       AND NOT EXISTS (
                           SELECT 1
@@ -516,11 +516,10 @@ public class ProductCatalogMaintenanceService {
                            prediction.prediction_source,
                            prediction.evidence,
                            prediction.algorithm_version
-                    FROM app.product_type_prediction AS prediction
+                    FROM app.predict_product_types(?) AS prediction
                     JOIN app.retailer_product AS product
                       ON product.id = prediction.retailer_product_id
-                    WHERE product.retailer_id = ?
-                      AND prediction.confidence >= 0.9500
+                    WHERE prediction.confidence >= 0.9500
                       AND NOT EXISTS (
                           SELECT 1
                           FROM app.retailer_product_type_rejection AS rejected
@@ -585,17 +584,27 @@ public class ProductCatalogMaintenanceService {
                 .update();
 
         // A suggestion waits for review only while the taxonomy still makes
-        // it: a rule that now leaves pet food out takes its suggestions with
-        // it (V83). Every suggestion still made was written above in this
-        // transaction, so one untouched since is no longer made. Asking the
-        // prediction view per suggestion instead ran for minutes.
+        // it and the product does not already have that type: a rule that now
+        // leaves pet food out takes its suggestions with it (V83), and salt
+        // given from the chain's category needs no decision. Every suggestion
+        // still made was written above in this transaction, so one untouched
+        // since is no longer made. Asking the prediction view per suggestion
+        // instead ran for minutes.
         jdbcClient.sql("""
                     DELETE FROM app.product_type_candidate AS candidate
                     USING app.retailer_product AS product
                     WHERE candidate.retailer_product_id = product.id
                       AND product.retailer_id = ?
                       AND candidate.status = 'PENDING'
-                      AND candidate.updated_at < NOW()
+                      AND (
+                          candidate.updated_at < NOW()
+                          OR EXISTS (
+                              SELECT 1
+                              FROM app.retailer_product_type AS assignment
+                              WHERE assignment.retailer_product_id = candidate.retailer_product_id
+                                AND assignment.product_type_id = candidate.product_type_id
+                          )
+                      )
                     """)
                 .param(1, retailerId)
                 .update();
