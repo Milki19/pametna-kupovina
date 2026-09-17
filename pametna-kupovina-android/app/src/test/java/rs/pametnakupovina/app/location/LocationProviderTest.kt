@@ -25,6 +25,38 @@ class LocationProviderTest {
     }
 
     @Test
+    fun `rezervna lokacija sme da bude starija od svezeg zahteva`() = runBlocking {
+        val fiveMinutesNanos = 300_000_000_000L
+        val fourMinutesOld = 1_000_000_000L
+        val now = fourMinutesOld + 240_000_000_000L
+
+        assertEquals(false, isRecentLocation(fourMinutesOld, now))
+        assertEquals(true, isUsableLocation(fourMinutesOld, now, fiveMinutesNanos))
+        assertEquals(false, isUsableLocation(fourMinutesOld, now + 120_000_000_000L, fiveMinutesNanos))
+
+        val result = resolveLocationWithFallback(
+            freshLocation = { null },
+            lastLocation = { 240 },
+            isAcceptable = { it <= 30 },
+            isAcceptableFallback = { it <= 300 }
+        )
+
+        assertEquals(240, result)
+    }
+
+    @Test
+    fun `rezervna lokacija starija od dozvoljenog se odbija`() = runBlocking {
+        val result = resolveLocationWithFallback(
+            freshLocation = { null },
+            lastLocation = { 600 },
+            isAcceptable = { it <= 30 },
+            isAcceptableFallback = { it <= 300 }
+        )
+
+        assertEquals(null, result)
+    }
+
+    @Test
     fun `ne pretvara otkazivanje u fallback`() {
         assertThrows(CancellationException::class.java) {
             runBlocking {
