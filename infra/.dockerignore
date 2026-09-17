@@ -1,0 +1,4 @@
+# The server image needs only the tested jar; backups, price list archives and
+# logs next to it must not be sent to Docker.
+*
+!release/backend.jar
