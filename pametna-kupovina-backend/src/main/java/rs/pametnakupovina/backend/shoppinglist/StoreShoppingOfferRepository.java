@@ -87,7 +87,8 @@ public class StoreShoppingOfferRepository {
                         -- still checks every condition.
                         WITH candidate AS MATERIALIZED (
                             SELECT item.id AS item_id,
-                                   product.id AS retailer_product_id
+                                   product.id AS retailer_product_id,
+                                   pack.by_the_kilogram
                             FROM (
                                 SELECT DISTINCT requested_store.retailer_id
                                 FROM app.store AS requested_store
@@ -124,10 +125,14 @@ public class StoreShoppingOfferRepository {
                             CROSS JOIN LATERAL (
                                 SELECT CASE WHEN counted.by_piece
                                             THEN product.package_count::NUMERIC
+                                            WHEN counted.by_the_kilogram
+                                            THEN 1000
                                             ELSE product.quantity_value
                                        END AS size,
                                        CASE WHEN counted.by_piece
                                             THEN 'piece'
+                                            WHEN counted.by_the_kilogram
+                                            THEN 'g'
                                             ELSE product.base_unit
                                        END AS unit,
                                        -- One bottle or can, for the usual size.
@@ -137,7 +142,8 @@ public class StoreShoppingOfferRepository {
                                             ELSE product.quantity_value
                                        END AS one_size,
                                        product.base_unit AS one_unit,
-                                       counted.by_piece
+                                       counted.by_piece,
+                                       counted.by_the_kilogram
                                 FROM (
                                     SELECT COALESCE(
                                                item.required_base_unit = 'piece'
@@ -146,7 +152,16 @@ public class StoreShoppingOfferRepository {
                                                    IS DISTINCT FROM 'piece'
                                                AND product.name !~* '\\m(rinfuz|cca)\\M',
                                                FALSE
-                                           ) AS by_piece
+                                           ) AS by_piece,
+                                           -- "jabuke 2kg" of apples sold loose by
+                                           -- the kilogram: each kilogram is a
+                                           -- pack (V90).
+                                           CASE WHEN item.target_quantity IS NOT NULL
+                                                 AND item.required_base_unit = 'g'
+                                                 AND product.quantity_value IS NULL
+                                                THEN app.sold_by_the_kilogram(product.id)
+                                                ELSE FALSE
+                                           END AS by_the_kilogram
                                 ) AS counted
                             ) pack
                             CROSS JOIN LATERAL (
@@ -301,7 +316,8 @@ public class StoreShoppingOfferRepository {
                               )
                             UNION
                             SELECT item.id,
-                                   product.id
+                                   product.id,
+                                   pack.by_the_kilogram
                             FROM (
                                 SELECT DISTINCT requested_store.retailer_id
                                 FROM app.store AS requested_store
@@ -330,10 +346,14 @@ public class StoreShoppingOfferRepository {
                             CROSS JOIN LATERAL (
                                 SELECT CASE WHEN counted.by_piece
                                             THEN product.package_count::NUMERIC
+                                            WHEN counted.by_the_kilogram
+                                            THEN 1000
                                             ELSE product.quantity_value
                                        END AS size,
                                        CASE WHEN counted.by_piece
                                             THEN 'piece'
+                                            WHEN counted.by_the_kilogram
+                                            THEN 'g'
                                             ELSE product.base_unit
                                        END AS unit,
                                        -- One bottle or can, for the usual size.
@@ -343,7 +363,8 @@ public class StoreShoppingOfferRepository {
                                             ELSE product.quantity_value
                                        END AS one_size,
                                        product.base_unit AS one_unit,
-                                       counted.by_piece
+                                       counted.by_piece,
+                                       counted.by_the_kilogram
                                 FROM (
                                     SELECT COALESCE(
                                                item.required_base_unit = 'piece'
@@ -352,7 +373,16 @@ public class StoreShoppingOfferRepository {
                                                    IS DISTINCT FROM 'piece'
                                                AND product.name !~* '\\m(rinfuz|cca)\\M',
                                                FALSE
-                                           ) AS by_piece
+                                           ) AS by_piece,
+                                           -- "jabuke 2kg" of apples sold loose by
+                                           -- the kilogram: each kilogram is a
+                                           -- pack (V90).
+                                           CASE WHEN item.target_quantity IS NOT NULL
+                                                 AND item.required_base_unit = 'g'
+                                                 AND product.quantity_value IS NULL
+                                                THEN app.sold_by_the_kilogram(product.id)
+                                                ELSE FALSE
+                                           END AS by_the_kilogram
                                 ) AS counted
                             ) pack
                             CROSS JOIN LATERAL (
@@ -608,10 +638,14 @@ public class StoreShoppingOfferRepository {
                             CROSS JOIN LATERAL (
                                 SELECT CASE WHEN counted.by_piece
                                             THEN product.package_count::NUMERIC
+                                            WHEN counted.by_the_kilogram
+                                            THEN 1000
                                             ELSE product.quantity_value
                                        END AS size,
                                        CASE WHEN counted.by_piece
                                             THEN 'piece'
+                                            WHEN counted.by_the_kilogram
+                                            THEN 'g'
                                             ELSE product.base_unit
                                        END AS unit,
                                        -- One bottle or can, for the usual size.
@@ -621,7 +655,8 @@ public class StoreShoppingOfferRepository {
                                             ELSE product.quantity_value
                                        END AS one_size,
                                        product.base_unit AS one_unit,
-                                       counted.by_piece
+                                       counted.by_piece,
+                                       counted.by_the_kilogram
                                 FROM (
                                     SELECT COALESCE(
                                                item.required_base_unit = 'piece'
@@ -630,7 +665,10 @@ public class StoreShoppingOfferRepository {
                                                    IS DISTINCT FROM 'piece'
                                                AND product.name !~* '\\m(rinfuz|cca)\\M',
                                                FALSE
-                                           ) AS by_piece
+                                           ) AS by_piece,
+                                           -- Loose goods by the kilogram, as the
+                                           -- candidates above found them (V90).
+                                           candidate.by_the_kilogram
                                 ) AS counted
                             ) pack
                             CROSS JOIN LATERAL (
