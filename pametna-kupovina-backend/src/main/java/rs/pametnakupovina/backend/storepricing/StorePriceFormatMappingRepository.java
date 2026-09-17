@@ -159,21 +159,39 @@ public class StorePriceFormatMappingRepository {
 
     @Transactional
     public int refreshEligibility(long retailerId) {
-        Integer mappingCount = jdbcClient.sql("""
-                        SELECT COUNT(*)
-                        FROM app.store_price_format_mapping
-                        WHERE retailer_id = :retailerId
-                          AND active = TRUE
+        // Retired links count too: a chain whose every link was retired after
+        // renaming its lists still has shops to link again, and a chain shown
+        // without addresses gets an entry for each list it publishes (V91).
+        boolean linksShopsToLists = jdbcClient.sql("""
+                        SELECT EXISTS (
+                                   SELECT 1
+                                   FROM app.store_price_format_mapping
+                                   WHERE retailer_id = :retailerId
+                               )
+                            OR EXISTS (
+                                   SELECT 1
+                                   FROM app.store_format AS format
+                                   JOIN app.retailer AS retailer
+                                     ON retailer.id = format.retailer_id
+                                   WHERE format.retailer_id = :retailerId
+                                     AND format.code = retailer.code || '_PRICE_LIST'
+                               )
                         """)
                 .param("retailerId", retailerId)
-                .query(Integer.class)
+                .query(Boolean.class)
                 .single();
-        if (mappingCount == null || mappingCount == 0) {
+        if (!linksShopsToLists) {
             return 0;
         }
 
         retireMappingsWithoutPrices(retailerId);
         applyBrandFormatFallback(retailerId);
+        // A shop follows its chain's one renamed list, and every list no
+        // placed shop quotes is shown without an address (V91).
+        jdbcClient.sql("SELECT app.keep_price_list_links_current(:retailerId)")
+                .param("retailerId", retailerId)
+                .query((resultSet, rowNumber) -> true)
+                .single();
 
         jdbcClient.sql("""
                     WITH eligibility AS (
