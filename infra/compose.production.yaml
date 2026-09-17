@@ -1,7 +1,29 @@
+# Pametna kupovina on one Linux server (Oracle Cloud Always Free ARM or any
+# VPS): PostGIS, the backend with the daily price cycle, and Caddy for HTTPS.
+# Step by step: infra/ORACLE.md. Settings: .env.production (not in Git).
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "5"
+
 services:
   postgres:
     image: ghcr.io/baosystems/postgis:16-3.5
     restart: unless-stopped
+    command:
+      - postgres
+      - -c
+      - shared_buffers=${POSTGRES_SHARED_BUFFERS:-2GB}
+      - -c
+      - effective_cache_size=${POSTGRES_EFFECTIVE_CACHE_SIZE:-6GB}
+      - -c
+      - work_mem=${POSTGRES_WORK_MEM:-32MB}
+      - -c
+      - maintenance_work_mem=${POSTGRES_MAINTENANCE_WORK_MEM:-512MB}
+    # Parallel queries share memory through /dev/shm; Docker's 64 MB is too little.
+    shm_size: ${POSTGRES_SHM_SIZE:-1g}
     environment:
       POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
       POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
@@ -9,39 +31,37 @@ services:
     volumes:
       - pametna_kupovina_postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"
-        ]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 10
+    logging: *logging
 
   backend:
     build:
-      context: ../pametna-kupovina-backend
+      context: .
+      dockerfile: backend.Dockerfile
+    image: pametna-kupovina-backend:release
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
     environment:
+      SPRING_PROFILES_ACTIVE: production
       DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
       DB_USERNAME: ${POSTGRES_USER}
       DB_PASSWORD: ${POSTGRES_PASSWORD}
+      # Also set in application-production.properties; repeated here so a jar
+      # built without that file still never opens the administrative endpoints.
       ADMIN_API_KEY_REQUIRED: "true"
       ADMIN_API_KEY: ${ADMIN_API_KEY:?ADMIN_API_KEY is required}
       SHOPPING_MAX_PRICE_AGE_DAYS: ${SHOPPING_MAX_PRICE_AGE_DAYS:-30}
-      PRICE_IMPORT_HTTP_ENDPOINTS_ENABLED: "false"
-      PRICE_IMPORT_SCHEDULE_ENABLED: "false"
-      MAXI_PRICE_IMPORT_SCHEDULE_ENABLED: "false"
-      VERIFIED_LOCATION_IMPORT_SCHEDULE_ENABLED: "false"
-      MAXI_PRICE_IMPORT_STORE_CODES: ${MAXI_PRICE_IMPORT_STORE_CODES:-508,538,512,513,541,544}
-      MAXI_PRICE_IMPORT_STORE_FILE_PREFIXES: ${MAXI_PRICE_IMPORT_STORE_FILE_PREFIXES:-508=MAXI_508_KNEZA_MIHAJLA_84_86_VALJEVO_,538=MAXI_538_KARADJORDJEVA_92_VALJEVO_,512=PRODAVNICA_512_OBRENA_NIKOLICA_3_VALJEVO_,513=PRODAVNICA_513_NASELJE_ZBRATIMLJENI_GRADOVI_BB_VALJEVO_,541=MAXI_541_GODJEVACKA_2_DIVCIBARE_VALJEVO_,544=MAXI_544_KARADJORDJEVA_2_VALJEVO_}
-      MAXI_PRICE_IMPORT_STORE_LOCATION_CODES: ${MAXI_PRICE_IMPORT_STORE_LOCATION_CODES:-508=S841,538=S538,512=S512,513=S513,541=S541,544=S927}
-      MAXI_PRICE_IMPORT_LOOKBACK_DAYS: ${MAXI_PRICE_IMPORT_LOOKBACK_DAYS:-7}
-      JVM_TOOL_OPTIONS: ${JVM_TOOL_OPTIONS:--Xms256m -Xmx1536m}
+      PRICE_IMPORT_ARCHIVE_DIRECTORY: /data/import-archive
       HEALTH_SHOW_DETAILS: never
+      TZ: Europe/Belgrade
+      JAVA_TOOL_OPTIONS: ${BACKEND_JAVA_OPTIONS:--Xms3g -Xmx4g -XX:+AlwaysPreTouch}
+    volumes:
+      - price_import_archive:/data/import-archive
     expose:
       - "8080"
     healthcheck:
@@ -52,55 +72,29 @@ services:
         ]
       interval: 15s
       timeout: 5s
-      retries: 10
-      start_period: 30s
+      retries: 20
+      start_period: 60s
+    logging: *logging
 
-  import-worker:
-    build:
-      context: ../pametna-kupovina-backend
+  caddy:
+    image: caddy:2.10-alpine
     restart: unless-stopped
     depends_on:
-      postgres:
-        condition: service_healthy
       backend:
         condition: service_healthy
     environment:
-      DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
-      DB_USERNAME: ${POSTGRES_USER}
-      DB_PASSWORD: ${POSTGRES_PASSWORD}
-      SPRING_MAIN_WEB_APPLICATION_TYPE: none
-      SPRING_FLYWAY_ENABLED: "false"
-      PRICE_IMPORT_HTTP_ENDPOINTS_ENABLED: "false"
-      PRICE_IMPORT_WORKER_ENABLED: "true"
-      PRICE_IMPORT_WORKER_INSTANCE_ID: ${PRICE_IMPORT_WORKER_INSTANCE_ID:-import-worker-1}
-      PRICE_IMPORT_ARCHIVE_DIRECTORY: /data/import-archive
-      PRICE_IMPORT_SCHEDULE_ENABLED: ${PRICE_IMPORT_SCHEDULE_ENABLED:-true}
-      PRICE_IMPORT_SCHEDULE_RETAILERS: ${PRICE_IMPORT_SCHEDULE_RETAILERS:-EUROPROM,LIDL,IDEA_RODA,UNIVEREXPORT,DIS}
-      PRICE_IMPORT_SCHEDULE_CRON: ${PRICE_IMPORT_SCHEDULE_CRON:-0 0 3 * * *}
-      MAXI_PRICE_IMPORT_SCHEDULE_ENABLED: ${MAXI_PRICE_IMPORT_SCHEDULE_ENABLED:-true}
-      MAXI_PRICE_IMPORT_SCHEDULE_CRON: ${MAXI_PRICE_IMPORT_SCHEDULE_CRON:-0 0 4 * * *}
-      MAXI_PRICE_IMPORT_STORE_CODES: ${MAXI_PRICE_IMPORT_STORE_CODES:-508,538,512,513,541,544}
-      MAXI_PRICE_IMPORT_STORE_FILE_PREFIXES: ${MAXI_PRICE_IMPORT_STORE_FILE_PREFIXES:-508=MAXI_508_KNEZA_MIHAJLA_84_86_VALJEVO_,538=MAXI_538_KARADJORDJEVA_92_VALJEVO_,512=PRODAVNICA_512_OBRENA_NIKOLICA_3_VALJEVO_,513=PRODAVNICA_513_NASELJE_ZBRATIMLJENI_GRADOVI_BB_VALJEVO_,541=MAXI_541_GODJEVACKA_2_DIVCIBARE_VALJEVO_,544=MAXI_544_KARADJORDJEVA_2_VALJEVO_}
-      MAXI_PRICE_IMPORT_STORE_LOCATION_CODES: ${MAXI_PRICE_IMPORT_STORE_LOCATION_CODES:-508=S841,538=S538,512=S512,513=S513,541=S541,544=S927}
-      MAXI_PRICE_IMPORT_LOOKBACK_DAYS: ${MAXI_PRICE_IMPORT_LOOKBACK_DAYS:-7}
-      VERIFIED_LOCATION_IMPORT_SCHEDULE_ENABLED: ${VERIFIED_LOCATION_IMPORT_SCHEDULE_ENABLED:-true}
-      VERIFIED_LOCATION_IMPORT_SCHEDULE_CRON: ${VERIFIED_LOCATION_IMPORT_SCHEDULE_CRON:-0 0 2 * * SUN}
-      DIS_LOCATION_IMPORT_URL: ${DIS_LOCATION_IMPORT_URL:-https://www.dis.rs/api/Dis/Locations}
-      EUROPROM_LOCATION_IMPORT_URL: ${EUROPROM_LOCATION_IMPORT_URL:-https://europrom.rs/prodajni-objekti/}
-      MAXI_LOCATION_IMPORT_GRAPHQL_URL: ${MAXI_LOCATION_IMPORT_GRAPHQL_URL:-https://www.maxi.rs/api/v1/}
-      IDEA_LOCATION_IMPORT_URL: ${IDEA_LOCATION_IMPORT_URL:-https://www.idea.rs/layout/set/json/Prodavnice}
-      RODA_LOCATION_IMPORT_URL: ${RODA_LOCATION_IMPORT_URL:-https://roda.rs/roda-prodavnice--p-1}
-      IDEA_PRICE_FORMAT_MAPPING_DISCOVERY_URL: ${IDEA_PRICE_FORMAT_MAPPING_DISCOVERY_URL:-https://data.gov.rs/sr/datasets/cenovnici-proizvoda-prema-pravilniku-o-uslovima-sadrzaju-i-nacinu-objavljivanja-cenovnika-idea-marketi-doo/}
-      IDEA_PRICE_FORMAT_MAPPING_MAX_DOWNLOAD_BYTES: ${IDEA_PRICE_FORMAT_MAPPING_MAX_DOWNLOAD_BYTES:-10000000}
-      UNIVEREXPORT_LOCATION_IMPORT_URL: ${UNIVEREXPORT_LOCATION_IMPORT_URL:-https://www.univerexport.rs/api/fetch/fetchProdavnice}
-      LIDL_LOCATION_IMPORT_API_KEY: ${LIDL_LOCATION_IMPORT_API_KEY:-16QaHsGX3Uc3JLhNlS2ZG1CmosbzVPs2}
-      DATA_QUALITY_MONITOR_ENABLED: ${DATA_QUALITY_MONITOR_ENABLED:-true}
-      DATA_QUALITY_MONITOR_INTERVAL_MS: ${DATA_QUALITY_MONITOR_INTERVAL_MS:-3600000}
-      DATA_QUALITY_STALE_PRICE_DAYS: ${DATA_QUALITY_STALE_PRICE_DAYS:-2}
-      JVM_TOOL_OPTIONS: ${IMPORT_WORKER_JVM_TOOL_OPTIONS:--Xms256m -Xmx2048m}
+      APP_DOMAIN: ${APP_DOMAIN:?APP_DOMAIN is required}
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+      - "${HTTPS_PORT:-443}:443/udp"
     volumes:
-      - price_import_archive:/data/import-archive
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    logging: *logging
 
+  # One verified dump into ./backups; ops/backup.sh runs it daily.
   database-backup:
     image: postgres:16-alpine
     profiles:
@@ -126,23 +120,6 @@ services:
         pg_dump --format=custom --compress=9 --file="$${backup_file}"
         pg_restore --list "$${backup_file}" >/dev/null
         echo "Backup verified: $${backup_file}"
-
-  caddy:
-    image: caddy:2.10-alpine
-    restart: unless-stopped
-    depends_on:
-      backend:
-        condition: service_healthy
-    environment:
-      APP_DOMAIN: ${APP_DOMAIN:?APP_DOMAIN is required}
-    ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
 
 volumes:
   pametna_kupovina_postgres_data:
