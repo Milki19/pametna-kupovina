@@ -38,10 +38,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * Everyday words on a list find the right products: a product gets such a type
  * when its name and the chain's category agree. "meso" is fresh meat, not
- * salami, and not trotters either; "voće" is fruit and "povrće" vegetables.
- * Galettes with sea salt, cat food with salmon, dog pâté and sauerkraut get
- * none of them. A type removed on the admin page stays removed after the next
- * catalogue refresh, and nothing waits for a decision that is already made.
+ * salami, and not trotters either; "voće" is fruit and "povrće" vegetables;
+ * "riba" is fresh fish, while "tunjevina" and "sardine" are cans. Galettes with
+ * sea salt, cat food with salmon, dog pâté and sauerkraut get none of them. A
+ * type removed on the admin page stays removed after the next catalogue
+ * refresh, and nothing waits for a decision that is already made.
  */
 @SpringBootTest(properties = {
         "price-import.http.request-timeout-seconds=5",
@@ -181,7 +182,7 @@ class GenericProductTypeTest {
     }
 
     @Test
-    void everydayWordsFindFreshFoodAndARemovedTypeStaysRemoved() {
+    void everydayWordsFindFreshAndCannedFoodAndARemovedTypeStaysRemoved() {
         long retailerId = jdbcClient.sql("""
                         INSERT INTO app.retailer (code, name, dataset_url)
                         VALUES ('GENERIC', 'Generic', ?)
@@ -193,6 +194,8 @@ class GenericProductTypeTest {
         assertThat(priceImportService.importPrices("GENERIC").status()).isEqualTo("SUCCEEDED");
 
         assertThat(typeOf(SALT)).isEqualTo("SALT");
+        assertThat(typeOf(CANNED_TUNA)).isEqualTo("CANNED_FISH");
+        assertThat(typeOf(SEA_BREAM)).isEqualTo("FISH");
         assertThat(typeOf(BEEF)).isEqualTo("MEAT");
         assertThat(typeOf(TROTTERS)).isEqualTo("MEAT");
         assertThat(typeOf(APPLE)).isEqualTo("FRUIT");
@@ -230,20 +233,22 @@ class GenericProductTypeTest {
         assertThat(chosenFor("povrće", list, shop)).isEqualTo(CARROT);
         assertThat(chosenFor("jabuke", list, shop)).isEqualTo(APPLE);
         assertThat(chosenFor("šargarepa", list, shop)).isEqualTo(CARROT);
+        assertThat(chosenFor("riba", list, shop)).isEqualTo(SEA_BREAM);
+        assertThat(chosenFor("tunjevina", list, shop)).isEqualTo(CANNED_TUNA);
 
-        // The owner removes the fruit type from the apple on the admin page.
-        assertThat(reviewService.reviewTypeAssignments("FRUIT", "jabuka", 10))
+        // The owner removes the canned fish type from the tuna on the admin page.
+        assertThat(reviewService.reviewTypeAssignments("CANNED_FISH", "tunjevina", 10))
                 .extracting(ProductTypeAssignmentReview::productName)
-                .containsExactly(APPLE);
-        long apple = productId(APPLE);
-        assertThat(reviewService.rejectTypeAssignment(apple, new ProductTypeRejectionRequest("fruit")).message())
+                .containsExactly(CANNED_TUNA);
+        long tuna = productId(CANNED_TUNA);
+        assertThat(reviewService.rejectTypeAssignment(tuna, new ProductTypeRejectionRequest("canned_fish")).message())
                 .contains("Uklonjeno");
-        assertThat(typeOf(APPLE)).isNull();
-        assertThatThrownBy(() -> reviewService.rejectTypeAssignment(apple, new ProductTypeRejectionRequest("FRUIT")))
+        assertThat(typeOf(CANNED_TUNA)).isNull();
+        assertThatThrownBy(() -> reviewService.rejectTypeAssignment(tuna, new ProductTypeRejectionRequest("CANNED_FISH")))
                 .isInstanceOf(ResponseStatusException.class);
 
         catalogMaintenanceService.refreshAll();
-        assertThat(typeOf(APPLE)).isNull();
+        assertThat(typeOf(CANNED_TUNA)).isNull();
         assertThat(typeOf(SALT)).isEqualTo("SALT");
         assertThat(typeOf(BEEF)).isEqualTo("MEAT");
 
