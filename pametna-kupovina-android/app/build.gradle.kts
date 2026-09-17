@@ -33,6 +33,21 @@ val backendBaseUrl = configuredValue(
 )
     .let { if (it.endsWith('/')) it else "$it/" }
 
+// Release signing key, kept outside Git (see infra/ORACLE.md). Without the file
+// the release APK is built unsigned.
+val keystoreProperties = Properties()
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.inputStream().use {
+        keystoreProperties.load(it)
+    }
+}
+
+fun keystoreValue(name: String): String =
+    keystoreProperties.getProperty(name)?.takeIf { it.isNotBlank() }
+        ?: error("keystore.properties has no $name")
+
 android {
     namespace = "rs.pametnakupovina.app"
     compileSdk {
@@ -59,8 +74,22 @@ android {
         manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
     }
 
+    signingConfigs {
+        if (keystorePropertiesFile.exists()) {
+            create("release") {
+                storeFile = file(keystoreValue("storeFile"))
+                storePassword = keystoreValue("storePassword")
+                keyAlias = keystoreValue("keyAlias")
+                keyPassword = keystoreValue("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            if (keystorePropertiesFile.exists()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             optimization {
                 enable = false
             }
@@ -81,6 +110,23 @@ android {
 
 ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
+}
+
+// A release build does not allow plain HTTP, so an http:// server address would
+// only fail on the phone. Stop the build instead.
+val checkReleaseBackendUrl by tasks.registering {
+    val releaseBackendBaseUrl = backendBaseUrl
+    doLast {
+        check(releaseBackendBaseUrl.startsWith("https://")) {
+            "Release build needs an https:// BACKEND_BASE_URL, " +
+                "e.g. -PBACKEND_BASE_URL=https://ime.duckdns.org/ " +
+                "(now: $releaseBackendBaseUrl)"
+        }
+    }
+}
+
+tasks.named { it == "preReleaseBuild" }.configureEach {
+    dependsOn(checkReleaseBackendUrl)
 }
 
 dependencies {
