@@ -472,8 +472,16 @@ public class ProductCatalogMaintenanceService {
                     FROM app.predict_product_types(?) AS prediction
                     JOIN app.retailer_product AS product
                       ON product.id = prediction.retailer_product_id
+                    JOIN app.product_type AS type
+                      ON type.id = prediction.product_type_id
                     WHERE prediction.confidence >= 0.7500
                       AND prediction.confidence < 0.9500
+                      -- Salt, meat, fish and produce wait for a decision only
+                      -- when the chain filed the product nowhere (V87).
+                      AND NOT (
+                          type.needs_source_category
+                          AND NULLIF(BTRIM(product.category_code), '') IS NOT NULL
+                      )
                       AND NOT EXISTS (
                           SELECT 1
                           FROM app.retailer_product_type AS assignment
@@ -531,8 +539,8 @@ public class ProductCatalogMaintenanceService {
                 .param(1, retailerId)
                 .update();
 
-        // "so", "riba", "meso", "voće", "povrće": a product the chain files
-        // under the category its name says (V83).
+        // "so", "meso", "riba", "voće", "povrće": a product the chain files
+        // under the category its name says (V83, V87).
         jdbcClient.sql("SELECT app.assign_generic_product_types(?)")
                 .param(1, retailerId)
                 .query((resultSet, rowNumber) -> true)
