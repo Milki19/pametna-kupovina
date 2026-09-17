@@ -39,10 +39,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * Everyday words on a list find the right products: a product gets such a type
  * when its name and the chain's category agree. "meso" is fresh meat, not
  * salami, and not trotters either; "voće" is fruit and "povrće" vegetables;
- * "riba" is fresh fish, while "tunjevina" and "sardine" are cans. Galettes with
- * sea salt, cat food with salmon, dog pâté and sauerkraut get none of them. A
- * type removed on the admin page stays removed after the next catalogue
- * refresh, and nothing waits for a decision that is already made.
+ * "riba" is fresh fish, while "tunjevina" and "sardine" are cans. Frozen meat
+ * and fish count only where a shop has no fresh, and never for "sveže meso"
+ * or "sveža riba". Galettes with sea salt, cat food with salmon, dog pâté,
+ * sauerkraut, fish sticks and burek get none of them. A type removed on the
+ * admin page stays removed after the next catalogue refresh, and nothing
+ * waits for a decision that is already made.
  */
 @SpringBootTest(properties = {
         "price-import.http.request-timeout-seconds=5",
@@ -82,6 +84,12 @@ class GenericProductTypeTest {
     private static final String APPLE = "JABUKA GLOSTER";
     private static final String CARROT = "ŠARGAREPA 1KG";
     private static final String SAUERKRAUT = "KUPUS KISELI RIBANAC 500G";
+    private static final String FROZEN_HAKE = "OSLIĆ FILET 400G FRIKOM";
+    private static final String FISH_STICKS = "RIBLJI ŠTAPIĆI PANIRANI 250G FROZY";
+    private static final String FROZEN_CHICKEN = "ZAMRZNUTI PILEĆI FILE 1KG";
+    private static final String MEAT_BUREK = "BUREK MESO 600G";
+    private static final String ONLY_FROZEN_HAKE = "OSLIĆ HEK 800G LAMARGO";
+    private static final String ONLY_FROZEN_BEEF = "ZAM. JUNEĆI BIFTEK VAKUUM 1KG";
 
     private static final LocalDate PRICE_DAY = LocalDate.of(2026, 9, 13);
 
@@ -125,17 +133,30 @@ class GenericProductTypeTest {
                 + row("8", "Sveže i prerađeno meso", TROTTERS, "8600000001127", "199,99")
                 + row("3", "Sveže voće i povrće", APPLE, "8600000001073", "119,99")
                 + row("3", "Sveže voće i povrće", CARROT, "8600000001134", "69,99")
-                + row("3", "Sveže voće i povrće", SAUERKRAUT, "8600000001080", "139,99");
+                + row("3", "Sveže voće i povrće", SAUERKRAUT, "8600000001080", "139,99")
+                + row("7", "Smrznuti proizvodi", FROZEN_HAKE, "8600000001141", "449,99")
+                + row("7", "Smrznuti proizvodi", FISH_STICKS, "8600000001158", "299,99")
+                + row("7", "Smrznuti proizvodi", FROZEN_CHICKEN, "8600000001165", "599,99")
+                + row("7", "Smrznuti proizvodi", MEAT_BUREK, "8600000001172", "349,99");
+        // A shop that sells meat and fish only frozen.
+        String frozenOnly = HEADER
+                + row("7", "Smrznuti proizvodi", ONLY_FROZEN_HAKE, "8600000001189", "699,99")
+                + row("7", "Smrznuti proizvodi", ONLY_FROZEN_BEEF, "8600000001196", "1499,99");
         csvServer = HttpServer.create(new InetSocketAddress(0), 0);
-        csvServer.createContext("/generic.csv", exchange -> {
+        serve("/generic.csv", csv);
+        serve("/frozen.csv", frozenOnly);
+        csvServer.setExecutor(Executors.newSingleThreadExecutor());
+        csvServer.start();
+    }
+
+    private static void serve(String path, String csv) {
+        csvServer.createContext(path, exchange -> {
             byte[] body = csv.getBytes(StandardCharsets.UTF_8);
             exchange.sendResponseHeaders(200, body.length);
             try (OutputStream out = exchange.getResponseBody()) {
                 out.write(body);
             }
         });
-        csvServer.setExecutor(Executors.newSingleThreadExecutor());
-        csvServer.start();
     }
 
     @AfterAll
@@ -181,17 +202,46 @@ class GenericProductTypeTest {
                 .orElse(null);
     }
 
-    @Test
-    void everydayWordsFindFreshAndCannedFoodAndARemovedTypeStaysRemoved() {
+    private long importChain(String code, String path) {
         long retailerId = jdbcClient.sql("""
                         INSERT INTO app.retailer (code, name, dataset_url)
-                        VALUES ('GENERIC', 'Generic', ?)
+                        VALUES (?, ?, ?)
                         RETURNING id
                         """)
-                .param("http://127.0.0.1:" + csvServer.getAddress().getPort() + "/generic.csv")
+                .param(code)
+                .param(code)
+                .param("http://127.0.0.1:" + csvServer.getAddress().getPort() + path)
                 .query(Long.class)
                 .single();
-        assertThat(priceImportService.importPrices("GENERIC").status()).isEqualTo("SUCCEEDED");
+        assertThat(priceImportService.importPrices(code).status()).isEqualTo("SUCCEEDED");
+        return retailerId;
+    }
+
+    private long shopOf(long retailerId, String code) {
+        long formatId = jdbcClient.sql("""
+                        INSERT INTO app.store_format (retailer_id, code, name)
+                        VALUES (?, 'TEST', 'Test format')
+                        RETURNING id
+                        """)
+                .param(retailerId)
+                .query(Long.class)
+                .single();
+        return jdbcClient.sql("""
+                        INSERT INTO app.store (retailer_id, store_format_id, external_code, name, address, city, active)
+                        VALUES (?, ?, ?, ?, 'Test adresa', 'Beograd', TRUE)
+                        RETURNING id
+                        """)
+                .param(retailerId)
+                .param(formatId)
+                .param(code + "-1")
+                .param(code + " objekat")
+                .query(Long.class)
+                .single();
+    }
+
+    @Test
+    void everydayWordsFindFreshAndCannedFoodAndARemovedTypeStaysRemoved() {
+        long retailerId = importChain("GENERIC", "/generic.csv");
 
         assertThat(typeOf(SALT)).isEqualTo("SALT");
         assertThat(typeOf(CANNED_TUNA)).isEqualTo("CANNED_FISH");
@@ -206,24 +256,12 @@ class GenericProductTypeTest {
         assertThat(typeOf(SALAMI)).isNull();
         assertThat(typeOf(DOG_PATE)).isNull();
         assertThat(typeOf(SAUERKRAUT)).isNull();
+        assertThat(typeOf(FROZEN_HAKE)).isEqualTo("FROZEN_FISH");
+        assertThat(typeOf(FROZEN_CHICKEN)).isEqualTo("FROZEN_MEAT");
+        assertThat(typeOf(FISH_STICKS)).isNull();
+        assertThat(typeOf(MEAT_BUREK)).isNull();
 
-        long formatId = jdbcClient.sql("""
-                        INSERT INTO app.store_format (retailer_id, code, name)
-                        VALUES (?, 'TEST', 'Test format')
-                        RETURNING id
-                        """)
-                .param(retailerId)
-                .query(Long.class)
-                .single();
-        long shop = jdbcClient.sql("""
-                        INSERT INTO app.store (retailer_id, store_format_id, external_code, name, address, city, active)
-                        VALUES (?, ?, 'GENERIC-1', 'Generic objekat', 'Test adresa', 'Beograd', TRUE)
-                        RETURNING id
-                        """)
-                .param(retailerId)
-                .param(formatId)
-                .query(Long.class)
-                .single();
+        long shop = shopOf(retailerId, "GENERIC");
         long list = shoppingListService.create(new CreateShoppingListRequest("Opšte reči"), "generic").id();
 
         assertThat(chosenFor("so", list, shop)).isEqualTo(SALT);
@@ -234,7 +272,18 @@ class GenericProductTypeTest {
         assertThat(chosenFor("jabuke", list, shop)).isEqualTo(APPLE);
         assertThat(chosenFor("šargarepa", list, shop)).isEqualTo(CARROT);
         assertThat(chosenFor("riba", list, shop)).isEqualTo(SEA_BREAM);
+        assertThat(chosenFor("sveža riba", list, shop)).isEqualTo(SEA_BREAM);
         assertThat(chosenFor("tunjevina", list, shop)).isEqualTo(CANNED_TUNA);
+
+        // Fresh first, even where frozen is cheaper; frozen where a shop has
+        // no fresh, unless the list says fresh.
+        long frozenShop = shopOf(importChain("FROZEN", "/frozen.csv"), "FROZEN");
+        long frozenList = shoppingListService.create(new CreateShoppingListRequest("Samo smrznuto"), "generic").id();
+        assertThat(typeOf(ONLY_FROZEN_BEEF)).isEqualTo("FROZEN_MEAT");
+        assertThat(chosenFor("meso", frozenList, frozenShop)).isEqualTo(ONLY_FROZEN_BEEF);
+        assertThat(chosenFor("riba", frozenList, frozenShop)).isEqualTo(ONLY_FROZEN_HAKE);
+        assertThat(chosenFor("sveže meso", frozenList, frozenShop)).isNull();
+        assertThat(chosenFor("sveža riba", frozenList, frozenShop)).isNull();
 
         // The owner removes the canned fish type from the tuna on the admin page.
         assertThat(reviewService.reviewTypeAssignments("CANNED_FISH", "tunjevina", 10))
@@ -251,6 +300,8 @@ class GenericProductTypeTest {
         assertThat(typeOf(CANNED_TUNA)).isNull();
         assertThat(typeOf(SALT)).isEqualTo("SALT");
         assertThat(typeOf(BEEF)).isEqualTo("MEAT");
+        assertThat(typeOf(FROZEN_HAKE)).isEqualTo("FROZEN_FISH");
+        assertThat(typeOf(FROZEN_CHICKEN)).isEqualTo("FROZEN_MEAT");
 
         // Nothing waits for a type the product already has, and panty liners
         // named "so slim" are not suggested as salt.
