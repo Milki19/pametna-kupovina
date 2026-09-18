@@ -87,7 +87,8 @@ class ShoppingRecommendationServiceTest {
         when(offerRepository.findOffers(
                 10L,
                 List.of(1L, 2L),
-                DATE
+                DATE,
+                true
         )).thenReturn(List.of(
                 offer(firstStore, firstItem, 100, 1001L),
                 offer(firstStore, secondItem, 300, 1002L),
@@ -244,7 +245,8 @@ class ShoppingRecommendationServiceTest {
         when(offerRepository.findOffers(
                 12L,
                 List.of(1L),
-                DATE
+                DATE,
+                true
         )).thenReturn(List.of());
 
         when(routeProvider.calculate(anyList()))
@@ -337,7 +339,8 @@ class ShoppingRecommendationServiceTest {
         when(offerRepository.findOffers(
                 20L,
                 List.of(1L, 2L),
-                DATE
+                DATE,
+                true
         )).thenReturn(List.of(
                 offer(firstStore, firstItem, 100, 2101L),
                 offer(secondStore, secondItem, 50, 2201L)

@@ -97,11 +97,34 @@ public class ShoppingRecommendationService {
                 .map(NearbyStore::storeId)
                 .toList();
 
-        List<StoreItemOffer> offerRows = offerRepository.findOffers(
-                listId,
-                storeIds,
-                asOfDate
-        );
+        // The same query answered the nearby shops and the chains without an
+        // address, one after the other, and matching every item against every
+        // chain is what it spends its time on. Asking once for both costs a
+        // little more than the larger half and saves the whole smaller one.
+        List<StoreShoppingOfferRepository.PriceListEntry> priceListEntries =
+                offerRepository.findPriceListEntriesWithoutLocation();
+
+        List<Long> queriedStoreIds = new ArrayList<>(storeIds);
+        priceListEntries.stream()
+                .map(StoreShoppingOfferRepository.PriceListEntry::storeId)
+                .forEach(queriedStoreIds::add);
+
+        List<StoreItemOffer> allOfferRows = queriedStoreIds.isEmpty()
+                ? List.of()
+                : offerRepository.findOffers(
+                        listId,
+                        queriedStoreIds,
+                        asOfDate,
+                        true
+                );
+
+        Set<Long> nearbyStoreIds = Set.copyOf(storeIds);
+        List<StoreItemOffer> offerRows = allOfferRows.stream()
+                .filter(offer -> nearbyStoreIds.contains(offer.storeId()))
+                .toList();
+        List<StoreItemOffer> priceListOffers = allOfferRows.stream()
+                .filter(offer -> !nearbyStoreIds.contains(offer.storeId()))
+                .toList();
 
         offerRows = preferFreshOffers(
                 offerRows,
@@ -214,9 +237,9 @@ public class ShoppingRecommendationService {
                 recommendedScenario,
                 lowestPriceScenario,
                 findUnlocatedPriceOptions(
-                        shoppingList.id(),
-                        shoppingList.items().size(),
-                        asOfDate
+                        priceListEntries,
+                        priceListOffers,
+                        shoppingList.items().size()
                 ),
                 DISCLAIMER
         );
@@ -229,14 +252,11 @@ public class ShoppingRecommendationService {
      * send them.
      */
     private List<UnlocatedPriceOption> findUnlocatedPriceOptions(
-            Long listId,
-            int totalItems,
-            LocalDate asOfDate
+            List<StoreShoppingOfferRepository.PriceListEntry> entries,
+            List<StoreItemOffer> offers,
+            int totalItems
     ) {
-        List<StoreShoppingOfferRepository.PriceListEntry> entries =
-                offerRepository.findPriceListEntriesWithoutLocation();
-
-        if (entries.isEmpty()) {
+        if (entries.isEmpty() || offers.isEmpty()) {
             return List.of();
         }
 
@@ -245,12 +265,6 @@ public class ShoppingRecommendationService {
                         StoreShoppingOfferRepository.PriceListEntry::storeId,
                         entry -> entry
                 ));
-
-        List<StoreItemOffer> offers = offerRepository.findPriceListOffers(
-                listId,
-                List.copyOf(entryById.keySet()),
-                asOfDate
-        );
 
         // One basket per published price list, then the range per chain.
         Map<Long, List<StoreItemOffer>> byEntry = offers.stream()
