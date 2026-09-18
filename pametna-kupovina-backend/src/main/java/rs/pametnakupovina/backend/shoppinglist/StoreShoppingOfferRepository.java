@@ -327,7 +327,25 @@ public class StoreShoppingOfferRepository {
                                 FROM app.store AS requested_store
                                 WHERE requested_store.id IN (:storeIds)
                             ) AS chain
-                            CROSS JOIN app.shopping_list_item AS item
+                            -- Only the items this half is for: an exact product,
+                            -- a family, or a category without an intent. Joined
+                            -- to every product first, a list of intents built
+                            -- 900,000 rows here and threw all of them away
+                            -- (0.95 s of a 3.9 s plan).
+                            CROSS JOIN (
+                                SELECT own_item.*
+                                FROM app.shopping_list_item AS own_item
+                                WHERE own_item.shopping_list_id = :listId
+                                  AND NOT (
+                                      own_item.matching_rule = 'FLEXIBLE_CATEGORY'
+                                      AND EXISTS (
+                                          SELECT 1
+                                          FROM app.shopping_intent AS own_intent
+                                          WHERE own_intent.id = own_item.shopping_intent_id
+                                            AND own_intent.active = TRUE
+                                      )
+                                  )
+                            ) AS item
                         LEFT JOIN LATERAL (
                             SELECT intent.id AS shopping_intent_id,
                                    intent.default_min_package_quantity,
@@ -541,6 +559,24 @@ public class StoreShoppingOfferRepository {
                                       )
                                   )
                               )
+                        ),
+                        -- The offer below runs once for every shop and every
+                        -- item, and scanning all the candidates each time to
+                        -- find that item's was 1.8 s of a 3.9 s plan. Grouped
+                        -- by item and chain, a shop reads only its own.
+                        candidate_group AS MATERIALIZED (
+                            SELECT candidate.item_id,
+                                   product.retailer_id,
+                                   ARRAY_AGG(candidate.retailer_product_id
+                                             ORDER BY candidate.retailer_product_id)
+                                       AS retailer_product_ids,
+                                   ARRAY_AGG(candidate.by_the_kilogram
+                                             ORDER BY candidate.retailer_product_id)
+                                       AS by_the_kilogram
+                            FROM candidate
+                            JOIN app.retailer_product AS product
+                              ON product.id = candidate.retailer_product_id
+                            GROUP BY candidate.item_id, product.retailer_id
                         )
                         SELECT store.id AS store_id,
                                retailer.code AS retailer_code,
@@ -622,10 +658,13 @@ public class StoreShoppingOfferRepository {
                                    selected_price.price_scope,
                                    pack.size AS package_size, pack.unit AS package_unit,
                                    need.packages
-                            FROM candidate
+                            FROM candidate_group
+                            CROSS JOIN LATERAL UNNEST(
+                                candidate_group.retailer_product_ids,
+                                candidate_group.by_the_kilogram
+                            ) AS candidate(retailer_product_id, by_the_kilogram)
                             JOIN app.retailer_product AS product
                               ON product.id = candidate.retailer_product_id
-                             AND candidate.item_id = item.id
                             LEFT JOIN app.canonical_product AS canonical
                               ON canonical.id =
                                   product.canonical_product_id
@@ -921,7 +960,9 @@ public class StoreShoppingOfferRepository {
                                          priced.id DESC
                                 LIMIT 1
                             ) AS selected_price ON TRUE
-                            WHERE product.retailer_id = store.retailer_id
+                            WHERE candidate_group.item_id = item.id
+                              AND candidate_group.retailer_id = store.retailer_id
+                              AND product.retailer_id = store.retailer_id
                               -- Far below what other chains charge, the price
                               -- is most likely for one piece or one kilogram
                               -- of a bigger pack (V72). The product screen
