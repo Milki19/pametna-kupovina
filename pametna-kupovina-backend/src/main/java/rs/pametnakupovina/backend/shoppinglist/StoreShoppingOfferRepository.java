@@ -68,7 +68,11 @@ public class StoreShoppingOfferRepository {
         return findOffers(listId, storeIds, asOfDate, false);
     }
 
-    private List<StoreItemOffer> findOffers(
+    /**
+     * @param includeUnlocated also prices the published lists whose shop we
+     *                         cannot place, so one pass answers both.
+     */
+    public List<StoreItemOffer> findOffers(
             Long listId,
             List<Long> storeIds,
             LocalDate asOfDate,
@@ -1159,10 +1163,8 @@ public class StoreShoppingOfferRepository {
 
     /**
      * Prices a basket against published price lists whose shop location is
-     * unknown (see V65). These entries have no coordinates and are never
-     * pricing_eligible, so they cannot be routed to; this exists only to say
-     * "it would be cheaper here" next to a plan the shopper can actually
-     * follow.
+     * unknown (see V65). The recommendation asks for these together with the
+     * nearby shops; this stays for the tests and for asking on its own.
      */
     public List<StoreItemOffer> findPriceListOffers(
             Long listId,
