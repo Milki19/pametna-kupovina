@@ -91,7 +91,10 @@ public class GovernmentDatasetCatalogRepository {
                                resource_last_modified,
                                review_status,
                                first_discovered_at,
-                               last_discovered_at
+                               last_discovered_at,
+                               probed_at,
+                               probe_verdict,
+                               probe_summary
                         FROM app.government_dataset_candidate
                         ORDER BY organization_name NULLS LAST,
                                  title,
@@ -118,9 +121,37 @@ public class GovernmentDatasetCatalogRepository {
                                 )),
                                 instant(resultSet.getTimestamp(
                                         "last_discovered_at"
-                                ))
+                                )),
+                                instant(resultSet.getTimestamp("probed_at")),
+                                resultSet.getString("probe_verdict"),
+                                resultSet.getString("probe_summary")
                         ))
                 .list();
+    }
+
+    public GovernmentDatasetCandidate findById(long id) {
+        return findAll().stream()
+                .filter(candidate -> candidate.id() == id)
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Nema kandidata sa id " + id
+                ));
+    }
+
+    /** What the probe found, kept next to the chain that is waiting. */
+    public void saveProbe(long id, String verdict, String summary) {
+        jdbcClient.sql("""
+                        UPDATE app.government_dataset_candidate
+                           SET probed_at = NOW(),
+                               probe_verdict = :verdict,
+                               probe_summary = :summary,
+                               updated_at = NOW()
+                         WHERE id = :id
+                        """)
+                .param("id", id)
+                .param("verdict", verdict)
+                .param("summary", summary)
+                .update();
     }
 
     private static String nullable(String value) {
