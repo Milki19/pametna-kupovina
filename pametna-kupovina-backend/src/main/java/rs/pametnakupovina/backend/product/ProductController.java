@@ -25,7 +25,6 @@ import java.util.List;
 public class ProductController {
 
     private final CanonicalProductSearchService canonicalSearchService;
-    private final ProductSearchService productSearchService;
     private final FuzzyProductCandidateService fuzzyCandidateService;
     private final ProductMatchDecisionService matchDecisionService;
     private final ProductMatchFeedbackService matchFeedbackService;
@@ -34,7 +33,6 @@ public class ProductController {
 
     public ProductController(
             CanonicalProductSearchService canonicalSearchService,
-            ProductSearchService productSearchService,
             FuzzyProductCandidateService fuzzyCandidateService,
             ProductMatchDecisionService matchDecisionService,
             ProductMatchFeedbackService matchFeedbackService,
@@ -42,7 +40,6 @@ public class ProductController {
             ProductFamilyDetailsService familyDetailsService
     ) {
         this.canonicalSearchService = canonicalSearchService;
-        this.productSearchService = productSearchService;
         this.fuzzyCandidateService = fuzzyCandidateService;
         this.matchDecisionService = matchDecisionService;
         this.matchFeedbackService = matchFeedbackService;
@@ -116,25 +113,6 @@ public class ProductController {
     ) {
         try {
             return canonicalSearchService.search(query, page, limit, includeWithoutPrice);
-        } catch (IllegalArgumentException exception) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    exception.getMessage(),
-                    exception
-            );
-        }
-    }
-
-    @GetMapping("/offers/search")
-    public List<ProductSearchResult> searchOffers(
-            @RequestParam("query") String query,
-            @RequestParam(
-                    name = "limit",
-                    defaultValue = "20"
-            ) int limit
-    ) {
-        try {
-            return productSearchService.search(query, limit);
         } catch (IllegalArgumentException exception) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
