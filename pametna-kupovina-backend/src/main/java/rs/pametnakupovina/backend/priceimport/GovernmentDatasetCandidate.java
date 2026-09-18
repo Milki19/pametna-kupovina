@@ -16,6 +16,9 @@ public record GovernmentDatasetCandidate(
         Instant resourceLastModified,
         String reviewStatus,
         Instant firstDiscoveredAt,
-        Instant lastDiscoveredAt
+        Instant lastDiscoveredAt,
+        Instant probedAt,
+        String probeVerdict,
+        String probeSummary
 ) {
 }

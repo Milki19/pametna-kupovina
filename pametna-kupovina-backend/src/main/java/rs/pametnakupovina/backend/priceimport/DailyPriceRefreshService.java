@@ -70,8 +70,14 @@ public class DailyPriceRefreshService {
                         """, Long.class, today);
                 boolean failed = false;
                 boolean warning = false;
+                // Chains registered after a clean probe run last and, like the
+                // other chain-wide lists, never fail the day on their own.
+                List<String> newcomers = registeredChains();
+                Set<String> tolerated = new java.util.HashSet<>(EXTRA);
+                tolerated.addAll(newcomers);
                 try {
-                    for (String code : java.util.stream.Stream.concat(CORE.stream(), EXTRA.stream()).toList()) {
+                    for (String code : java.util.stream.Stream.of(CORE, EXTRA, newcomers)
+                            .flatMap(List::stream).toList()) {
                         Outcome outcome;
                         try {
                             outcome = importRetailer(code, today);
@@ -83,8 +89,8 @@ public class DailyPriceRefreshService {
                                 INSERT INTO app.price_refresh_result(cycle_id,retailer_code,snapshot_date,rows_saved,status,detail)
                                 VALUES (?,?,?,?,?,?)
                                 """, id, code, outcome.date(), outcome.rows(), outcome.status(), outcome.detail());
-                        failed |= failsTheDay(code, outcome.status());
-                        warning |= warnsTheDay(code, outcome.status());
+                        failed |= failsTheDay(code, outcome.status(), tolerated);
+                        warning |= warnsTheDay(code, outcome.status(), tolerated);
                         log.info("Daily refresh {}: {} {} date={} rows={}", id, code, outcome.status(), outcome.date(), outcome.rows());
                     }
                     String status = failed ? "FAILED" : warning ? "WARNING" : "SUCCEEDED";
@@ -115,8 +121,26 @@ public class DailyPriceRefreshService {
                 """, Boolean.class, today));
     }
 
+    /** Chains onboarded from the portal: active, with the standard price list. */
+    List<String> registeredChains() {
+        List<String> known = java.util.stream.Stream.concat(CORE.stream(), EXTRA.stream()).toList();
+
+        return jdbc.queryForList("""
+                SELECT retailer.code
+                  FROM app.retailer_data_source AS source
+                  JOIN app.retailer AS retailer ON retailer.id = source.retailer_id
+                 WHERE source.active
+                   AND source.source_type = 'PRICE_CATALOG'
+                   AND source.code = 'PRIMARY_PRICE_CATALOG'
+                 ORDER BY retailer.code
+                """, String.class)
+                .stream()
+                .filter(code -> !known.contains(code))
+                .toList();
+    }
+
     private Outcome importRetailer(String code, LocalDate today) {
-        if (EXTRA.contains(code)) {
+        if (EXTRA.contains(code) || !CORE.contains(code) && !code.equals("MAXI")) {
             ImportResult result = imports.importPrices(code.equals(DELHAIZE_CATALOG) ? "MAXI" : code);
             return new Outcome(result.snapshotDate(), result.rowsSaved(), classifyExtra(result.status()),
                     result.status() + "; cenovnik od " + result.snapshotDate());
@@ -150,11 +174,19 @@ public class DailyPriceRefreshService {
     }
 
     static boolean failsTheDay(String code, String status) {
-        return !EXTRA.contains(code) && status.equals("FAILED");
+        return failsTheDay(code, status, Set.copyOf(EXTRA));
     }
 
     static boolean warnsTheDay(String code, String status) {
-        return status.equals("WARNING") || (EXTRA.contains(code) && status.equals("FAILED"));
+        return warnsTheDay(code, status, Set.copyOf(EXTRA));
+    }
+
+    static boolean failsTheDay(String code, String status, Set<String> tolerated) {
+        return !tolerated.contains(code) && status.equals("FAILED");
+    }
+
+    static boolean warnsTheDay(String code, String status, Set<String> tolerated) {
+        return status.equals("WARNING") || (tolerated.contains(code) && status.equals("FAILED"));
     }
 
     static int consecutiveDays(Set<LocalDate> successfulDays, LocalDate today) {
