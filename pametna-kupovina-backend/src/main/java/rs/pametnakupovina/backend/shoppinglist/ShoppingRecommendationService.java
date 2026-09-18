@@ -21,6 +21,10 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 
 @Service
@@ -31,6 +35,9 @@ public class ShoppingRecommendationService {
     private static final String DISCLAIMER =
             "Prikazane cene su iz cenovnika za navedeni datum; "
                     + "zalihe i cena na kasi nisu garantovane.";
+
+    /** Beyond four, the database rather than the query becomes the queue. */
+    private static final int MAX_PARALLEL_OFFER_QUERIES = 4;
 
     private final ShoppingListRepository shoppingListRepository;
     private final NearbyStoreRepository nearbyStoreRepository;
@@ -104,19 +111,16 @@ public class ShoppingRecommendationService {
         List<StoreShoppingOfferRepository.PriceListEntry> priceListEntries =
                 offerRepository.findPriceListEntriesWithoutLocation();
 
-        List<Long> queriedStoreIds = new ArrayList<>(storeIds);
-        priceListEntries.stream()
-                .map(StoreShoppingOfferRepository.PriceListEntry::storeId)
-                .forEach(queriedStoreIds::add);
+        Map<String, List<Long>> storesByChain = new LinkedHashMap<>();
+        nearbyStores.forEach(store -> storesByChain
+                .computeIfAbsent(store.retailerCode(), code -> new ArrayList<>())
+                .add(store.storeId()));
+        priceListEntries.forEach(entry -> storesByChain
+                .computeIfAbsent(entry.retailerCode(), code -> new ArrayList<>())
+                .add(entry.storeId()));
 
-        List<StoreItemOffer> allOfferRows = queriedStoreIds.isEmpty()
-                ? List.of()
-                : offerRepository.findOffers(
-                        listId,
-                        queriedStoreIds,
-                        asOfDate,
-                        true
-                );
+        List<StoreItemOffer> allOfferRows =
+                findOffersForChains(listId, storesByChain, asOfDate);
 
         Set<Long> nearbyStoreIds = Set.copyOf(storeIds);
         List<StoreItemOffer> offerRows = allOfferRows.stream()
@@ -243,6 +247,68 @@ public class ShoppingRecommendationService {
                 ),
                 DISCLAIMER
         );
+    }
+
+    /**
+     * The offer query works out each chain's candidate products on its own,
+     * so chains split into groups never repeat each other's work. On the
+     * two-core server the groups run side by side; with one core they run as
+     * one query, as before.
+     */
+    private List<StoreItemOffer> findOffersForChains(
+            Long listId,
+            Map<String, List<Long>> storesByChain,
+            LocalDate asOfDate
+    ) {
+        if (storesByChain.isEmpty()) {
+            return List.of();
+        }
+
+        int groupCount = Math.min(
+                storesByChain.size(),
+                Math.clamp(Runtime.getRuntime().availableProcessors(), 1, MAX_PARALLEL_OFFER_QUERIES)
+        );
+        List<List<Long>> groups = new ArrayList<>();
+        for (int index = 0; index < groupCount; index++) {
+            groups.add(new ArrayList<>());
+        }
+
+        // Largest chains first, each into the lightest group so far.
+        storesByChain.values().stream()
+                .sorted(Comparator.comparingInt(List<Long>::size).reversed())
+                .forEach(chainStores -> groups.stream()
+                        .min(Comparator.comparingInt(List::size))
+                        .orElseThrow()
+                        .addAll(chainStores));
+
+        if (groupCount == 1) {
+            return offerRepository.findOffers(listId, groups.getFirst(), asOfDate, true);
+        }
+
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            List<Future<List<StoreItemOffer>>> queries = groups.stream()
+                    .map(group -> executor.submit(
+                            () -> offerRepository.findOffers(listId, group, asOfDate, true)
+                    ))
+                    .toList();
+
+            List<StoreItemOffer> offers = new ArrayList<>();
+            for (Future<List<StoreItemOffer>> query : queries) {
+                offers.addAll(query.get());
+            }
+
+            // Each shop sits in one group, so a stable sort by shop keeps every
+            // shop's items in the order the query returned them.
+            offers.sort(Comparator.comparing(StoreItemOffer::storeId));
+            return offers;
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Računanje ponuda je prekinuto.", exception);
+        } catch (ExecutionException exception) {
+            throw exception.getCause() instanceof RuntimeException runtime
+                    ? runtime
+                    : new IllegalStateException(exception.getCause());
+        }
     }
 
     /**

@@ -18,6 +18,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -85,16 +86,16 @@ class ShoppingRecommendationServiceTest {
         )).thenReturn(List.of(firstStore, secondStore));
 
         when(offerRepository.findOffers(
-                10L,
-                List.of(1L, 2L),
-                DATE,
-                true
-        )).thenReturn(List.of(
+                eq(10L),
+                anyList(),
+                eq(DATE),
+                eq(true)
+        )).thenAnswer(call -> offersFor(call.getArgument(1), List.of(
                 offer(firstStore, firstItem, 100, 1001L),
                 offer(firstStore, secondItem, 300, 1002L),
                 offer(secondStore, firstItem, 130, 2001L),
                 offer(secondStore, secondItem, 100, 2002L)
-        ));
+        )));
 
         when(routeProvider.calculate(anyList()))
                 .thenReturn(routeMatrix());
@@ -337,14 +338,14 @@ class ShoppingRecommendationServiceTest {
                 20
         )).thenReturn(List.of(firstStore, secondStore));
         when(offerRepository.findOffers(
-                20L,
-                List.of(1L, 2L),
-                DATE,
-                true
-        )).thenReturn(List.of(
+                eq(20L),
+                anyList(),
+                eq(DATE),
+                eq(true)
+        )).thenAnswer(call -> offersFor(call.getArgument(1), List.of(
                 offer(firstStore, firstItem, 100, 2101L),
                 offer(secondStore, secondItem, 50, 2201L)
-        ));
+        )));
         when(routeProvider.calculate(anyList()))
                 .thenReturn(routeMatrix());
 
@@ -525,5 +526,15 @@ class ShoppingRecommendationServiceTest {
                 true,
                 entries
         );
+    }
+
+    /** Answers whichever group of shops the service asks for, as the query would. */
+    private static List<StoreItemOffer> offersFor(
+            List<Long> storeIds,
+            List<StoreItemOffer> offers
+    ) {
+        return offers.stream()
+                .filter(offer -> storeIds.contains(offer.storeId()))
+                .toList();
     }
 }
