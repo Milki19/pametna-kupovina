@@ -37,16 +37,12 @@ import rs.pametnakupovina.backend.matching.ProductMatchFeedbackRequest;
 import rs.pametnakupovina.backend.matching.ProductMatchFeedbackService;
 import rs.pametnakupovina.backend.matching.ProductMatchStatus;
 import rs.pametnakupovina.backend.priceimport.ImportResult;
-import rs.pametnakupovina.backend.priceimport.ImportWorkerHeartbeat;
-import rs.pametnakupovina.backend.priceimport.ImportWorkerStatusRepository;
 import rs.pametnakupovina.backend.priceimport.GovernmentDatasetCatalogRepository;
 import rs.pametnakupovina.backend.priceimport.GovernmentPriceDataset;
 import rs.pametnakupovina.backend.priceimport.PriceImportService;
 import rs.pametnakupovina.backend.priceimport.RetailerDataSourceRepository;
 import rs.pametnakupovina.backend.product.CanonicalProductSearchPage;
 import rs.pametnakupovina.backend.product.CanonicalProductSearchService;
-import rs.pametnakupovina.backend.product.ProductSearchResult;
-import rs.pametnakupovina.backend.product.ProductSearchService;
 import rs.pametnakupovina.backend.product.ProductCatalogMaintenanceService;
 import rs.pametnakupovina.backend.retailerlocation.RetailerLocationImportResult;
 import rs.pametnakupovina.backend.retailerlocation.RetailerLocationImportService;
@@ -202,9 +198,6 @@ class PametnaKupovinaBackendApplicationTests {
             governmentDatasetCatalogRepository;
 
     @Autowired
-    private ProductSearchService productSearchService;
-
-    @Autowired
     private CanonicalProductSearchService canonicalProductSearchService;
 
     @Autowired
@@ -348,7 +341,6 @@ class PametnaKupovinaBackendApplicationTests {
                             app.shopping_list,
                             app.product_match_feedback,
                             app.product_match_decision,
-                            app.import_worker_heartbeat,
                             app.product_identity_candidate,
                             app.product_family_typical_price,
                             app.product_retailer_presence,
@@ -1155,19 +1147,6 @@ class PametnaKupovinaBackendApplicationTests {
     }
 
     @Test
-    void importWorkerHeartbeatReportsHealthyInstance() {
-        new ImportWorkerHeartbeat(jdbcClient, "integration-worker")
-                .heartbeat();
-
-        var status = new ImportWorkerStatusRepository(jdbcClient)
-                .latestStatus(Duration.ofMinutes(2));
-
-        assertThat(status.instanceId()).isEqualTo("integration-worker");
-        assertThat(status.heartbeatAt()).isNotNull();
-        assertThat(status.healthy()).isTrue();
-    }
-
-    @Test
     void registeredPriceSourceRejectsConcurrentImport() {
         Long retailerId = jdbcClient.sql("""
                         INSERT INTO app.retailer (code, name)
@@ -1608,97 +1587,6 @@ class PametnaKupovinaBackendApplicationTests {
                 "Test voda 1 l:WATER"
         );
         assertThat(breadMinimumPrice).isEqualByComparingTo("79.90");
-    }
-
-    @Test
-    void productSearchReturnsSameProductForLatinAndCyrillicQuery() {
-        Long retailerId = jdbcClient.sql("""
-                        INSERT INTO app.retailer (code, name)
-                        VALUES (?, ?)
-                        RETURNING id
-                        """)
-                .param(1, "SEARCH_NORMALIZATION_TEST")
-                .param(2, "Search normalization test")
-                .query(Long.class)
-                .single();
-
-        Long productId = jdbcClient.sql("""
-                        INSERT INTO app.retailer_product (
-                            retailer_id,
-                            source_product_key,
-                            name,
-                            normalized_name,
-                            brand,
-                            quantity_value,
-                            base_unit,
-                            unit
-                        )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                        RETURNING id
-                        """)
-                .param(1, retailerId)
-                .param(2, "SEARCH-NORMALIZATION-PRODUCT")
-                .param(3, "Čokoladno mleko Žirafa 1 l")
-                .param(4, "cokoladno mleko zirafa 1 l")
-                .param(5, "Test brend")
-                .param(6, 1000)
-                .param(7, "ml")
-                .param(8, "l")
-                .query(Long.class)
-                .single();
-
-        Long importRunId = jdbcClient.sql("""
-                        INSERT INTO app.import_run (
-                            retailer_id,
-                            source_url,
-                            status
-                        )
-                        VALUES (?, ?, 'SUCCEEDED')
-                        RETURNING id
-                        """)
-                .param(1, retailerId)
-                .param(2, "https://example.test/search.csv")
-                .query(Long.class)
-                .single();
-
-        jdbcClient.sql("""
-                        INSERT INTO app.price_observation (
-                            retailer_product_id,
-                            import_run_id,
-                            retailer_format_name,
-                            price_date,
-                            regular_price
-                        )
-                        VALUES (?, ?, ?, DATE '2026-08-04', ?)
-                        """)
-                .param(1, productId)
-                .param(2, importRunId)
-                .param(3, "Search test format")
-                .param(4, new BigDecimal("175.50"))
-                .update();
-
-        List<ProductSearchResult> latinResults =
-                productSearchService.search(
-                        "čokoladno mleko žirafa",
-                        10
-                );
-
-        List<ProductSearchResult> cyrillicResults =
-                productSearchService.search(
-                        "чоколадно млеко жирафа",
-                        10
-                );
-
-        assertThat(latinResults)
-                .extracting(ProductSearchResult::productId)
-                .containsExactly(productId);
-
-        assertThat(cyrillicResults)
-                .extracting(ProductSearchResult::productId)
-                .containsExactly(productId);
-
-        assertThat(latinResults.getFirst().name())
-                .isEqualTo("Čokoladno mleko Žirafa 1 l");
     }
 
     @Test
