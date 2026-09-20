@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="sr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Politika privatnosti · Pametna kupovina</title>
+<link rel="stylesheet" href="/pravno.css">
+</head>
+<body>
+<header>
+  <h1>Politika privatnosti</h1>
+  <p>Aplikacija Pametna kupovina · poslednja izmena 20.09.2026.</p>
+</header>
+<main>
+
+<p class="napomena"><strong>NACRT.</strong> Tekst još nije odobren i nije na snazi: mesta označena sa [dopuniti] mora da popuni vlasnik aplikacije.</p>
+
+<p>Pametna kupovina poredi cene iz zvaničnih cenovnika koje trgovci objavljuju
+na portalu otvorenih podataka i predlaže gde je spisak za kupovinu najjeftiniji.
+Za to joj ne treba vaše ime, ni e-mail, ni broj telefona.</p>
+
+<p class="napomena">Aplikacija nema naloge. Ne tražimo registraciju, ne
+prikupljamo ime, e-mail, broj telefona ni lozinku, i nemamo način da saznamo
+ko ste.</p>
+
+<h2>Ko rukuje podacima</h2>
+<p>Podacima rukuje <strong>[dopuniti: ime ili naziv i adresa vlasnika
+aplikacije]</strong>. Pitanja i zahteve šaljite na
+<strong>[dopuniti: kontakt e-mail]</strong>.</p>
+
+<h2>Šta se prikuplja</h2>
+<dl>
+  <dt>Nasumičan broj uređaja</dt>
+  <dd>Pri prvom pokretanju aplikacija napravi slučajan broj (UUID) i čuva ga
+  na vašem telefonu. Po njemu server prepoznaje da je isti uređaj poslao
+  zahtev, kako biste videli svoje spiskove, a ne tuđe. Uz spiskove se na
+  serveru čuva samo njegov nepovratan otisak (SHA-256), ne i sam broj. Broj
+  nije vezan ni za vaš Google nalog, ni za uređaj na način koji bi preživeo
+  brisanje aplikacije.</dd>
+
+  <dt>Spiskovi za kupovinu</dt>
+  <dd>Nazivi stavki koje ukucate, količine i barkodovi, kao i naziv spiska.
+  Čuvaju se na serveru da biste spisak imali i posle zatvaranja aplikacije.</dd>
+
+  <dt>Lokacija</dt>
+  <dd>Ako date dozvolu, koordinate se šalju uz zahtev da bi se izračunalo koje
+  su prodavnice blizu i koliko put košta. Koordinate se koriste samo dok taj
+  zahtev traje. <strong>Ne upisuju se u bazu niti u zapise servera</strong> i
+  ne vezuju se za vaše spiskove. Umesto GPS-a možete uneti i mesto ručno.</dd>
+
+  <dt>Potvrde spajanja proizvoda</dt>
+  <dd>Kada potvrdite ili odbijete predlog „ovo je taj proizvod", čuva se šta je
+  bilo traženo i šta je izabrano, zajedno sa brojem uređaja, da bi pretraga
+  postajala tačnija.</dd>
+
+  <dt>Ono što ostaje samo na telefonu</dt>
+  <dd>Nedovršene stavke i tok kupovine u prodavnici čuvaju se u lokalnoj bazi
+  aplikacije i ne šalju se nikome.</dd>
+</dl>
+
+<h2>Šta se ne prikuplja</h2>
+<ul>
+  <li>Ime, prezime, e-mail, broj telefona, adresa stanovanja, lozinka.</li>
+  <li>Kontakti, fotografije, poruke, spisak aplikacija na telefonu.</li>
+  <li>Reklamni identifikatori i praćenje po sajtovima i aplikacijama.</li>
+  <li>Analitika ponašanja i izveštaji o padovima — aplikacija nema ugrađen
+  nijedan takav alat.</li>
+</ul>
+
+<h2>Zašto se podaci koriste</h2>
+<ul>
+  <li>Da se spisak poveže sa proizvodima i da se izračuna najjeftinija kupovina.</li>
+  <li>Da vam se prikažu vaši spiskovi na vašem uređaju.</li>
+  <li>Da prepoznavanje proizvoda bude tačnije.</li>
+</ul>
+<p>Podaci se ne koriste za reklame, ne prodaju se i ne ustupaju trećim licima
+radi njihovih svrha.</p>
+
+<h2>Kome se podaci prosleđuju</h2>
+<ul>
+  <li><strong>Server na kom aplikacija radi</strong> —
+  <strong>[dopuniti: naziv i država centra podataka, npr. Oracle Cloud,
+  Nemačka]</strong>. Podaci se čuvaju tamo.</li>
+  <li><strong>Google Maps</strong> — kada gledate mapu, Google prikazuje
+  karte i pri tome vidi vaš zahtev, po svojim pravilima privatnosti.</li>
+</ul>
+<p>Cenovnici se preuzimaju sa portala otvorenih podataka Republike Srbije i sa
+sajtova trgovaca. Tim izvorima se <strong>ne šalje nijedan vaš podatak</strong>
+— preuzimaju se samo javni cenovnici.</p>
+
+<h2>Koliko se podaci čuvaju</h2>
+<ul>
+  <li>Spisak i njegove stavke — dok ih ne obrišete.</li>
+  <li>Potvrde spajanja proizvoda — dok postoji potreba da pretraga bude tačna.</li>
+  <li>Koordinate — koliko traje jedan zahtev, pa se odbacuju.</li>
+</ul>
+
+<h2>Brisanje podataka</h2>
+<p>Spisak brišete u samoj aplikaciji: otvorite spisak i izaberite brisanje.
+Time se sa servera briše i spisak i sve njegove stavke.</p>
+<p>Ako želite da se obriše sve što je vezano za vaš uređaj, pošaljite zahtev na
+<strong>[dopuniti: kontakt e-mail]</strong>. Da bismo znali šta da obrišemo,
+u zahtevu pošaljite broj uređaja iz aplikacije
+(<em>Podešavanja → O aplikaciji</em>). Zahtev se izvršava najkasnije u roku od
+30 dana. Brisanjem aplikacije sa telefona briše se i broj uređaja, posle čega
+spisak više ne može da se pronađe ni da se obriše na zahtev.</p>
+
+<h2>Bezbednost</h2>
+<p>Saobraćaj između aplikacije i servera ide preko HTTPS veze. Pristup serveru
+ima samo vlasnik aplikacije. Broj uređaja se uz spiskove čuva kao nepovratan
+otisak, pa ni onaj ko bi video bazu ne bi mogao da se predstavi kao vaš uređaj.</p>
+
+<h2>Deca</h2>
+<p>Aplikacija nije namenjena deci i ne prikuplja podatke za koje se zna da
+pripadaju detetu.</p>
+
+<h2>Vaša prava</h2>
+<p>Po Zakonu o zaštiti podataka o ličnosti imate pravo da tražite uvid,
+ispravku i brisanje podataka, kao i da se obratite Povereniku za informacije od
+javnog značaja i zaštitu podataka o ličnosti. Pošto aplikacija ne zna ko ste,
+zahtev možemo da izvršimo samo uz broj uređaja opisan iznad.</p>
+
+<h2>Izmene</h2>
+<p>Ako se ova politika promeni, nova verzija se objavljuje na ovoj adresi sa
+novim datumom.</p>
+
+<footer>
+  <p><a href="/uslovi/">Uslovi korišćenja</a></p>
+</footer>
+</main>
+</body>
+</html>
