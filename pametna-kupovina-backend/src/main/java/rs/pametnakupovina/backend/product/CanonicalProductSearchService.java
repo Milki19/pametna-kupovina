@@ -6,6 +6,7 @@ import rs.pametnakupovina.backend.matching.ParsedQuantity;
 import rs.pametnakupovina.backend.matching.ProductMatchScorer;
 import rs.pametnakupovina.backend.matching.ProductNameNormalizer;
 import rs.pametnakupovina.backend.matching.ProductQuantityParser;
+import rs.pametnakupovina.backend.matching.SearchSpellingCorrector;
 import rs.pametnakupovina.backend.shoppinglist.ShoppingIntentResolver;
 
 import java.math.BigDecimal;
@@ -32,6 +33,7 @@ public class CanonicalProductSearchService {
     private final ProductMatchScorer productMatchScorer;
     private final EanValidator eanValidator;
     private final ShoppingIntentResolver shoppingIntentResolver;
+    private final SearchSpellingCorrector searchSpellingCorrector;
 
     public CanonicalProductSearchService(
             CanonicalProductSearchRepository searchRepository,
@@ -39,7 +41,8 @@ public class CanonicalProductSearchService {
             ProductQuantityParser productQuantityParser,
             ProductMatchScorer productMatchScorer,
             EanValidator eanValidator,
-            ShoppingIntentResolver shoppingIntentResolver
+            ShoppingIntentResolver shoppingIntentResolver,
+            SearchSpellingCorrector searchSpellingCorrector
     ) {
         this.searchRepository = searchRepository;
         this.productNameNormalizer = productNameNormalizer;
@@ -47,6 +50,7 @@ public class CanonicalProductSearchService {
         this.productMatchScorer = productMatchScorer;
         this.eanValidator = eanValidator;
         this.shoppingIntentResolver = shoppingIntentResolver;
+        this.searchSpellingCorrector = searchSpellingCorrector;
     }
 
     public CanonicalProductSearchPage search(
@@ -61,7 +65,8 @@ public class CanonicalProductSearchService {
         validate(query, page, limit);
 
         String strippedQuery = query.strip();
-        List<ScoredRow> scoredRows = rank(query, includeWithoutPrice);
+        RankedQuery ranked = rank(query, includeWithoutPrice);
+        List<ScoredRow> scoredRows = ranked.rows();
 
         int totalElements = scoredRows.size();
         long offset = (long) page * limit;
@@ -109,6 +114,7 @@ public class CanonicalProductSearchService {
 
         return new CanonicalProductSearchPage(
                 strippedQuery,
+                ranked.correctedQuery(),
                 page,
                 limit,
                 totalElements,
@@ -123,7 +129,7 @@ public class CanonicalProductSearchService {
     public List<ProductSearchCandidate> candidates(String query, int limit) {
         validate(query, 0, limit);
 
-        return rank(query, true).stream()
+        return rank(query, true).rows().stream()
                 .limit(limit)
                 .map(ScoredRow::source)
                 .map(row -> new ProductSearchCandidate(
@@ -140,7 +146,7 @@ public class CanonicalProductSearchService {
                 .toList();
     }
 
-    private List<ScoredRow> rank(String query, boolean includeWithoutPrice) {
+    private RankedQuery rank(String query, boolean includeWithoutPrice) {
         String normalizedQuery = productNameNormalizer.normalize(query);
 
         if (normalizedQuery.isBlank()) {
@@ -149,21 +155,49 @@ public class CanonicalProductSearchService {
             );
         }
 
-        Optional<ParsedQuantity> queryQuantity =
-                productQuantityParser.parse(query);
-
         String validEan = eanValidator.normalize(query.strip())
                 .orElse(null);
 
-        Map<Long, Integer> typePriorities = typePriorities(normalizedQuery);
+        List<CanonicalProductSearchRow> rows = findRows(
+                normalizedQuery,
+                validEan,
+                includeWithoutPrice
+        );
 
-        return searchRepository.findCandidates(
-                        normalizedQuery,
-                        validEan
-                ).stream()
-                .filter(row -> includeWithoutPrice || row.hasUsablePrice() || row.exactEanMatch())
+        String correctedQuery = null;
+
+        // Nothing at all: the query is no use as typed, so one round of
+        // spelling correction can only help. A barcode is either right or
+        // wrong and is never guessed at.
+        if (rows.isEmpty() && validEan == null) {
+            for (String corrected
+                    : searchSpellingCorrector.corrections(normalizedQuery)) {
+                List<CanonicalProductSearchRow> correctedRows = findRows(
+                        corrected,
+                        null,
+                        includeWithoutPrice
+                );
+
+                // A correction that finds nothing either is not worth
+                // putting in front of a shopper.
+                if (!correctedRows.isEmpty()) {
+                    correctedQuery = corrected;
+                    normalizedQuery = corrected;
+                    rows = correctedRows;
+                    break;
+                }
+            }
+        }
+
+        Optional<ParsedQuantity> queryQuantity =
+                productQuantityParser.parse(query);
+
+        Map<Long, Integer> typePriorities = typePriorities(normalizedQuery);
+        String rankedQuery = normalizedQuery;
+
+        List<ScoredRow> scoredRows = rows.stream()
                 .map(row -> score(
-                        normalizedQuery,
+                        rankedQuery,
                         queryQuantity,
                         row
                 ))
@@ -187,6 +221,21 @@ public class CanonicalProductSearchService {
                                 .thenComparing(row -> row.source()
                                         .productFamilyId())
                 )
+                .toList();
+
+        return new RankedQuery(correctedQuery, scoredRows);
+    }
+
+    private List<CanonicalProductSearchRow> findRows(
+            String normalizedQuery,
+            String validEan,
+            boolean includeWithoutPrice
+    ) {
+        return searchRepository.findCandidates(normalizedQuery, validEan)
+                .stream()
+                .filter(row -> includeWithoutPrice
+                        || row.hasUsablePrice()
+                        || row.exactEanMatch())
                 .toList();
     }
 
@@ -291,6 +340,12 @@ public class CanonicalProductSearchService {
                 knownRetailers,
                 row.packageCount()
         );
+    }
+
+    private record RankedQuery(
+            String correctedQuery,
+            List<ScoredRow> rows
+    ) {
     }
 
     private record ScoredRow(

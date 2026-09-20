@@ -6,6 +6,9 @@ import rs.pametnakupovina.backend.matching.EanValidator;
 import rs.pametnakupovina.backend.matching.ProductMatchScorer;
 import rs.pametnakupovina.backend.matching.ProductNameNormalizer;
 import rs.pametnakupovina.backend.matching.ProductQuantityParser;
+import rs.pametnakupovina.backend.matching.SearchSpellingCorrector;
+import rs.pametnakupovina.backend.matching.SearchWordVocabularyRepository;
+import rs.pametnakupovina.backend.matching.SearchWordVocabularyRepository.VocabularyWord;
 import rs.pametnakupovina.backend.shoppinglist.ShoppingIntentResolver;
 import rs.pametnakupovina.backend.shoppinglist.ShoppingIntentResolver.ResolvedShoppingIntent;
 
@@ -16,6 +19,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -34,6 +38,8 @@ class CanonicalProductSearchServiceTest {
             mock(CanonicalProductSearchRepository.class);
     private final ShoppingIntentResolver intentResolver =
             mock(ShoppingIntentResolver.class);
+    private final SearchWordVocabularyRepository vocabularyRepository =
+            mock(SearchWordVocabularyRepository.class);
     private final ProductNameNormalizer normalizer =
             new ProductNameNormalizer();
     private final CanonicalProductSearchService service =
@@ -43,7 +49,8 @@ class CanonicalProductSearchServiceTest {
                     new ProductQuantityParser(),
                     new ProductMatchScorer(normalizer),
                     new EanValidator(),
-                    intentResolver
+                    intentResolver,
+                    new SearchSpellingCorrector(vocabularyRepository)
             );
 
     @BeforeEach
@@ -58,6 +65,12 @@ class CanonicalProductSearchServiceTest {
         when(intentResolver.resolve(anyString())).thenReturn(Optional.of(
                 new ResolvedShoppingIntent(7L, "MILK", "Mleko", "mleko", false)
         ));
+        when(vocabularyRepository.findWordsOfLength(anyInt(), anyInt()))
+                .thenReturn(List.of(
+                        new VocabularyWord("mleko", 1),
+                        new VocabularyWord("meso", 1),
+                        new VocabularyWord("keks", 1)
+                ));
     }
 
     @Test
@@ -76,6 +89,44 @@ class CanonicalProductSearchServiceTest {
                         "MLEKO COKO 1% 1L",
                         "Alpsko mleko 3,5%mm 1L"
                 );
+    }
+
+    /**
+     * "mlkeo" used to find nothing; two swapped letters are one slip from
+     * the word that was meant.
+     */
+    @Test
+    void aMistypedQueryFindsWhatWasMeantAndSaysSo() {
+        when(repository.findCandidates("mlkeo", null)).thenReturn(List.of());
+
+        CanonicalProductSearchPage page = service.search("mlkeo", 0, 10, false);
+
+        assertThat(page.correctedQuery()).isEqualTo("mleko");
+        assertThat(page.query()).isEqualTo("mlkeo");
+        assertThat(names(page)).startsWith("Alpsko mleko 3,5%mm 1L");
+    }
+
+    @Test
+    void aQueryThatFindsSomethingIsSearchedAsItWasTyped() {
+        CanonicalProductSearchPage page = service.search("mleko", 0, 10, false);
+
+        assertThat(page.correctedQuery()).isNull();
+        assertThat(names(page)).isNotEmpty();
+    }
+
+    /**
+     * A correction that finds nothing either would only put a word the
+     * shopper never typed in front of an empty page.
+     */
+    @Test
+    void aCorrectionThatFindsNothingIsNotReported() {
+        when(repository.findCandidates("mlkeo", null)).thenReturn(List.of());
+        when(repository.findCandidates("mleko", null)).thenReturn(List.of());
+
+        CanonicalProductSearchPage page = service.search("mlkeo", 0, 10, false);
+
+        assertThat(page.correctedQuery()).isNull();
+        assertThat(page.totalElements()).isZero();
     }
 
     private static List<String> names(CanonicalProductSearchPage page) {
