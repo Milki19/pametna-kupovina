@@ -4516,6 +4516,42 @@ class PametnaKupovinaBackendApplicationTests {
         assertThat(canonicalProductSearchService.search("Pilos nepostojeci",0,20).items()).isEmpty();
     }
 
+    /**
+     * "mlkeo" and "helb" used to find nothing at all: two swapped letters
+     * leave a short word with almost no trigram in common with the word that
+     * was meant, so the query is tried once more against the words a shop
+     * actually uses.
+     */
+    @Test
+    void aMistypedQueryIsTriedAgainstTheWordsAShopUses() {
+        long retailer = jdbcClient.sql("INSERT INTO app.retailer(code,name) VALUES('TYPO','Typo test') RETURNING id")
+                .query(Long.class).single();
+        jdbcClient.sql("""
+                INSERT INTO app.retailer_product(retailer_id,source_product_key,name,normalized_name,brand)
+                VALUES (?,'milk','Mleko 1l','mleko 1 l','Pilos'),
+                       (?,'bread','Hleb beli 500g','hleb beli 500 g','Klas')
+                """).params(retailer,retailer).update();
+        productCatalogMaintenanceService.refreshRetailer(retailer);
+
+        var milk = canonicalProductSearchService.search("mlkeo",0,20,true);
+        assertThat(milk.query()).isEqualTo("mlkeo");
+        assertThat(milk.correctedQuery()).isEqualTo("mleko");
+        assertThat(milk.items()).isNotEmpty();
+        assertThat(canonicalProductSearchService.search("helb",0,20,true).correctedQuery())
+                .isEqualTo("hleb");
+        // A longer query is already close enough for the text search to
+        // carry the mistyped word, and is left exactly as it was typed.
+        var typedBread = canonicalProductSearchService.search("beli helb",0,20,true);
+        assertThat(typedBread.correctedQuery()).isNull();
+        assertThat(typedBread.items()).isNotEmpty();
+        // A query that finds something is searched exactly as it was typed.
+        assertThat(canonicalProductSearchService.search("mleko",0,20,true).correctedQuery()).isNull();
+        // A word no shop word is one slip from stays a miss, and says so.
+        var nonsense = canonicalProductSearchService.search("xyzwq",0,20,true);
+        assertThat(nonsense.correctedQuery()).isNull();
+        assertThat(nonsense.items()).isEmpty();
+    }
+
     @Test
     void beerIntentsNeverSubstituteNonAlcoholicForRegularOrTheReverse() {
         long retailer = jdbcClient.sql("INSERT INTO app.retailer(code,name) VALUES('BEERTEST','Beer test') RETURNING id")
