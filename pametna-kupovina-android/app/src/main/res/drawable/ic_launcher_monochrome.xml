@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Korpa sa kvačicom, po vlasnikovoj skici. Sve stoji unutar kruga
-     prečnika 72 oko sredine, pa nijedna maska ne odseče ništa. Kvačica je
-     u boji pozadine, kao da je izrezana iz korpe. -->
+<!-- Za teme Androida 13+ sistem sve oboji jednom bojom, pa puna korpa ne bi
+     imala šta da pokaže: ovde je korpa iscrtana linijom, a kvačica ostaje
+     unutra i vidi se. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
@@ -11,24 +11,26 @@
     <path
         android:pathData="M40,50L48,30"
         android:strokeColor="#FFFFFF"
-        android:strokeWidth="6"
+        android:strokeWidth="5"
         android:strokeLineCap="round" />
     <path
         android:pathData="M68,50L60,30"
         android:strokeColor="#FFFFFF"
-        android:strokeWidth="6"
+        android:strokeWidth="5"
         android:strokeLineCap="round" />
 
     <path
         android:fillColor="#FFFFFF"
         android:pathData="M26,48h56a5,5 0 0 1 0,10h-56a5,5 0 0 1 0,-10z" />
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M30,58h48l-5,20a4,4 0 0 1 -4,3h-30a4,4 0 0 1 -4,-3z" />
+        android:pathData="M31.5,59.5h45l-4.5,18a4,4 0 0 1 -4,3h-28a4,4 0 0 1 -4,-3z"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="5"
+        android:strokeLineJoin="round" />
 
     <path
         android:pathData="M42,68L49,75L66,60"
-        android:strokeColor="#176B52"
+        android:strokeColor="#FFFFFF"
         android:strokeWidth="6"
         android:strokeLineCap="round"
         android:strokeLineJoin="round" />
