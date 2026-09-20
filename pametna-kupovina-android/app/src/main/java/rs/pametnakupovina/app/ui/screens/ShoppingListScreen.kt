@@ -316,7 +316,9 @@ private fun SecondaryAction(
     ) {
         AppIcon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(AppSpacing.xs))
-        Text(text, maxLines = 1)
+        // Uz uvećano pismo „Dodaj stavku" se seklo na „Dodaj": natpis sme u
+        // drugi red, dugme naraste.
+        Text(text, textAlign = TextAlign.Center)
     }
 }
 
