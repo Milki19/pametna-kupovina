@@ -6,8 +6,11 @@
 #
 #   infra/ops/register-chain.sh "dm drogerie markt" "Domaca trgovina"
 #
-# Ključ se traži na početku i ne ostaje u istoriji komandi; može i unapred,
-# kroz ADMIN_KEY. Adresa servera se menja kroz BASE_URL.
+# Ključ (isti kao ADMIN_API_KEY u .env.production na serveru) se uzima, tim
+# redom: iz promenljive ADMIN_KEY, iz fajla ADMIN_KEY_FILE ili
+# ~/.pametna-kupovina-admin-key, pa tek onda pitanjem na terminalu. Nijedan od
+# ta tri načina ne ostavlja ključ u istoriji komandi. Adresa servera se menja
+# kroz BASE_URL.
 set -euo pipefail
 
 if [ "$#" -eq 0 ]; then
@@ -16,15 +19,28 @@ if [ "$#" -eq 0 ]; then
 fi
 
 base_url="${BASE_URL:-https://pametna-kupovina.duckdns.org}"
+key_file="${ADMIN_KEY_FILE:-$HOME/.pametna-kupovina-admin-key}"
 
-if [ -z "${ADMIN_KEY:-}" ]; then
-    printf 'Admin ključ: ' >&2
-    read -r -s ADMIN_KEY
-    printf '\n' >&2
+if [ -z "${ADMIN_KEY:-}" ] && [ -r "$key_file" ]; then
+    ADMIN_KEY="$(head -n 1 "$key_file")"
 fi
 
+# Pitanje ide na sam terminal, ne na stdin: kad skriptu pokrene nešto drugo
+# (Run dugme, cron, cev), stdin ume da bude zatvoren ili da već sadrži nešto,
+# pa bi `read` pokupio to umesto ukucanog ključa i server bi vratio 401.
+if [ -z "${ADMIN_KEY:-}" ] && [ -r /dev/tty ]; then
+    printf 'Admin ključ: ' > /dev/tty
+    read -r -s ADMIN_KEY < /dev/tty || true
+    printf '\n' > /dev/tty
+fi
+
+# Nalepljen ključ često ponese razmak ili prelom reda, a server poredi doslovno.
+ADMIN_KEY="$(printf '%s' "${ADMIN_KEY:-}" | tr -d '[:space:]')"
+
 if [ -z "$ADMIN_KEY" ]; then
-    echo "Ključ je prazan; server bi vratio 401." >&2
+    echo "Nemam ključ. Upiši ga jednom u $key_file" >&2
+    echo "  (umesto <kljuc> pravi ključ):" >&2
+    echo "  printf %s '<kljuc>' > $key_file && chmod 600 $key_file" >&2
     exit 2
 fi
 
@@ -53,6 +69,15 @@ def zovi(putanja, metod="GET"):
             return json.load(odgovor)
     except urllib.error.HTTPError as greska:
         telo = greska.read().decode("utf-8", "replace").strip()
+
+        if greska.code == 401:
+            raise SystemExit(
+                "Server nije prihvatio ključ. Mora da bude isti kao "
+                "ADMIN_API_KEY u .env.production na serveru:\n"
+                "  ssh ubuntu@<server> \"grep ADMIN_API_KEY "
+                "pametna-kupovina/.env.production\""
+            )
+
         raise SystemExit(
             "Server je odbio %s %s: %s %s"
             % (metod, putanja, greska.code, telo[:300])
