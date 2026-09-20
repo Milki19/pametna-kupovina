@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import rs.pametnakupovina.backend.priceimport.GovernmentDataResourceDiscoveryClient;
 import rs.pametnakupovina.backend.priceimport.GovernmentDatasetCandidate;
 import rs.pametnakupovina.backend.priceimport.GovernmentDatasetCatalogRepository;
 
@@ -32,12 +33,14 @@ public class PriceListProbeCoordinator {
 
     private final GovernmentDatasetCatalogRepository repository;
     private final PriceListProbeService probeService;
+    private final GovernmentDataResourceDiscoveryClient discoveryClient;
     private final HttpClient httpClient;
     private final Duration requestTimeout;
 
     public PriceListProbeCoordinator(
             GovernmentDatasetCatalogRepository repository,
             PriceListProbeService probeService,
+            GovernmentDataResourceDiscoveryClient discoveryClient,
             @Value("${price-import.http.connect-timeout-seconds:20}")
             long connectTimeoutSeconds,
             @Value("${price-import.http.request-timeout-seconds:900}")
@@ -45,6 +48,7 @@ public class PriceListProbeCoordinator {
     ) {
         this.repository = repository;
         this.probeService = probeService;
+        this.discoveryClient = discoveryClient;
         this.requestTimeout = Duration.ofSeconds(requestTimeoutSeconds);
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(connectTimeoutSeconds))
@@ -58,15 +62,14 @@ public class PriceListProbeCoordinator {
                 ? candidate.title()
                 : candidate.organizationName();
 
+        PublishedFile file = latestPublishedFile(candidate);
         PriceListProbeReport report;
 
         try {
             report = probe(
                     label,
-                    candidate.resourceUrl(),
-                    candidate.resourceLastModified() == null
-                            ? null
-                            : candidate.resourceLastModified().atZone(ZONE).toLocalDate()
+                    file.url(),
+                    file.publishedOn()
             );
         } catch (IOException | InterruptedException exception) {
             if (exception instanceof InterruptedException) {
@@ -93,6 +96,54 @@ public class PriceListProbeCoordinator {
         );
 
         return report;
+    }
+
+    /**
+     * Most of the portal's own files carry the minute they were replaced in
+     * their address, so the address discovery stored days ago is gone by now.
+     * The daily import already asks the dataset page for the current one; the
+     * probe has to judge that same file, not a file nobody will import.
+     */
+    private PublishedFile latestPublishedFile(GovernmentDatasetCandidate candidate) {
+        LocalDate knownDate = candidate.resourceLastModified() == null
+                ? null
+                : candidate.resourceLastModified().atZone(ZONE).toLocalDate();
+
+        if (candidate.datasetPageUrl() == null
+                || candidate.datasetPageUrl().isBlank()) {
+            return new PublishedFile(candidate.resourceUrl(), knownDate);
+        }
+
+        try {
+            var discovered = discoveryClient.discoverLatestCsv(
+                    candidate.datasetPageUrl()
+            );
+
+            repository.updateResource(
+                    candidate.id(),
+                    discovered.url(),
+                    discovered.lastModified()
+            );
+
+            return new PublishedFile(
+                    discovered.url(),
+                    discovered.lastModified() == null
+                            ? knownDate
+                            : discovered.lastModified().atZone(ZONE).toLocalDate()
+            );
+        } catch (RuntimeException exception) {
+            log.warn(
+                    "Ne mogu da pročitam stranicu skupa {}; probam poslednju "
+                            + "poznatu adresu cenovnika: {}",
+                    candidate.datasetPageUrl(),
+                    exception.toString()
+            );
+
+            return new PublishedFile(candidate.resourceUrl(), knownDate);
+        }
+    }
+
+    private record PublishedFile(String url, LocalDate publishedOn) {
     }
 
     private PriceListProbeReport probe(String label, String url, LocalDate publishedOn)

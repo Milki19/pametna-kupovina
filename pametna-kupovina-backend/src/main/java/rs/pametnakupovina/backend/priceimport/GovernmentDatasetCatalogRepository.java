@@ -154,6 +154,30 @@ public class GovernmentDatasetCatalogRepository {
                 .update();
     }
 
+    /** The portal replaced the file, so the address we hold is gone. */
+    public void updateResource(long id, String url, Instant lastModified) {
+        if (url == null || url.isBlank()) {
+            return;
+        }
+
+        jdbcClient.sql("""
+                        UPDATE app.government_dataset_candidate
+                           SET resource_url = :url,
+                               resource_last_modified = COALESCE(
+                                   :lastModified, resource_last_modified
+                               ),
+                               updated_at = NOW()
+                         WHERE id = :id
+                        """)
+                .param("id", id)
+                .param("url", url)
+                .param("lastModified", lastModified == null
+                        ? null
+                        : java.time.OffsetDateTime.ofInstant(
+                                lastModified, java.time.ZoneOffset.UTC))
+                .update();
+    }
+
     private static String nullable(String value) {
         return value == null || value.isBlank() ? null : value;
     }
