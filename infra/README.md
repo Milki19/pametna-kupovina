@@ -37,6 +37,7 @@ Skripte:
 | `ops/backup.sh` | server (cron) | Dump baze, slanje van servera (`BACKUP_UPLOAD_URL`), brisanje starih dump-ova i cenovnika. |
 | `ops/check-import.sh` | server (cron) | Da li server odgovara i da li je današnji uvoz uspeo; poruka na `ALERT_URL`. |
 | `ops/restore.sh backups/<dump>` | server | Briše bazu i vraća je iz dump-a (traži da se upiše DA). |
+| `ops/register-chain.sh "naziv"` | Mac | Probno čita cenovnik lanca sa portala i uključuje ga u dnevni uvoz (traži admin ključ). |
 
 Memorija je podešena za Oracle ARM mašinu sa 12 GB. Za mašinu sa 4 GB
 vrednosti su u komentaru u `.env.production.example`.
