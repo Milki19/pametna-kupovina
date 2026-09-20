@@ -121,14 +121,22 @@ for trazeni in sys.argv[1:]:
     print("\n== %s (id %s)" % (kandidat.get("title") or trazeni, kandidat["id"]))
 
     proba = zovi("/api/v1/imports/catalog/%s/probe" % kandidat["id"], "POST")
-    print("   ocena: %s | redova: %s | upotrebljivo: %s%% | cena: %s%% | "
-          "barkod: %s%% | najnoviji datum: %s | cenovnika u fajlu: %d"
+    procitano = proba.get("rowsRead") or 0
+
+    # Server šalje brojeve redova, a ne procente: udeli se računaju ovde.
+    def udeo(polje):
+        if not procitano:
+            return "—"
+        return "%d%%" % round(100.0 * (proba.get(polje) or 0) / procitano)
+
+    print("   ocena: %s | redova: %s | upotrebljivo: %s | cena: %s | "
+          "barkod: %s | najnoviji datum: %s | cenovnika u fajlu: %d"
           % (
               proba.get("verdict"),
-              proba.get("rowsRead"),
-              proba.get("usableShare"),
-              proba.get("priceShare"),
-              proba.get("barcodeShare"),
+              procitano,
+              udeo("rowsUsable"),
+              udeo("rowsWithPrice"),
+              udeo("rowsWithBarcode"),
               proba.get("newestPriceDate"),
               len(proba.get("priceListNames") or []),
           ))
