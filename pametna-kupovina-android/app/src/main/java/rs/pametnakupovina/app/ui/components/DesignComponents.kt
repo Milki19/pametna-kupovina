@@ -122,13 +122,15 @@ fun AppTopBar(
     TopAppBar(
         title = {
             Column {
-                Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                // Na telefonu sa uvećanim pismom „Provera proizvoda" je bila
+                // „Provera proiz…"; naslov ekrana sme da pređe u drugi red.
+                Text(title, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 subtitle?.let {
                     Text(
                         it,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
                 }

@@ -63,7 +63,7 @@ fun FullScreenDialog(
             topBar = {
                 TopAppBar(
                     title = {
-                        Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(title, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     },
                     navigationIcon = {
                         IconButton(onClick = onDismiss) {
