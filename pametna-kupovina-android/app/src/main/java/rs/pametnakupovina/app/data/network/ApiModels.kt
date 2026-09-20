@@ -161,7 +161,9 @@ data class CanonicalProductSearchPageDto(
     val totalElements: Long,
     val totalPages: Int,
     val hasNext: Boolean,
-    val items: List<CanonicalProductSearchItemDto> = emptyList()
+    val items: List<CanonicalProductSearchItemDto> = emptyList(),
+    // Šta je zapravo traženo kad je reč bila pogrešno ukucana; null inače.
+    val correctedQuery: String? = null
 )
 
 @Serializable

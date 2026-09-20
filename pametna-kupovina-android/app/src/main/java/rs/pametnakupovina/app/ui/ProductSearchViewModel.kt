@@ -16,6 +16,7 @@ import rs.pametnakupovina.app.data.network.CanonicalProductSearchItemDto
 
 data class ProductSearchUiState(
     val query: String = "",
+    val correctedQuery: String? = null,
     val page: Int = 0,
     val isSearching: Boolean = false,
     val isLoadingMore: Boolean = false,
@@ -126,6 +127,7 @@ class ProductSearchViewModel @Inject constructor(
 
             _uiState.value = ProductSearchUiState(
                 query = query,
+                correctedQuery = response.correctedQuery,
                 includeWithoutPrice = include,
                 page = response.page,
                 results = if (append) {

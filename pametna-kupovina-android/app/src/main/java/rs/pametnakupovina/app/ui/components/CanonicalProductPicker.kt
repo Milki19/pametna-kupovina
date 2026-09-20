@@ -142,6 +142,18 @@ internal fun LazyListScope.canonicalProductPicker(
             }
     }
 
+    searchState.correctedQuery?.let { corrected ->
+        item(key = "search-corrected") {
+            Text(
+                "Nema rezultata za \u201E${searchState.query.trim()}\u201C. " +
+                    "Prikazani su rezultati za \u201E$corrected\u201C.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.testTag("search-corrected")
+            )
+        }
+    }
+
     items(
         items = searchState.results,
         key = { it.productFamilyId ?: it.canonicalProductId ?: it.name }
