@@ -101,6 +101,30 @@ public class ReceiptRepository {
                 .update();
     }
 
+    /**
+     * Ime iz QR koda je ono što je kasa upisala, a često ga i nema. Kad
+     * Poreska uprava kaže svoje, ono ga zamenjuje — ali se prazno nikad ne
+     * upisuje preko punog.
+     */
+    public void nameShop(
+            long receiptId,
+            String shopName,
+            String taxIdentificationNumber
+    ) {
+        jdbcClient.sql("""
+                        UPDATE app.receipt
+                           SET shop_name = :shop,
+                               tax_identification_number = COALESCE(
+                                   :tin, tax_identification_number
+                               )
+                         WHERE id = :receiptId
+                        """)
+                .param("receiptId", receiptId)
+                .param("shop", shopName)
+                .param("tin", taxIdentificationNumber)
+                .update();
+    }
+
     public boolean itemsAlreadyRead(long receiptId) {
         return jdbcClient.sql("""
                         SELECT items_read_at IS NOT NULL

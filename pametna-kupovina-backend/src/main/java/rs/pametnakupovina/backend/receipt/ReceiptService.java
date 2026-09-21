@@ -109,18 +109,36 @@ public class ReceiptService {
             return;
         }
 
-        receiptClient.journalOf(verificationUrl)
-                .map(journalParser::parse)
-                .ifPresent(parsed -> receiptRepository.saveItems(
+        receiptClient.fetch(verificationUrl).ifPresent(fetched -> {
+            var parsed = journalParser.parse(fetched.journal());
+
+            receiptRepository.saveItems(
+                    receiptId,
+                    parsed.items().stream()
+                            .map(item -> item.withProductFamily(
+                                    itemMatcher
+                                            .productFamilyFor(item.name())
+                                            .orElse(null)
+                            ))
+                            .toList()
+            );
+
+            // Pola računa u QR kodu uopšte ne nosi prodavnicu; Poreska uprava
+            // je uvek zna, pa se ime dopunjuje čim stigne.
+            String shopName = fetched.shopName() != null
+                    ? fetched.shopName()
+                    : parsed.shopName();
+
+            if (shopName != null && !shopName.isBlank()) {
+                receiptRepository.nameShop(
                         receiptId,
-                        parsed.items().stream()
-                                .map(item -> item.withProductFamily(
-                                        itemMatcher
-                                                .productFamilyFor(item.name())
-                                                .orElse(null)
-                                ))
-                                .toList()
-                ));
+                        shopName,
+                        fetched.taxIdentificationNumber() != null
+                                ? fetched.taxIdentificationNumber()
+                                : parsed.taxIdentificationNumber()
+                );
+            }
+        });
     }
 
     /** Šta kupac obično kupuje — ono što računi znaju, a spisak ne. */
