@@ -72,11 +72,12 @@ public class ReceiptRepository {
             jdbcClient.sql("""
                             INSERT INTO app.receipt_item (
                                 receipt_id, line_number, name, quantity,
-                                unit_of_measure, unit_price, total_price
+                                unit_of_measure, unit_price, total_price,
+                                product_family_id
                             )
                             VALUES (
                                 :receiptId, :line, :name, :quantity,
-                                :unit, :unitPrice, :total
+                                :unit, :unitPrice, :total, :familyId
                             )
                             ON CONFLICT (receipt_id, line_number) DO NOTHING
                             """)
@@ -87,6 +88,7 @@ public class ReceiptRepository {
                     .param("unit", item.unitOfMeasure())
                     .param("unitPrice", item.unitPrice())
                     .param("total", item.totalPrice())
+                    .param("familyId", item.productFamilyId())
                     .update();
         }
 
@@ -169,7 +171,7 @@ public class ReceiptRepository {
     private List<Receipt.ReceiptItem> itemsOf(long receiptId) {
         return jdbcClient.sql("""
                         SELECT line_number, name, quantity, unit_of_measure,
-                               unit_price, total_price
+                               unit_price, total_price, product_family_id
                         FROM app.receipt_item
                         WHERE receipt_id = :receiptId
                         ORDER BY line_number
@@ -181,7 +183,43 @@ public class ReceiptRepository {
                         resultSet.getBigDecimal("quantity"),
                         resultSet.getString("unit_of_measure"),
                         resultSet.getBigDecimal("unit_price"),
-                        resultSet.getBigDecimal("total_price")
+                        resultSet.getBigDecimal("total_price"),
+                        resultSet.getObject("product_family_id", Long.class)
+                ))
+                .list();
+    }
+
+    /**
+     * Šta kupac zaista kupuje, po broju puta. Računa se po proizvodu, ne po
+     * nazivu sa kase, jer isti jogurt u dva lanca ima dva imena.
+     */
+    public List<Habit> whatTheyBuy(long accountId, int limit) {
+        return jdbcClient.sql("""
+                        SELECT item.product_family_id,
+                               COALESCE(
+                                   family.composed_name, family.display_name
+                               ) AS name,
+                               COUNT(DISTINCT receipt.id) AS times,
+                               MAX(receipt.issued_at) AS last_bought
+                        FROM app.receipt_item AS item
+                        JOIN app.receipt AS receipt
+                          ON receipt.id = item.receipt_id
+                        JOIN app.product_family AS family
+                          ON family.id = item.product_family_id
+                        WHERE receipt.account_id = :accountId
+                          AND item.product_family_id IS NOT NULL
+                        GROUP BY item.product_family_id, name
+                        ORDER BY times DESC, last_bought DESC
+                        LIMIT :limit
+                        """)
+                .param("accountId", accountId)
+                .param("limit", limit)
+                .query((resultSet, rowNumber) -> new Habit(
+                        resultSet.getLong("product_family_id"),
+                        resultSet.getString("name"),
+                        resultSet.getInt("times"),
+                        resultSet.getObject("last_bought", java.time.OffsetDateTime.class)
+                                .toInstant()
                 ))
                 .list();
     }
@@ -234,6 +272,18 @@ public class ReceiptRepository {
                                 .toInstant()
                 ))
                 .list();
+    }
+
+    /**
+     * @param times koliko različitih računa sadrži taj proizvod; dve kutije
+     *              na istom računu su i dalje jedna kupovina
+     */
+    public record Habit(
+            long productFamilyId,
+            String name,
+            int times,
+            Instant lastBought
+    ) {
     }
 
     public record MonthlySpending(

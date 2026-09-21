@@ -20,6 +20,7 @@ public class ReceiptService {
     private static final int MOST_RECEIPTS = 200;
     private static final int MOST_MONTHS = 24;
     private static final int MOST_SHOPS = 20;
+    private static final int MOST_HABITS = 50;
     private static final String SHOP_UNKNOWN = "Nepoznata prodavnica";
 
     private final ReceiptRepository receiptRepository;
@@ -28,6 +29,7 @@ public class ReceiptService {
     private final FiscalVerificationUrlReader verificationUrlReader;
     private final FiscalReceiptClient receiptClient;
     private final FiscalReceiptJournalParser journalParser;
+    private final ReceiptItemMatcher itemMatcher;
 
     public ReceiptService(
             ReceiptRepository receiptRepository,
@@ -35,7 +37,8 @@ public class ReceiptService {
             ShoppingListClientTokenPolicy clientTokenPolicy,
             FiscalVerificationUrlReader verificationUrlReader,
             FiscalReceiptClient receiptClient,
-            FiscalReceiptJournalParser journalParser
+            FiscalReceiptJournalParser journalParser,
+            ReceiptItemMatcher itemMatcher
     ) {
         this.receiptRepository = receiptRepository;
         this.accountRepository = accountRepository;
@@ -43,6 +46,7 @@ public class ReceiptService {
         this.verificationUrlReader = verificationUrlReader;
         this.receiptClient = receiptClient;
         this.journalParser = journalParser;
+        this.itemMatcher = itemMatcher;
     }
 
     @Transactional
@@ -107,8 +111,24 @@ public class ReceiptService {
 
         receiptClient.journalOf(verificationUrl)
                 .map(journalParser::parse)
-                .ifPresent(parsed ->
-                        receiptRepository.saveItems(receiptId, parsed.items()));
+                .ifPresent(parsed -> receiptRepository.saveItems(
+                        receiptId,
+                        parsed.items().stream()
+                                .map(item -> item.withProductFamily(
+                                        itemMatcher
+                                                .productFamilyFor(item.name())
+                                                .orElse(null)
+                                ))
+                                .toList()
+                ));
+    }
+
+    /** Šta kupac obično kupuje — ono što računi znaju, a spisak ne. */
+    public List<ReceiptRepository.Habit> habits(String clientToken, int limit) {
+        return receiptRepository.whatTheyBuy(
+                accountFor(clientToken),
+                Math.clamp(limit, 1, MOST_HABITS)
+        );
     }
 
     private long accountFor(String clientToken) {

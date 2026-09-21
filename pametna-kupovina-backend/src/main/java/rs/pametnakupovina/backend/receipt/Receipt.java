@@ -19,13 +19,25 @@ public record Receipt(
         List<ReceiptItem> items
 ) {
 
+    /**
+     * @param productFamilyId proizvod iz kataloga kad se naziv sa kase sigurno
+     *                        poklopi sa njim; prazno je i uobičajeno i u redu
+     */
     public record ReceiptItem(
             int lineNumber,
             String name,
             BigDecimal quantity,
             String unitOfMeasure,
             BigDecimal unitPrice,
-            BigDecimal totalPrice
+            BigDecimal totalPrice,
+            Long productFamilyId
     ) {
+
+        public ReceiptItem withProductFamily(Long productFamilyId) {
+            return new ReceiptItem(
+                    lineNumber, name, quantity, unitOfMeasure,
+                    unitPrice, totalPrice, productFamilyId
+            );
+        }
     }
 }
