@@ -9,6 +9,8 @@ import retrofit2.HttpException
 import rs.pametnakupovina.app.data.local.DraftItemDao
 import rs.pametnakupovina.app.data.local.DraftItemEntity
 import rs.pametnakupovina.app.data.local.SyncState
+import rs.pametnakupovina.app.data.network.AccountStateDto
+import rs.pametnakupovina.app.data.network.GoogleSignInRequestDto
 import rs.pametnakupovina.app.data.network.ProductCandidateDto
 import rs.pametnakupovina.app.data.network.AddShoppingListItemRequestDto
 import rs.pametnakupovina.app.data.network.CanonicalProductSearchPageDto
@@ -132,6 +134,11 @@ class ShoppingRepository @Inject constructor(
     private val syncMutex = Mutex()
 
     val draftItems: Flow<List<DraftItemEntity>> = dao.observeVisibleItems()
+
+    suspend fun accountState(): AccountStateDto = api.getAccount()
+
+    suspend fun signInWithGoogle(idToken: String): AccountStateDto =
+        api.signInWithGoogle(GoogleSignInRequestDto(idToken))
 
     suspend fun searchProducts(
         query: String,

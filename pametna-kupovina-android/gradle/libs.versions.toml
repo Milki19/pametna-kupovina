@@ -18,10 +18,15 @@ dataStore = "1.2.1"
 graphicsPath = "1.1.0"
 work = "2.10.5"
 kotlinxSerialization = "1.9.0"
+credentials = "1.6.0"
+googleIdentity = "1.1.1"
 playServicesLocation = "21.4.0"
 mapsCompose = "6.12.0"
 
 [libraries]
+androidx-credentials = { group = "androidx.credentials", name = "credentials", version.ref = "credentials" }
+androidx-credentials-play-services-auth = { group = "androidx.credentials", name = "credentials-play-services-auth", version.ref = "credentials" }
+google-identity-googleid = { group = "com.google.android.libraries.identity.googleid", name = "googleid", version.ref = "googleIdentity" }
 androidx-graphics-path = { group = "androidx.graphics", name = "graphics-path", version.ref = "graphicsPath" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
