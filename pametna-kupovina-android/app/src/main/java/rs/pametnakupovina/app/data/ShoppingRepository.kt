@@ -10,6 +10,9 @@ import rs.pametnakupovina.app.data.local.DraftItemDao
 import rs.pametnakupovina.app.data.local.DraftItemEntity
 import rs.pametnakupovina.app.data.local.SyncState
 import rs.pametnakupovina.app.data.network.AccountStateDto
+import rs.pametnakupovina.app.data.network.ReceiptDto
+import rs.pametnakupovina.app.data.network.ScanReceiptRequestDto
+import rs.pametnakupovina.app.data.network.SpendingDto
 import rs.pametnakupovina.app.data.network.GoogleSignInRequestDto
 import rs.pametnakupovina.app.data.network.ProductCandidateDto
 import rs.pametnakupovina.app.data.network.AddShoppingListItemRequestDto
@@ -134,6 +137,14 @@ class ShoppingRepository @Inject constructor(
     private val syncMutex = Mutex()
 
     val draftItems: Flow<List<DraftItemEntity>> = dao.observeVisibleItems()
+
+    suspend fun scanReceipt(verificationUrl: String): ReceiptDto =
+        api.scanReceipt(ScanReceiptRequestDto(verificationUrl))
+
+    suspend fun receipts(limit: Int = 50): List<ReceiptDto> =
+        api.getReceipts(limit)
+
+    suspend fun spending(): SpendingDto = api.getSpending()
 
     suspend fun accountState(): AccountStateDto = api.getAccount()
 

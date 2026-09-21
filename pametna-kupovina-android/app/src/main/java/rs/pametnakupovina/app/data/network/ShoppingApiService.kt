@@ -26,6 +26,19 @@ interface ShoppingApiService {
         @Query("historyLimit") historyLimit: Int = 30
     ): CanonicalProductDetailsDto
 
+    @POST("api/v1/receipts")
+    suspend fun scanReceipt(
+        @Body request: ScanReceiptRequestDto
+    ): ReceiptDto
+
+    @GET("api/v1/receipts")
+    suspend fun getReceipts(
+        @Query("limit") limit: Int = 50
+    ): List<ReceiptDto>
+
+    @GET("api/v1/receipts/spending")
+    suspend fun getSpending(): SpendingDto
+
     @GET("api/v1/accounts/me")
     suspend fun getAccount(): AccountStateDto
 

@@ -154,6 +154,53 @@ data class ProductRetailerAvailabilityDto(
 )
 
 @Serializable
+data class ReceiptDto(
+    val id: Long,
+    val invoiceNumber: String,
+    val shopName: String,
+    val issuedAt: String,
+    val totalAmount: Double,
+    val itemsRead: Boolean = false,
+    val items: List<ReceiptItemDto> = emptyList()
+)
+
+@Serializable
+data class ReceiptItemDto(
+    val lineNumber: Int,
+    val name: String,
+    val quantity: Double,
+    val unitOfMeasure: String? = null,
+    val unitPrice: Double? = null,
+    val totalPrice: Double
+)
+
+@Serializable
+data class ScanReceiptRequestDto(
+    val verificationUrl: String
+)
+
+@Serializable
+data class MonthlySpendingDto(
+    val month: String,
+    val spent: Double,
+    val receipts: Int
+)
+
+@Serializable
+data class ShopSpendingDto(
+    val shopName: String,
+    val spent: Double,
+    val receipts: Int,
+    val lastVisit: String
+)
+
+@Serializable
+data class SpendingDto(
+    val byMonth: List<MonthlySpendingDto> = emptyList(),
+    val byShop: List<ShopSpendingDto> = emptyList()
+)
+
+@Serializable
 data class AccountStateDto(
     val signedIn: Boolean = false
 )
