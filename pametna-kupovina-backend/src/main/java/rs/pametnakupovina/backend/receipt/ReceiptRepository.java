@@ -60,6 +60,56 @@ public class ReceiptRepository {
                 .single();
     }
 
+    /**
+     * Stavke se upisuju jednom; drugo skeniranje istog računa ih ne duplira.
+     */
+    public void saveItems(long receiptId, List<Receipt.ReceiptItem> items) {
+        if (items.isEmpty()) {
+            return;
+        }
+
+        for (Receipt.ReceiptItem item : items) {
+            jdbcClient.sql("""
+                            INSERT INTO app.receipt_item (
+                                receipt_id, line_number, name, quantity,
+                                unit_of_measure, unit_price, total_price
+                            )
+                            VALUES (
+                                :receiptId, :line, :name, :quantity,
+                                :unit, :unitPrice, :total
+                            )
+                            ON CONFLICT (receipt_id, line_number) DO NOTHING
+                            """)
+                    .param("receiptId", receiptId)
+                    .param("line", item.lineNumber())
+                    .param("name", item.name())
+                    .param("quantity", item.quantity())
+                    .param("unit", item.unitOfMeasure())
+                    .param("unitPrice", item.unitPrice())
+                    .param("total", item.totalPrice())
+                    .update();
+        }
+
+        jdbcClient.sql("""
+                        UPDATE app.receipt
+                           SET items_read_at = NOW()
+                         WHERE id = :receiptId
+                        """)
+                .param("receiptId", receiptId)
+                .update();
+    }
+
+    public boolean itemsAlreadyRead(long receiptId) {
+        return jdbcClient.sql("""
+                        SELECT items_read_at IS NOT NULL
+                        FROM app.receipt WHERE id = :receiptId
+                        """)
+                .param("receiptId", receiptId)
+                .query(Boolean.class)
+                .optional()
+                .orElse(false);
+    }
+
     public List<Receipt> findAll(long accountId, int limit) {
         return jdbcClient.sql("""
                         SELECT id, verification_key, shop_name, issued_at,
