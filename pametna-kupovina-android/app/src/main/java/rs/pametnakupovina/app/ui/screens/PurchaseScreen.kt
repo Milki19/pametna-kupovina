@@ -57,6 +57,9 @@ import rs.pametnakupovina.app.data.purchase.validatePurchaseProgress
 import rs.pametnakupovina.app.navigation.NavigationPoint
 import rs.pametnakupovina.app.navigation.googleMapsDirectionsUrl
 import rs.pametnakupovina.app.navigation.launchGoogleMapsDirections
+import rs.pametnakupovina.app.data.network.MonthlySpendingDto
+import rs.pametnakupovina.app.data.network.ReceiptDto
+import rs.pametnakupovina.app.ui.ReceiptViewModel
 import rs.pametnakupovina.app.ui.PurchaseViewModel
 import rs.pametnakupovina.app.ui.components.AppIcon
 import rs.pametnakupovina.app.ui.components.AppSpacing
@@ -97,9 +100,12 @@ private fun PurchaseHistory(
     sessions: List<PurchaseSessionSummary>,
     message: String?,
     onBack: () -> Unit,
-    onOpen: (String) -> Unit
+    onOpen: (String) -> Unit,
+    receiptViewModel: ReceiptViewModel = hiltViewModel()
 ) {
     val (active, finished) = sessions.partition { it.archivedAt == null }
+    val receipts by receiptViewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     Scaffold(topBar = { AppTopBar(title = "Kupovine", onBack = onBack) }) { padding ->
         LazyColumn(
             modifier = Modifier
@@ -116,6 +122,30 @@ private fun PurchaseHistory(
         ) {
             message?.let {
                 item(key = "message") { NoticeBanner(text = it, tone = StatusTone.ERROR) }
+            }
+            receipts.message?.let {
+                item(key = "receipt-message") {
+                    NoticeBanner(
+                        text = it,
+                        tone = StatusTone.NEUTRAL,
+                        actionLabel = "U redu",
+                        onAction = receiptViewModel::dismissMessage
+                    )
+                }
+            }
+            item(key = "scan") {
+                SpendingCard(
+                    byMonth = receipts.byMonth,
+                    receiptCount = receipts.receipts.size,
+                    scanning = receipts.scanning,
+                    onScan = { receiptViewModel.scan(context) }
+                )
+            }
+            if (receipts.receipts.isNotEmpty()) {
+                item(key = "receipts-header") {
+                    SectionHeader("Računi", trailing = receipts.receipts.size.toString())
+                }
+                item(key = "receipts") { ReceiptGroup(receipts.receipts) }
             }
             if (sessions.isEmpty()) {
                 item(key = "empty") { EmptyPurchases() }
@@ -134,14 +164,128 @@ private fun PurchaseHistory(
             }
             item(key = "storage-note") {
                 Text(
-                    "Planovi i napredak su sačuvani na ovom telefonu i rade bez mreže. " +
-                        "Brisanje podataka aplikacije briše i ovu istoriju.",
+                    "Planovi i napredak su na ovom telefonu i rade bez mreže; " +
+                        "brisanje podataka aplikacije briše i njih. Skenirani " +
+                        "računi stoje uz nalog, pa ostaju i kad promeniš telefon.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
     }
+}
+
+/**
+ * Potrošnja i dugme za skeniranje stoje zajedno: broj bez načina da mu se
+ * doda sledeći račun je samo broj.
+ */
+@Composable
+private fun SpendingCard(
+    byMonth: List<MonthlySpendingDto>,
+    receiptCount: Int,
+    scanning: Boolean,
+    onScan: () -> Unit
+) {
+    Surface(
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(AppSpacing.lg),
+            verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)
+        ) {
+            val thisMonth = byMonth.firstOrNull()
+
+            if (thisMonth == null) {
+                Text("Potrošnja", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Skeniraj račun posle kupovine pa ćeš ovde videti koliko " +
+                        "je otišlo i gde.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                Text(
+                    monthName(thisMonth.month),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    money(thisMonth.spent),
+                    style = MaterialTheme.typography.headlineSmall
+                )
+                Text(
+                    counted(receiptCount, "račun", "računa", "računa"),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            OutlinedButton(
+                enabled = !scanning,
+                onClick = onScan,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("scan-receipt")
+            ) {
+                Text(if (scanning) "Skeniram…" else "Skeniraj račun")
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReceiptGroup(receipts: List<ReceiptDto>) {
+    Surface(
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column {
+            receipts.forEachIndexed { index, receipt ->
+                if (index > 0) {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = AppSpacing.lg)
+                    )
+                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(AppSpacing.lg)
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            receipt.shopName,
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                        Text(
+                            date(receipt.issuedAt),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Text(
+                        money(receipt.totalAmount),
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** „2026-09-01" postaje „septembar 2026.". */
+private fun monthName(isoMonth: String): String = try {
+    val date = java.time.LocalDate.parse(isoMonth)
+    val names = listOf(
+        "januar", "februar", "mart", "april", "maj", "jun",
+        "jul", "avgust", "septembar", "oktobar", "novembar", "decembar"
+    )
+    "${names[date.monthValue - 1]} ${date.year}."
+} catch (invalid: Exception) {
+    isoMonth
 }
 
 @Composable
