@@ -26,17 +26,23 @@ public class ReceiptService {
     private final AccountRepository accountRepository;
     private final ShoppingListClientTokenPolicy clientTokenPolicy;
     private final FiscalVerificationUrlReader verificationUrlReader;
+    private final FiscalReceiptClient receiptClient;
+    private final FiscalReceiptJournalParser journalParser;
 
     public ReceiptService(
             ReceiptRepository receiptRepository,
             AccountRepository accountRepository,
             ShoppingListClientTokenPolicy clientTokenPolicy,
-            FiscalVerificationUrlReader verificationUrlReader
+            FiscalVerificationUrlReader verificationUrlReader,
+            FiscalReceiptClient receiptClient,
+            FiscalReceiptJournalParser journalParser
     ) {
         this.receiptRepository = receiptRepository;
         this.accountRepository = accountRepository;
         this.clientTokenPolicy = clientTokenPolicy;
         this.verificationUrlReader = verificationUrlReader;
+        this.receiptClient = receiptClient;
+        this.journalParser = journalParser;
     }
 
     @Transactional
@@ -55,6 +61,8 @@ public class ReceiptService {
                 verificationUrl.strip(),
                 shopName
         );
+
+        readItems(receiptId, verificationUrl.strip());
 
         return receiptRepository.findById(accountId, receiptId)
                 .orElseThrow(() -> new ResponseStatusException(
@@ -85,6 +93,22 @@ public class ReceiptService {
                 receiptRepository.spendingByMonth(accountId, MOST_MONTHS),
                 receiptRepository.spendingByShop(accountId, MOST_SHOPS)
         );
+    }
+
+    /**
+     * Stavke su jedino zbog čega se Poreska uprava uopšte zove. Ako ne
+     * odgovori, račun ostaje zaveden sa onim što je bilo u QR kodu — gde,
+     * kada i koliko — a stavke mogu da stignu kasnije.
+     */
+    private void readItems(long receiptId, String verificationUrl) {
+        if (receiptRepository.itemsAlreadyRead(receiptId)) {
+            return;
+        }
+
+        receiptClient.journalOf(verificationUrl)
+                .map(journalParser::parse)
+                .ifPresent(parsed ->
+                        receiptRepository.saveItems(receiptId, parsed.items()));
     }
 
     private long accountFor(String clientToken) {
