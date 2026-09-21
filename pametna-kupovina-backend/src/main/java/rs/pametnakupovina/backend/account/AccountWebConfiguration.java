@@ -23,7 +23,8 @@ public class AccountWebConfiguration implements WebMvcConfigurer {
                         "/api/v1/shopping-lists/**",
                         "/api/v1/products/match-decisions/**",
                         "/api/v1/products/reports/**",
-                        "/api/v1/receipts/**"
+                        "/api/v1/receipts/**",
+                        "/api/v1/loyalty-cards/**"
                 );
     }
 }

@@ -62,6 +62,7 @@ import rs.pametnakupovina.backend.shoppinglist.ShoppingListMatchingService;
 import rs.pametnakupovina.backend.shoppinglist.ShoppingListResponse;
 import rs.pametnakupovina.backend.shoppinglist.ShoppingListService;
 import rs.pametnakupovina.backend.account.AccountSignInService;
+import rs.pametnakupovina.backend.loyalty.LoyaltyCardService;
 import rs.pametnakupovina.backend.receipt.ReceiptService;
 import rs.pametnakupovina.backend.account.GoogleIdentityVerifier;
 import rs.pametnakupovina.backend.shoppinglist.ShoppingListSummary;
@@ -248,6 +249,9 @@ class PametnaKupovinaBackendApplicationTests {
     private ReceiptService receiptService;
 
     @Autowired
+    private LoyaltyCardService loyaltyCardService;
+
+    @Autowired
     private ShoppingListMatchingService shoppingListMatchingService;
 
     @Autowired
@@ -344,6 +348,7 @@ class PametnaKupovinaBackendApplicationTests {
     void cleanBusinessData() {
         jdbcClient.sql("""
                         TRUNCATE TABLE
+                            app.loyalty_card,
                             app.receipt_item,
                             app.receipt,
                             app.product_merge_suggestion,
@@ -4618,6 +4623,44 @@ class PametnaKupovinaBackendApplicationTests {
 
         // Tuđi telefon ne vidi ništa od toga.
         assertThat(receiptService.history("drugi-telefon", 50)).isEmpty();
+    }
+
+    /**
+     * Gomila plastike ostaje kod kuće, ali broj sa kartice mora da izađe pred
+     * kasirku tačno onakav kakav je odštampan.
+     */
+    @Test
+    void aLoyaltyCardIsKeptForTheTillAndNeverShownToAnotherPhone() {
+        var card = loyaltyCardService.add(
+                "telefon-kartica", "Super Kartica", "6108560008584550", "EAN_13");
+
+        assertThat(card.cardNumber()).isEqualTo("6108560008584550");
+        assertThat(card.barcodeFormat()).isEqualTo("EAN_13");
+
+        // Ista kartica dodata dvaput je i dalje jedna, samo osveženog naziva.
+        var again = loyaltyCardService.add(
+                "telefon-kartica", "Super kartica (žena)", "6108560008584550", "EAN_13");
+        assertThat(again.id()).isEqualTo(card.id());
+        assertThat(loyaltyCardService.cards("telefon-kartica"))
+                .singleElement()
+                .satisfies(only ->
+                        assertThat(only.name()).isEqualTo("Super kartica (žena)"));
+
+        assertThat(loyaltyCardService.cards("drugi-telefon")).isEmpty();
+        assertThatThrownBy(() ->
+                loyaltyCardService.remove("drugi-telefon", card.id()))
+                .hasMessageContaining("404");
+
+        // Prazan broj i oblik koda koji nijedna kasa ne čita se odbijaju.
+        assertThatThrownBy(() ->
+                loyaltyCardService.add("telefon-kartica", "Prazna", "   ", "EAN_13"))
+                .hasMessageContaining("ne sme biti prazan");
+        assertThatThrownBy(() ->
+                loyaltyCardService.add("telefon-kartica", "Čudna", "123456", "MAGIJA"))
+                .hasMessageContaining("Nepoznat oblik");
+
+        loyaltyCardService.remove("telefon-kartica", card.id());
+        assertThat(loyaltyCardService.cards("telefon-kartica")).isEmpty();
     }
 
     @Test

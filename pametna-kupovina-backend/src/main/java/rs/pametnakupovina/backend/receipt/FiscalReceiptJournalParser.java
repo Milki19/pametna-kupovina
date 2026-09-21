@@ -149,7 +149,8 @@ public class FiscalReceiptJournalParser {
                     number(amounts.group(2)),
                     null,
                     number(amounts.group(1)),
-                    number(amounts.group(3))
+                    number(amounts.group(3)),
+                    null
             ));
             name.setLength(0);
         }

@@ -47,6 +47,14 @@ public class ReceiptController {
         return receiptService.spending(clientToken);
     }
 
+    @GetMapping("/habits")
+    public List<ReceiptRepository.Habit> habits(
+            @RequestHeader(CLIENT_TOKEN_HEADER) String clientToken,
+            @RequestParam(name = "limit", defaultValue = "20") int limit
+    ) {
+        return receiptService.habits(clientToken, limit);
+    }
+
     @GetMapping("/{receiptId}")
     public Receipt one(
             @RequestHeader(CLIENT_TOKEN_HEADER) String clientToken,
