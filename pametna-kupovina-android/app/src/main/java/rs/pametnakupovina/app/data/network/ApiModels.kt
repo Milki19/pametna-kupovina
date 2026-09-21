@@ -154,6 +154,16 @@ data class ProductRetailerAvailabilityDto(
 )
 
 @Serializable
+data class AccountStateDto(
+    val signedIn: Boolean = false
+)
+
+@Serializable
+data class GoogleSignInRequestDto(
+    val idToken: String
+)
+
+@Serializable
 data class CanonicalProductSearchPageDto(
     val query: String,
     val page: Int,

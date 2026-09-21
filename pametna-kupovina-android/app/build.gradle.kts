@@ -33,6 +33,13 @@ val backendBaseUrl = configuredValue(
 )
     .let { if (it.endsWith('/')) it else "$it/" }
 
+// Web OAuth klijent iz Google Cloud-a. Nije tajna: po njemu Google zna kom
+// serveru izdaje token, a server prima samo tokene izdate baš njemu.
+val googleClientId = configuredValue(
+    "GOOGLE_CLIENT_ID",
+    "1064409596151-2urs62fuq3udekpl4b18omirhhe5j08t.apps.googleusercontent.com"
+)
+
 // Release signing key, kept outside Git (see infra/ORACLE.md). Without the file
 // the release APK is built unsigned.
 val keystoreProperties = Properties()
@@ -70,6 +77,11 @@ android {
             "String",
             "BACKEND_BASE_URL",
             backendBaseUrl.asBuildConfigString()
+        )
+        buildConfigField(
+            "String",
+            "GOOGLE_CLIENT_ID",
+            googleClientId.asBuildConfigString()
         )
         manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
     }
@@ -167,6 +179,9 @@ dependencies {
 
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.androidx.hilt.work)
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services.auth)
+    implementation(libs.google.identity.googleid)
     ksp(libs.androidx.hilt.compiler)
 
     testImplementation(libs.junit)

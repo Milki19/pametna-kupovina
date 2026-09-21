@@ -26,6 +26,14 @@ interface ShoppingApiService {
         @Query("historyLimit") historyLimit: Int = 30
     ): CanonicalProductDetailsDto
 
+    @GET("api/v1/accounts/me")
+    suspend fun getAccount(): AccountStateDto
+
+    @POST("api/v1/accounts/sign-in/google")
+    suspend fun signInWithGoogle(
+        @Body request: GoogleSignInRequestDto
+    ): AccountStateDto
+
     @POST("api/v1/shopping-lists")
     suspend fun createShoppingList(
         @Body request: CreateShoppingListRequestDto
