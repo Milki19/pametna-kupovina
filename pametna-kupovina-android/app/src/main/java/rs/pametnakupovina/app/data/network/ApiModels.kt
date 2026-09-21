@@ -154,6 +154,29 @@ data class ProductRetailerAvailabilityDto(
 )
 
 @Serializable
+data class LoyaltyCardDto(
+    val id: Long,
+    val name: String,
+    val cardNumber: String,
+    val barcodeFormat: String
+)
+
+@Serializable
+data class AddLoyaltyCardRequestDto(
+    val name: String,
+    val cardNumber: String,
+    val barcodeFormat: String
+)
+
+@Serializable
+data class HabitDto(
+    val productFamilyId: Long,
+    val name: String,
+    val times: Int,
+    val lastBought: String
+)
+
+@Serializable
 data class ReceiptDto(
     val id: Long,
     val invoiceNumber: String,

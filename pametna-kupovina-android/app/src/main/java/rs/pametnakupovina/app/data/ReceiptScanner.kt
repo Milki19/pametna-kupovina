@@ -57,6 +57,55 @@ class ReceiptScanner @Inject constructor() {
     }
 }
 
+/** Kod sa kartice lojalnosti: bilo koji oblik koji kasa ume da odštampa. */
+data class ScannedBarcode(val value: String, val format: String)
+
+@Singleton
+class BarcodeScanner @Inject constructor() {
+
+    suspend fun anyBarcode(activityContext: Context): ScannedBarcode {
+        val scanner = GmsBarcodeScanning.getClient(activityContext)
+
+        val barcode = try {
+            scanner.startScan().awaitBarcode()
+        } catch (failure: MlKitException) {
+            if (failure.errorCode == MlKitException.CODE_SCANNER_CANCELLED) {
+                throw ScanCancelled()
+            }
+            throw failure
+        } ?: throw ScanCancelled()
+
+        val value = barcode.rawValue?.trim().orEmpty()
+
+        if (value.isEmpty()) {
+            throw ScanCancelled()
+        }
+
+        return ScannedBarcode(value, zxingName(barcode.format))
+    }
+
+    /** ML Kit broji oblike svojim brojevima; ZXing ih crta po imenu. */
+    private fun zxingName(format: Int): String = when (format) {
+        Barcode.FORMAT_EAN_13 -> "EAN_13"
+        Barcode.FORMAT_EAN_8 -> "EAN_8"
+        Barcode.FORMAT_UPC_A -> "UPC_A"
+        Barcode.FORMAT_UPC_E -> "UPC_E"
+        Barcode.FORMAT_CODE_39 -> "CODE_39"
+        Barcode.FORMAT_ITF -> "ITF"
+        Barcode.FORMAT_CODABAR -> "CODABAR"
+        Barcode.FORMAT_QR_CODE -> "QR_CODE"
+        Barcode.FORMAT_PDF417 -> "PDF417"
+        else -> "CODE_128"
+    }
+}
+
+private suspend fun Task<Barcode>.awaitBarcode(): Barcode? =
+    suspendCoroutine { waiting ->
+        addOnSuccessListener { barcode -> waiting.resume(barcode) }
+        addOnCanceledListener { waiting.resumeWithException(ScanCancelled()) }
+        addOnFailureListener { failure -> waiting.resumeWithException(failure) }
+    }
+
 private suspend fun Task<Barcode>.await(): String? = suspendCoroutine { waiting ->
     addOnSuccessListener { barcode -> waiting.resume(barcode?.rawValue) }
     addOnCanceledListener { waiting.resumeWithException(ScanCancelled()) }

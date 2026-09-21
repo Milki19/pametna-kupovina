@@ -10,6 +10,9 @@ import rs.pametnakupovina.app.data.local.DraftItemDao
 import rs.pametnakupovina.app.data.local.DraftItemEntity
 import rs.pametnakupovina.app.data.local.SyncState
 import rs.pametnakupovina.app.data.network.AccountStateDto
+import rs.pametnakupovina.app.data.network.AddLoyaltyCardRequestDto
+import rs.pametnakupovina.app.data.network.HabitDto
+import rs.pametnakupovina.app.data.network.LoyaltyCardDto
 import rs.pametnakupovina.app.data.network.ReceiptDto
 import rs.pametnakupovina.app.data.network.ScanReceiptRequestDto
 import rs.pametnakupovina.app.data.network.SpendingDto
@@ -137,6 +140,20 @@ class ShoppingRepository @Inject constructor(
     private val syncMutex = Mutex()
 
     val draftItems: Flow<List<DraftItemEntity>> = dao.observeVisibleItems()
+
+    suspend fun loyaltyCards(): List<LoyaltyCardDto> = api.getLoyaltyCards()
+
+    suspend fun addLoyaltyCard(
+        name: String,
+        cardNumber: String,
+        barcodeFormat: String
+    ): LoyaltyCardDto = api.addLoyaltyCard(
+        AddLoyaltyCardRequestDto(name, cardNumber, barcodeFormat)
+    )
+
+    suspend fun deleteLoyaltyCard(cardId: Long) = api.deleteLoyaltyCard(cardId)
+
+    suspend fun habits(limit: Int = 20): List<HabitDto> = api.getHabits(limit)
 
     suspend fun scanReceipt(verificationUrl: String): ReceiptDto =
         api.scanReceipt(ScanReceiptRequestDto(verificationUrl))
