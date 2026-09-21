@@ -208,7 +208,9 @@ public class ReceiptRepository {
                           ON family.id = item.product_family_id
                         WHERE receipt.account_id = :accountId
                           AND item.product_family_id IS NOT NULL
-                        GROUP BY item.product_family_id, name
+                        GROUP BY item.product_family_id,
+                                 family.composed_name,
+                                 family.display_name
                         ORDER BY times DESC, last_bought DESC
                         LIMIT :limit
                         """)

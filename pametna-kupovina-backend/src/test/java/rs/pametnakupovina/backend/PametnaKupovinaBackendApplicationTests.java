@@ -4623,6 +4623,11 @@ class PametnaKupovinaBackendApplicationTests {
 
         // Tuđi telefon ne vidi ništa od toga.
         assertThat(receiptService.history("drugi-telefon", 50)).isEmpty();
+
+        // Navike se čitaju i kad ih još nema: prazno, bez greške. Ovaj poziv
+        // je falio, pa je upit sa greškom u grupisanju stigao na server.
+        assertThat(receiptService.habits("telefon-racun", 20)).isEmpty();
+        assertThat(receiptService.habits("drugi-telefon", 20)).isEmpty();
     }
 
     /**
@@ -4791,6 +4796,15 @@ class PametnaKupovinaBackendApplicationTests {
                 .getFirst();
 
         assertThat(chosen.productName()).isEqualTo("BETA mleko 2,8%mm 1l");
+
+        // Isto to, ispisano kao „šta obično kupuješ".
+        assertThat(receiptService.habits("telefon-navika", 20))
+                .singleElement()
+                .satisfies(habit -> {
+                    assertThat(habit.productFamilyId()).isEqualTo(betaFamily);
+                    assertThat(habit.name()).containsIgnoringCase("beta");
+                    assertThat(habit.times()).isEqualTo(1);
+                });
 
         // A kad njegovo mleko poskupi, plan ga napušta bez oklevanja.
         jdbcClient.sql("""
