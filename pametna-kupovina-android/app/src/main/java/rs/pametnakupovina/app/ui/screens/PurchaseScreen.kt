@@ -81,6 +81,7 @@ fun PurchaseScreen(
     sessionId: String? = null,
     onBack: () -> Unit,
     onOpen: (String) -> Unit,
+    onOpenCards: () -> Unit = {},
     viewModel: PurchaseViewModel = hiltViewModel()
 ) {
     val sessions by viewModel.sessions.collectAsStateWithLifecycle()
@@ -89,7 +90,7 @@ fun PurchaseScreen(
     LaunchedEffect(sessionId) { sessionId?.let(viewModel::load) }
 
     if (sessionId == null) {
-        PurchaseHistory(sessions, message, onBack, onOpen)
+        PurchaseHistory(sessions, message, onBack, onOpen, onOpenCards)
     } else {
         PurchaseInProgress(session, message, onBack, viewModel)
     }
@@ -101,6 +102,7 @@ private fun PurchaseHistory(
     message: String?,
     onBack: () -> Unit,
     onOpen: (String) -> Unit,
+    onOpenCards: () -> Unit,
     receiptViewModel: ReceiptViewModel = hiltViewModel()
 ) {
     val (active, finished) = sessions.partition { it.archivedAt == null }
@@ -131,6 +133,14 @@ private fun PurchaseHistory(
                         actionLabel = "U redu",
                         onAction = receiptViewModel::dismissMessage
                     )
+                }
+            }
+            item(key = "cards") {
+                OutlinedButton(
+                    onClick = onOpenCards,
+                    modifier = Modifier.fillMaxWidth().testTag("open-cards")
+                ) {
+                    Text("Lojalti kartice")
                 }
             }
             item(key = "scan") {

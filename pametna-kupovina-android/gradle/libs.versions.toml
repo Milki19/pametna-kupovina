@@ -21,12 +21,14 @@ kotlinxSerialization = "1.9.0"
 credentials = "1.6.0"
 googleIdentity = "1.1.1"
 codeScanner = "16.1.0"
+zxing = "3.5.3"
 playServicesLocation = "21.4.0"
 mapsCompose = "6.12.0"
 
 [libraries]
 androidx-credentials = { group = "androidx.credentials", name = "credentials", version.ref = "credentials" }
 androidx-credentials-play-services-auth = { group = "androidx.credentials", name = "credentials-play-services-auth", version.ref = "credentials" }
+zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
 google-play-services-code-scanner = { group = "com.google.android.gms", name = "play-services-code-scanner", version.ref = "codeScanner" }
 google-identity-googleid = { group = "com.google.android.libraries.identity.googleid", name = "googleid", version.ref = "googleIdentity" }
 androidx-graphics-path = { group = "androidx.graphics", name = "graphics-path", version.ref = "graphicsPath" }

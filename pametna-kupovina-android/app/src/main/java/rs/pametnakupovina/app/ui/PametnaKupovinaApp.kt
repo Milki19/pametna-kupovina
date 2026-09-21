@@ -10,6 +10,7 @@ import androidx.navigation.navArgument
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import rs.pametnakupovina.app.ui.screens.LocationScreen
+import rs.pametnakupovina.app.ui.screens.LoyaltyCardsScreen
 import rs.pametnakupovina.app.ui.screens.MatchingScreen
 import rs.pametnakupovina.app.ui.screens.ProductDetailsScreen
 import rs.pametnakupovina.app.ui.screens.RecommendationScreen
@@ -22,6 +23,7 @@ private object Route {
     const val LOCATION = "location/{listId}"
     const val RECOMMENDATION = "recommendation/{listId}"
     const val PRODUCT_DETAILS = "product/{canonicalProductId}"
+    const val CARDS = "cards"
 
     fun matching(listId: Long) = "matching/$listId"
     fun location(listId: Long) = "location/$listId"
@@ -41,14 +43,19 @@ fun PametnaKupovinaApp() {
         navController = navController,
         startDestination = Route.LIST
     ) {
+        composable(Route.CARDS) {
+            LoyaltyCardsScreen(onBack = { navController.popBackStack() })
+        }
         composable("purchases") {
             PurchaseScreen(onBack = navController::popBackStack,
-                onOpen = { navController.navigate("purchase/$it") })
+                onOpen = { navController.navigate("purchase/$it") },
+                onOpenCards = { navController.navigate(Route.CARDS) })
         }
         composable("purchase/{sessionId}", arguments = listOf(navArgument("sessionId") { type = NavType.StringType })) { entry ->
             PurchaseScreen(sessionId = entry.arguments?.getString("sessionId"),
                 onBack = navController::popBackStack,
-                onOpen = { navController.navigate("purchase/$it") })
+                onOpen = { navController.navigate("purchase/$it") },
+                onOpenCards = { navController.navigate(Route.CARDS) })
         }
         composable(Route.LIST) {
             ShoppingListScreen(

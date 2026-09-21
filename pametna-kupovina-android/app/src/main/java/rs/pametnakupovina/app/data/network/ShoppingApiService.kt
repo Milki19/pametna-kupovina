@@ -26,6 +26,22 @@ interface ShoppingApiService {
         @Query("historyLimit") historyLimit: Int = 30
     ): CanonicalProductDetailsDto
 
+    @GET("api/v1/loyalty-cards")
+    suspend fun getLoyaltyCards(): List<LoyaltyCardDto>
+
+    @POST("api/v1/loyalty-cards")
+    suspend fun addLoyaltyCard(
+        @Body request: AddLoyaltyCardRequestDto
+    ): LoyaltyCardDto
+
+    @DELETE("api/v1/loyalty-cards/{cardId}")
+    suspend fun deleteLoyaltyCard(@Path("cardId") cardId: Long)
+
+    @GET("api/v1/receipts/habits")
+    suspend fun getHabits(
+        @Query("limit") limit: Int = 20
+    ): List<HabitDto>
+
     @POST("api/v1/receipts")
     suspend fun scanReceipt(
         @Body request: ScanReceiptRequestDto

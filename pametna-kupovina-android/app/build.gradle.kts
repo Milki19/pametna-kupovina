@@ -183,6 +183,7 @@ dependencies {
     implementation(libs.androidx.credentials.play.services.auth)
     implementation(libs.google.identity.googleid)
     implementation(libs.google.play.services.code.scanner)
+    implementation(libs.zxing.core)
     ksp(libs.androidx.hilt.compiler)
 
     testImplementation(libs.junit)
