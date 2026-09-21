@@ -22,7 +22,8 @@ public class AccountWebConfiguration implements WebMvcConfigurer {
                 .addPathPatterns(
                         "/api/v1/shopping-lists/**",
                         "/api/v1/products/match-decisions/**",
-                        "/api/v1/products/reports/**"
+                        "/api/v1/products/reports/**",
+                        "/api/v1/receipts/**"
                 );
     }
 }

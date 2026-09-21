@@ -62,6 +62,7 @@ import rs.pametnakupovina.backend.shoppinglist.ShoppingListMatchingService;
 import rs.pametnakupovina.backend.shoppinglist.ShoppingListResponse;
 import rs.pametnakupovina.backend.shoppinglist.ShoppingListService;
 import rs.pametnakupovina.backend.account.AccountSignInService;
+import rs.pametnakupovina.backend.receipt.ReceiptService;
 import rs.pametnakupovina.backend.account.GoogleIdentityVerifier;
 import rs.pametnakupovina.backend.shoppinglist.ShoppingListSummary;
 import rs.pametnakupovina.backend.shoppinglist.StoreItemOffer;
@@ -242,6 +243,9 @@ class PametnaKupovinaBackendApplicationTests {
 
     @Autowired
     private AccountSignInService accountSignInService;
+
+    @Autowired
+    private ReceiptService receiptService;
 
     @Autowired
     private ShoppingListMatchingService shoppingListMatchingService;
@@ -4577,6 +4581,43 @@ class PametnaKupovinaBackendApplicationTests {
         // Prazan nalog sa kog je telefon prešao se ne zadržava.
         assertThat(jdbcClient.sql("SELECT COUNT(*) FROM app.account")
                 .query(Long.class).single()).isEqualTo(1L);
+    }
+
+    /**
+     * Račun se zavodi iz samog QR koda: prodavnica, vreme i iznos stoje u
+     * njemu, pa skeniranje radi i kad u prodavnici nema signala za Poresku
+     * upravu. Isti račun skeniran dvaput ostaje jedan.
+     */
+    @Test
+    void aScannedReceiptIsFiledFromItsOwnCodeAndCountsTowardsSpending() {
+        String code = "https://suf.purs.gov.rs/v/?vl="
+                + "A0xVRURWOExCRHQxT3YxbzA0AQAANAEAAEDr0gEAAAAAAAABg82GSNIAAApNaWxvamtvIDIy";
+
+        var receipt = receiptService.scan("telefon-racun", code);
+
+        assertThat(receipt.invoiceNumber()).isEqualTo("LUEDV8LB-Dt1Ov1o0-308");
+        assertThat(receipt.shopName()).isEqualTo("Milojko 22");
+        assertThat(receipt.totalAmount())
+                .isEqualByComparingTo(new java.math.BigDecimal("3060.00"));
+        assertThat(receipt.itemsRead()).isFalse();
+
+        // Skeniran dvaput je i dalje jedan račun.
+        assertThat(receiptService.scan("telefon-racun", code).id())
+                .isEqualTo(receipt.id());
+        assertThat(receiptService.history("telefon-racun", 50)).hasSize(1);
+
+        var spending = receiptService.spending("telefon-racun");
+        assertThat(spending.byMonth()).singleElement().satisfies(month -> {
+            assertThat(month.month()).isEqualTo(java.time.LocalDate.of(2022, 10, 1));
+            assertThat(month.spent())
+                    .isEqualByComparingTo(new java.math.BigDecimal("3060.00"));
+            assertThat(month.receipts()).isEqualTo(1);
+        });
+        assertThat(spending.byShop()).singleElement().satisfies(shop ->
+                assertThat(shop.shopName()).isEqualTo("Milojko 22"));
+
+        // Tuđi telefon ne vidi ništa od toga.
+        assertThat(receiptService.history("drugi-telefon", 50)).isEmpty();
     }
 
     @Test
