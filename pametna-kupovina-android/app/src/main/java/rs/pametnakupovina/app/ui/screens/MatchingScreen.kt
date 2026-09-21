@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -134,9 +135,23 @@ private fun MatchingContent(
             item(key = "decide-header") {
                 SectionHeader("Treba tvoja odluka", trailing = needsDecision.size.toString())
             }
-            items(needsDecision, key = { it.itemId }) { item ->
+            if (needsDecision.any(::canUseAsFlexible)) {
+                item(key = "decide-hint") {
+                    Text(
+                        "Gde ti nije važan brend ni pakovanje, pusti aplikaciju " +
+                            "da izabere najpovoljnije.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            itemsIndexed(needsDecision, key = { _, item -> item.itemId }) { index, item ->
                 DecisionCard(
                     item = item,
+                    // Isti razlog na deset kartica je deset puta isti pasus.
+                    // Piše se samo kad se promeni u odnosu na karticu iznad.
+                    showExplanation = index == 0 ||
+                        needsDecision[index - 1].explanation != item.explanation,
                     enabled = enabled,
                     onChoose = { candidate -> onChoose(item, candidate) },
                     onUseAsFlexible = { onUseAsFlexible(item) }
@@ -193,6 +208,7 @@ private fun MatchingSummary(result: ShoppingListMatchingDto, pending: Int) {
 @Composable
 private fun DecisionCard(
     item: ShoppingItemMatchResultDto,
+    showExplanation: Boolean,
     enabled: Boolean,
     onChoose: (ProductCandidateDto?) -> Unit,
     onUseAsFlexible: () -> Unit
@@ -214,11 +230,13 @@ private fun DecisionCard(
                 )
                 StatusPill(statusText(item.matchingStatus), statusTone(item.matchingStatus))
             }
-            Text(
-                item.explanation,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            if (showExplanation) {
+                Text(
+                    item.explanation,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
 
             if (item.matchingStatus == ShoppingItemMatchingStatusDto.NEEDS_CONFIRMATION) {
                 item.candidates.take(5).forEach { candidate ->
@@ -234,16 +252,12 @@ private fun DecisionCard(
             }
 
             if (canUseAsFlexible(item)) {
-                Text(
-                    "Ako ti nije važan brend ni pakovanje, aplikacija može sama da izabere najpovoljniju ponudu.",
-                    style = MaterialTheme.typography.bodyMedium
-                )
                 FilledTonalButton(
                     enabled = enabled,
                     onClick = onUseAsFlexible,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Neka aplikacija izabere")
+                    Text("Neka aplikacija izabere najpovoljnije")
                 }
             }
         }
