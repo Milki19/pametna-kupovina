@@ -4727,6 +4727,87 @@ class PametnaKupovinaBackendApplicationTests {
         assertThat(nonsense.items()).isEmpty();
     }
 
+    /**
+     * Navika sme da odlučuje tek kad je cena ista. Plan ostaje najjeftiniji —
+     * ono što kupac obično kupuje ne sme da ga košta ni dinar, jer je cela
+     * aplikacija zbog toga i napravljena.
+     */
+    @Test
+    void whatTheyUsuallyBuyBreaksATieAndNeverCostsMore() {
+        long retailer = jdbcClient.sql("INSERT INTO app.retailer(code,name) VALUES('NAVIKA','Navika test') RETURNING id")
+                .query(Long.class).single();
+        long format = jdbcClient.sql("INSERT INTO app.store_format(retailer_id,code,name) VALUES(?,'TEST','Test') RETURNING id")
+                .param(retailer).query(Long.class).single();
+        long store = insertVerifiedStore(retailer, format, "NAVIKA-SHOP", "Test", 44.27, 19.88, true);
+        long run = jdbcClient.sql("INSERT INTO app.import_run(retailer_id,source_url,status) VALUES(?,'https://example.test/navika','SUCCEEDED') RETURNING id")
+                .param(retailer).query(Long.class).single();
+        var normalizer = new rs.pametnakupovina.backend.matching.ProductNameNormalizer();
+
+        // Dva mleka iste cene i istog pakovanja: ništa osim navike ih ne deli.
+        for (String name : List.of("ALFA mleko 2,8%mm 1l", "BETA mleko 2,8%mm 1l")) {
+            long product = jdbcClient.sql("""
+                    INSERT INTO app.retailer_product(retailer_id,source_product_key,name,normalized_name)
+                    VALUES(?,?,?,?) RETURNING id
+                    """).params(retailer, name, name, normalizer.normalize(name))
+                    .query(Long.class).single();
+            jdbcClient.sql("INSERT INTO app.price_observation(retailer_product_id,import_run_id,price_date,regular_price) VALUES(?,?,'2026-09-10',99.99)")
+                    .params(product, run).update();
+        }
+        productCatalogMaintenanceService.refreshRetailer(retailer);
+
+        var list = shoppingListService.create(
+                new CreateShoppingListRequest("Navika"), "telefon-navika");
+        shoppingListService.addItem(list.id(), "telefon-navika",
+                new AddShoppingListItemRequest("mleko", "mleko", null, BigDecimal.ONE,
+                        ShoppingItemRule.FLEXIBLE_CATEGORY,
+                        new FlexibleItemConstraints("mleko", null, null, null, null)));
+
+        // Bez ijednog računa odlučuje ono što je i do sada: redosled je
+        // nepromenjen.
+        String withoutReceipts = storeShoppingOfferRepository
+                .findOffers(list.id(), List.of(store), LocalDate.of(2026, 9, 10))
+                .getFirst().productName();
+        assertThat(withoutReceipts).isNotNull();
+
+        // Kupac je BETA mleko već kupovao.
+        long betaFamily = jdbcClient.sql("""
+                SELECT product_family_id FROM app.retailer_product
+                WHERE retailer_id = ? AND name = 'BETA mleko 2,8%mm 1l'
+                """).param(retailer).query(Long.class).single();
+        long accountId = jdbcClient.sql(
+                        "SELECT account_id FROM app.shopping_list WHERE id = ?")
+                .param(list.id()).query(Long.class).single();
+        long receipt = jdbcClient.sql("""
+                INSERT INTO app.receipt(account_id,verification_key,shop_name,issued_at,total_amount)
+                VALUES(?,'NAVIKA-1','Prodavnica','2026-09-09T10:00:00Z',99.99) RETURNING id
+                """).param(accountId).query(Long.class).single();
+        jdbcClient.sql("""
+                INSERT INTO app.receipt_item(receipt_id,line_number,name,quantity,total_price,product_family_id)
+                VALUES(?,1,'BETA mleko',1,99.99,?)
+                """).params(receipt, betaFamily).update();
+
+        var chosen = storeShoppingOfferRepository
+                .findOffers(list.id(), List.of(store), LocalDate.of(2026, 9, 10))
+                .getFirst();
+
+        assertThat(chosen.productName()).isEqualTo("BETA mleko 2,8%mm 1l");
+
+        // A kad njegovo mleko poskupi, plan ga napušta bez oklevanja.
+        jdbcClient.sql("""
+                UPDATE app.price_observation SET regular_price = 149.99
+                WHERE retailer_product_id IN (
+                    SELECT id FROM app.retailer_product
+                    WHERE retailer_id = ? AND name = 'BETA mleko 2,8%mm 1l'
+                )
+                """).param(retailer).update();
+        productCatalogMaintenanceService.refreshRetailer(retailer);
+
+        assertThat(storeShoppingOfferRepository
+                .findOffers(list.id(), List.of(store), LocalDate.of(2026, 9, 10))
+                .getFirst().productName())
+                .isEqualTo("ALFA mleko 2,8%mm 1l");
+    }
+
     @Test
     void beerIntentsNeverSubstituteNonAlcoholicForRegularOrTheReverse() {
         long retailer = jdbcClient.sql("INSERT INTO app.retailer(code,name) VALUES('BEERTEST','Beer test') RETURNING id")

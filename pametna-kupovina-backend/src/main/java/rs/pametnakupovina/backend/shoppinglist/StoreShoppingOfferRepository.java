@@ -60,6 +60,29 @@ public class StoreShoppingOfferRepository {
         this.jdbcClient = jdbcClient;
     }
 
+    /**
+     * Proizvodi koje je vlasnik ovog spiska već kupovao, po skeniranim
+     * računima. Vraća se kao niz u parametru umesto kao podupit u sortiranju:
+     * upit koji se izvršava za svakog kandidata u svakoj prodavnici je ono što
+     * je preporuku i usporavalo. Prazan niz ne menja nijedan redosled.
+     */
+    private Long[] boughtFamilyIds(Long listId) {
+        return jdbcClient.sql("""
+                        SELECT DISTINCT item.product_family_id
+                        FROM app.receipt_item AS item
+                        JOIN app.receipt AS receipt
+                          ON receipt.id = item.receipt_id
+                        JOIN app.shopping_list AS list
+                          ON list.account_id = receipt.account_id
+                        WHERE list.id = :listId
+                          AND item.product_family_id IS NOT NULL
+                        """)
+                .param("listId", listId)
+                .query(Long.class)
+                .list()
+                .toArray(Long[]::new);
+    }
+
     public List<StoreItemOffer> findOffers(
             Long listId,
             List<Long> storeIds,
@@ -1180,6 +1203,19 @@ public class StoreShoppingOfferRepository {
                                          ELSE 1
                                      END ASC,
                                      selected_price.effective_price * need.packages ASC,
+                                     -- Dve ponude koje koštaju isto: bira se
+                                     -- ona koju kupac zaista kupuje, po
+                                     -- skeniranim računima. Stoji tek posle
+                                     -- cene, jer plan ostaje najjeftiniji —
+                                     -- navika ne sme da košta ni dinar. Bez
+                                     -- ijednog računa lista je prazna i ovaj
+                                     -- red ne razlikuje ništa.
+                                     CASE
+                                         WHEN product.product_family_id =
+                                              ANY (:boughtFamilyIds)
+                                             THEN 0
+                                         ELSE 1
+                                     END ASC,
                                      need.packages * pack.size ASC NULLS LAST,
                                      product.id ASC
                             LIMIT 1
@@ -1198,6 +1234,7 @@ public class StoreShoppingOfferRepository {
                 .param("listId", listId)
                 .param("storeIds", storeIds)
                 .param("includeUnlocated", includeUnlocated)
+                .param("boughtFamilyIds", boughtFamilyIds(listId))
                 .query(ROW_MAPPER)
                 .list();
     }
