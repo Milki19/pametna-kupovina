@@ -96,12 +96,12 @@ public class ShoppingListRepository {
 
     public ShoppingListSummary create(
             String name,
-            String clientTokenHash
+            long accountId
     ) {
         return jdbcClient.sql("""
                         INSERT INTO app.shopping_list(
                             name,
-                            client_token_hash
+                            account_id
                         )
                         VALUES (?, ?)
                         RETURNING id,
@@ -111,13 +111,13 @@ public class ShoppingListRepository {
                                   0 AS item_count
                         """)
                 .param(1, name)
-                .param(2, clientTokenHash)
+                .param(2, accountId)
                 .query(SUMMARY_ROW_MAPPER)
                 .single();
     }
 
     public List<ShoppingListSummary> findAll(
-            String clientTokenHash
+            long accountId
     ) {
         return jdbcClient.sql("""
                         SELECT sl.id,
@@ -128,7 +128,7 @@ public class ShoppingListRepository {
                         FROM app.shopping_list sl
                         LEFT JOIN app.shopping_list_item sli
                           ON sli.shopping_list_id = sl.id
-                        WHERE sl.client_token_hash = ?
+                        WHERE sl.account_id = ?
                           AND sl.active = TRUE
                         GROUP BY sl.id,
                                  sl.name,
@@ -137,7 +137,7 @@ public class ShoppingListRepository {
                         ORDER BY sl.updated_at DESC,
                                  sl.id DESC
                         """)
-                .param(1, clientTokenHash)
+                .param(1, accountId)
                 .query(SUMMARY_ROW_MAPPER)
                 .list();
     }
@@ -174,7 +174,7 @@ public class ShoppingListRepository {
 
     public Optional<ShoppingListResponse> findById(
             Long listId,
-            String clientTokenHash
+            long accountId
     ) {
         Optional<ShoppingListHeader> header =
                 jdbcClient.sql("""
@@ -184,11 +184,11 @@ public class ShoppingListRepository {
                                        updated_at
                                 FROM app.shopping_list
                                 WHERE id = ?
-                                  AND client_token_hash = ?
+                                  AND account_id = ?
                                   AND active = TRUE
                                 """)
                         .param(1, listId)
-                        .param(2, clientTokenHash)
+                        .param(2, accountId)
                         .query((resultSet, rowNumber) ->
                                 new ShoppingListHeader(
                                         resultSet.getLong("id"),
@@ -258,28 +258,28 @@ public class ShoppingListRepository {
         );
     }
 
-    public boolean existsByIdAndClientTokenHash(
+    public boolean existsByIdAndAccount(
             Long listId,
-            String clientTokenHash
+            long accountId
     ) {
         return jdbcClient.sql("""
                         SELECT EXISTS (
                             SELECT 1
                             FROM app.shopping_list
                             WHERE id = ?
-                              AND client_token_hash = ?
+                              AND account_id = ?
                               AND active = TRUE
                         )
                         """)
                 .param(1, listId)
-                .param(2, clientTokenHash)
+                .param(2, accountId)
                 .query(Boolean.class)
                 .single();
     }
 
     public boolean updateName(
             Long listId,
-            String clientTokenHash,
+            long accountId,
             String name
     ) {
         int updatedRows = jdbcClient.sql("""
@@ -287,12 +287,12 @@ public class ShoppingListRepository {
                         SET name = ?,
                             updated_at = NOW()
                         WHERE id = ?
-                          AND client_token_hash = ?
+                          AND account_id = ?
                           AND active = TRUE
                         """)
                 .param(1, name)
                 .param(2, listId)
-                .param(3, clientTokenHash)
+                .param(3, accountId)
                 .update();
 
         return updatedRows > 0;
@@ -440,18 +440,18 @@ public class ShoppingListRepository {
 
     public boolean deactivateList(
             Long listId,
-            String clientTokenHash
+            long accountId
     ) {
         int updatedRows = jdbcClient.sql("""
                         UPDATE app.shopping_list
                         SET active = FALSE,
                             updated_at = NOW()
                         WHERE id = ?
-                          AND client_token_hash = ?
+                          AND account_id = ?
                           AND active = TRUE
                         """)
                 .param(1, listId)
-                .param(2, clientTokenHash)
+                .param(2, accountId)
                 .update();
 
         return updatedRows > 0;

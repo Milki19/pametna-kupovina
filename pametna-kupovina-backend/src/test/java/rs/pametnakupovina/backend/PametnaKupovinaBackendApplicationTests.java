@@ -361,7 +361,10 @@ class PametnaKupovinaBackendApplicationTests {
                             app.canonical_product,
                             app.brand_alias,
                             app.brand,
-                            app.retailer_data_source
+                            app.retailer_data_source,
+                            app.account_identity,
+                            app.account_device,
+                            app.account
                         RESTART IDENTITY
                         """)
                 .update();
@@ -3428,10 +3431,14 @@ class PametnaKupovinaBackendApplicationTests {
                 firstClientToken
         ).items()).hasSize(1);
 
+        // Uređaj se od V95 vodi uz nalog, a spisak pripada nalogu; sam broj
+        // uređaja se i dalje nigde ne čuva, samo njegov otisak.
         String storedTokenHash = jdbcClient.sql("""
-                        SELECT client_token_hash
-                        FROM app.shopping_list
-                        WHERE id = ?
+                        SELECT device.client_token_hash
+                        FROM app.shopping_list AS list
+                        JOIN app.account_device AS device
+                          ON device.account_id = list.account_id
+                        WHERE list.id = ?
                         """)
                 .param(1, firstList.id())
                 .query(String.class)
@@ -4522,6 +4529,44 @@ class PametnaKupovinaBackendApplicationTests {
      * was meant, so the query is tried once more against the words a shop
      * actually uses.
      */
+    /**
+     * Od V95 spisak pripada nalogu, a telefon je samo jedan ulaz u njega.
+     * Dok se niko nije prijavio, nalog i dalje ne zna ništa o vlasniku.
+     */
+    @Test
+    void aPhoneKeepsOneAccountAndTwoPhonesNeverShareLists() {
+        var first = shoppingListService.create(
+                new CreateShoppingListRequest("Prvi spisak"), "uredjaj-a");
+        shoppingListService.create(
+                new CreateShoppingListRequest("Drugi spisak"), "uredjaj-b");
+
+        assertThat(shoppingListService.findAll("uredjaj-a"))
+                .extracting(ShoppingListSummary::name)
+                .containsExactly("Prvi spisak");
+        assertThat(shoppingListService.findAll("uredjaj-b"))
+                .extracting(ShoppingListSummary::name)
+                .containsExactly("Drugi spisak");
+        // Tuđi spisak ne postoji za ovaj telefon — ni da ga vidi, ni da sazna
+        // da postoji.
+        assertThatThrownBy(() -> shoppingListService.findById(first.id(), "uredjaj-b"))
+                .hasMessageContaining("404");
+
+        // Isti telefon ostaje na istom nalogu koliko god puta se javio.
+        shoppingListService.create(
+                new CreateShoppingListRequest("Treći spisak"), "uredjaj-a");
+        assertThat(jdbcClient.sql(
+                        "SELECT COUNT(*) FROM app.account_device").query(Long.class).single())
+                .isEqualTo(2L);
+        assertThat(jdbcClient.sql("""
+                        SELECT COUNT(DISTINCT account_id) FROM app.shopping_list
+                        """).query(Long.class).single())
+                .isEqualTo(2L);
+        // Prijave još nema, pa ni jednog ličnog podatka uz nalog.
+        assertThat(jdbcClient.sql(
+                        "SELECT COUNT(*) FROM app.account_identity").query(Long.class).single())
+                .isZero();
+    }
+
     @Test
     void aMistypedQueryIsTriedAgainstTheWordsAShopUses() {
         long retailer = jdbcClient.sql("INSERT INTO app.retailer(code,name) VALUES('TYPO','Typo test') RETURNING id")

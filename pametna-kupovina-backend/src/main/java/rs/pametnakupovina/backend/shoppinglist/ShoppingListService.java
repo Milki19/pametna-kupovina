@@ -2,6 +2,7 @@ package rs.pametnakupovina.backend.shoppinglist;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import rs.pametnakupovina.backend.account.AccountRepository;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import rs.pametnakupovina.backend.matching.ProductNameNormalizer;
@@ -21,6 +22,7 @@ public class ShoppingListService {
 
     private final ShoppingListRepository repository;
     private final ShoppingListClientTokenPolicy clientTokenPolicy;
+    private final AccountRepository accountRepository;
     private final ShoppingListTextParser textParser;
     private final ProductNameNormalizer productNameNormalizer;
     private final ShoppingIntentResolver shoppingIntentResolver;
@@ -29,6 +31,7 @@ public class ShoppingListService {
     public ShoppingListService(
             ShoppingListRepository repository,
             ShoppingListClientTokenPolicy clientTokenPolicy,
+            AccountRepository accountRepository,
             ShoppingListTextParser textParser,
             ProductNameNormalizer productNameNormalizer,
             ShoppingIntentResolver shoppingIntentResolver,
@@ -36,6 +39,7 @@ public class ShoppingListService {
     ) {
         this.repository = repository;
         this.clientTokenPolicy = clientTokenPolicy;
+        this.accountRepository = accountRepository;
         this.textParser = textParser;
         this.productNameNormalizer = productNameNormalizer;
         this.shoppingIntentResolver = shoppingIntentResolver;
@@ -51,15 +55,24 @@ public class ShoppingListService {
                 request == null ? null : request.name()
         );
 
-        String clientTokenHash =
-                clientTokenPolicy.validateAndHash(clientToken);
+        long accountId = accountFor(clientToken);
 
-        return repository.create(name, clientTokenHash);
+        return repository.create(name, accountId);
+    }
+
+    /**
+     * The phone's own random number never leaves this line: it is hashed, and
+     * from there on a list belongs to an account, not to a handset.
+     */
+    private long accountFor(String clientToken) {
+        return accountRepository.forDevice(
+                clientTokenPolicy.validateAndHash(clientToken)
+        );
     }
 
     public List<ShoppingListSummary> findAll(String clientToken) {
         return repository.findAll(
-                clientTokenPolicy.validateAndHash(clientToken)
+                accountFor(clientToken)
         );
     }
 
@@ -67,10 +80,9 @@ public class ShoppingListService {
             Long listId,
             String clientToken
     ) {
-        String clientTokenHash =
-                clientTokenPolicy.validateAndHash(clientToken);
+        long accountId = accountFor(clientToken);
 
-        return repository.findById(listId, clientTokenHash)
+        return repository.findById(listId, accountId)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
                         "Spisak nije pronađen: " + listId
@@ -90,8 +102,7 @@ public class ShoppingListService {
             String clientToken,
             UpdateShoppingListRequest request
     ) {
-        String clientTokenHash =
-                clientTokenPolicy.validateAndHash(clientToken);
+        long accountId = accountFor(clientToken);
 
         String name = validListName(
                 request == null ? null : request.name()
@@ -99,13 +110,13 @@ public class ShoppingListService {
 
         if (!repository.updateName(
                 listId,
-                clientTokenHash,
+                accountId,
                 name
         )) {
             throw listNotFound(listId);
         }
 
-        return repository.findById(listId, clientTokenHash)
+        return repository.findById(listId, accountId)
                 .orElseThrow(() -> listNotFound(listId));
     }
 
@@ -309,10 +320,9 @@ public class ShoppingListService {
 
     @Transactional
     public void deleteList(Long listId, String clientToken) {
-        String clientTokenHash =
-                clientTokenPolicy.validateAndHash(clientToken);
+        long accountId = accountFor(clientToken);
 
-        if (!repository.deactivateList(listId, clientTokenHash)) {
+        if (!repository.deactivateList(listId, accountId)) {
             throw listNotFound(listId);
         }
     }
@@ -430,12 +440,11 @@ public class ShoppingListService {
     }
 
     private void requireList(Long listId, String clientToken) {
-        String clientTokenHash =
-                clientTokenPolicy.validateAndHash(clientToken);
+        long accountId = accountFor(clientToken);
 
-        if (!repository.existsByIdAndClientTokenHash(
+        if (!repository.existsByIdAndAccount(
                 listId,
-                clientTokenHash
+                accountId
         )) {
             throw listNotFound(listId);
         }
