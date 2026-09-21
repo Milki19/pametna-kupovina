@@ -7,6 +7,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -60,6 +61,8 @@ import rs.pametnakupovina.backend.shoppinglist.ShoppingListMatchingResponse;
 import rs.pametnakupovina.backend.shoppinglist.ShoppingListMatchingService;
 import rs.pametnakupovina.backend.shoppinglist.ShoppingListResponse;
 import rs.pametnakupovina.backend.shoppinglist.ShoppingListService;
+import rs.pametnakupovina.backend.account.AccountSignInService;
+import rs.pametnakupovina.backend.account.GoogleIdentityVerifier;
 import rs.pametnakupovina.backend.shoppinglist.ShoppingListSummary;
 import rs.pametnakupovina.backend.shoppinglist.StoreItemOffer;
 import rs.pametnakupovina.backend.shoppinglist.StoreShoppingOfferRepository;
@@ -87,6 +90,7 @@ import java.util.List;
 import java.util.concurrent.Executors;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.when;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest(properties = {
@@ -187,6 +191,9 @@ class PametnaKupovinaBackendApplicationTests {
 
     private static HttpServer csvServer;
 
+    @MockitoBean
+    private GoogleIdentityVerifier googleVerifier;
+
     @Autowired
     private PriceImportService priceImportService;
 
@@ -232,6 +239,9 @@ class PametnaKupovinaBackendApplicationTests {
 
     @Autowired
     private ShoppingListService shoppingListService;
+
+    @Autowired
+    private AccountSignInService accountSignInService;
 
     @Autowired
     private ShoppingListMatchingService shoppingListMatchingService;
@@ -4533,6 +4543,40 @@ class PametnaKupovinaBackendApplicationTests {
      * Od V95 spisak pripada nalogu, a telefon je samo jedan ulaz u njega.
      * Dok se niko nije prijavio, nalog i dalje ne zna ništa o vlasniku.
      */
+    /**
+     * Zbog čega prijava uopšte postoji: isti čovek na drugom telefonu zatiče
+     * svoje spiskove, a ne praznu aplikaciju. Provera samog Google tokena je
+     * posao `GoogleIdentityVerifierTest`-a; ovde se gleda šta se dešava sa
+     * spiskovima.
+     */
+    @Test
+    void signingInOnASecondPhoneBringsTheFirstPhonesLists() {
+        when(googleVerifier.subjectOf("token-od-google")).thenReturn("isti-covek");
+
+        shoppingListService.create(
+                new CreateShoppingListRequest("Stari telefon"), "telefon-1");
+        accountSignInService.signInWithGoogle("telefon-1", "token-od-google");
+
+        // Nov telefon: svoj spisak, pa prijava istim nalogom.
+        shoppingListService.create(
+                new CreateShoppingListRequest("Novi telefon"), "telefon-2");
+        assertThat(accountSignInService.state("telefon-2").signedIn()).isFalse();
+
+        accountSignInService.signInWithGoogle("telefon-2", "token-od-google");
+
+        assertThat(accountSignInService.state("telefon-2").signedIn()).isTrue();
+        assertThat(shoppingListService.findAll("telefon-2"))
+                .extracting(ShoppingListSummary::name)
+                .containsExactlyInAnyOrder("Stari telefon", "Novi telefon");
+        // Stari telefon gleda u isti nalog, pa vidi isto.
+        assertThat(shoppingListService.findAll("telefon-1"))
+                .extracting(ShoppingListSummary::name)
+                .containsExactlyInAnyOrder("Stari telefon", "Novi telefon");
+        // Prazan nalog sa kog je telefon prešao se ne zadržava.
+        assertThat(jdbcClient.sql("SELECT COUNT(*) FROM app.account")
+                .query(Long.class).single()).isEqualTo(1L);
+    }
+
     @Test
     void aPhoneKeepsOneAccountAndTwoPhonesNeverShareLists() {
         var first = shoppingListService.create(

@@ -2,6 +2,7 @@ package rs.pametnakupovina.backend.account;
 
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
 
@@ -70,6 +71,74 @@ public class AccountRepository {
                 .param("hash", clientTokenHash)
                 .query(Long.class)
                 .single();
+    }
+
+    /** Whether anyone has signed in on this account yet. */
+    public boolean isSignedIn(long accountId) {
+        return jdbcClient.sql("""
+                        SELECT EXISTS (
+                            SELECT 1 FROM app.account_identity
+                            WHERE account_id = :accountId
+                        )
+                        """)
+                .param("accountId", accountId)
+                .query(Boolean.class)
+                .single();
+    }
+
+    public void attachIdentity(
+            long accountId,
+            String provider,
+            String subject
+    ) {
+        jdbcClient.sql("""
+                        INSERT INTO app.account_identity (
+                            account_id, provider, subject
+                        )
+                        VALUES (:accountId, :provider, :subject)
+                        ON CONFLICT (provider, subject) DO NOTHING
+                        """)
+                .param("accountId", accountId)
+                .param("provider", provider)
+                .param("subject", subject)
+                .update();
+    }
+
+    /**
+     * Signing in on a phone that already has lists of its own: the phone and
+     * everything it made join the account behind the identity, and the empty
+     * one it came from is dropped. Nothing a shopper wrote is left behind.
+     */
+    @Transactional
+    public void moveEverything(long fromAccountId, long toAccountId) {
+        if (fromAccountId == toAccountId) {
+            return;
+        }
+
+        jdbcClient.sql("""
+                        UPDATE app.shopping_list
+                           SET account_id = :to
+                         WHERE account_id = :from
+                        """)
+                .param("to", toAccountId)
+                .param("from", fromAccountId)
+                .update();
+
+        jdbcClient.sql("""
+                        UPDATE app.account_device
+                           SET account_id = :to
+                         WHERE account_id = :from
+                        """)
+                .param("to", toAccountId)
+                .param("from", fromAccountId)
+                .update();
+
+        jdbcClient.sql("""
+                        DELETE FROM app.account
+                         WHERE id = :from
+                        """)
+                .param("from", fromAccountId)
+                .update();
     }
 
     /** The account an identity already belongs to, if it has been seen. */
