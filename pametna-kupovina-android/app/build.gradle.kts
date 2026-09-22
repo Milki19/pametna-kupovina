@@ -160,6 +160,10 @@ dependencies {
     implementation(libs.dagger.hilt.android)
     ksp(libs.dagger.hilt.compiler)
     implementation(libs.androidx.hilt.navigation.compose)
+    // Hilt's generated component annotates a method @CanIgnoreReturnValue;
+    // nothing in its own POM declares this, some other dependency always
+    // carried it in before.
+    compileOnly(libs.errorprone.annotations)
 
     implementation(libs.retrofit)
     implementation(libs.retrofit.kotlinx.serialization)
