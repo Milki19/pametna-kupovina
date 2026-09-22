@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 import rs.pametnakupovina.app.data.NotAFiscalReceipt
 import rs.pametnakupovina.app.data.ReceiptScanner
 import rs.pametnakupovina.app.data.ScanCancelled
@@ -18,11 +19,14 @@ import rs.pametnakupovina.app.data.ShoppingRepository
 import rs.pametnakupovina.app.data.network.MonthlySpendingDto
 import rs.pametnakupovina.app.data.network.ReceiptDto
 import rs.pametnakupovina.app.data.network.ShopSpendingDto
+import rs.pametnakupovina.app.data.network.WeeklySpendingDto
 
 data class ReceiptUiState(
     val receipts: List<ReceiptDto> = emptyList(),
     val byMonth: List<MonthlySpendingDto> = emptyList(),
     val byShop: List<ShopSpendingDto> = emptyList(),
+    val byWeek: List<WeeklySpendingDto> = emptyList(),
+    val selectedMonth: LocalDate = LocalDate.now().withDayOfMonth(1),
     val scanning: Boolean = false,
     val message: String? = null
 )
@@ -45,18 +49,30 @@ class ReceiptViewModel @Inject constructor(
      * Kupovine na ovom ekranu rade i bez mreže i ne smeju da ispaštaju.
      */
     fun refresh() {
+        val month = _uiState.value.selectedMonth
         viewModelScope.launch {
-            runCatching { repository.receipts() to repository.spending() }
+            runCatching {
+                repository.receipts() to repository.spending(month.toString())
+            }
                 .onSuccess { (receipts, spending) ->
                     _uiState.update {
                         it.copy(
                             receipts = receipts,
                             byMonth = spending.byMonth,
-                            byShop = spending.byShop
+                            byShop = spending.byShop,
+                            byWeek = spending.byWeek
                         )
                     }
                 }
         }
+    }
+
+    /** Meni sme da vrati unazad koliko ima podataka, ali nikad u budućnost. */
+    fun changeMonth(monthsDelta: Int) {
+        val next = _uiState.value.selectedMonth.plusMonths(monthsDelta.toLong())
+        if (next.isAfter(LocalDate.now().withDayOfMonth(1))) return
+        _uiState.update { it.copy(selectedMonth = next) }
+        refresh()
     }
 
     fun scan(activityContext: Context) {

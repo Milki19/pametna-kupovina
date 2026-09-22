@@ -32,6 +32,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -116,6 +117,7 @@ fun StatusPill(
 fun AppTopBar(
     title: String,
     onBack: (() -> Unit)? = null,
+    onMenu: (() -> Unit)? = null,
     subtitle: String? = null,
     actions: @Composable RowScope.() -> Unit = {}
 ) {
@@ -137,9 +139,18 @@ fun AppTopBar(
             }
         },
         navigationIcon = {
+            // Strelica gde ima kuda nazad, meni na ekranima do kojih se dolazi
+            // iz menija; oba istovremeno bi značila da jedno od njih laže.
             if (onBack != null) {
                 IconButton(onClick = onBack) {
                     AppIcon(R.drawable.ic_arrow_back, contentDescription = "Nazad")
+                }
+            } else if (onMenu != null) {
+                IconButton(
+                    onClick = onMenu,
+                    modifier = Modifier.testTag("open-menu")
+                ) {
+                    AppIcon(R.drawable.ic_menu, contentDescription = "Meni")
                 }
             }
         },

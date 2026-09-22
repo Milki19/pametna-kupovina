@@ -16,9 +16,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
-import android.content.Intent
-import androidx.core.net.toUri
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -68,9 +65,9 @@ import rs.pametnakupovina.app.ui.plural
 
 @Composable
 fun ShoppingListScreen(
+    onBack: () -> Unit,
     onOpenMatching: (Long) -> Unit,
     onOpenProduct: (Long) -> Unit,
-    onOpenPurchases: () -> Unit = {},
     viewModel: ShoppingListViewModel = hiltViewModel(),
     productSearchViewModel: ProductSearchViewModel = hiltViewModel()
 ) {
@@ -80,8 +77,6 @@ fun ShoppingListScreen(
     var editedItem by remember { mutableStateOf<DraftItemEntity?>(null) }
     var showItemEditor by rememberSaveable { mutableStateOf(false) }
     var showPasteDialog by rememberSaveable { mutableStateOf(false) }
-    var showAbout by rememberSaveable { mutableStateOf(false) }
-    val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
@@ -122,46 +117,15 @@ fun ShoppingListScreen(
         }
     }
 
-    if (showAbout) {
-        AboutDialog(
-            onDismiss = { showAbout = false },
-            onOpenLink = { url ->
-                context.startActivity(
-                    Intent(Intent.ACTION_VIEW, url.toUri())
-                )
-            }
-        )
-    }
-
     Scaffold(
         topBar = {
             AppTopBar(
                 title = "Moj spisak",
+                onBack = onBack,
                 subtitle = when {
                     state.isOffline -> "Bez mreže, izmene čekaju slanje"
                     state.items.isNotEmpty() -> items(state.items.size)
                     else -> null
-                },
-                actions = {
-                    IconButton(
-                        onClick = { showAbout = true },
-                        modifier = Modifier.testTag("open-about")
-                    ) {
-                        AppIcon(
-                            R.drawable.ic_info,
-                            contentDescription = "O aplikaciji",
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                    TextButton(onClick = onOpenPurchases) {
-                        AppIcon(
-                            R.drawable.ic_history,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(Modifier.width(AppSpacing.xs))
-                        Text("Kupovine")
-                    }
                 }
             )
         },
