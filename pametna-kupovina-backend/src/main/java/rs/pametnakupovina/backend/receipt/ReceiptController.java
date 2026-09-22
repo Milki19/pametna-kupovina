@@ -42,9 +42,10 @@ public class ReceiptController {
 
     @GetMapping("/spending")
     public ReceiptService.Spending spending(
-            @RequestHeader(CLIENT_TOKEN_HEADER) String clientToken
+            @RequestHeader(CLIENT_TOKEN_HEADER) String clientToken,
+            @RequestParam(name = "month", required = false) java.time.LocalDate month
     ) {
-        return receiptService.spending(clientToken);
+        return receiptService.spending(clientToken, month);
     }
 
     @GetMapping("/habits")

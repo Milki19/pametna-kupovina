@@ -7,6 +7,8 @@ import org.springframework.web.server.ResponseStatusException;
 import rs.pametnakupovina.backend.account.AccountRepository;
 import rs.pametnakupovina.backend.shoppinglist.ShoppingListClientTokenPolicy;
 
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 
 /**
@@ -22,6 +24,7 @@ public class ReceiptService {
     private static final int MOST_SHOPS = 20;
     private static final int MOST_HABITS = 50;
     private static final String SHOP_UNKNOWN = "Nepoznata prodavnica";
+    private static final ZoneId BELGRADE = ZoneId.of("Europe/Belgrade");
 
     private final ReceiptRepository receiptRepository;
     private final AccountRepository accountRepository;
@@ -91,11 +94,18 @@ public class ReceiptService {
     }
 
     public Spending spending(String clientToken) {
+        return spending(clientToken, null);
+    }
+
+    public Spending spending(String clientToken, LocalDate month) {
         long accountId = accountFor(clientToken);
+        LocalDate weekMonth = (month != null ? month : LocalDate.now(BELGRADE))
+                .withDayOfMonth(1);
 
         return new Spending(
                 receiptRepository.spendingByMonth(accountId, MOST_MONTHS),
-                receiptRepository.spendingByShop(accountId, MOST_SHOPS)
+                receiptRepository.spendingByShop(accountId, MOST_SHOPS),
+                receiptRepository.spendingByWeek(accountId, weekMonth)
         );
     }
 
@@ -157,7 +167,8 @@ public class ReceiptService {
 
     public record Spending(
             List<ReceiptRepository.MonthlySpending> byMonth,
-            List<ReceiptRepository.ShopSpending> byShop
+            List<ReceiptRepository.ShopSpending> byShop,
+            List<ReceiptRepository.WeeklySpending> byWeek
     ) {
     }
 }

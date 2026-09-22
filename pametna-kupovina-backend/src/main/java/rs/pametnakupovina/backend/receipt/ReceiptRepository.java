@@ -275,6 +275,54 @@ public class ReceiptRepository {
                 .list();
     }
 
+    /**
+     * Isti mesec, po nedeljama (1-7, 8-14, 15-21, 22-28, 29-kraj), kao na
+     * mani.rs. Bucket se računa iz dana u mesecu, pa poslednja nedelja ima
+     * 2-3 dana i to je normalno.
+     */
+    public List<WeeklySpending> spendingByWeek(long accountId, LocalDate monthStart) {
+        List<Object[]> rows = jdbcClient.sql("""
+                        SELECT bucket, SUM(total_amount) AS spent, COUNT(*) AS receipts
+                        FROM (
+                            SELECT total_amount,
+                                   (EXTRACT(
+                                       DAY FROM (issued_at AT TIME ZONE 'Europe/Belgrade')
+                                   )::int - 1) / 7 AS bucket
+                            FROM app.receipt
+                            WHERE account_id = :accountId
+                              AND (issued_at AT TIME ZONE 'Europe/Belgrade')::date
+                                  >= :monthStart
+                              AND (issued_at AT TIME ZONE 'Europe/Belgrade')::date
+                                  < (:monthStart + INTERVAL '1 month')::date
+                        ) AS bucketed
+                        GROUP BY bucket
+                        ORDER BY bucket
+                        """)
+                .param("accountId", accountId)
+                .param("monthStart", monthStart)
+                .query((resultSet, rowNumber) -> new Object[]{
+                        resultSet.getInt("bucket"),
+                        resultSet.getBigDecimal("spent"),
+                        resultSet.getInt("receipts")
+                })
+                .list();
+
+        LocalDate monthEnd = monthStart.plusMonths(1).minusDays(1);
+        return rows.stream()
+                .map(row -> {
+                    int bucket = (int) row[0];
+                    LocalDate weekStart = monthStart.plusDays(bucket * 7L);
+                    LocalDate weekEnd = weekStart.plusDays(6).isAfter(monthEnd)
+                            ? monthEnd
+                            : weekStart.plusDays(6);
+                    return new WeeklySpending(
+                            bucket, weekStart, weekEnd,
+                            (BigDecimal) row[1], (int) row[2]
+                    );
+                })
+                .toList();
+    }
+
     /** Gde je otišlo, od najviše ka najmanje. */
     public List<ShopSpending> spendingByShop(long accountId, int shops) {
         return jdbcClient.sql("""
@@ -324,6 +372,15 @@ public class ReceiptRepository {
             BigDecimal spent,
             int receipts,
             Instant lastVisit
+    ) {
+    }
+
+    public record WeeklySpending(
+            int bucket,
+            LocalDate weekStart,
+            LocalDate weekEnd,
+            BigDecimal spent,
+            int receipts
     ) {
     }
 }
