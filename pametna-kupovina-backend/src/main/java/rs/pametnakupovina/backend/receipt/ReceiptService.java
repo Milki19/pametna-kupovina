@@ -93,10 +93,6 @@ public class ReceiptService {
                 ));
     }
 
-    public Spending spending(String clientToken) {
-        return spending(clientToken, null);
-    }
-
     public Spending spending(String clientToken, LocalDate month) {
         long accountId = accountFor(clientToken);
         LocalDate weekMonth = (month != null ? month : LocalDate.now(BELGRADE))

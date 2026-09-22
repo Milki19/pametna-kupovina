@@ -10,14 +10,14 @@ import java.util.List;
 @RequestMapping("/api/v1/retailers")
 public class RetailerController {
 
-    private final RetailerService retailerService;
+    private final RetailerRepository retailerRepository;
 
-    public RetailerController(RetailerService retailerService) {
-        this.retailerService = retailerService;
+    public RetailerController(RetailerRepository retailerRepository) {
+        this.retailerRepository = retailerRepository;
     }
 
     @GetMapping
     public List<Retailer> findAll() {
-        return retailerService.findAll();
+        return retailerRepository.findAll();
     }
 }

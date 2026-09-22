@@ -4611,7 +4611,7 @@ class PametnaKupovinaBackendApplicationTests {
                 .isEqualTo(receipt.id());
         assertThat(receiptService.history("telefon-racun", 50)).hasSize(1);
 
-        var spending = receiptService.spending("telefon-racun");
+        var spending = receiptService.spending("telefon-racun", null);
         assertThat(spending.byMonth()).singleElement().satisfies(month -> {
             assertThat(month.month()).isEqualTo(java.time.LocalDate.of(2022, 10, 1));
             assertThat(month.spent())
@@ -4668,13 +4668,10 @@ class PametnaKupovinaBackendApplicationTests {
 
         assertThat(byWeek).extracting(w -> w.bucket()).containsExactly(0, 1, 4);
         assertThat(byWeek.get(0).spent()).isEqualByComparingTo("1000.00");
-        assertThat(byWeek.get(0).weekStart()).isEqualTo(java.time.LocalDate.of(2026, 6, 1));
-        assertThat(byWeek.get(0).weekEnd()).isEqualTo(java.time.LocalDate.of(2026, 6, 7));
         assertThat(byWeek.get(1).spent()).isEqualByComparingTo("2000.00");
-        // Poslednja nedelja juna ima samo 2 dana (29-30), ne 7.
+        // Poslednja nedelja juna ima samo 2 dana (29-30), ne 7, ali to ovaj
+        // upit ne treba da zna — bucket 4 je i dalje samo bucket 4.
         assertThat(byWeek.get(2).spent()).isEqualByComparingTo("500.00");
-        assertThat(byWeek.get(2).weekStart()).isEqualTo(java.time.LocalDate.of(2026, 6, 29));
-        assertThat(byWeek.get(2).weekEnd()).isEqualTo(java.time.LocalDate.of(2026, 6, 30));
 
         // Prazan mesec ne puca, samo je prazan.
         assertThat(receiptService

@@ -863,7 +863,7 @@ public class ShoppingListService {
                 ? fallbackName
                 : rawInput;
 
-        if (value == null || value.trim().isEmpty()) {
+        if (value == null || value.isBlank()) {
             throw badRequest(
                     "Sirovi unos artikla ne sme biti prazan"
             );
