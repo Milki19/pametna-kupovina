@@ -53,7 +53,9 @@ interface ShoppingApiService {
     ): List<ReceiptDto>
 
     @GET("api/v1/receipts/spending")
-    suspend fun getSpending(): SpendingDto
+    suspend fun getSpending(
+        @Query("month") month: String? = null
+    ): SpendingDto
 
     @GET("api/v1/accounts/me")
     suspend fun getAccount(): AccountStateDto

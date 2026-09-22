@@ -161,7 +161,7 @@ class ShoppingRepository @Inject constructor(
     suspend fun receipts(limit: Int = 50): List<ReceiptDto> =
         api.getReceipts(limit)
 
-    suspend fun spending(): SpendingDto = api.getSpending()
+    suspend fun spending(month: String? = null): SpendingDto = api.getSpending(month)
 
     suspend fun accountState(): AccountStateDto = api.getAccount()
 

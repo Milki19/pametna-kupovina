@@ -108,7 +108,7 @@ private fun PurchaseHistory(
     val (active, finished) = sessions.partition { it.archivedAt == null }
     val receipts by receiptViewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    Scaffold(topBar = { AppTopBar(title = "Kupovine", onBack = onBack) }) { padding ->
+    Scaffold(topBar = { AppTopBar(title = "Istorija", onBack = onBack) }) { padding ->
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()

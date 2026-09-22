@@ -218,9 +218,19 @@ data class ShopSpendingDto(
 )
 
 @Serializable
+data class WeeklySpendingDto(
+    val bucket: Int,
+    val weekStart: String,
+    val weekEnd: String,
+    val spent: Double,
+    val receipts: Int
+)
+
+@Serializable
 data class SpendingDto(
     val byMonth: List<MonthlySpendingDto> = emptyList(),
-    val byShop: List<ShopSpendingDto> = emptyList()
+    val byShop: List<ShopSpendingDto> = emptyList(),
+    val byWeek: List<WeeklySpendingDto> = emptyList()
 )
 
 @Serializable
