@@ -4631,6 +4631,58 @@ class PametnaKupovinaBackendApplicationTests {
     }
 
     /**
+     * Dashboard treba nedeljne stubove za izabrani mesec, kao na mani.rs:
+     * 1-7, 8-14, ..., 29-kraj. Račun iz drugog meseca i računi drugog naloga
+     * ne smeju da uđu u zbir.
+     */
+    @Test
+    void weeklySpendingBucketsTheMonthAndIgnoresEverythingOutsideIt() {
+        var list = shoppingListService.create(
+                new CreateShoppingListRequest("Nedeljna potrošnja"), "telefon-nedelja");
+        long accountId = jdbcClient.sql(
+                        "SELECT account_id FROM app.shopping_list WHERE id = ?")
+                .param(list.id()).query(Long.class).single();
+
+        jdbcClient.sql("""
+                INSERT INTO app.receipt(account_id,verification_key,shop_name,issued_at,total_amount)
+                VALUES (?,'NEDELJA-1','Prva','2026-06-05T12:00:00Z',1000.00),
+                       (?,'NEDELJA-2','Druga','2026-06-12T12:00:00Z',2000.00),
+                       (?,'NEDELJA-3','Treca','2026-06-30T12:00:00Z',500.00),
+                       (?,'NEDELJA-4','Van meseca','2026-07-02T12:00:00Z',9999.00)
+                """).params(accountId, accountId, accountId, accountId).update();
+
+        long drugiNalog = jdbcClient.sql(
+                        "SELECT account_id FROM app.shopping_list WHERE id = ?")
+                .param(shoppingListService.create(
+                        new CreateShoppingListRequest("Tuđ spisak"), "telefon-druga-nedelja"
+                ).id())
+                .query(Long.class).single();
+        jdbcClient.sql("""
+                INSERT INTO app.receipt(account_id,verification_key,shop_name,issued_at,total_amount)
+                VALUES (?,'NEDELJA-5','Tuđa','2026-06-05T12:00:00Z',7777.00)
+                """).param(drugiNalog).update();
+
+        var byWeek = receiptService
+                .spending("telefon-nedelja", java.time.LocalDate.of(2026, 6, 1))
+                .byWeek();
+
+        assertThat(byWeek).extracting(w -> w.bucket()).containsExactly(0, 1, 4);
+        assertThat(byWeek.get(0).spent()).isEqualByComparingTo("1000.00");
+        assertThat(byWeek.get(0).weekStart()).isEqualTo(java.time.LocalDate.of(2026, 6, 1));
+        assertThat(byWeek.get(0).weekEnd()).isEqualTo(java.time.LocalDate.of(2026, 6, 7));
+        assertThat(byWeek.get(1).spent()).isEqualByComparingTo("2000.00");
+        // Poslednja nedelja juna ima samo 2 dana (29-30), ne 7.
+        assertThat(byWeek.get(2).spent()).isEqualByComparingTo("500.00");
+        assertThat(byWeek.get(2).weekStart()).isEqualTo(java.time.LocalDate.of(2026, 6, 29));
+        assertThat(byWeek.get(2).weekEnd()).isEqualTo(java.time.LocalDate.of(2026, 6, 30));
+
+        // Prazan mesec ne puca, samo je prazan.
+        assertThat(receiptService
+                .spending("telefon-nedelja", java.time.LocalDate.of(2026, 1, 1))
+                .byWeek()).isEmpty();
+    }
+
+    /**
      * Gomila plastike ostaje kod kuće, ali broj sa kartice mora da izađe pred
      * kasirku tačno onakav kakav je odštampan.
      */
