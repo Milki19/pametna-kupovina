@@ -787,7 +787,7 @@ public class DataQualityService {
     }
 
     private String normalizedRequired(String value, String fieldName) {
-        if (value == null || value.trim().isEmpty()) {
+        if (value == null || value.isBlank()) {
             throw badRequest(fieldName + " je obavezan");
         }
 

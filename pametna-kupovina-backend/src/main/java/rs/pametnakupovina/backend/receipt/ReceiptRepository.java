@@ -281,8 +281,8 @@ public class ReceiptRepository {
      * 2-3 dana i to je normalno.
      */
     public List<WeeklySpending> spendingByWeek(long accountId, LocalDate monthStart) {
-        List<Object[]> rows = jdbcClient.sql("""
-                        SELECT bucket, SUM(total_amount) AS spent, COUNT(*) AS receipts
+        return jdbcClient.sql("""
+                        SELECT bucket, SUM(total_amount) AS spent
                         FROM (
                             SELECT total_amount,
                                    (EXTRACT(
@@ -300,27 +300,11 @@ public class ReceiptRepository {
                         """)
                 .param("accountId", accountId)
                 .param("monthStart", monthStart)
-                .query((resultSet, rowNumber) -> new Object[]{
+                .query((resultSet, rowNumber) -> new WeeklySpending(
                         resultSet.getInt("bucket"),
-                        resultSet.getBigDecimal("spent"),
-                        resultSet.getInt("receipts")
-                })
+                        resultSet.getBigDecimal("spent")
+                ))
                 .list();
-
-        LocalDate monthEnd = monthStart.plusMonths(1).minusDays(1);
-        return rows.stream()
-                .map(row -> {
-                    int bucket = (int) row[0];
-                    LocalDate weekStart = monthStart.plusDays(bucket * 7L);
-                    LocalDate weekEnd = weekStart.plusDays(6).isAfter(monthEnd)
-                            ? monthEnd
-                            : weekStart.plusDays(6);
-                    return new WeeklySpending(
-                            bucket, weekStart, weekEnd,
-                            (BigDecimal) row[1], (int) row[2]
-                    );
-                })
-                .toList();
     }
 
     /** Gde je otišlo, od najviše ka najmanje. */
@@ -377,10 +361,7 @@ public class ReceiptRepository {
 
     public record WeeklySpending(
             int bucket,
-            LocalDate weekStart,
-            LocalDate weekEnd,
-            BigDecimal spent,
-            int receipts
+            BigDecimal spent
     ) {
     }
 }
