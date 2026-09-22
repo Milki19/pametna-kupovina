@@ -23,7 +23,6 @@ googleIdentity = "1.1.1"
 codeScanner = "16.1.0"
 zxing = "3.5.3"
 playServicesLocation = "21.4.0"
-mapsCompose = "6.12.0"
 
 [libraries]
 androidx-credentials = { group = "androidx.credentials", name = "credentials", version.ref = "credentials" }
@@ -65,9 +64,7 @@ dagger-hilt-compiler = { group = "com.google.dagger", name = "hilt-compiler", ve
 dagger-hilt-android-testing = { group = "com.google.dagger", name = "hilt-android-testing", version.ref = "hilt" }
 retrofit = { group = "com.squareup.retrofit2", name = "retrofit", version = "3.0.0" }
 retrofit-kotlinx-serialization = { group = "com.squareup.retrofit2", name = "converter-kotlinx-serialization", version = "3.0.0" }
-retrofit-gson = { group = "com.squareup.retrofit2", name = "converter-gson", version = "3.0.0" }
 google-play-services-location = { group = "com.google.android.gms", name = "play-services-location", version.ref = "playServicesLocation" }
-google-maps-compose = { group = "com.google.maps.android", name = "maps-compose", version.ref = "mapsCompose" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
 
 [plugins]

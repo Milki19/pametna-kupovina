@@ -6,6 +6,11 @@ import java.math.BigDecimal
 data class ShoppingAmount(val value: Double, val unit: String)
 data class RequestedShoppingAmount(val name: String, val amount: ShoppingAmount)
 
+internal const val DECIMAL_NUMBER = "\\d+(?:[.,]\\d+)?"
+
+/** "2,5" or "2.5" as a Double — the Serbian decimal comma either way. */
+internal fun String.parseSerbianDecimal(): Double? = replace(',', '.').toDoubleOrNull()
+
 /** Suggestions apply only to new generic entries, never to existing drafts. */
 fun suggestedAmount(name: String): ShoppingAmount? {
     val normalized = Normalizer.normalize(name.trim().lowercase(), Normalizer.Form.NFD)
@@ -19,14 +24,14 @@ fun suggestedAmount(name: String): ShoppingAmount? {
 }
 
 fun parseShoppingAmount(input: String): RequestedShoppingAmount? {
-    val suffix = Regex("^(.+?)\\s+(\\d+(?:[.,]\\d+)?)\\s*(kg|g|l|ml|kom|komada)\\s*$", RegexOption.IGNORE_CASE)
-    val prefix = Regex("^(\\d+(?:[.,]\\d+)?)\\s*(kg|g|l|ml|kom|komada)\\s+(.+)$", RegexOption.IGNORE_CASE)
+    val suffix = Regex("^(.+?)\\s+($DECIMAL_NUMBER)\\s*(kg|g|l|ml|kom|komada)\\s*$", RegexOption.IGNORE_CASE)
+    val prefix = Regex("^($DECIMAL_NUMBER)\\s*(kg|g|l|ml|kom|komada)\\s+(.+)$", RegexOption.IGNORE_CASE)
     val end = suffix.matchEntire(input.trim())
     val start = prefix.matchEntire(input.trim())
     val name = end?.groupValues?.get(1) ?: start?.groupValues?.get(3) ?: return null
     val number = end?.groupValues?.get(2) ?: start!!.groupValues[1]
     val unit = (end?.groupValues?.get(3) ?: start!!.groupValues[2]).lowercase()
-    val value = number.replace(',', '.').toDoubleOrNull() ?: return null
+    val value = number.parseSerbianDecimal() ?: return null
     val baseValue = value * if (unit in setOf("kg", "l")) 1000 else 1
     if (!baseValue.isFinite() || baseValue <= 0) return null
     return RequestedShoppingAmount(name.trim(), ShoppingAmount(baseValue, when (unit) {

@@ -54,12 +54,9 @@ import rs.pametnakupovina.app.ui.counted
 import rs.pametnakupovina.app.ui.dateTime
 import rs.pametnakupovina.app.ui.items
 import rs.pametnakupovina.app.ui.money
+import rs.pametnakupovina.app.ui.monthName
 
 private val BELGRADE = ZoneId.of("Europe/Belgrade")
-private val MONTH_NAMES = listOf(
-    "januar", "februar", "mart", "april", "maj", "jun",
-    "jul", "avgust", "septembar", "oktobar", "novembar", "decembar"
-)
 
 private enum class DashboardTab { RECEIPTS, SHOPS }
 
@@ -75,7 +72,7 @@ fun DashboardScreen(
     dashboardViewModel: DashboardViewModel = hiltViewModel(),
     receiptViewModel: ReceiptViewModel = hiltViewModel()
 ) {
-    val dashboardState by dashboardViewModel.uiState.collectAsStateWithLifecycle()
+    val listItemCount by dashboardViewModel.listItemCount.collectAsStateWithLifecycle()
     val receiptState by receiptViewModel.uiState.collectAsStateWithLifecycle()
     var tab by rememberSaveable { mutableStateOf(DashboardTab.RECEIPTS) }
 
@@ -119,7 +116,7 @@ fun DashboardScreen(
             verticalArrangement = Arrangement.spacedBy(AppSpacing.md)
         ) {
             item(key = "list-shortcut") {
-                ShoppingListShortcutCard(dashboardState.listItemCount, onOpenList)
+                ShoppingListShortcutCard(listItemCount, onOpenList)
             }
             item(key = "spending") {
                 MonthSpendingCard(receiptState.byMonth, receiptState.selectedMonth)
@@ -398,10 +395,8 @@ private fun EmptyTabMessage(text: String) {
     )
 }
 
-private fun monthTitle(month: LocalDate): String {
-    val name = MONTH_NAMES[month.monthValue - 1].replaceFirstChar(Char::uppercase)
-    return "$name ${month.year}."
-}
+private fun monthTitle(month: LocalDate): String =
+    monthName(month).replaceFirstChar(Char::uppercase)
 
 private fun isInMonth(issuedAtIso: String, month: LocalDate): Boolean = try {
     val local = Instant.parse(issuedAtIso).atZone(BELGRADE).toLocalDate()

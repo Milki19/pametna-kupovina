@@ -29,20 +29,16 @@ data class Coordinates(
     }
 }
 
-interface LocationProvider {
-    suspend fun currentLocation(): Coordinates
-}
-
 class LocationUnavailableException(message: String) : Exception(message)
 
 @Singleton
 class FusedLocationProvider @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val client: FusedLocationProviderClient
-) : LocationProvider {
+) {
 
     @SuppressLint("MissingPermission")
-    override suspend fun currentLocation(): Coordinates {
+    suspend fun currentLocation(): Coordinates {
         if (!hasLocationPermission(context)) {
             throw LocationUnavailableException(
                 "Dozvola za lokaciju nije odobrena."
@@ -176,8 +172,7 @@ internal fun isUsableLocation(
         nowNanos - timestampNanos <= maxAgeNanos
 
 private fun hasUsableCoordinates(location: Location): Boolean =
-    location.latitude.isFinite() && location.longitude.isFinite() &&
-        location.latitude in -90.0..90.0 && location.longitude in -180.0..180.0
+    runCatching { Coordinates(location.latitude, location.longitude) }.isSuccess
 
 internal suspend fun <T> resolveLocationWithFallback(
     freshLocation: suspend () -> T?,
