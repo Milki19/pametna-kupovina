@@ -66,6 +66,15 @@ fun date(iso: String): String = try {
     iso
 }
 
+private val MonthNames = listOf(
+    "januar", "februar", "mart", "april", "maj", "jun",
+    "jul", "avgust", "septembar", "oktobar", "novembar", "decembar"
+)
+
+/** "2026-09-01" or any date in September 2026 becomes "septembar 2026.". */
+fun monthName(month: LocalDate): String =
+    "${MonthNames[month.monthValue - 1]} ${month.year}."
+
 private val ShortDateFormat = DateTimeFormatter.ofPattern("dd.MM.")
 
 /** Day and month only, for a date that sits next to other information. */

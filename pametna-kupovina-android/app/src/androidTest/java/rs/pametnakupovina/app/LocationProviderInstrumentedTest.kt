@@ -19,7 +19,7 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import rs.pametnakupovina.app.location.LocationProvider
+import rs.pametnakupovina.app.location.FusedLocationProvider
 
 @HiltAndroidTest
 @RunWith(AndroidJUnit4::class)
@@ -28,7 +28,7 @@ class LocationProviderInstrumentedTest {
     @get:Rule
     val hiltRule = HiltAndroidRule(this)
 
-    @Inject lateinit var locationProvider: LocationProvider
+    @Inject lateinit var locationProvider: FusedLocationProvider
     @Inject lateinit var fusedLocationClient: FusedLocationProviderClient
 
     private val instrumentation

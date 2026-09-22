@@ -63,7 +63,7 @@ import rs.pametnakupovina.app.data.network.RecommendationStoreDto
 import rs.pametnakupovina.app.data.network.ShoppingRecommendationDto
 import rs.pametnakupovina.app.data.network.UnlocatedPriceOptionDto
 import rs.pametnakupovina.app.data.purchase.PurchaseSession
-import rs.pametnakupovina.app.navigation.NavigationPoint
+import rs.pametnakupovina.app.location.Coordinates
 import rs.pametnakupovina.app.navigation.googleMapsDirectionsUrl
 import rs.pametnakupovina.app.navigation.launchGoogleMapsDirections
 import rs.pametnakupovina.app.ui.ProductSearchViewModel
@@ -318,9 +318,9 @@ internal fun RecommendationContent(
                         stopCount = orderedStores.size,
                         onClick = {
                             val url = googleMapsDirectionsUrl(
-                                origin = NavigationPoint(origin.first, origin.second),
+                                origin = Coordinates(origin.first, origin.second),
                                 orderedStops = orderedStores.map { store ->
-                                    NavigationPoint(store.latitude, store.longitude)
+                                    Coordinates(store.latitude, store.longitude)
                                 }
                             )
                             launchGoogleMapsDirections(context, url)

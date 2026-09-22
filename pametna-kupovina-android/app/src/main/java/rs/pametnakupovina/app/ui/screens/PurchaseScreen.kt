@@ -54,7 +54,7 @@ import rs.pametnakupovina.app.data.purchase.PurchaseItemProgress
 import rs.pametnakupovina.app.data.purchase.PurchaseSession
 import rs.pametnakupovina.app.data.purchase.PurchaseStatus
 import rs.pametnakupovina.app.data.purchase.validatePurchaseProgress
-import rs.pametnakupovina.app.navigation.NavigationPoint
+import rs.pametnakupovina.app.location.Coordinates
 import rs.pametnakupovina.app.navigation.googleMapsDirectionsUrl
 import rs.pametnakupovina.app.navigation.launchGoogleMapsDirections
 import rs.pametnakupovina.app.data.network.MonthlySpendingDto
@@ -288,12 +288,7 @@ private fun ReceiptGroup(receipts: List<ReceiptDto>) {
 
 /** „2026-09-01" postaje „septembar 2026.". */
 private fun monthName(isoMonth: String): String = try {
-    val date = java.time.LocalDate.parse(isoMonth)
-    val names = listOf(
-        "januar", "februar", "mart", "april", "maj", "jun",
-        "jul", "avgust", "septembar", "oktobar", "novembar", "decembar"
-    )
-    "${names[date.monthValue - 1]} ${date.year}."
+    rs.pametnakupovina.app.ui.monthName(java.time.LocalDate.parse(isoMonth))
 } catch (invalid: Exception) {
     isoMonth
 }
@@ -416,7 +411,7 @@ private fun PurchaseInProgress(
                                 context,
                                 googleMapsDirectionsUrl(
                                     null,
-                                    stores.map { NavigationPoint(it.latitude, it.longitude) }
+                                    stores.map { Coordinates(it.latitude, it.longitude) }
                                 )
                             )
                         }) {
@@ -501,7 +496,7 @@ private fun PurchaseInProgress(
                                 context,
                                 googleMapsDirectionsUrl(
                                     null,
-                                    listOf(NavigationPoint(store.latitude, store.longitude))
+                                    listOf(Coordinates(store.latitude, store.longitude))
                                 )
                             )
                         }

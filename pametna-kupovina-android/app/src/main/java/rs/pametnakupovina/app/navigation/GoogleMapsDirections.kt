@@ -4,26 +4,13 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import rs.pametnakupovina.app.location.Coordinates
 
-data class NavigationPoint(
-    val latitude: Double,
-    val longitude: Double
-) {
-    init {
-        require(latitude.isFinite() && latitude in -90.0..90.0) {
-            "Latitude je van opsega."
-        }
-        require(longitude.isFinite() && longitude in -180.0..180.0) {
-            "Longitude je van opsega."
-        }
-    }
-
-    internal fun queryValue(): String = "$latitude,$longitude"
-}
+private fun Coordinates.queryValue(): String = "$latitude,$longitude"
 
 fun googleMapsDirectionsUrl(
-    origin: NavigationPoint?,
-    orderedStops: List<NavigationPoint>
+    origin: Coordinates?,
+    orderedStops: List<Coordinates>
 ): String {
     val stops = orderedStops.distinct()
     require(stops.isNotEmpty()) { "Ruta mora imati bar jednu prodavnicu." }

@@ -4,14 +4,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
-import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import rs.pametnakupovina.app.data.ShoppingRepository
-
-data class DashboardUiState(val listItemCount: Int = 0)
 
 /**
  * Samo broj stavki na spisku, bez sinhronizacije — to već radi
@@ -22,14 +19,7 @@ class DashboardViewModel @Inject constructor(
     repository: ShoppingRepository
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(DashboardUiState())
-    val uiState: StateFlow<DashboardUiState> = _uiState.asStateFlow()
-
-    init {
-        viewModelScope.launch {
-            repository.draftItems.collect { items ->
-                _uiState.update { it.copy(listItemCount = items.size) }
-            }
-        }
-    }
+    val listItemCount: StateFlow<Int> = repository.draftItems
+        .map { it.size }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 }

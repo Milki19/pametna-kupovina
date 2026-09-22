@@ -27,8 +27,6 @@ import rs.pametnakupovina.app.data.local.MIGRATION_4_5
 import rs.pametnakupovina.app.data.local.PametnaKupovinaDatabase
 import rs.pametnakupovina.app.data.network.ShoppingApiService
 import rs.pametnakupovina.app.data.preferences.ClientIdentityStore
-import rs.pametnakupovina.app.location.FusedLocationProvider
-import rs.pametnakupovina.app.location.LocationProvider
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -113,9 +111,4 @@ object LocationModule {
     ): FusedLocationProviderClient =
         LocationServices.getFusedLocationProviderClient(context)
 
-    @Provides
-    @Singleton
-    fun provideLocationProvider(
-        provider: FusedLocationProvider
-    ): LocationProvider = provider
 }

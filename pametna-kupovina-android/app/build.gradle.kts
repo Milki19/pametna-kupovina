@@ -25,8 +25,6 @@ fun configuredValue(name: String, defaultValue: String = ""): String =
         ?: providers.environmentVariable(name).orNull
         ?: localProperties.getProperty(name, defaultValue)
 
-val mapsApiKey = configuredValue("MAPS_API_KEY")
-
 val backendBaseUrl = configuredValue(
     "BACKEND_BASE_URL",
     "http://10.0.2.2:8080/"
@@ -83,7 +81,6 @@ android {
             "GOOGLE_CLIENT_ID",
             googleClientId.asBuildConfigString()
         )
-        manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
     }
 
     signingConfigs {
@@ -166,11 +163,9 @@ dependencies {
 
     implementation(libs.retrofit)
     implementation(libs.retrofit.kotlinx.serialization)
-    implementation(libs.retrofit.gson)
     implementation(libs.kotlinx.serialization.json)
 
     implementation(libs.google.play.services.location)
-    implementation(libs.google.maps.compose)
 
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)

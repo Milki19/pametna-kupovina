@@ -9,7 +9,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import rs.pametnakupovina.app.location.Coordinates
-import rs.pametnakupovina.app.location.LocationProvider
+import rs.pametnakupovina.app.location.FusedLocationProvider
 
 data class LocationUiState(
     val isResolving: Boolean = false,
@@ -20,7 +20,7 @@ data class LocationUiState(
 
 @HiltViewModel
 class LocationViewModel @Inject constructor(
-    private val locationProvider: LocationProvider
+    private val locationProvider: FusedLocationProvider
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(LocationUiState())

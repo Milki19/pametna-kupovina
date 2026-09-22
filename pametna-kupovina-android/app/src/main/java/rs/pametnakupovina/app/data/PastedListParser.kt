@@ -8,11 +8,11 @@ data class ParsedDraftLine(
 
 object PastedListParser {
     private val leadingQuantity = Regex(
-        "^(\\d+(?:[.,]\\d+)?)\\s*[x×]\\s+(.+)$",
+        "^($DECIMAL_NUMBER)\\s*[x×]\\s+(.+)$",
         RegexOption.IGNORE_CASE
     )
     private val trailingQuantity = Regex(
-        "^(.+?)\\s+[x×]\\s*(\\d+(?:[.,]\\d+)?)$",
+        "^(.+?)\\s+[x×]\\s*($DECIMAL_NUMBER)$",
         RegexOption.IGNORE_CASE
     )
     private val bullet = Regex("^[\\s*•·▪◦-]+")
@@ -50,5 +50,5 @@ object PastedListParser {
         .toList()
 
     private fun String.toQuantity(): Double =
-        replace(',', '.').toDoubleOrNull()?.takeIf { it > 0 } ?: 1.0
+        parseSerbianDecimal()?.takeIf { it > 0 } ?: 1.0
 }
