@@ -63,6 +63,12 @@ interface ShoppingApiService {
         @Body request: GoogleSignInRequestDto
     ): AccountStateDto
 
+    @POST("api/v1/accounts/invite")
+    suspend fun createInvite(): InviteDto
+
+    @POST("api/v1/accounts/join")
+    suspend fun joinHousehold(@Body request: JoinRequestDto): AccountStateDto
+
     @POST("api/v1/shopping-lists")
     suspend fun createShoppingList(
         @Body request: CreateShoppingListRequestDto

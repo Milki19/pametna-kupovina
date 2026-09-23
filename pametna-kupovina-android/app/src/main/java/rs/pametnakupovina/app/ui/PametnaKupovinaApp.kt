@@ -32,6 +32,7 @@ import rs.pametnakupovina.app.R
 import rs.pametnakupovina.app.ui.components.AppIcon
 import rs.pametnakupovina.app.ui.components.AppSpacing
 import rs.pametnakupovina.app.ui.screens.AboutDialog
+import rs.pametnakupovina.app.ui.screens.HouseholdDialog
 import rs.pametnakupovina.app.ui.screens.DashboardScreen
 import rs.pametnakupovina.app.ui.screens.LocationScreen
 import rs.pametnakupovina.app.ui.screens.LoyaltyCardsScreen
@@ -70,6 +71,7 @@ fun PametnaKupovinaApp() {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val drawerScope = rememberCoroutineScope()
     var showAbout by rememberSaveable { mutableStateOf(false) }
+    var showHousehold by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
 
     if (showAbout) {
@@ -78,6 +80,13 @@ fun PametnaKupovinaApp() {
             onOpenLink = { url ->
                 context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri()))
             }
+        )
+    }
+
+    if (showHousehold) {
+        HouseholdDialog(
+            onDismiss = { showHousehold = false },
+            onJoined = receiptViewModel::refresh
         )
     }
 
@@ -97,6 +106,10 @@ fun PametnaKupovinaApp() {
                     onHistory = {
                         drawerScope.launch { drawerState.close() }
                         navController.navigate("purchases")
+                    },
+                    onHousehold = {
+                        drawerScope.launch { drawerState.close() }
+                        showHousehold = true
                     },
                     onAbout = {
                         drawerScope.launch { drawerState.close() }
@@ -209,6 +222,7 @@ private fun AppDrawerContent(
     onScan: () -> Unit,
     onCards: () -> Unit,
     onHistory: () -> Unit,
+    onHousehold: () -> Unit,
     onAbout: () -> Unit
 ) {
     Column(modifier = Modifier.padding(vertical = AppSpacing.md)) {
@@ -243,6 +257,15 @@ private fun AppDrawerContent(
             modifier = Modifier
                 .padding(horizontal = AppSpacing.sm)
                 .testTag("menu-history")
+        )
+        NavigationDrawerItem(
+            label = { Text("Domaćinstvo") },
+            icon = { AppIcon(R.drawable.ic_home, contentDescription = null) },
+            selected = false,
+            onClick = onHousehold,
+            modifier = Modifier
+                .padding(horizontal = AppSpacing.sm)
+                .testTag("menu-household")
         )
         NavigationDrawerItem(
             label = { Text("O aplikaciji") },

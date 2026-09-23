@@ -248,6 +248,17 @@ data class GoogleSignInRequestDto(
 )
 
 @Serializable
+data class InviteDto(
+    val code: String,
+    val validMinutes: Int
+)
+
+@Serializable
+data class JoinRequestDto(
+    val code: String
+)
+
+@Serializable
 data class CanonicalProductSearchPageDto(
     val query: String,
     val page: Int,

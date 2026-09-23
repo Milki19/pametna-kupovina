@@ -12,6 +12,7 @@ import rs.pametnakupovina.app.data.local.SyncState
 import rs.pametnakupovina.app.data.network.AccountStateDto
 import rs.pametnakupovina.app.data.network.AddLoyaltyCardRequestDto
 import rs.pametnakupovina.app.data.network.HabitDto
+import rs.pametnakupovina.app.data.network.JoinRequestDto
 import rs.pametnakupovina.app.data.network.LoyaltyCardDto
 import rs.pametnakupovina.app.data.network.ReceiptDto
 import rs.pametnakupovina.app.data.network.ScanReceiptRequestDto
@@ -164,6 +165,28 @@ class ShoppingRepository @Inject constructor(
     suspend fun spending(month: String): SpendingDto = api.getSpending(month)
 
     suspend fun accountState(): AccountStateDto = api.getAccount()
+
+    /** Sadržaj QR koda za drugi telefon: jednokratni kod i spisak koji se deli. */
+    suspend fun householdInvite(): Pair<String, Int> {
+        val listId = synchronizePending(allowRejected = true)
+        val invite = api.createInvite()
+        return householdCode(invite.code, listId) to invite.validMinutes
+    }
+
+    /**
+     * Ovaj telefon ulazi u nalog koji je pokazao kod i prelazi na njegov
+     * spisak. Ono što je već bilo na ovom spisku dodaje se zajedničkom, pa
+     * ništa što je kupac upisao ne nestaje sa ekrana.
+     */
+    suspend fun joinHousehold(scanned: String) {
+        val (code, listId) = parseHouseholdCode(scanned) ?: throw NotAHouseholdCode()
+        api.joinHousehold(JoinRequestDto(code))
+        syncMutex.withLock {
+            clientIdentityStore.setActiveListId(listId)
+            dao.resetRemoteState()
+        }
+        synchronizeAndRefresh()
+    }
 
     suspend fun signInWithGoogle(idToken: String): AccountStateDto =
         api.signInWithGoogle(GoogleSignInRequestDto(idToken))
@@ -420,6 +443,20 @@ class ShoppingRepository @Inject constructor(
 }
 
 data class RejectedItem(val name: String, val reason: String?)
+
+class NotAHouseholdCode : Exception()
+
+private const val HOUSEHOLD_PREFIX = "pametnakupovina:domacinstvo:"
+
+internal fun householdCode(code: String, listId: Long) = "$HOUSEHOLD_PREFIX$code:$listId"
+
+/** Kod i spisak iz skeniranog QR-a, ili null za bilo koji drugi kod. */
+internal fun parseHouseholdCode(scanned: String): Pair<String, Long>? {
+    val rest = scanned.trim().takeIf { it.startsWith(HOUSEHOLD_PREFIX) }
+        ?.removePrefix(HOUSEHOLD_PREFIX) ?: return null
+    val listId = rest.substringAfter(':', "").toLongOrNull() ?: return null
+    return rest.substringBefore(':').takeIf(String::isNotBlank)?.let { it to listId }
+}
 
 class ItemSyncValidationException(
     val rejected: List<RejectedItem>,
