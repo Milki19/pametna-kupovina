@@ -4628,6 +4628,16 @@ class PametnaKupovinaBackendApplicationTests {
         jdbcClient.sql("UPDATE app.account SET invite_expires_at = NOW() - INTERVAL '1 minute'").update();
         assertThatThrownBy(() -> accountSignInService.join("komsija", stale.code()))
                 .hasMessageContaining("404");
+
+        // Brisanje u domaćinstvu: tata izlazi, a mamino ostaje netaknuto.
+        assertThat(accountSignInService.state("mama").household()).isTrue();
+        accountSignInService.delete("tata");
+        assertThat(accountSignInService.state("mama").household()).isFalse();
+        assertThat(receiptService.history("mama", 50)).hasSize(1);
+        // Poslednji na nalogu briše sve.
+        accountSignInService.delete("mama");
+        assertThat(jdbcClient.sql("SELECT COUNT(*) FROM app.account").query(Long.class).single()).isZero();
+        assertThat(jdbcClient.sql("SELECT COUNT(*) FROM app.receipt").query(Long.class).single()).isZero();
     }
 
     /**

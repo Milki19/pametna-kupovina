@@ -38,9 +38,19 @@ public class AccountSignInService {
     }
 
     public AccountState state(String clientToken) {
-        long accountId = accountFor(clientToken);
+        return stateOf(accountFor(clientToken));
+    }
 
-        return new AccountState(accountRepository.isSignedIn(accountId));
+    /** Brisanje iz same aplikacije; vidi {@link AccountRepository#forget}. */
+    public void delete(String clientToken) {
+        accountRepository.forget(clientTokenPolicy.validateAndHash(clientToken));
+    }
+
+    private AccountState stateOf(long accountId) {
+        return new AccountState(
+                accountRepository.isSignedIn(accountId),
+                accountRepository.isShared(accountId)
+        );
     }
 
     @Transactional
@@ -61,14 +71,14 @@ public class AccountSignInService {
                     subject
             );
 
-            return new AccountState(true);
+            return stateOf(deviceAccount);
         }
 
         // Isti čovek sa drugog telefona: telefon i sve što je na njemu
         // napravio prelaze na nalog koji već postoji.
         accountRepository.moveEverything(deviceAccount, known.get());
 
-        return new AccountState(true);
+        return stateOf(known.get());
     }
 
     /**
@@ -102,7 +112,7 @@ public class AccountSignInService {
 
         accountRepository.moveEverything(accountFor(clientToken), household);
 
-        return new AccountState(accountRepository.isSignedIn(household));
+        return stateOf(household);
     }
 
     private long accountFor(String clientToken) {
@@ -112,11 +122,12 @@ public class AccountSignInService {
     }
 
     /**
-     * @param signedIn whether this phone's account has an identity; there is
-     *                 deliberately nothing else here, because the server
-     *                 keeps neither a name nor an address to report back
+     * @param signedIn  whether this phone's account has an identity; there is
+     *                  deliberately no name or address here, because the
+     *                  server keeps neither
+     * @param household whether other phones share the account
      */
-    public record AccountState(boolean signedIn) {
+    public record AccountState(boolean signedIn, boolean household) {
     }
 
     public record Invite(String code, long validMinutes) {
