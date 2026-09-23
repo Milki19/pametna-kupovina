@@ -75,6 +75,53 @@ public class AccountRepository {
                 .single();
     }
 
+    /** Whether other phones share this account: a household. */
+    public boolean isShared(long accountId) {
+        return jdbcClient.sql("""
+                        SELECT COUNT(*) > 1
+                        FROM app.account_device
+                        WHERE account_id = :accountId
+                        """)
+                .param("accountId", accountId)
+                .query(Boolean.class)
+                .single();
+    }
+
+    /**
+     * The phone leaves. Alone on its account, the account and everything on
+     * it go with it (the rows cascade); in a household only the phone leaves,
+     * and what the household shares stays with the others. Either way the
+     * catalogue feedback it left no longer points back at it: decisions and
+     * reports lose the hash, and the append-only feedback keeps a hash that no
+     * device has any more.
+     */
+    @Transactional
+    public void forget(String clientTokenHash) {
+        for (String unlink : List.of(
+                "UPDATE app.product_match_decision SET client_token_hash = NULL WHERE client_token_hash = :hash",
+                "UPDATE app.product_report SET client_token_hash = NULL WHERE client_token_hash = :hash"
+        )) {
+            jdbcClient.sql(unlink).param("hash", clientTokenHash).update();
+        }
+
+        jdbcClient.sql("""
+                        WITH gone AS (
+                            DELETE FROM app.account_device
+                             WHERE client_token_hash = :hash
+                            RETURNING account_id
+                        )
+                        DELETE FROM app.account
+                         WHERE id IN (SELECT account_id FROM gone)
+                           AND NOT EXISTS (
+                               SELECT 1 FROM app.account_device AS other
+                               WHERE other.account_id = account.id
+                                 AND other.client_token_hash <> :hash
+                           )
+                        """)
+                .param("hash", clientTokenHash)
+                .update();
+    }
+
     /** Whether anyone has signed in on this account yet. */
     public boolean isSignedIn(long accountId) {
         return jdbcClient.sql("""
