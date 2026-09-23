@@ -22,13 +22,14 @@ import com.google.zxing.MultiFormatWriter
 fun Barcode(
     value: String,
     format: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    contentDescription: String = "Crtični kod: $value"
 ) {
     val bitmap = remember(value, format) { renderBarcode(value, format) } ?: return
 
     Image(
         painter = BitmapPainter(bitmap.asImageBitmap()),
-        contentDescription = "Crtični kod: $value",
+        contentDescription = contentDescription,
         contentScale = ContentScale.FillBounds,
         modifier = modifier
     )
