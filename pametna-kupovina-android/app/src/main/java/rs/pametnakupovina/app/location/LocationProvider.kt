@@ -4,6 +4,7 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
+import android.location.Geocoder
 import android.location.Location
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.CurrentLocationRequest
@@ -15,8 +16,11 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import java.util.Locale
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
 data class Coordinates(
@@ -30,6 +34,25 @@ data class Coordinates(
 }
 
 class LocationUnavailableException(message: String) : Exception(message)
+
+private val CyrillicToLatin = "абвгдђежзијклљмнњопрстћуфхцчџш".toList().zip(
+    listOf(
+        "a", "b", "v", "g", "d", "đ", "e", "ž", "z", "i", "j", "k", "l", "lj", "m",
+        "n", "nj", "o", "p", "r", "s", "t", "ć", "u", "f", "h", "c", "č", "dž", "š"
+    )
+).toMap()
+
+/** Geocoder vraća srpske adrese ćirilicom i kad se traži latinica. */
+internal fun toLatin(text: String): String = buildString {
+    text.forEach { letter ->
+        val latin = CyrillicToLatin[letter.lowercaseChar()]
+        when {
+            latin == null -> append(letter)
+            letter.isUpperCase() -> append(latin.replaceFirstChar(Char::uppercase))
+            else -> append(latin)
+        }
+    }
+}
 
 @Singleton
 class FusedLocationProvider @Inject constructor(
@@ -92,10 +115,39 @@ class FusedLocationProvider @Inject constructor(
             }
         ) ?: throw LocationUnavailableException(
                 "Lokacija nije pronađena. Uključi lokacijske usluge " +
-                    "ili unesi koordinate ručno."
+                    "ili upiši adresu."
             )
 
         return Coordinates(location.latitude, location.longitude)
+    }
+
+    /**
+     * Kraj ili adresa („Karaburma", „Bulevar kralja Aleksandra 73") kao
+     * polazna tačka, bez mape i bez API ključa: Android-ov Geocoder, samo
+     * unutar Srbije, da „Karaburma" ne ode u drugu državu.
+     */
+    @Suppress("DEPRECATION") // Verzija sa listener-om postoji tek od API 33.
+    suspend fun findAddress(query: String): Pair<Coordinates, String> = withContext(Dispatchers.IO) {
+        if (!Geocoder.isPresent()) {
+            throw LocationUnavailableException(
+                "Pretraga adrese ne radi na ovom telefonu. Unesi koordinate ručno."
+            )
+        }
+        val geocoder = Geocoder(context, Locale.forLanguageTag("sr-Latn-RS"))
+        val search = { geocoder.getFromLocationName(query, 1, 42.2, 18.8, 46.2, 23.1) }
+        val found = runCatching(search)
+            // Prvi poziv „na hladno" ume da vrati UNAVAILABLE, drugi prođe.
+            .recoverCatching { search() }
+            .getOrElse {
+                throw LocationUnavailableException(
+                    "Pretraga adrese trenutno ne radi. Probaj ponovo za koji trenutak."
+                )
+            }
+            ?.firstOrNull()
+            ?: throw LocationUnavailableException(
+                "Adresa nije pronađena. Dodaj grad, npr. „Karaburma, Beograd“."
+            )
+        Coordinates(found.latitude, found.longitude) to toLatin(found.getAddressLine(0) ?: query)
     }
 
     private fun locationRequest(

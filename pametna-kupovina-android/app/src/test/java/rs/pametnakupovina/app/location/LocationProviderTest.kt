@@ -7,6 +7,12 @@ import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class LocationProviderTest {
+    @Test fun addressComesBackInLatin() {
+        assertEquals("Karaburma, Beograd, Srbija", toLatin("Карабурма, Београд, Србија"))
+        assertEquals("Ljubljanska 12, Džervinova", toLatin("Љубљанска 12, Џервинова"))
+        assertEquals("Knez Mihailova 5", toLatin("Knez Mihailova 5"))
+    }
+
     @Test fun refusesStaleAndFutureLocation() = runBlocking {
         assertEquals(true, isRecentLocation(1_000_000_000, 31_000_000_000))
         assertEquals(false, isRecentLocation(1_000_000_000, 32_000_000_000))
