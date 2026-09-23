@@ -258,8 +258,7 @@ data class GoogleSignInRequestDto(
 
 @Serializable
 data class InviteDto(
-    val code: String,
-    val validMinutes: Int
+    val code: String
 )
 
 @Serializable

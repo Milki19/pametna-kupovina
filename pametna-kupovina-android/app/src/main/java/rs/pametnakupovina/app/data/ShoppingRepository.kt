@@ -169,10 +169,9 @@ class ShoppingRepository @Inject constructor(
     suspend fun deleteAccount() = api.deleteAccount()
 
     /** Sadržaj QR koda za drugi telefon: jednokratni kod i spisak koji se deli. */
-    suspend fun householdInvite(): Pair<String, Int> {
+    suspend fun householdInvite(): String {
         val listId = synchronizePending(allowRejected = true)
-        val invite = api.createInvite()
-        return householdCode(invite.code, listId) to invite.validMinutes
+        return householdCode(api.createInvite().code, listId)
     }
 
     /**
