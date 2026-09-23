@@ -38,7 +38,6 @@ import retrofit2.HttpException
 
 data class HouseholdUiState(
     val inviteQr: String? = null,
-    val validMinutes: Int = 0,
     val busy: Boolean = false,
     val joined: Boolean = false,
     val message: String? = null
@@ -54,8 +53,8 @@ class HouseholdViewModel @Inject constructor(
     val uiState: StateFlow<HouseholdUiState> = _uiState.asStateFlow()
 
     fun invite() = run("Kod nije napravljen. Proveri internet i probaj ponovo.") {
-        val (qr, minutes) = repository.householdInvite()
-        _uiState.update { it.copy(inviteQr = qr, validMinutes = minutes) }
+        val qr = repository.householdInvite()
+        _uiState.update { it.copy(inviteQr = qr) }
         null
     }
 
@@ -123,7 +122,7 @@ fun HouseholdDialog(
                     )
                     Text(
                         "Neka ukućanin u svojoj aplikaciji otvori meni → Domaćinstvo → " +
-                            "Pridruži se i skenira ovaj kod. Važi ${state.validMinutes} minuta.",
+                            "Pridruži se i skenira ovaj kod. Važi 15 minuta.",
                         style = MaterialTheme.typography.bodyMedium
                     )
                 } else {

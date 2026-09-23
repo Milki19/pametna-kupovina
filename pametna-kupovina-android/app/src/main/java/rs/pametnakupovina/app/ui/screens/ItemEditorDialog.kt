@@ -114,7 +114,7 @@ internal fun ItemEditorDialog(
     onIncludeWithoutPrice: (Boolean) -> Unit,
     onDismiss: () -> Unit,
     onSave: (DraftItemInput) -> Unit,
-    onScanBarcode: (suspend () -> String?)? = null
+    onScanBarcode: suspend () -> String?
 ) {
     val scope = rememberCoroutineScope()
     val key = item?.localId
@@ -281,9 +281,7 @@ internal fun ItemEditorDialog(
                     onRetry = onRetryProductSearch,
                     onIncludeWithoutPrice = onIncludeWithoutPrice,
                     onLoadMore = onLoadMoreProducts,
-                    onScan = onScanBarcode?.let { scan ->
-                        { scope.launch { scan()?.let(::search) } }
-                    }
+                    onScan = { scope.launch { onScanBarcode()?.let(::search) } }
                 )
                 item(key = "quantity") {
                     QuantityStepper(

@@ -75,18 +75,6 @@ public class AccountRepository {
                 .single();
     }
 
-    /** Whether other phones share this account: a household. */
-    public boolean isShared(long accountId) {
-        return jdbcClient.sql("""
-                        SELECT COUNT(*) > 1
-                        FROM app.account_device
-                        WHERE account_id = :accountId
-                        """)
-                .param("accountId", accountId)
-                .query(Boolean.class)
-                .single();
-    }
-
     /**
      * The phone leaves. Alone on its account, the account and everything on
      * it go with it (the rows cascade); in a household only the phone leaves,
@@ -122,16 +110,19 @@ public class AccountRepository {
                 .update();
     }
 
-    /** Whether anyone has signed in on this account yet. */
-    public boolean isSignedIn(long accountId) {
+    /** Whether anyone has signed in, and whether other phones share it. */
+    public AccountSignInService.AccountState state(long accountId) {
         return jdbcClient.sql("""
                         SELECT EXISTS (
-                            SELECT 1 FROM app.account_identity
-                            WHERE account_id = :accountId
-                        )
+                                   SELECT 1 FROM app.account_identity
+                                   WHERE account_id = :accountId
+                               ) AS signed_in,
+                               (SELECT COUNT(*) FROM app.account_device
+                                WHERE account_id = :accountId) > 1 AS household
                         """)
                 .param("accountId", accountId)
-                .query(Boolean.class)
+                .query((row, number) -> new AccountSignInService.AccountState(
+                        row.getBoolean("signed_in"), row.getBoolean("household")))
                 .single();
     }
 

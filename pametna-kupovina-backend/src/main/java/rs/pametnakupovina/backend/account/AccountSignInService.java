@@ -38,19 +38,12 @@ public class AccountSignInService {
     }
 
     public AccountState state(String clientToken) {
-        return stateOf(accountFor(clientToken));
+        return accountRepository.state(accountFor(clientToken));
     }
 
     /** Brisanje iz same aplikacije; vidi {@link AccountRepository#forget}. */
     public void delete(String clientToken) {
         accountRepository.forget(clientTokenPolicy.validateAndHash(clientToken));
-    }
-
-    private AccountState stateOf(long accountId) {
-        return new AccountState(
-                accountRepository.isSignedIn(accountId),
-                accountRepository.isShared(accountId)
-        );
     }
 
     @Transactional
@@ -71,14 +64,14 @@ public class AccountSignInService {
                     subject
             );
 
-            return stateOf(deviceAccount);
+            return accountRepository.state(deviceAccount);
         }
 
         // Isti čovek sa drugog telefona: telefon i sve što je na njemu
         // napravio prelaze na nalog koji već postoji.
         accountRepository.moveEverything(deviceAccount, known.get());
 
-        return stateOf(known.get());
+        return accountRepository.state(known.get());
     }
 
     /**
@@ -112,7 +105,7 @@ public class AccountSignInService {
 
         accountRepository.moveEverything(accountFor(clientToken), household);
 
-        return stateOf(household);
+        return accountRepository.state(household);
     }
 
     private long accountFor(String clientToken) {
@@ -130,6 +123,7 @@ public class AccountSignInService {
     public record AccountState(boolean signedIn, boolean household) {
     }
 
+    /** @param validMinutes aplikacija 1.4 ga čita; ostaje dok je 1.4 kod ljudi */
     public record Invite(String code, long validMinutes) {
     }
 }
