@@ -17,11 +17,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -36,6 +38,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -67,6 +72,12 @@ fun LocationScreen(
     var latitudeText by rememberSaveable { mutableStateOf("") }
     var longitudeText by rememberSaveable { mutableStateOf("") }
     var showManual by rememberSaveable { mutableStateOf(false) }
+    var address by rememberSaveable { mutableStateOf("") }
+    val focusManager = LocalFocusManager.current
+    val findAddress = {
+        focusManager.clearFocus()
+        viewModel.findAddress(address)
+    }
 
     LaunchedEffect(state.coordinates) {
         state.coordinates?.let { coordinates ->
@@ -160,6 +171,27 @@ fun LocationScreen(
                 }
             }
 
+            OutlinedTextField(
+                value = address,
+                onValueChange = { address = it },
+                label = { Text("Ili upiši adresu ili kraj") },
+                placeholder = { Text("npr. Karaburma, Beograd") },
+                trailingIcon = {
+                    IconButton(
+                        enabled = address.isNotBlank() && !state.isResolving,
+                        onClick = findAddress
+                    ) {
+                        AppIcon(R.drawable.ic_search, contentDescription = "Pronađi adresu")
+                    }
+                },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = { findAddress() }),
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("address-field")
+            )
+
             state.message?.let { message ->
                 NoticeBanner(
                     text = message,
@@ -167,7 +199,7 @@ fun LocationScreen(
                 )
             }
 
-            if (state.isError) {
+            if (state.offerSettings) {
                 Column {
                     TextButton(onClick = {
                         context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
