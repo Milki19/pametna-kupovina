@@ -63,6 +63,12 @@ interface ShoppingApiService {
         @Body request: GoogleSignInRequestDto
     ): AccountStateDto
 
+    @DELETE("api/v1/accounts/me")
+    suspend fun deleteAccount()
+
+    @POST("api/v1/crash-reports")
+    suspend fun reportCrash(@Body report: CrashReportDto)
+
     @POST("api/v1/accounts/invite")
     suspend fun createInvite(): InviteDto
 

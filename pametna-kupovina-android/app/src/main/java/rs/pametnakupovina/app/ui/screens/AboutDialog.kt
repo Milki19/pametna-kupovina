@@ -1,5 +1,6 @@
 package rs.pametnakupovina.app.ui.screens
 
+import android.app.ActivityManager
 import android.content.Context
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.flow.update
@@ -16,6 +17,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -35,7 +39,9 @@ import rs.pametnakupovina.app.ui.components.AppSpacing
 data class AboutUiState(
     val deviceToken: String? = null,
     val signedIn: Boolean = false,
+    val household: Boolean = false,
     val signingIn: Boolean = false,
+    val deleting: Boolean = false,
     val message: String? = null
 )
 
@@ -65,8 +71,31 @@ class AboutViewModel @Inject constructor(
     private suspend fun refreshAccount() {
         runCatching { repository.accountState() }
             .onSuccess { state ->
-                _uiState.update { it.copy(signedIn = state.signedIn) }
+                _uiState.update { it.copy(signedIn = state.signedIn, household = state.household) }
             }
+    }
+
+    /**
+     * Server briše nalog (ili, u domaćinstvu, samo ovaj telefon), a Android
+     * briše sve što je aplikacija držala na telefonu i zatvara je — kao
+     * „Obriši podatke" u podešavanjima, samo iz aplikacije.
+     */
+    fun deleteEverything(context: Context) {
+        if (_uiState.value.deleting) return
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(deleting = true, message = null) }
+            try {
+                repository.deleteAccount()
+                context.getSystemService(ActivityManager::class.java).clearApplicationUserData()
+            } catch (error: kotlinx.coroutines.CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                _uiState.update {
+                    it.copy(deleting = false, message = "Brisanje nije uspelo. Proveri internet i probaj ponovo.")
+                }
+            }
+        }
     }
 
     fun signIn(activityContext: Context) {
@@ -107,6 +136,33 @@ fun AboutDialog(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    var confirmDelete by rememberSaveable { mutableStateOf(false) }
+
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text(if (state.household) "Izađi i obriši?" else "Obrisati sve?") },
+            text = {
+                Text(
+                    if (state.household) {
+                        "Ovaj telefon izlazi iz domaćinstva i briše sve sa sebe. " +
+                            "Zajednički spisak, računi i kartice ostaju ukućanima."
+                    } else {
+                        "Brišu se spiskovi, skenirani računi, kartice i prijava, i na " +
+                            "serveru i na telefonu. Ne može da se vrati. Aplikacija će se zatvoriti."
+                    }
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !state.deleting,
+                    onClick = { viewModel.deleteEverything(context) },
+                    modifier = Modifier.testTag("about-delete-confirm")
+                ) { Text(if (state.deleting) "Brišem…" else "Obriši", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Otkaži") } }
+        )
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -156,8 +212,18 @@ fun AboutDialog(
                     )
                 }
 
+                TextButton(
+                    onClick = { confirmDelete = true },
+                    modifier = Modifier.testTag("about-delete")
+                ) {
+                    Text(
+                        if (state.household) "Izađi iz domaćinstva i obriši podatke" else "Obriši moje podatke",
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+
                 Text(
-                    "Broj uređaja (pošalji ga uz zahtev za brisanje podataka):",
+                    "Broj uređaja (za pitanja o podacima):",
                     style = MaterialTheme.typography.bodyMedium
                 )
                 SelectionContainer {
