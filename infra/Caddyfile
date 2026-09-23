@@ -1,4 +1,19 @@
 {$APP_DOMAIN} {
     encode zstd gzip
+
+    # Najveći pravi zahtev je nalepljen spisak; ovo sprečava da neko
+    # zatrpa server gigabajtom JSON-a pre nego što ga backend uopšte vidi.
+    request_body {
+        max_size 1MB
+    }
+
+    header {
+        Strict-Transport-Security "max-age=31536000"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "no-referrer"
+        -Server
+    }
+
     reverse_proxy backend:8080
 }

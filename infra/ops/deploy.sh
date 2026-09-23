@@ -10,7 +10,9 @@ infra="$(cd "$(dirname "$0")/.." && pwd -P)"
 test -s "$infra/release/backend.jar" || { echo "Prvo pokreni infra/ops/release-backend.sh." >&2; exit 1; }
 
 ssh "$target" "mkdir -p '$remote_dir/ops' '$remote_dir/release' '$remote_dir/backups'"
-rsync -az \
+# --inplace: Caddyfile is bind-mounted as a single file, and a renamed
+# replacement would leave the running Caddy looking at the old one.
+rsync -az --inplace \
     "$infra/compose.production.yaml" \
     "$infra/Caddyfile" \
     "$infra/backend.Dockerfile" \
