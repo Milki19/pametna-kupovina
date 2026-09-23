@@ -107,4 +107,24 @@ class WriteRateLimitInterceptorTest {
                 request, new MockHttpServletResponse(), new Object()
         );
     }
+
+    @Test
+    void oneAddressIsCappedWhateverTokensItMakesUp() throws Exception {
+        var perAddress = new AddressRateLimitInterceptor();
+        MockHttpServletRequest script = new MockHttpServletRequest("GET", "/api/v1/products/search");
+        script.setRemoteAddr("203.0.113.7");
+        MockHttpServletRequest shopper = new MockHttpServletRequest("GET", "/api/v1/products/search");
+        shopper.setRemoteAddr("198.51.100.4");
+
+        // Novi izmišljeni token u svakom zahtevu ne pomaže: broji se adresa.
+        for (int request = 0; request < AddressRateLimitInterceptor.REQUESTS_PER_MINUTE; request++) {
+            script.removeHeader("X-Client-Token");
+            script.addHeader("X-Client-Token", "izmisljen-" + request);
+            assertThat(perAddress.preHandle(script, new MockHttpServletResponse(), new Object())).isTrue();
+        }
+
+        assertThatThrownBy(() -> perAddress.preHandle(script, new MockHttpServletResponse(), new Object()))
+                .hasMessageContaining("429");
+        assertThat(perAddress.preHandle(shopper, new MockHttpServletResponse(), new Object())).isTrue();
+    }
 }
