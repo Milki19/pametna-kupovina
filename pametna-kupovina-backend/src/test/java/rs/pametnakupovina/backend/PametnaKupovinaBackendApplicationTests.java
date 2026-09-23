@@ -2288,7 +2288,7 @@ class PametnaKupovinaBackendApplicationTests {
         Long decisionsForClient = jdbcClient.sql("""
                         SELECT COUNT(*)
                         FROM app.product_match_decision
-                        WHERE client_token = ?
+                        WHERE client_token_hash = encode(sha256(convert_to(?, 'UTF8')), 'hex')
                         """)
                 .param(1, clientToken)
                 .query(Long.class)

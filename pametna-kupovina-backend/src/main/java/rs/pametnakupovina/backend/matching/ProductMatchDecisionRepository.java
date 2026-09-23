@@ -36,7 +36,7 @@ public class ProductMatchDecisionRepository {
                             score,
                             status,
                             algorithm_version,
-                            client_token
+                            client_token_hash
                         )
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                         RETURNING id
