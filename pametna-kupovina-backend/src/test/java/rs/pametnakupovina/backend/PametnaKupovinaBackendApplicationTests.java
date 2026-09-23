@@ -4589,6 +4589,48 @@ class PametnaKupovinaBackendApplicationTests {
     }
 
     /**
+     * Domaćinstvo: drugi telefon skenira kod sa prvog i ulazi u isti nalog.
+     * Ništa sa njega se ne gubi — ni računi ni kartice, koji su do sada pri
+     * prijavi sa drugog telefona tiho nestajali zajedno sa praznim nalogom.
+     */
+    @Test
+    void aHouseholdPhoneJoinsWithEverythingItHad() {
+        shoppingListService.create(new CreateShoppingListRequest("Kućni spisak"), "mama");
+        shoppingListService.create(new CreateShoppingListRequest("Tatin spisak"), "tata");
+        loyaltyCardService.add("tata", "Tatina kartica", "123456789", "CODE_128");
+        loyaltyCardService.add("mama", "Ista kartica", "123456789", "CODE_128");
+        long tata = jdbcClient.sql("""
+                        SELECT account_id FROM app.shopping_list WHERE name = 'Tatin spisak'
+                        """).query(Long.class).single();
+        jdbcClient.sql("""
+                INSERT INTO app.receipt(account_id,verification_key,shop_name,issued_at,total_amount)
+                VALUES (?,'DOMACINSTVO-1','Pekara','2026-09-01T08:00:00Z',120.00)
+                """).param(tata).update();
+
+        var invite = accountSignInService.invite("mama");
+        accountSignInService.join("tata", invite.code());
+
+        assertThat(shoppingListService.findAll("tata"))
+                .extracting(ShoppingListSummary::name)
+                .containsExactlyInAnyOrder("Kućni spisak", "Tatin spisak");
+        assertThat(receiptService.history("mama", 50)).singleElement()
+                .satisfies(receipt -> assertThat(receipt.shopName()).isEqualTo("Pekara"));
+        // Ista kartica u oba telefona ostaje jedna.
+        assertThat(loyaltyCardService.cards("mama")).singleElement()
+                .satisfies(card -> assertThat(card.name()).isEqualTo("Ista kartica"));
+        assertThat(jdbcClient.sql("SELECT COUNT(*) FROM app.account")
+                .query(Long.class).single()).isEqualTo(1L);
+
+        // Kod radi jednom, a istekao ne radi uopšte.
+        assertThatThrownBy(() -> accountSignInService.join("komsija", invite.code()))
+                .hasMessageContaining("404");
+        var stale = accountSignInService.invite("mama");
+        jdbcClient.sql("UPDATE app.account SET invite_expires_at = NOW() - INTERVAL '1 minute'").update();
+        assertThatThrownBy(() -> accountSignInService.join("komsija", stale.code()))
+                .hasMessageContaining("404");
+    }
+
+    /**
      * Račun se zavodi iz samog QR koda: prodavnica, vreme i iznos stoje u
      * njemu, pa skeniranje radi i kad u prodavnici nema signala za Poresku
      * upravu. Isti račun skeniran dvaput ostaje jedan.

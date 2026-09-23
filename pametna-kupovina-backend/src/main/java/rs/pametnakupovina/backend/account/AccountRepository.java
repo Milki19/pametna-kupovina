@@ -4,6 +4,8 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -105,9 +107,12 @@ public class AccountRepository {
     }
 
     /**
-     * Signing in on a phone that already has lists of its own: the phone and
-     * everything it made join the account behind the identity, and the empty
-     * one it came from is dropped. Nothing a shopper wrote is left behind.
+     * Signing in on a phone that already has lists of its own, or joining a
+     * household: the phone and everything it made join the other account,
+     * and the empty one it came from is dropped. Nothing a shopper wrote is
+     * left behind — the account's rows cascade away with it, so every table
+     * that belongs to an account has to be moved here first. A receipt or a
+     * card the other account already has stays there once.
      */
     @Transactional
     public void moveEverything(long fromAccountId, long toAccountId) {
@@ -115,23 +120,34 @@ public class AccountRepository {
             return;
         }
 
-        jdbcClient.sql("""
-                        UPDATE app.shopping_list
-                           SET account_id = :to
-                         WHERE account_id = :from
-                        """)
-                .param("to", toAccountId)
-                .param("from", fromAccountId)
-                .update();
-
-        jdbcClient.sql("""
-                        UPDATE app.account_device
-                           SET account_id = :to
-                         WHERE account_id = :from
-                        """)
-                .param("to", toAccountId)
-                .param("from", fromAccountId)
-                .update();
+        for (String move : List.of(
+                "UPDATE app.shopping_list SET account_id = :to WHERE account_id = :from",
+                "UPDATE app.account_device SET account_id = :to WHERE account_id = :from",
+                "UPDATE app.account_identity SET account_id = :to WHERE account_id = :from",
+                """
+                UPDATE app.receipt AS moved SET account_id = :to
+                 WHERE moved.account_id = :from
+                   AND NOT EXISTS (
+                       SELECT 1 FROM app.receipt AS kept
+                       WHERE kept.account_id = :to
+                         AND kept.verification_key = moved.verification_key
+                   )
+                """,
+                """
+                UPDATE app.loyalty_card AS moved SET account_id = :to
+                 WHERE moved.account_id = :from
+                   AND NOT EXISTS (
+                       SELECT 1 FROM app.loyalty_card AS kept
+                       WHERE kept.account_id = :to
+                         AND kept.card_number = moved.card_number
+                   )
+                """
+        )) {
+            jdbcClient.sql(move)
+                    .param("to", toAccountId)
+                    .param("from", fromAccountId)
+                    .update();
+        }
 
         jdbcClient.sql("""
                         DELETE FROM app.account
@@ -139,6 +155,35 @@ public class AccountRepository {
                         """)
                 .param("from", fromAccountId)
                 .update();
+    }
+
+    /** A new invite replaces the old one: only the last code shown works. */
+    public void saveInvite(long accountId, String code, Duration validFor) {
+        jdbcClient.sql("""
+                        UPDATE app.account
+                           SET invite_code_hash = encode(sha256(convert_to(:code, 'UTF8')), 'hex'),
+                               invite_expires_at = NOW() + make_interval(secs => :seconds)
+                         WHERE id = :accountId
+                        """)
+                .param("code", code)
+                .param("seconds", validFor.toSeconds())
+                .param("accountId", accountId)
+                .update();
+    }
+
+    /** The account that invited, if the code is still good; it works once. */
+    public Optional<Long> useInvite(String code) {
+        return jdbcClient.sql("""
+                        UPDATE app.account
+                           SET invite_code_hash = NULL,
+                               invite_expires_at = NULL
+                         WHERE invite_code_hash = encode(sha256(convert_to(:code, 'UTF8')), 'hex')
+                           AND invite_expires_at > NOW()
+                        RETURNING id
+                        """)
+                .param("code", code)
+                .query(Long.class)
+                .optional();
     }
 
     /** The account an identity already belongs to, if it has been seen. */

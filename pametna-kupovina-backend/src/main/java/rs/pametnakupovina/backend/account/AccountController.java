@@ -35,6 +35,24 @@ public class AccountController {
         return signInService.signInWithGoogle(clientToken, request.idToken());
     }
 
+    @PostMapping("/invite")
+    public AccountSignInService.Invite invite(
+            @RequestHeader(CLIENT_TOKEN_HEADER) String clientToken
+    ) {
+        return signInService.invite(clientToken);
+    }
+
+    @PostMapping("/join")
+    public AccountSignInService.AccountState join(
+            @RequestHeader(CLIENT_TOKEN_HEADER) String clientToken,
+            @RequestBody JoinRequest request
+    ) {
+        return signInService.join(clientToken, request.code());
+    }
+
     public record GoogleSignInRequest(@NotBlank String idToken) {
+    }
+
+    public record JoinRequest(@NotBlank String code) {
     }
 }
