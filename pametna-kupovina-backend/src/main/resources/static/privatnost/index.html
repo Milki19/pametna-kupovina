@@ -9,7 +9,7 @@
 <body>
 <header>
   <h1>Politika privatnosti</h1>
-  <p>Aplikacija Pametna kupovina · poslednja izmena 23.09.2026. (domaćinstvo, praćenje cena, pretraga adrese)</p>
+  <p>Aplikacija Pametna kupovina · poslednja izmena 23.09.2026. (brisanje iz aplikacije, izveštaji o padu)</p>
 </header>
 <main>
 
@@ -77,6 +77,12 @@ vašeg naloga</strong> — ne i vaše ime, e-mail adresa ni slika.</p>
   <strong>isti nalog</strong>: ukućani vide zajednički spisak, skenirane račune
   i kartice lojalnosti. Kod važi 15 minuta i može se iskoristiti samo jednom.</dd>
 
+  <dt>Izveštaj o padu aplikacije</dt>
+  <dd>Ako aplikacija pukne, pri sledećem pokretanju šalje se <strong>samo
+  tehnički zapis greške, verzija aplikacije i Androida i model telefona</strong>
+  (npr. „Samsung A52"). Bez broja uređaja i bez ikakvog ličnog podatka, pa se
+  ne zna čiji je telefon. Služi samo da se greška popravi.</dd>
+
   <dt>Potvrde spajanja proizvoda</dt>
   <dd>Kada potvrdite ili odbijete predlog „ovo je taj proizvod", čuva se šta je
   bilo traženo i šta je izabrano, zajedno sa brojem uređaja, da bi pretraga
@@ -95,8 +101,8 @@ vašeg naloga</strong> — ne i vaše ime, e-mail adresa ni slika.</p>
   ni onda kada se prijavite preko Google-a.</li>
   <li>Kontakti, fotografije, poruke, spisak aplikacija na telefonu.</li>
   <li>Reklamni identifikatori i praćenje po sajtovima i aplikacijama.</li>
-  <li>Analitika ponašanja i izveštaji o padovima — aplikacija nema ugrađen
-  nijedan takav alat.</li>
+  <li>Analitika ponašanja — aplikacija nema ugrađen nijedan takav alat, pa
+  ni tuđi alat za praćenje padova (Crashlytics, Sentry i slično).</li>
 </ul>
 
 <h2>Zašto se podaci koriste</h2>
@@ -135,22 +141,22 @@ da se podaci tamo čuvaju bez posebnog odobrenja.</p>
   zatražite brisanje naloga.</li>
   <li>Potvrde spajanja proizvoda — dok postoji potreba da pretraga bude tačna.</li>
   <li>Koordinate — koliko traje jedan zahtev, pa se odbacuju.</li>
+  <li>Izveštaji o padu aplikacije — 90 dana.</li>
 </ul>
 
 <h2>Brisanje podataka</h2>
-<p>Spisak brišete u samoj aplikaciji: otvorite spisak i izaberite brisanje.
-Time se sa servera briše i spisak i sve njegove stavke.</p>
-<p>Karticu brišete u aplikaciji, na ekranu „Lojalti kartice". Za brisanje
-skeniranih računa pošaljite zahtev na e-mail ispod.</p>
-<p>Ako ste se prijavili, u istom zahtevu recite da želite i brisanje naloga;
-tada se briše i veza sa Google nalogom, pa vas sledeća prijava više neće
-prepoznati.</p>
-<p>Ako želite da se obriše sve što je vezano za vaš uređaj, pošaljite zahtev na
-<strong>pametnakupovina19@gmail.com</strong>. Da bismo znali šta da obrišemo,
-u zahtevu pošaljite broj uređaja iz aplikacije
-(dugme <em>O aplikaciji</em> na ekranu spiska). Zahtev se izvršava najkasnije u roku od
+<p><strong>Sve odjednom, iz aplikacije:</strong> meni → <em>O aplikaciji</em> →
+<em>Obriši moje podatke</em>. Odmah se sa servera brišu spiskovi, skenirani
+računi, kartice lojalnosti i veza sa Google nalogom, a sa telefona sve što je
+aplikacija čuvala. Ako ste u domaćinstvu, vaš telefon izlazi iz njega, a
+zajednički spisak, računi i kartice ostaju ukućanima. Potvrde spajanja i
+prijave grešaka koje ste poslali ostaju, ali više nisu vezane za vaš uređaj.</p>
+<p>Pojedinačno: spisak brišete na samom spisku, a karticu na ekranu „Kartice".</p>
+<p><strong>Bez aplikacije:</strong> pošaljite zahtev na
+<strong>pametnakupovina19@gmail.com</strong> sa brojem uređaja iz aplikacije
+(meni → <em>O aplikaciji</em>). Zahtev se izvršava najkasnije u roku od
 30 dana. Brisanjem aplikacije sa telefona briše se i broj uređaja, posle čega
-spisak više ne može da se pronađe ni da se obriše na zahtev.</p>
+podaci više ne mogu da se pronađu ni da se obrišu na zahtev.</p>
 
 <h2>Bezbednost</h2>
 <p>Saobraćaj između aplikacije i servera ide preko HTTPS veze. Pristup serveru
