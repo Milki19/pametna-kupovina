@@ -1,5 +1,9 @@
 package rs.pametnakupovina.app.ui.screens
 
+import android.Manifest
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -15,6 +19,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
@@ -30,6 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -37,6 +43,7 @@ import rs.pametnakupovina.app.data.amountLabel
 import rs.pametnakupovina.app.data.network.CanonicalProductDetailsDto
 import rs.pametnakupovina.app.data.network.CanonicalProductOfferDto
 import rs.pametnakupovina.app.data.network.CanonicalProductPricePointDto
+import rs.pametnakupovina.app.alerts.bestPrice
 import rs.pametnakupovina.app.ui.ProductDetailsViewModel
 import rs.pametnakupovina.app.ui.components.AppSpacing
 import rs.pametnakupovina.app.ui.components.AppTopBar
@@ -56,6 +63,18 @@ fun ProductDetailsScreen(
     viewModel: ProductDetailsViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val watching by viewModel.watching.collectAsStateWithLifecycle()
+    // Bez dozvole praćenje i dalje radi; samo obaveštenje ne izlazi.
+    val notificationPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { viewModel.setWatching(true) }
+    val watch: (Boolean) -> Unit = { on ->
+        if (on && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            viewModel.setWatching(on)
+        }
+    }
     var showReport by rememberSaveable { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
 
@@ -92,7 +111,11 @@ fun ProductDetailsScreen(
                     message = requireNotNull(state.errorMessage),
                     onRetry = viewModel::load
                 )
-                state.product != null -> ProductDetailsContent(requireNotNull(state.product))
+                state.product != null -> ProductDetailsContent(
+                    requireNotNull(state.product),
+                    watching = watching,
+                    onWatch = watch
+                )
             }
         }
     }
@@ -161,7 +184,11 @@ private fun ReportDialog(
  * kilogram of a bigger pack.
  */
 @Composable
-private fun ProductDetailsContent(product: CanonicalProductDetailsDto) {
+private fun ProductDetailsContent(
+    product: CanonicalProductDetailsDto,
+    watching: Boolean,
+    onWatch: (Boolean) -> Unit
+) {
     val offers = product.offers.sortedWith(
         compareBy({ it.priceNeedsCheck }, { isCaseOf(it, product) }, { it.effectivePrice })
     )
@@ -190,6 +217,35 @@ private fun ProductDetailsContent(product: CanonicalProductDetailsDto) {
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+        }
+
+        if (bestPrice(product) != null || watching) {
+            item(key = "watch") {
+                Surface(
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.surfaceContainer,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = AppSpacing.lg, vertical = AppSpacing.sm)
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Javi mi kad pojeftini", style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                "Proveravam jednom dnevno",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = watching,
+                            onCheckedChange = onWatch,
+                            modifier = Modifier.testTag("watch-price")
+                        )
+                    }
+                }
             }
         }
 

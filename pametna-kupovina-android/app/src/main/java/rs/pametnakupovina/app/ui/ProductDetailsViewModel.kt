@@ -7,10 +7,16 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import rs.pametnakupovina.app.alerts.PriceWatchStore
+import rs.pametnakupovina.app.alerts.WatchedProduct
+import rs.pametnakupovina.app.alerts.bestPrice
 import rs.pametnakupovina.app.data.ShoppingRepository
 import rs.pametnakupovina.app.data.network.CanonicalProductDetailsDto
 import rs.pametnakupovina.app.data.network.ProductReportReasonDto
@@ -26,7 +32,8 @@ data class ProductDetailsUiState(
 @HiltViewModel
 class ProductDetailsViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
-    private val repository: ShoppingRepository
+    private val repository: ShoppingRepository,
+    private val priceWatch: PriceWatchStore
 ) : ViewModel() {
 
     val canonicalProductId: Long = requireNotNull(
@@ -36,8 +43,22 @@ class ProductDetailsViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(ProductDetailsUiState())
     val uiState: StateFlow<ProductDetailsUiState> = _uiState.asStateFlow()
 
+    val watching: StateFlow<Boolean> = priceWatch.watched
+        .map { list -> list.any { it.canonicalProductId == canonicalProductId } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
     init {
         load()
+    }
+
+    /** Prati se najniža cena koju ekran upravo pokazuje. */
+    fun setWatching(watch: Boolean) {
+        viewModelScope.launch {
+            if (!watch) return@launch priceWatch.unwatch(canonicalProductId)
+            val product = _uiState.value.product ?: return@launch
+            val offer = bestPrice(product) ?: return@launch
+            priceWatch.watch(WatchedProduct(canonicalProductId, product.name, offer.effectivePrice))
+        }
     }
 
     fun load() {
