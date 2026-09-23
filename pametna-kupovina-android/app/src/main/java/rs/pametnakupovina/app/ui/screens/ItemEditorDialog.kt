@@ -25,6 +25,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -33,6 +34,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.input.KeyboardType
 import java.math.BigDecimal
+import kotlinx.coroutines.launch
 import rs.pametnakupovina.app.R
 import rs.pametnakupovina.app.data.DraftItemInput
 import rs.pametnakupovina.app.data.amountLabel
@@ -111,8 +113,10 @@ internal fun ItemEditorDialog(
     onLoadMoreProducts: () -> Unit,
     onIncludeWithoutPrice: (Boolean) -> Unit,
     onDismiss: () -> Unit,
-    onSave: (DraftItemInput) -> Unit
+    onSave: (DraftItemInput) -> Unit,
+    onScanBarcode: (suspend () -> String?)? = null
 ) {
+    val scope = rememberCoroutineScope()
     val key = item?.localId
     var name by rememberSaveable(key) { mutableStateOf(item?.name.orEmpty()) }
     var quantity by rememberSaveable(key) {
@@ -182,6 +186,13 @@ internal fun ItemEditorDialog(
             ShoppingItemRuleDto.FLEXIBLE_CATEGORY -> category.isNotBlank() && packageError == null
         }
 
+    fun search(value: String) {
+        name = value
+        selectedProduct = null
+        selectedProductRawInput = null
+        onSearchQueryChange(value)
+    }
+
     fun chooseRule(next: ShoppingItemRuleDto) {
         if (next == rule) return
         rule = next
@@ -249,12 +260,7 @@ internal fun ItemEditorDialog(
                     query = name,
                     selectedProduct = selectedProduct,
                     searchState = productSearchState,
-                    onQueryChange = { value ->
-                        name = value
-                        selectedProduct = null
-                        selectedProductRawInput = null
-                        onSearchQueryChange(value)
-                    },
+                    onQueryChange = ::search,
                     onSelectProduct = { product ->
                         selectedProductRawInput = name.trim()
                         selectedProduct = product
@@ -274,7 +280,10 @@ internal fun ItemEditorDialog(
                     },
                     onRetry = onRetryProductSearch,
                     onIncludeWithoutPrice = onIncludeWithoutPrice,
-                    onLoadMore = onLoadMoreProducts
+                    onLoadMore = onLoadMoreProducts,
+                    onScan = onScanBarcode?.let { scan ->
+                        { scope.launch { scan()?.let(::search) } }
+                    }
                 )
                 item(key = "quantity") {
                     QuantityStepper(

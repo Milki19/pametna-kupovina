@@ -47,7 +47,8 @@ internal fun LazyListScope.canonicalProductPicker(
     onRetry: () -> Unit,
     onLoadMore: () -> Unit,
     onIncludeWithoutPrice: (Boolean) -> Unit = {},
-    showWithoutPriceFilter: Boolean = true
+    showWithoutPriceFilter: Boolean = true,
+    onScan: (() -> Unit)? = null
 ) {
     item(key = "product-query") {
         OutlinedTextField(
@@ -55,14 +56,23 @@ internal fun LazyListScope.canonicalProductPicker(
             onValueChange = onQueryChange,
             label = { Text("Naziv ili barkod") },
             leadingIcon = { AppIcon(R.drawable.ic_search, contentDescription = null) },
-            trailingIcon = if (query.isNotEmpty() && selectedProduct == null) {
-                {
-                    IconButton(onClick = { onQueryChange("") }) {
-                        AppIcon(R.drawable.ic_close, contentDescription = "Obriši pretragu")
+            trailingIcon = when {
+                selectedProduct != null -> null
+                query.isNotEmpty() -> {
+                    {
+                        IconButton(onClick = { onQueryChange("") }) {
+                            AppIcon(R.drawable.ic_close, contentDescription = "Obriši pretragu")
+                        }
                     }
                 }
-            } else {
-                null
+                onScan != null -> {
+                    {
+                        IconButton(onClick = onScan, modifier = Modifier.testTag("scan-barcode")) {
+                            AppIcon(R.drawable.ic_camera, contentDescription = "Skeniraj barkod")
+                        }
+                    }
+                }
+                else -> null
             },
             singleLine = true,
             modifier = Modifier
