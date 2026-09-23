@@ -121,6 +121,7 @@
     .row { flex-direction: column; align-items: stretch; }
     .row .actions { justify-content: flex-start; }
   }
+  pre { white-space: pre-wrap; word-break: break-word; font-size: 12px; margin: 8px 0 0; }
 </style>
 </head>
 <body>
@@ -130,6 +131,7 @@
     <button role="tab" data-tab="duplicates" aria-selected="true">Isti proizvodi? <span class="count" id="count-duplicates"></span></button>
     <button role="tab" data-tab="reports" aria-selected="false">Prijave <span class="count" id="count-reports"></span></button>
     <button role="tab" data-tab="types" aria-selected="false">Vrste proizvoda</button>
+    <button role="tab" data-tab="crashes" aria-selected="false">Padovi <span class="count" id="count-crashes"></span></button>
   </nav>
 </header>
 <main>
@@ -175,6 +177,11 @@
     <h2>Označeno <span class="count" id="count-assigned"></span></h2>
     <input type="search" id="assigned-search" placeholder="Traži po nazivu, npr. sheba">
     <div class="card" id="assigned"></div>
+  </section>
+
+  <section id="tab-crashes" hidden>
+    <p class="meta">Padovi aplikacije sa telefona, bez broja uređaja. Klik na red pokazuje ceo zapis. Čuvaju se 90 dana.</p>
+    <div class="card" id="crashes"></div>
   </section>
 </main>
 <div id="toast" role="status"></div>
@@ -417,7 +424,36 @@
   }
 
   // Navigation
-  const loaders = { duplicates: loadDuplicates, reports: loadReports, types: () => { loadCandidates(); loadAssigned(); } };
+  // Padovi aplikacije: isti pad u istoj verziji jednom, pa ceo zapis na klik.
+  async function loadCrashes() {
+    const container = document.getElementById('crashes');
+    container.textContent = 'Učitavam…';
+    try {
+      const crashes = await api('/crashes');
+      showError(null);
+      container.textContent = '';
+      document.getElementById('count-crashes').textContent = crashes.length ? '(' + crashes.length + ')' : '';
+      if (!crashes.length) {
+        container.append(el('p', { class: 'empty' }, 'Nema padova.'));
+        return;
+      }
+      for (const crash of crashes) {
+        const trace = el('pre', { class: 'meta', hidden: '' }, crash.latest);
+        const row = el('div', { class: 'row' },
+          el('div', {},
+            el('div', { class: 'name' }, crash.problem),
+            el('div', { class: 'meta' }, ['verzija ' + crash.appVersion, crash.times + '×', 'poslednji ' + new Date(crash.lastSeen).toLocaleString('sr-RS'), crash.phone].join(' · ')),
+            trace));
+        row.addEventListener('click', () => { trace.hidden = !trace.hidden; });
+        container.append(row);
+      }
+    } catch (error) {
+      container.textContent = '';
+      showError(error);
+    }
+  }
+
+  const loaders = { duplicates: loadDuplicates, reports: loadReports, types: () => { loadCandidates(); loadAssigned(); }, crashes: loadCrashes };
   const loaded = new Set();
 
   function openTab(name) {
