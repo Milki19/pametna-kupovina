@@ -16,6 +16,8 @@ import rs.pametnakupovina.app.data.NotAFiscalReceipt
 import rs.pametnakupovina.app.data.ReceiptScanner
 import rs.pametnakupovina.app.data.ScanCancelled
 import rs.pametnakupovina.app.data.ShoppingRepository
+import rs.pametnakupovina.app.data.network.CategorySpendingDto
+import rs.pametnakupovina.app.data.network.HabitDto
 import rs.pametnakupovina.app.data.network.MonthlySpendingDto
 import rs.pametnakupovina.app.data.network.ReceiptDto
 import rs.pametnakupovina.app.data.network.ShopSpendingDto
@@ -26,6 +28,8 @@ data class ReceiptUiState(
     val byMonth: List<MonthlySpendingDto> = emptyList(),
     val byShop: List<ShopSpendingDto> = emptyList(),
     val byWeek: List<WeeklySpendingDto> = emptyList(),
+    val byCategory: List<CategorySpendingDto> = emptyList(),
+    val habits: List<HabitDto> = emptyList(),
     val selectedMonth: LocalDate = LocalDate.now().withDayOfMonth(1),
     val scanning: Boolean = false,
     val message: String? = null
@@ -52,15 +56,21 @@ class ReceiptViewModel @Inject constructor(
         val month = _uiState.value.selectedMonth
         viewModelScope.launch {
             runCatching {
-                repository.receipts() to repository.spending(month.toString())
+                Triple(
+                    repository.receipts(),
+                    repository.spending(month.toString()),
+                    repository.habits()
+                )
             }
-                .onSuccess { (receipts, spending) ->
+                .onSuccess { (receipts, spending, habits) ->
                     _uiState.update {
                         it.copy(
                             receipts = receipts,
                             byMonth = spending.byMonth,
                             byShop = spending.byShop,
-                            byWeek = spending.byWeek
+                            byWeek = spending.byWeek,
+                            byCategory = spending.byCategory,
+                            habits = habits
                         )
                     }
                 }
