@@ -197,6 +197,9 @@ class PametnaKupovinaBackendApplicationTests {
     private GoogleIdentityVerifier googleVerifier;
 
     @Autowired
+    private rs.pametnakupovina.backend.crash.CrashReportController crashReportController;
+
+    @Autowired
     private PriceImportService priceImportService;
 
     @Autowired
@@ -4638,6 +4641,30 @@ class PametnaKupovinaBackendApplicationTests {
         accountSignInService.delete("mama");
         assertThat(jdbcClient.sql("SELECT COUNT(*) FROM app.account").query(Long.class).single()).isZero();
         assertThat(jdbcClient.sql("SELECT COUNT(*) FROM app.receipt").query(Long.class).single()).isZero();
+    }
+
+    /**
+     * Pad sa telefona stiže bez broja uređaja; isti pad u istoj verziji se
+     * na /admin vidi jednom, sa brojem ponavljanja.
+     */
+    @Test
+    void aCrashFromAPhoneShowsUpOnceWithItsCount() {
+        String trace = "java.lang.IllegalStateException: prazan spisak\n\tat rs.App.main(App.kt:1)";
+        for (int crash = 0; crash < 2; crash++) {
+            crashReportController.report(new rs.pametnakupovina.backend.crash.CrashReportController.CrashReport(
+                    "1.4", "16", "Google Pixel 8", trace));
+        }
+        crashReportController.report(new rs.pametnakupovina.backend.crash.CrashReportController.CrashReport(
+                "1.4", "14", "Samsung A52", "java.lang.NullPointerException\n\tat rs.App.other(App.kt:2)"));
+
+        assertThat(crashReportController.crashes())
+                .extracting(group -> group.problem() + " x" + group.times())
+                .containsExactlyInAnyOrder(
+                        "java.lang.IllegalStateException: prazan spisak x2",
+                        "java.lang.NullPointerException x1");
+        assertThatThrownBy(() -> crashReportController.report(
+                new rs.pametnakupovina.backend.crash.CrashReportController.CrashReport("1.4", "16", "x", "  ")))
+                .hasMessageContaining("400");
     }
 
     /**
