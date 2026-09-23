@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -71,6 +72,7 @@ fun ShoppingListScreen(
     viewModel: ShoppingListViewModel = hiltViewModel(),
     productSearchViewModel: ProductSearchViewModel = hiltViewModel()
 ) {
+    val context = LocalContext.current
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val productSearchState by productSearchViewModel.uiState
         .collectAsStateWithLifecycle()
@@ -214,6 +216,7 @@ fun ShoppingListScreen(
             onRetryProductSearch = productSearchViewModel::retry,
             onLoadMoreProducts = productSearchViewModel::loadNextPage,
             onIncludeWithoutPrice = productSearchViewModel::includeWithoutPrice,
+            onScanBarcode = { productSearchViewModel.scanBarcode(context) },
             onDismiss = {
                 productSearchViewModel.clear()
                 showItemEditor = false

@@ -1,5 +1,6 @@
 package rs.pametnakupovina.app.ui
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -11,6 +12,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import rs.pametnakupovina.app.data.BarcodeScanner
 import rs.pametnakupovina.app.data.ShoppingRepository
 import rs.pametnakupovina.app.data.network.CanonicalProductSearchItemDto
 
@@ -29,13 +31,26 @@ data class ProductSearchUiState(
 
 @HiltViewModel
 class ProductSearchViewModel @Inject constructor(
-    private val repository: ShoppingRepository
+    private val repository: ShoppingRepository,
+    private val scanner: BarcodeScanner
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ProductSearchUiState())
     val uiState: StateFlow<ProductSearchUiState> = _uiState.asStateFlow()
 
     private var searchJob: Job? = null
+
+    /**
+     * Barkod sa police, za pretragu koja ga već prepoznaje. Null kad kupac
+     * odustane ili kamera ne pročita kod — tada se ništa ne menja.
+     */
+    suspend fun scanBarcode(activityContext: Context): String? = try {
+        scanner.anyBarcode(activityContext).value
+    } catch (error: CancellationException) {
+        throw error
+    } catch (_: Exception) {
+        null
+    }
 
     fun includeWithoutPrice(include: Boolean) {
         _uiState.value = _uiState.value.copy(includeWithoutPrice=include)

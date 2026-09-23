@@ -20,6 +20,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
+import rs.pametnakupovina.app.data.BarcodeScanner
 import rs.pametnakupovina.app.data.ShoppingRepository
 import rs.pametnakupovina.app.data.local.PametnaKupovinaDatabase
 import rs.pametnakupovina.app.data.network.CanonicalProductSearchPageDto
@@ -44,7 +45,7 @@ class ProductSearchTypingInstrumentedTest {
             requests.add(query)
             CanonicalProductSearchPageDto(query, page, 10, 20, 2, page == 0)
         } as ShoppingApiService
-        val viewModel = ProductSearchViewModel(ShoppingRepository(api, database.draftItemDao(), ClientIdentityStore(context)))
+        val viewModel = ProductSearchViewModel(ShoppingRepository(api, database.draftItemDao(), ClientIdentityStore(context)), BarcodeScanner())
         try {
             compose.setContent {
                 val state by viewModel.uiState.collectAsState()
