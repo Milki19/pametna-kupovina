@@ -87,6 +87,15 @@ public class PriceListProbeService {
                             .parse(reader)
             ) {
                 return read(label, parser, today, publishedOn);
+            } catch (IllegalArgumentException unreadableHeader) {
+                // Npr. PWW: naslov „Ц Е Н О В Н И К" u prvom redu, pa prazne
+                // kolone umesto zaglavlja. To je presuda, ne greška servera.
+                return new PriceListProbeReport(
+                        label, 0, 0, 0, 0, List.of(), null, null, List.of(),
+                        List.of("Prvi red nije zaglavlje kolona, pa se fajl ne može pročitati: "
+                                + unreadableHeader.getMessage()),
+                        PriceListProbeVerdict.REJECTED
+                );
             }
         }
     }

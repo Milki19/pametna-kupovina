@@ -35,6 +35,16 @@ class PriceListProbeServiceTest {
     }
 
     @Test
+    void aTitleAboveTheHeaderIsAVerdictNotAServerError() throws IOException {
+        // PWW Niš/Jagodina/Leskovac: naslov u prvom redu, kolone tek ispod.
+        PriceListProbeReport report = probe("Ц Е Н О В Н И К;;;;;;;;;\n" + pravilnik(10, "2026-09-18"));
+
+        assertThat(report.verdict()).isEqualTo(PriceListProbeVerdict.REJECTED);
+        assertThat(report.findings()).singleElement()
+                .asString().contains("Prvi red nije zaglavlje");
+    }
+
+    @Test
     void aDashOrABracketInTheHeaderIsStillTheSameColumn() throws IOException {
         String header = "Kategorija;Naziv kategorije;Naziv proizvoda;Robna marka;"
                 + "Barkod proizvoda (EAN kod);Jedinica mere;Naziv trgovca – formata;"
