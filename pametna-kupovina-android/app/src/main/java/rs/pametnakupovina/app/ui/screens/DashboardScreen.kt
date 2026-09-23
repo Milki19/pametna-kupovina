@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -42,8 +43,6 @@ import java.time.YearMonth
 import java.time.ZoneId
 import rs.pametnakupovina.app.R
 import rs.pametnakupovina.app.data.network.MonthlySpendingDto
-import rs.pametnakupovina.app.data.network.ReceiptDto
-import rs.pametnakupovina.app.data.network.ShopSpendingDto
 import rs.pametnakupovina.app.data.network.WeeklySpendingDto
 import rs.pametnakupovina.app.ui.DashboardViewModel
 import rs.pametnakupovina.app.ui.ReceiptViewModel
@@ -51,6 +50,7 @@ import rs.pametnakupovina.app.ui.components.AppIcon
 import rs.pametnakupovina.app.ui.components.AppSpacing
 import rs.pametnakupovina.app.ui.components.AppTopBar
 import rs.pametnakupovina.app.ui.counted
+import rs.pametnakupovina.app.ui.date
 import rs.pametnakupovina.app.ui.dateTime
 import rs.pametnakupovina.app.ui.items
 import rs.pametnakupovina.app.ui.money
@@ -58,7 +58,12 @@ import rs.pametnakupovina.app.ui.monthName
 
 private val BELGRADE = ZoneId.of("Europe/Belgrade")
 
-private enum class DashboardTab { RECEIPTS, SHOPS }
+private enum class DashboardTab(val label: String, val tag: String) {
+    RECEIPTS("Računi", "tab-receipts"),
+    SHOPS("Prodavnice", "tab-shops"),
+    CATEGORIES("Kategorije", "tab-categories"),
+    HABITS("Navike", "tab-habits")
+}
 
 /**
  * Početni ekran: potrošnja za izabrani mesec (kao mani.rs) i, odmah ispod,
@@ -127,22 +132,37 @@ fun DashboardScreen(
             item(key = "tabs") {
                 DashboardTabRow(selected = tab, onSelect = { tab = it })
             }
-            when (tab) {
-                DashboardTab.RECEIPTS -> if (monthReceipts.isEmpty()) {
-                    item(key = "no-receipts") {
-                        EmptyTabMessage("Nema računa za ovaj mesec.")
-                    }
-                } else {
-                    item(key = "receipts") { MonthReceiptsGroup(monthReceipts) }
-                }
+            val (rows, emptyText) = when (tab) {
+                DashboardTab.RECEIPTS -> monthReceipts.map {
+                    DashboardRow(it.shopName, receiptTimestamp(it.issuedAt), money(it.totalAmount))
+                } to "Nema računa za ovaj mesec."
 
-                DashboardTab.SHOPS -> if (receiptState.byShop.isEmpty()) {
-                    item(key = "no-shops") {
-                        EmptyTabMessage("Još nema podataka o prodavnicama.")
-                    }
-                } else {
-                    item(key = "shops") { ShopSpendingGroup(receiptState.byShop) }
-                }
+                DashboardTab.SHOPS -> receiptState.byShop.map {
+                    DashboardRow(
+                        it.shopName,
+                        counted(it.receipts, "račun", "računa", "računa"),
+                        money(it.spent)
+                    )
+                } to "Još nema podataka o prodavnicama."
+
+                DashboardTab.CATEGORIES -> receiptState.byCategory.map {
+                    DashboardRow(it.category, trailing = money(it.spent))
+                } to "Nema računa za ovaj mesec."
+
+                // Navike su za sve vreme, ne za izabrani mesec: to je ono što
+                // kupac obično kupuje, a ne šta je kupio u junu.
+                DashboardTab.HABITS -> receiptState.habits.map { habit ->
+                    DashboardRow(
+                        habit.name,
+                        listOfNotNull(
+                            counted(habit.times, "put", "puta", "puta"),
+                            belgradeDay(habit.lastBought)?.let { "poslednji put ${date(it.toString())}" }
+                        ).joinToString(" • ")
+                    )
+                } to "Navike se vide kad skeniraš račune sa stavkama."
+            }
+            item(key = tab.name) {
+                if (rows.isEmpty()) EmptyTabMessage(emptyText) else DashboardRows(rows)
             }
         }
     }
@@ -304,63 +324,37 @@ private fun WeeklyBarChart(weeks: List<WeekBar>, modifier: Modifier = Modifier) 
 @Composable
 private fun DashboardTabRow(selected: DashboardTab, onSelect: (DashboardTab) -> Unit) {
     TabRow(selectedTabIndex = selected.ordinal) {
-        Tab(
-            selected = selected == DashboardTab.RECEIPTS,
-            onClick = { onSelect(DashboardTab.RECEIPTS) },
-            text = { Text("Računi") },
-            modifier = Modifier.testTag("tab-receipts")
-        )
-        Tab(
-            selected = selected == DashboardTab.SHOPS,
-            onClick = { onSelect(DashboardTab.SHOPS) },
-            text = { Text("Prodavnice") },
-            modifier = Modifier.testTag("tab-shops")
-        )
-    }
-}
-
-@Composable
-private fun MonthReceiptsGroup(receipts: List<ReceiptDto>) {
-    Surface(
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column {
-            receipts.forEachIndexed { index, receipt ->
-                if (index > 0) {
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = AppSpacing.lg))
-                }
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(AppSpacing.lg)
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(receipt.shopName, style = MaterialTheme.typography.bodyLarge)
-                        Text(
-                            receiptTimestamp(receipt.issuedAt),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Text(money(receipt.totalAmount), style = MaterialTheme.typography.bodyLarge)
-                }
+        DashboardTab.entries.forEach { tab ->
+            // Bez podrazumevanih 16 dp sa strane teksta: četiri naziva staju
+            // i na uzak telefon, umesto „Prodavnic".
+            Tab(
+                selected = selected == tab,
+                onClick = { onSelect(tab) },
+                modifier = Modifier
+                    .heightIn(min = 48.dp)
+                    .testTag(tab.tag)
+            ) {
+                Text(tab.label, style = MaterialTheme.typography.titleSmall, maxLines = 1)
             }
         }
     }
 }
 
+private data class DashboardRow(
+    val title: String,
+    val subtitle: String? = null,
+    val trailing: String? = null
+)
+
 @Composable
-private fun ShopSpendingGroup(shops: List<ShopSpendingDto>) {
+private fun DashboardRows(rows: List<DashboardRow>) {
     Surface(
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainer,
         modifier = Modifier.fillMaxWidth()
     ) {
         Column {
-            shops.forEachIndexed { index, shop ->
+            rows.forEachIndexed { index, row ->
                 if (index > 0) {
                     HorizontalDivider(modifier = Modifier.padding(horizontal = AppSpacing.lg))
                 }
@@ -371,14 +365,19 @@ private fun ShopSpendingGroup(shops: List<ShopSpendingDto>) {
                         .padding(AppSpacing.lg)
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(shop.shopName, style = MaterialTheme.typography.bodyLarge)
-                        Text(
-                            counted(shop.receipts, "račun", "računa", "računa"),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Text(row.title, style = MaterialTheme.typography.bodyLarge)
+                        row.subtitle?.let {
+                            Text(
+                                it,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
-                    Text(money(shop.spent), style = MaterialTheme.typography.bodyLarge)
+                    row.trailing?.let {
+                        Spacer(Modifier.width(AppSpacing.md))
+                        Text(it, style = MaterialTheme.typography.bodyLarge)
+                    }
                 }
             }
         }
@@ -398,12 +397,14 @@ private fun EmptyTabMessage(text: String) {
 private fun monthTitle(month: LocalDate): String =
     monthName(month).replaceFirstChar(Char::uppercase)
 
-private fun isInMonth(issuedAtIso: String, month: LocalDate): Boolean = try {
-    val local = Instant.parse(issuedAtIso).atZone(BELGRADE).toLocalDate()
-    local.year == month.year && local.month == month.month
+private fun belgradeDay(instantIso: String): LocalDate? = try {
+    Instant.parse(instantIso).atZone(BELGRADE).toLocalDate()
 } catch (_: Exception) {
-    false
+    null
 }
+
+private fun isInMonth(issuedAtIso: String, month: LocalDate): Boolean =
+    belgradeDay(issuedAtIso)?.let { it.year == month.year && it.month == month.month } ?: false
 
 private fun receiptTimestamp(issuedAtIso: String): String = try {
     dateTime(Instant.parse(issuedAtIso).toEpochMilli())
