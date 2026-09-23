@@ -2,6 +2,7 @@ package rs.pametnakupovina.backend.matching;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import rs.pametnakupovina.backend.shoppinglist.ShoppingListClientTokenPolicy;
 
 @Service
 public class ProductMatchFeedbackService {
@@ -9,14 +10,14 @@ public class ProductMatchFeedbackService {
     private static final int MAX_NOTE_LENGTH = 500;
 
     private final ProductMatchFeedbackRepository feedbackRepository;
-    private final ProductMatchClientTokenValidator clientTokenValidator;
+    private final ShoppingListClientTokenPolicy clientTokenPolicy;
 
     public ProductMatchFeedbackService(
             ProductMatchFeedbackRepository feedbackRepository,
-            ProductMatchClientTokenValidator clientTokenValidator
+            ShoppingListClientTokenPolicy clientTokenPolicy
     ) {
         this.feedbackRepository = feedbackRepository;
-        this.clientTokenValidator = clientTokenValidator;
+        this.clientTokenPolicy = clientTokenPolicy;
     }
 
     @Transactional
@@ -36,7 +37,7 @@ public class ProductMatchFeedbackService {
             );
         }
 
-        String clientToken = clientTokenValidator.validateRequired(
+        String clientToken = clientTokenPolicy.validateAndHash(
                 request.clientToken()
         );
 

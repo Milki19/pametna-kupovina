@@ -2,6 +2,7 @@ package rs.pametnakupovina.backend.matching;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import rs.pametnakupovina.backend.shoppinglist.ShoppingListClientTokenPolicy;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -33,7 +34,7 @@ public class ProductMatchDecisionService {
     private final ProductMatchThresholdPolicy thresholdPolicy;
     private final ProductMatchDecisionRepository decisionRepository;
     private final ProductMatchFeedbackRepository feedbackRepository;
-    private final ProductMatchClientTokenValidator clientTokenValidator;
+    private final ShoppingListClientTokenPolicy clientTokenPolicy;
 
     public ProductMatchDecisionService(
             FuzzyProductCandidateService candidateService,
@@ -41,14 +42,14 @@ public class ProductMatchDecisionService {
             ProductMatchThresholdPolicy thresholdPolicy,
             ProductMatchDecisionRepository decisionRepository,
             ProductMatchFeedbackRepository feedbackRepository,
-            ProductMatchClientTokenValidator clientTokenValidator
+            ShoppingListClientTokenPolicy clientTokenPolicy
     ) {
         this.candidateService = candidateService;
         this.productNameNormalizer = productNameNormalizer;
         this.thresholdPolicy = thresholdPolicy;
         this.decisionRepository = decisionRepository;
         this.feedbackRepository = feedbackRepository;
-        this.clientTokenValidator = clientTokenValidator;
+        this.clientTokenPolicy = clientTokenPolicy;
     }
 
     @Transactional
@@ -146,8 +147,10 @@ public class ProductMatchDecisionService {
             );
         }
 
-        String normalizedClientToken =
-                clientTokenValidator.validateOptional(clientToken);
+        // Token uređaja je ključ naloga: čuva se samo njegov otisak.
+        String normalizedClientToken = clientToken == null
+                ? null
+                : clientTokenPolicy.validateAndHash(clientToken);
 
         if (reuseFeedback && normalizedClientToken != null) {
             // A confirmed product without a barcode is not replayed as an

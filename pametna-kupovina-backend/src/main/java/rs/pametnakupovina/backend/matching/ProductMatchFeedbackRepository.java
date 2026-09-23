@@ -40,8 +40,8 @@ public class ProductMatchFeedbackRepository {
                         FROM app.product_match_decision
                         WHERE id = ?
                           AND (
-                              client_token IS NULL
-                                  OR client_token = ?
+                              client_token_hash IS NULL
+                                  OR client_token_hash = ?
                           )
                         """)
                 .param(1, decisionId)
@@ -89,7 +89,7 @@ public class ProductMatchFeedbackRepository {
         return jdbcClient.sql("""
                         INSERT INTO app.product_match_feedback (
                             decision_id,
-                            client_token,
+                            client_token_hash,
                             action,
                             selected_canonical_product_id,
                             selected_product_family_id,
@@ -143,7 +143,7 @@ public class ProductMatchFeedbackRepository {
                             FROM app.product_match_feedback feedback
                             JOIN app.product_match_decision decision
                               ON decision.id = feedback.decision_id
-                            WHERE feedback.client_token = ?
+                            WHERE feedback.client_token_hash = ?
                               AND decision.normalized_query = ?
                             ORDER BY feedback.created_at DESC,
                                      feedback.id DESC
