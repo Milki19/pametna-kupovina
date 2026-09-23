@@ -101,7 +101,8 @@ public class ReceiptService {
         return new Spending(
                 receiptRepository.spendingByMonth(accountId, MOST_MONTHS),
                 receiptRepository.spendingByShop(accountId, MOST_SHOPS),
-                receiptRepository.spendingByWeek(accountId, weekMonth)
+                receiptRepository.spendingByWeek(accountId, weekMonth),
+                receiptRepository.spendingByCategory(accountId, weekMonth)
         );
     }
 
@@ -164,7 +165,8 @@ public class ReceiptService {
     public record Spending(
             List<ReceiptRepository.MonthlySpending> byMonth,
             List<ReceiptRepository.ShopSpending> byShop,
-            List<ReceiptRepository.WeeklySpending> byWeek
+            List<ReceiptRepository.WeeklySpending> byWeek,
+            List<ReceiptRepository.CategorySpending> byCategory
     ) {
     }
 }

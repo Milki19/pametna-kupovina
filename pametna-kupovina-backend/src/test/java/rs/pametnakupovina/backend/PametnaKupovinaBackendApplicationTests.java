@@ -4673,10 +4673,34 @@ class PametnaKupovinaBackendApplicationTests {
         // upit ne treba da zna — bucket 4 je i dalje samo bucket 4.
         assertThat(byWeek.get(2).spent()).isEqualByComparingTo("500.00");
 
+        // Kategorije: mleko ide pod svoju glavnu kategoriju, kesa bez
+        // proizvoda i računi bez stavki u „Ostalo" — zbir ostaje 3500.
+        long milk = jdbcClient.sql("""
+                INSERT INTO app.product_family(family_key,display_name,normalized_name,product_category_id)
+                SELECT 'kategorija-mleko','Mleko 1l','mleko 1l',id
+                FROM app.product_category WHERE code = 'MILK'
+                RETURNING id
+                """).query(Long.class).single();
+        jdbcClient.sql("""
+                INSERT INTO app.receipt_item(receipt_id,line_number,name,quantity,total_price,product_family_id)
+                SELECT id,1,'MLEKO 1L',1,900.00,? FROM app.receipt WHERE verification_key = 'NEDELJA-1'
+                UNION ALL
+                SELECT id,2,'KESA',1,100.00,NULL FROM app.receipt WHERE verification_key = 'NEDELJA-1'
+                """).param(milk).update();
+
+        var byCategory = receiptService
+                .spending("telefon-nedelja", java.time.LocalDate.of(2026, 6, 1))
+                .byCategory();
+        assertThat(byCategory).extracting(c -> c.category())
+                .containsExactly("Ostalo", "Mlečni proizvodi i jaja");
+        assertThat(byCategory.get(0).spent()).isEqualByComparingTo("2600.00");
+        assertThat(byCategory.get(1).spent()).isEqualByComparingTo("900.00");
+
         // Prazan mesec ne puca, samo je prazan.
-        assertThat(receiptService
-                .spending("telefon-nedelja", java.time.LocalDate.of(2026, 1, 1))
-                .byWeek()).isEmpty();
+        var january = receiptService
+                .spending("telefon-nedelja", java.time.LocalDate.of(2026, 1, 1));
+        assertThat(january.byWeek()).isEmpty();
+        assertThat(january.byCategory()).isEmpty();
     }
 
     /**

@@ -333,6 +333,55 @@ public class ReceiptRepository {
     }
 
     /**
+     * Izabrani mesec po glavnim kategorijama kataloga (Mleko ide pod Mlečne
+     * proizvode). Stavka bez prepoznatog proizvoda i račun čije stavke još
+     * nisu stigle od Poreske uprave idu u „Ostalo", da zbir ostane zbir meseca.
+     */
+    public List<CategorySpending> spendingByCategory(long accountId, LocalDate monthStart) {
+        return jdbcClient.sql("""
+                        WITH month_receipt AS (
+                            SELECT id, total_amount
+                            FROM app.receipt
+                            WHERE account_id = :accountId
+                              AND (issued_at AT TIME ZONE 'Europe/Belgrade')::date
+                                  >= :monthStart
+                              AND (issued_at AT TIME ZONE 'Europe/Belgrade')::date
+                                  < (:monthStart + INTERVAL '1 month')::date
+                        )
+                        SELECT category, SUM(spent) AS spent
+                        FROM (
+                            SELECT COALESCE(parent.name, own.name, 'Ostalo') AS category,
+                                   item.total_price AS spent
+                            FROM month_receipt AS receipt
+                            JOIN app.receipt_item AS item
+                              ON item.receipt_id = receipt.id
+                            LEFT JOIN app.product_family AS family
+                              ON family.id = item.product_family_id
+                            LEFT JOIN app.product_category AS own
+                              ON own.id = family.product_category_id
+                            LEFT JOIN app.product_category AS parent
+                              ON parent.id = own.parent_id
+                            UNION ALL
+                            SELECT 'Ostalo', receipt.total_amount
+                            FROM month_receipt AS receipt
+                            WHERE NOT EXISTS (
+                                SELECT 1 FROM app.receipt_item AS item
+                                WHERE item.receipt_id = receipt.id
+                            )
+                        ) AS line
+                        GROUP BY category
+                        ORDER BY spent DESC, category
+                        """)
+                .param("accountId", accountId)
+                .param("monthStart", monthStart)
+                .query((resultSet, rowNumber) -> new CategorySpending(
+                        resultSet.getString("category"),
+                        resultSet.getBigDecimal("spent")
+                ))
+                .list();
+    }
+
+    /**
      * @param times koliko različitih računa sadrži taj proizvod; dve kutije
      *              na istom računu su i dalje jedna kupovina
      */
@@ -361,6 +410,12 @@ public class ReceiptRepository {
 
     public record WeeklySpending(
             int bucket,
+            BigDecimal spent
+    ) {
+    }
+
+    public record CategorySpending(
+            String category,
             BigDecimal spent
     ) {
     }
