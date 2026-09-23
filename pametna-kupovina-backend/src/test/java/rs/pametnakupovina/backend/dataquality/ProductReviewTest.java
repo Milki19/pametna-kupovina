@@ -31,11 +31,15 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * One chain sells Zaječarsko's jubilee bottle under an old barcode and a
- * name no rule reads as the other chain's "NRGB" bottle, and Vidal's candy
- * turtles whose name says "GUMENE" where the other chain's does not. The owner
- * is asked about both pairs and not about the dark beer. The bottles are
- * confirmed as one product and the candies rejected: after the next rebuild
- * the bottles are one product and nothing is asked again. A shopper's report
+ * name no rule reads as the other chain's "NRGB" bottle. Brand and size
+ * match and, once read off, the two names say nothing else — same brand
+ * and size is the same product (V99), so that pair is decided the moment
+ * both price lists are in, nobody is asked. Vidal's candy turtles are
+ * different: one chain's name says "GUMENE" where the other's does not, an
+ * extra word neither side's rule can safely drop, so that pair is still
+ * asked about — and not the dark beer, a real difference no rule blurs. The
+ * candies are rejected: after the next rebuild the bottles are one product,
+ * the candies are still two, and nothing is asked again. A shopper's report
  * is reviewed too.
  */
 @SpringBootTest(properties = {
@@ -148,26 +152,23 @@ class ProductReviewTest {
         importChain("REVIEW_FIRST", "/first.csv");
         importChain("REVIEW_SECOND", "/second.csv");
         catalogMaintenanceService.refreshAll();
-        assertThat(familyOf(JUBILEE)).isNotEqualTo(familyOf(BOTTLE));
+
+        // Brand and size line up and, brand and packaging code aside, both
+        // names say only "pivo" — decided the moment both lists are in,
+        // nobody asked (V99).
+        assertThat(familyOf(JUBILEE)).isEqualTo(familyOf(BOTTLE));
+        assertThat(familyOf(DARK)).isNotEqualTo(familyOf(BOTTLE));
 
         List<ProductMergeSuggestionReview> suggestions = reviewService.reviewMergeSuggestions(50);
-        assertThat(suggestions).hasSize(2);
-        ProductMergeSuggestionReview bottles = suggestions.stream()
-                .filter(suggestion -> pairs(suggestion, JUBILEE, BOTTLE))
-                .findFirst()
-                .orElseThrow();
+        assertThat(suggestions).hasSize(1);
         ProductMergeSuggestionReview candies = suggestions.stream()
                 .filter(suggestion -> pairs(suggestion, GUMMY, CANDY))
                 .findFirst()
                 .orElseThrow();
-        assertThat(bottles.brand()).isEqualTo("Zajecarsko");
-        assertThat(bottles.left().retailers()).isNotBlank();
 
-        assertThat(reviewService.decideMerge(bottles.id(), new ProductMergeDecisionRequest(true)).decision())
-                .isEqualTo("SAME");
         assertThat(reviewService.decideMerge(candies.id(), new ProductMergeDecisionRequest(false)).decision())
                 .isEqualTo("DIFFERENT");
-        assertThatThrownBy(() -> reviewService.decideMerge(bottles.id(), new ProductMergeDecisionRequest(true)))
+        assertThatThrownBy(() -> reviewService.decideMerge(candies.id(), new ProductMergeDecisionRequest(false)))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("više ne postoji");
 

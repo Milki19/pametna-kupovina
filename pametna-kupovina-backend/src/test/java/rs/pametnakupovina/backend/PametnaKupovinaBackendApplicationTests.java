@@ -4871,6 +4871,103 @@ class PametnaKupovinaBackendApplicationTests {
                 .isEqualTo("ALFA mleko 2,8%mm 1l");
     }
 
+    /**
+     * V99: kad brend, veličina, pakovanje i vrsta potpuno poklope i nijedan
+     * lanac ne prodaje oba imena, par se više ne pita — spaja se sam, isto
+     * kao da je vlasnik kliknuo „Isti proizvod". Prava druga varijanta istog
+     * brenda i veličine (druga vrsta paštete) i dalje ostaje poseban proizvod.
+     */
+    @Test
+    void productsThatPassEveryMergeCheckJoinWithoutAskingButATrueVariantStaysApart() {
+        var normalizer = new rs.pametnakupovina.backend.matching.ProductNameNormalizer();
+
+        long retailerA = jdbcClient.sql("INSERT INTO app.retailer(code,name) VALUES('MERGEA','Merge A test') RETURNING id")
+                .query(Long.class).single();
+        long formatA = jdbcClient.sql("INSERT INTO app.store_format(retailer_id,code,name) VALUES(?,'TEST','Test') RETURNING id")
+                .param(retailerA).query(Long.class).single();
+        insertVerifiedStore(retailerA, formatA, "MERGEA-SHOP", "Test", 44.27, 19.88, true);
+        long runA = jdbcClient.sql("INSERT INTO app.import_run(retailer_id,source_url,status) VALUES(?,'https://example.test/mergea','SUCCEEDED') RETURNING id")
+                .param(retailerA).query(Long.class).single();
+
+        long retailerB = jdbcClient.sql("INSERT INTO app.retailer(code,name) VALUES('MERGEB','Merge B test') RETURNING id")
+                .query(Long.class).single();
+        long formatB = jdbcClient.sql("INSERT INTO app.store_format(retailer_id,code,name) VALUES(?,'TEST','Test') RETURNING id")
+                .param(retailerB).query(Long.class).single();
+        insertVerifiedStore(retailerB, formatB, "MERGEB-SHOP", "Test", 44.27, 19.88, true);
+        long runB = jdbcClient.sql("INSERT INTO app.import_run(retailer_id,source_url,status) VALUES(?,'https://example.test/mergeb','SUCCEEDED') RETURNING id")
+                .param(retailerB).query(Long.class).single();
+
+        // Isti proizvod, dva različita načina da se ispiše ime — Argeta
+        // pikant pašteta 45g, baš kao na admin stranici.
+        long sameA = insertMergeCandidate(retailerA, "Pasteta pikant Argeta 45g", "Argeta", 45, "g", normalizer);
+        offerCurrentPrice(sameA, runA, 64.99);
+        long sameB = insertMergeCandidate(retailerB, "PASTETA ARGETA PIKANT PASTETA 45G", "Argeta", 45, "g", normalizer);
+        offerCurrentPrice(sameB, runB, 71.99);
+
+        // Prava druga varijanta istog brenda i veličine: ćureća, ne pikant.
+        long variantA = insertMergeCandidate(retailerA, "Pasteta Argeta cureca 45g", "Argeta", 45, "g", normalizer);
+        offerCurrentPrice(variantA, runA, 64.99);
+        long variantB = insertMergeCandidate(retailerB, "PASTETA ARGETA CURECA 45G", "Argeta", 45, "g", normalizer);
+        offerCurrentPrice(variantB, runB, 71.99);
+
+        productCatalogMaintenanceService.refreshRetailer(retailerA);
+        productCatalogMaintenanceService.refreshRetailer(retailerB);
+        // Odluka koju je drugi refresh upisao se spaja tek na sledećem — isto
+        // kao i vlasnikova, "pri sledećem osvežavanju kataloga". Ne zna se
+        // unapred čiji ključ pobeđuje, pa oba lanca prolaze još jednom, kao
+        // u pravom dnevnom ciklusu koji ionako osvežava sve redom.
+        productCatalogMaintenanceService.refreshRetailer(retailerA);
+        productCatalogMaintenanceService.refreshRetailer(retailerB);
+
+        assertThat(jdbcClient.sql("SELECT COUNT(*) FROM app.product_merge_suggestion")
+                .query(Integer.class).single())
+                .isZero();
+
+        assertThat(familyOf(sameA)).isEqualTo(familyOf(sameB));
+        assertThat(familyOf(variantA)).isEqualTo(familyOf(variantB));
+        assertThat(familyOf(variantA)).isNotEqualTo(familyOf(sameA));
+    }
+
+    private long insertMergeCandidate(
+            long retailerId, String name, String brand, int quantity, String unit,
+            rs.pametnakupovina.backend.matching.ProductNameNormalizer normalizer
+    ) {
+        return jdbcClient.sql("""
+                        INSERT INTO app.retailer_product(
+                            retailer_id, source_product_key, name, normalized_name,
+                            brand, quantity_value, base_unit
+                        )
+                        VALUES (?,?,?,?,?,?,?) RETURNING id
+                        """)
+                .params(retailerId, name, name, normalizer.normalize(name), brand, quantity, unit)
+                .query(Long.class).single();
+    }
+
+    /**
+     * product_retailer_presence (pa i merge_family iza njega) čita samo
+     * odavde, ne iz price_observation — bez ovog reda porodica je nevidljiva
+     * za spajanje koliko god cena postojala.
+     */
+    private void offerCurrentPrice(long retailerProductId, long importRunId, double price) {
+        jdbcClient.sql("""
+                        INSERT INTO app.current_price_offer (
+                            retailer_product_id, import_run_id, scope_type,
+                            retailer_format_name, price_date, first_seen_date,
+                            last_seen_date, regular_price
+                        )
+                        VALUES (?, ?, 'STORE_FORMAT', 'Test', '2026-09-10', '2026-09-10', '2026-09-10', ?)
+                        """)
+                .params(retailerProductId, importRunId, price)
+                .update();
+    }
+
+    private Long familyOf(long retailerProductId) {
+        return jdbcClient.sql("SELECT product_family_id FROM app.retailer_product WHERE id = ?")
+                .param(retailerProductId)
+                .query(Long.class)
+                .single();
+    }
+
     @Test
     void beerIntentsNeverSubstituteNonAlcoholicForRegularOrTheReverse() {
         long retailer = jdbcClient.sql("INSERT INTO app.retailer(code,name) VALUES('BEERTEST','Beer test') RETURNING id")
