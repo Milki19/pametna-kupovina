@@ -239,7 +239,16 @@ data class SpendingDto(
 
 @Serializable
 data class AccountStateDto(
-    val signedIn: Boolean = false
+    val signedIn: Boolean = false,
+    val household: Boolean = false
+)
+
+@Serializable
+data class CrashReportDto(
+    val appVersion: String,
+    val androidVersion: String,
+    val device: String,
+    val stackTrace: String
 )
 
 @Serializable
