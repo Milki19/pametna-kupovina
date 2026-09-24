@@ -6,12 +6,13 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -34,6 +35,7 @@ import rs.pametnakupovina.app.data.network.ShoppingItemRuleDto
 import rs.pametnakupovina.app.data.network.ShoppingListMatchingDto
 import rs.pametnakupovina.app.ui.MatchingViewModel
 import rs.pametnakupovina.app.ui.components.AppIcon
+import rs.pametnakupovina.app.ui.components.cardBorder
 import rs.pametnakupovina.app.ui.components.AppSpacing
 import rs.pametnakupovina.app.ui.components.AppTopBar
 import rs.pametnakupovina.app.ui.components.BottomActionBar
@@ -43,6 +45,7 @@ import rs.pametnakupovina.app.ui.components.NoticeBanner
 import rs.pametnakupovina.app.ui.components.PrimaryActionButton
 import rs.pametnakupovina.app.ui.components.SectionHeader
 import rs.pametnakupovina.app.ui.components.StatusPill
+import rs.pametnakupovina.app.ui.components.StepCard
 import rs.pametnakupovina.app.ui.components.StatusTone
 import rs.pametnakupovina.app.ui.counted
 import rs.pametnakupovina.app.ui.plural
@@ -135,16 +138,6 @@ private fun MatchingContent(
             item(key = "decide-header") {
                 SectionHeader("Treba tvoja odluka", trailing = needsDecision.size.toString())
             }
-            if (needsDecision.any(::canUseAsFlexible)) {
-                item(key = "decide-hint") {
-                    Text(
-                        "Gde ti nije važan brend ni pakovanje, pusti aplikaciju " +
-                            "da izabere najpovoljnije.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
             itemsIndexed(needsDecision, key = { _, item -> item.itemId }) { index, item ->
                 DecisionCard(
                     item = item,
@@ -170,38 +163,43 @@ private fun MatchingContent(
     }
 }
 
+/** Korak u toku izračunavanja i koliko je stavki već prepoznato. */
 @Composable
 private fun MatchingSummary(result: ShoppingListMatchingDto, pending: Int) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(AppSpacing.md),
-        modifier = Modifier.padding(vertical = AppSpacing.sm)
+    val connected = connectedItems(result)
+    StepCard(
+        step = "KORAK 1 OD 3",
+        title = if (pending == 0) {
+            "Sve stavke su prepoznate"
+        } else {
+            "$pending ${plural(pending, "stavka traži", "stavke traže", "stavki traži")} tvoju odluku"
+        },
+        text = "Potvrdi nejasne stavke da bismo našli najpovoljnije cene u blizini."
     ) {
-        AppIcon(
-            if (pending == 0) R.drawable.ic_check_circle else R.drawable.ic_warning,
-            contentDescription = null,
-            tint = if (pending == 0) {
-                MaterialTheme.colorScheme.primary
-            } else {
-                MaterialTheme.colorScheme.tertiary
-            },
-            modifier = Modifier.size(36.dp)
-        )
-        Column {
+        Row {
             Text(
-                if (pending == 0) {
-                    "Sve stavke su prepoznate"
-                } else {
-                    "$pending ${plural(pending, "stavka traži", "stavke traže", "stavki traži")} tvoju odluku"
-                },
-                style = MaterialTheme.typography.titleLarge
+                "Prepoznato $connected od ${result.totalItems}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f)
             )
-            Text(
-                "Prepoznato ${connectedItems(result)} od ${result.totalItems}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            if (pending > 0) {
+                Text(
+                    "još $pending",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
         }
+        LinearProgressIndicator(
+            progress = { if (result.totalItems > 0) connected.toFloat() / result.totalItems else 0f },
+            drawStopIndicator = {},
+            gapSize = 0.dp,
+            trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(8.dp)
+        )
     }
 }
 
@@ -216,18 +214,22 @@ private fun DecisionCard(
     Surface(
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainer,
+        border = cardBorder,
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
             modifier = Modifier.padding(AppSpacing.lg),
             verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    item.requestedName,
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.weight(1f)
-                )
+            Row(verticalAlignment = Alignment.Top) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Sa spiska",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text("„${item.requestedName}“", style = MaterialTheme.typography.titleLarge)
+                }
                 StatusPill(statusText(item.matchingStatus), statusTone(item.matchingStatus))
             }
             if (showExplanation) {
@@ -246,24 +248,48 @@ private fun DecisionCard(
                         onChoose = { onChoose(candidate) }
                     )
                 }
-                TextButton(enabled = enabled, onClick = { onChoose(null) }) {
-                    Text("Nijedan, ostavi neupareno")
-                }
             }
 
             if (canUseAsFlexible(item)) {
-                FilledTonalButton(
-                    enabled = enabled,
+                Surface(
                     onClick = onUseAsFlexible,
+                    enabled = enabled,
+                    shape = MaterialTheme.shapes.small,
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Neka aplikacija izabere najpovoljnije")
+                    Column(
+                        modifier = Modifier.padding(AppSpacing.md),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Text(
+                            "Neka aplikacija izabere najpovoljnije",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            "Kad ti nije važan brend ni pakovanje.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            if (item.matchingStatus == ShoppingItemMatchingStatusDto.NEEDS_CONFIRMATION) {
+                TextButton(
+                    enabled = enabled,
+                    onClick = { onChoose(null) },
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                ) {
+                    Text("Nijedan, ostavi neupareno", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
     }
 }
 
+/** Ceo red se bira dodirom; „Izaberi" kaže šta dodir radi. */
 @Composable
 private fun CandidateRow(
     candidate: ProductCandidateDto,
@@ -271,36 +297,48 @@ private fun CandidateRow(
     onChoose: () -> Unit
 ) {
     Surface(
+        onClick = onChoose,
+        enabled = enabled,
         shape = MaterialTheme.shapes.small,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
-            modifier = Modifier.padding(
-                start = AppSpacing.md,
-                end = AppSpacing.sm,
-                top = AppSpacing.sm,
-                bottom = AppSpacing.sm
-            ),
-            verticalAlignment = Alignment.CenterVertically
+            modifier = Modifier.padding(AppSpacing.md),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm)
         ) {
-            Column(modifier = Modifier.weight(1f)) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
                 Text(candidate.name, style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    listOfNotNull(
-                        candidate.brand,
-                        candidate.quantityValue?.let { quantity ->
-                            candidate.baseUnit?.let { amountLabel(quantity, it, candidate.packageCount) }
-                        },
-                        "poklapanje ${(candidate.score.totalScore * 100).toInt()}%"
-                    ).joinToString(" · "),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm)
+                ) {
+                    StatusPill("${(candidate.score.totalScore * 100).toInt()}%", StatusTone.POSITIVE)
+                    Text(
+                        listOfNotNull(
+                            candidate.brand,
+                            candidate.quantityValue?.let { quantity ->
+                                candidate.baseUnit?.let { amountLabel(quantity, it, candidate.packageCount) }
+                            }
+                        ).joinToString(" · "),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
-            FilledTonalButton(enabled = enabled, onClick = onChoose) {
-                Text("Izaberi")
-            }
+            Text(
+                "Izaberi",
+                style = MaterialTheme.typography.labelLarge,
+                color = if (enabled) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                }
+            )
         }
     }
 }
@@ -310,6 +348,7 @@ private fun SettledList(items: List<ShoppingItemMatchResultDto>) {
     Surface(
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainer,
+        border = cardBorder,
         modifier = Modifier.fillMaxWidth()
     ) {
         Column {

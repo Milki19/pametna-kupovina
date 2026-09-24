@@ -234,6 +234,7 @@ private fun ProductSearchResultCard(
     Surface(
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainer,
+        border = cardBorder,
         modifier = Modifier
             .fillMaxWidth()
             .testTag("product-result-${product.resultId()}")

@@ -28,7 +28,7 @@
 
     <path
         android:pathData="M42,68L49,75L66,60"
-        android:strokeColor="#176B52"
+        android:strokeColor="#005C55"
         android:strokeWidth="6"
         android:strokeLineCap="round"
         android:strokeLineJoin="round" />

@@ -35,6 +35,15 @@ import rs.pametnakupovina.app.data.network.serverMessage
 import rs.pametnakupovina.app.ui.components.AppSpacing
 import rs.pametnakupovina.app.ui.components.Barcode
 import retrofit2.HttpException
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Surface
+import androidx.compose.ui.graphics.Color
+import rs.pametnakupovina.app.R
+import rs.pametnakupovina.app.ui.components.StatusPill
+import rs.pametnakupovina.app.ui.components.StatusTone
+import rs.pametnakupovina.app.ui.components.TonalActionButton
+import rs.pametnakupovina.app.ui.components.cardBorder
 
 data class HouseholdUiState(
     val inviteQr: String? = null,
@@ -100,29 +109,43 @@ fun HouseholdDialog(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
+    val close = {
+        if (state.joined) onJoined()
+        onDismiss()
+    }
     AlertDialog(
-        onDismissRequest = {
-            if (state.joined) onJoined()
-            onDismiss()
-        },
+        onDismissRequest = close,
         title = { Text("Domaćinstvo") },
         text = {
             Column(
-                verticalArrangement = Arrangement.spacedBy(AppSpacing.sm),
+                verticalArrangement = Arrangement.spacedBy(AppSpacing.md),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 val qr = state.inviteQr
                 if (qr != null) {
-                    Barcode(
-                        qr,
-                        "QR_CODE",
-                        modifier = Modifier.size(220.dp).testTag("household-qr"),
-                        // Kod je ključ naloga; čitač ekrana ne treba da ga izgovara.
-                        contentDescription = "QR kod za pridruživanje domaćinstvu"
-                    )
+                    Surface(
+                        shape = MaterialTheme.shapes.medium,
+                        color = Color.White,
+                        border = cardBorder
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(AppSpacing.md),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)
+                        ) {
+                            Barcode(
+                                qr,
+                                "QR_CODE",
+                                modifier = Modifier.size(200.dp).testTag("household-qr"),
+                                // Kod je ključ naloga; čitač ekrana ne treba da ga izgovara.
+                                contentDescription = "QR kod za pridruživanje domaćinstvu"
+                            )
+                            StatusPill("Važi 15 minuta", StatusTone.WARNING)
+                        }
+                    }
                     Text(
-                        "Neka ukućanin u svojoj aplikaciji otvori meni → Domaćinstvo → " +
-                            "Pridruži se i skenira ovaj kod. Važi 15 minuta.",
+                        "Neka ukućanin u svojoj aplikaciji otvori Meni → Domaćinstvo → " +
+                            "Pridruži se i skenira ovaj kod.",
                         style = MaterialTheme.typography.bodyMedium
                     )
                 } else {
@@ -140,21 +163,29 @@ fun HouseholdDialog(
                         modifier = Modifier.testTag("household-message")
                     )
                 }
+                TonalActionButton(
+                    text = if (state.inviteQr == null) "Pozovi ukućanina" else "Novi kod",
+                    icon = R.drawable.ic_add,
+                    primary = true,
+                    enabled = !state.busy,
+                    onClick = viewModel::invite,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("household-invite")
+                )
+                TonalActionButton(
+                    text = "Pridruži se (skeniraj kod)",
+                    icon = R.drawable.ic_camera,
+                    enabled = !state.busy && !state.joined,
+                    onClick = { viewModel.join(context) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("household-join")
+                )
             }
         },
         confirmButton = {
-            TextButton(
-                enabled = !state.busy,
-                onClick = viewModel::invite,
-                modifier = Modifier.testTag("household-invite")
-            ) { Text(if (state.inviteQr == null) "Pozovi ukućanina" else "Novi kod") }
-        },
-        dismissButton = {
-            TextButton(
-                enabled = !state.busy && !state.joined,
-                onClick = { viewModel.join(context) },
-                modifier = Modifier.testTag("household-join")
-            ) { Text("Pridruži se") }
+            TextButton(onClick = close) { Text("Zatvori") }
         }
     )
 }

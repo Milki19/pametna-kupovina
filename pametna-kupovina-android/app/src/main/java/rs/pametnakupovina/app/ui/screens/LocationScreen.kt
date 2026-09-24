@@ -9,19 +9,18 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilledTonalButton
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Surface
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -55,6 +54,8 @@ import rs.pametnakupovina.app.ui.components.BottomActionBar
 import rs.pametnakupovina.app.ui.components.NoticeBanner
 import rs.pametnakupovina.app.ui.components.PrimaryActionButton
 import rs.pametnakupovina.app.ui.components.StatusTone
+import rs.pametnakupovina.app.ui.components.StepCard
+import rs.pametnakupovina.app.ui.components.cardBorder
 
 /**
  * One large action for the usual case. Typing coordinates is a fallback for a
@@ -134,13 +135,17 @@ fun LocationScreen(
                 .padding(horizontal = AppSpacing.lg, vertical = AppSpacing.md),
             verticalArrangement = Arrangement.spacedBy(AppSpacing.md)
         ) {
-            Text(
-                "Put računamo od polazne tačke do prodavnica u blizini.",
-                style = MaterialTheme.typography.bodyLarge
+            StepCard(
+                step = "KORAK 2 OD 3",
+                title = "Polazna tačka",
+                text = "Put računamo od polazne tačke do prodavnica u blizini."
             )
 
-            FilledTonalButton(
+            Surface(
                 enabled = !state.isResolving,
+                shape = MaterialTheme.shapes.medium,
+                color = MaterialTheme.colorScheme.surfaceContainer,
+                border = cardBorder,
                 onClick = {
                     if (hasLocationPermission(context)) {
                         viewModel.resolveCurrentLocation()
@@ -153,21 +158,46 @@ fun LocationScreen(
                         )
                     }
                 },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 64.dp)
+                modifier = Modifier.fillMaxWidth()
             ) {
-                if (state.isResolving) {
-                    CircularProgressIndicator(
-                        strokeWidth = 2.dp,
-                        modifier = Modifier.size(22.dp)
+                Row(
+                    modifier = Modifier.padding(AppSpacing.lg),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(AppSpacing.md)
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            if (state.isResolving) {
+                                CircularProgressIndicator(
+                                    strokeWidth = 2.dp,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            } else {
+                                AppIcon(R.drawable.ic_my_location, contentDescription = null)
+                            }
+                        }
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            if (state.isResolving) "Tražim lokaciju…" else "Koristi trenutnu lokaciju",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Text(
+                            "Samo za ovo računanje",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    AppIcon(
+                        R.drawable.ic_chevron_right,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Spacer(Modifier.width(AppSpacing.md))
-                    Text("Tražim lokaciju…", style = MaterialTheme.typography.titleMedium)
-                } else {
-                    AppIcon(R.drawable.ic_my_location, contentDescription = null)
-                    Spacer(Modifier.width(AppSpacing.md))
-                    Text("Koristi trenutnu lokaciju", style = MaterialTheme.typography.titleMedium)
                 }
             }
 
