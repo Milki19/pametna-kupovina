@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -15,14 +17,25 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.withStyle
+import kotlin.math.abs
+import kotlin.math.roundToInt
+import rs.pametnakupovina.app.ui.components.StatusPill
+import rs.pametnakupovina.app.ui.components.StatusTone
+import rs.pametnakupovina.app.ui.wholeDinars
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
-import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -47,6 +60,8 @@ import rs.pametnakupovina.app.data.network.WeeklySpendingDto
 import rs.pametnakupovina.app.ui.DashboardViewModel
 import rs.pametnakupovina.app.ui.ReceiptViewModel
 import rs.pametnakupovina.app.ui.components.AppIcon
+import rs.pametnakupovina.app.ui.components.cardBorder
+import rs.pametnakupovina.app.ui.components.heroColors
 import rs.pametnakupovina.app.ui.components.AppSpacing
 import rs.pametnakupovina.app.ui.components.AppTopBar
 import rs.pametnakupovina.app.ui.components.NoticeBanner
@@ -73,7 +88,6 @@ private enum class DashboardTab(val label: String, val tag: String) {
  */
 @Composable
 fun DashboardScreen(
-    onOpenMenu: () -> Unit,
     onOpenList: () -> Unit,
     dashboardViewModel: DashboardViewModel = hiltViewModel(),
     receiptViewModel: ReceiptViewModel = hiltViewModel()
@@ -87,29 +101,7 @@ fun DashboardScreen(
     }
     val canGoForward = receiptState.selectedMonth.isBefore(LocalDate.now().withDayOfMonth(1))
 
-    Scaffold(
-        topBar = {
-            AppTopBar(
-                title = monthTitle(receiptState.selectedMonth),
-                onMenu = onOpenMenu,
-                actions = {
-                    IconButton(
-                        onClick = { receiptViewModel.changeMonth(-1) },
-                        modifier = Modifier.testTag("previous-month")
-                    ) {
-                        AppIcon(R.drawable.ic_arrow_back, contentDescription = "Prethodni mesec")
-                    }
-                    IconButton(
-                        onClick = { receiptViewModel.changeMonth(1) },
-                        enabled = canGoForward,
-                        modifier = Modifier.testTag("next-month")
-                    ) {
-                        AppIcon(R.drawable.ic_chevron_right, contentDescription = "Sledeći mesec")
-                    }
-                }
-            )
-        }
-    ) { padding ->
+    Scaffold(topBar = { AppTopBar(title = "Početna") }) { padding ->
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -119,7 +111,7 @@ fun DashboardScreen(
                 horizontal = AppSpacing.lg,
                 vertical = AppSpacing.md
             ),
-            verticalArrangement = Arrangement.spacedBy(AppSpacing.md)
+            verticalArrangement = Arrangement.spacedBy(AppSpacing.lg)
         ) {
             // Skeniranje iz menija javlja ishod ovde; bez ovoga su i uspeh i
             // greška prolazili ćutke.
@@ -134,34 +126,44 @@ fun DashboardScreen(
                     )
                 }
             }
-            item(key = "list-shortcut") {
-                ShoppingListShortcutCard(listItemCount, onOpenList)
-            }
             item(key = "spending") {
-                MonthSpendingCard(receiptState.byMonth, receiptState.selectedMonth)
+                MonthSpendingCard(
+                    byMonth = receiptState.byMonth,
+                    selectedMonth = receiptState.selectedMonth,
+                    shops = monthReceipts.distinctBy { it.shopName }.size,
+                    canGoForward = canGoForward,
+                    onChangeMonth = receiptViewModel::changeMonth
+                )
+            }
+            item(key = "list-shortcut") {
+                ActiveListCard(listItemCount, onOpenList)
             }
             item(key = "weekly-chart") {
                 WeeklyBarChart(weekBars(receiptState.selectedMonth, receiptState.byWeek))
-            }
-            item(key = "tabs") {
-                DashboardTabRow(selected = tab, onSelect = { tab = it })
             }
             val (rows, emptyText) = when (tab) {
                 DashboardTab.RECEIPTS -> monthReceipts.map {
                     DashboardRow(it.shopName, receiptTimestamp(it.issuedAt), money(it.totalAmount))
                 } to "Nema računa za ovaj mesec."
 
-                DashboardTab.SHOPS -> receiptState.byShop.map {
-                    DashboardRow(
-                        it.shopName,
-                        counted(it.receipts, "račun", "računa", "računa"),
-                        money(it.spent)
-                    )
-                } to "Još nema podataka o prodavnicama."
+                DashboardTab.SHOPS -> {
+                    val total = receiptState.byShop.sumOf { it.spent }
+                    receiptState.byShop.map {
+                        DashboardRow(
+                            it.shopName,
+                            counted(it.receipts, "račun", "računa", "računa"),
+                            "${wholeDinars(it.spent)} RSD",
+                            share = share(it.spent, total)
+                        )
+                    } to "Još nema podataka o prodavnicama."
+                }
 
-                DashboardTab.CATEGORIES -> receiptState.byCategory.map {
-                    DashboardRow(it.category, trailing = money(it.spent))
-                } to "Nema računa za ovaj mesec."
+                DashboardTab.CATEGORIES -> {
+                    val total = receiptState.byCategory.sumOf { it.spent }
+                    receiptState.byCategory.map {
+                        DashboardRow(it.category, trailing = "${wholeDinars(it.spent)} RSD", share = share(it.spent, total))
+                    } to "Nema računa za ovaj mesec."
+                }
 
                 // Navike su za sve vreme, ne za izabrani mesec: to je ono što
                 // kupac obično kupuje, a ne šta je kupio u junu.
@@ -175,78 +177,166 @@ fun DashboardScreen(
                     )
                 } to "Navike se vide kad skeniraš račune sa stavkama."
             }
-            item(key = tab.name) {
-                if (rows.isEmpty()) EmptyTabMessage(emptyText) else DashboardRows(rows)
+            item(key = "analytics") {
+                AnalyticsCard(tab, onSelect = { tab = it }, rows, emptyText)
             }
         }
     }
 }
 
-@Composable
-private fun ShoppingListShortcutCard(itemCount: Int, onOpenList: () -> Unit) {
-    Surface(
-        onClick = onOpenList,
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.primaryContainer,
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag("open-list")
-    ) {
-        Row(
-            modifier = Modifier.padding(AppSpacing.lg),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            AppIcon(
-                R.drawable.ic_content_paste,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onPrimaryContainer
-            )
-            Spacer(Modifier.width(AppSpacing.md))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    "Moj spisak",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-                Text(
-                    if (itemCount == 0) "Prazan" else items(itemCount),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-            }
-            AppIcon(
-                R.drawable.ic_chevron_right,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onPrimaryContainer
-            )
-        }
-    }
-}
-
+/** Mesec, ukupna potrošnja i promena u odnosu na mesec pre. */
 @Composable
 private fun MonthSpendingCard(
     byMonth: List<MonthlySpendingDto>,
-    selectedMonth: LocalDate
+    selectedMonth: LocalDate,
+    shops: Int,
+    canGoForward: Boolean,
+    onChangeMonth: (Int) -> Unit
 ) {
     val month = byMonth.find { it.month == selectedMonth.toString() }
+    val spent = month?.spent ?: 0.0
+    val receipts = month?.receipts ?: 0
+    val previousMonth = selectedMonth.minusMonths(1)
+    val previous = byMonth.find { it.month == previousMonth.toString() }?.spent ?: 0.0
     Surface(
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainer,
+        border = cardBorder,
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
             modifier = Modifier.padding(AppSpacing.lg),
-            verticalArrangement = Arrangement.spacedBy(AppSpacing.xs)
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)
         ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                FilledTonalIconButton(
+                    onClick = { onChangeMonth(-1) },
+                    modifier = Modifier.testTag("previous-month")
+                ) {
+                    AppIcon(
+                        R.drawable.ic_chevron_right,
+                        contentDescription = "Prethodni mesec",
+                        modifier = Modifier.rotate(180f)
+                    )
+                }
+                Text(
+                    monthTitle(selectedMonth),
+                    style = MaterialTheme.typography.titleLarge,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.weight(1f)
+                )
+                FilledTonalIconButton(
+                    onClick = { onChangeMonth(1) },
+                    enabled = canGoForward,
+                    modifier = Modifier.testTag("next-month")
+                ) {
+                    AppIcon(R.drawable.ic_chevron_right, contentDescription = "Sledeći mesec")
+                }
+            }
             Text(
-                money(month?.spent ?: 0.0),
-                style = MaterialTheme.typography.headlineMedium
-            )
-            Text(
-                "Ukupni troškovi • ${counted(month?.receipts ?: 0, "račun", "računa", "računa")}",
-                style = MaterialTheme.typography.bodyMedium,
+                "UKUPNA MESEČNA POTROŠNJA",
+                style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            Text(dinars(spent), style = MaterialTheme.typography.displaySmall)
+            // Samo kad oba meseca imaju račune: „-100%" za prazan mesec ne
+            // govori ništa.
+            if (spent > 0 && previous > 0) {
+                val change = ((spent - previous) / previous * 100).roundToInt()
+                StatusPill(
+                    // Pravi minus: crtica se kod cifara iste širine razmakne.
+                    "${if (change > 0) "+" else "−"}${abs(change)}% u odnosu na ${monthName(previousMonth).substringBefore(' ')}",
+                    if (change > 0) StatusTone.WARNING else StatusTone.POSITIVE
+                )
+            }
+            // Kad se „Prosečna korpa" prelomi, brojevi i dalje stoje u istoj visini.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(IntrinsicSize.Min)
+                    .padding(top = AppSpacing.sm)
+                    .background(
+                        MaterialTheme.colorScheme.surfaceContainerLow,
+                        MaterialTheme.shapes.small
+                    )
+                    .padding(vertical = AppSpacing.md)
+            ) {
+                MonthStat("Računa", receipts.toString(), Modifier.weight(1f))
+                MonthStat("Prodavnica", shops.toString(), Modifier.weight(1f))
+                MonthStat(
+                    "Prosečna korpa",
+                    if (receipts > 0) wholeDinars(spent / receipts) else "–",
+                    Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MonthStat(label: String, value: String, modifier: Modifier) {
+    Column(
+        modifier = modifier.fillMaxHeight(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
+        Text(value, style = MaterialTheme.typography.titleLarge)
+    }
+}
+
+/** Iznos u celim dinarima, sa „RSD" sitnije, kao na nacrtu. */
+@Composable
+private fun dinars(value: Double) = buildAnnotatedString {
+    append(wholeDinars(value))
+    withStyle(MaterialTheme.typography.titleMedium.toSpanStyle()) { append(" RSD") }
+}
+
+@Composable
+private fun ActiveListCard(itemCount: Int, onOpenList: () -> Unit) {
+    val hero = heroColors()
+    Surface(
+        shape = MaterialTheme.shapes.medium,
+        color = hero.container,
+        contentColor = hero.content,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(AppSpacing.lg),
+            verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)
+        ) {
+            Text("AKTIVNA LISTA", style = MaterialTheme.typography.labelMedium)
+            Text("Moj spisak", style = MaterialTheme.typography.headlineSmall)
+            Surface(
+                onClick = onOpenList,
+                shape = RoundedCornerShape(14.dp),
+                color = hero.action,
+                contentColor = hero.onAction,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = AppSpacing.xs)
+                    .testTag("open-list")
+            ) {
+                Row(
+                    modifier = Modifier.padding(AppSpacing.lg),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    AppIcon(R.drawable.ic_content_paste, contentDescription = null)
+                    Spacer(Modifier.width(AppSpacing.md))
+                    Text(
+                        if (itemCount == 0) "Spisak je prazan" else "Otvori spisak (${items(itemCount)})",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.weight(1f)
+                    )
+                    AppIcon(R.drawable.ic_chevron_right, contentDescription = null)
+                }
+            }
         }
     }
 }
@@ -261,7 +351,7 @@ private fun weekBars(month: LocalDate, byWeek: List<WeeklySpendingDto>): List<We
         val startDay = bucket * 7 + 1
         val endDay = minOf(startDay + 6, lengthOfMonth)
         WeekBar(
-            label = "$startDay-$endDay",
+            label = "$startDay–$endDay",
             spent = byBucket[bucket]?.spent ?: 0.0
         )
     }
@@ -269,54 +359,62 @@ private fun weekBars(month: LocalDate, byWeek: List<WeeklySpendingDto>): List<We
 
 /**
  * Bez chart biblioteke: visina stuba je udeo fiksne visine kolone
- * (Spacer + stub, oba sa weight-om, uvek zbir 1), kao na mani.rs.
+ * (Spacer + stub, oba sa weight-om, uvek zbir 1), kao na mani.rs. Najveća
+ * nedelja je tamna, ostale svetle.
  */
 @Composable
 private fun WeeklyBarChart(weeks: List<WeekBar>, modifier: Modifier = Modifier) {
     val maxSpent = (weeks.maxOfOrNull { it.spent } ?: 0.0).coerceAtLeast(1.0)
+    val busiest = weeks.filter { it.spent > 0 }.maxByOrNull { it.spent }
     Surface(
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainer,
+        border = cardBorder,
         modifier = modifier.fillMaxWidth()
     ) {
-        Column(modifier = Modifier.padding(AppSpacing.lg)) {
+        Column(
+            modifier = Modifier.padding(AppSpacing.lg),
+            verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)
+        ) {
+            Text("Nedeljni pregled potrošnje", style = MaterialTheme.typography.titleMedium)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(120.dp),
+                    .height(140.dp),
                 horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm)
             ) {
                 weeks.forEach { week ->
-                    val fraction = (week.spent / maxSpent).toFloat().coerceIn(0f, 1f)
+                    val fraction = (week.spent / maxSpent).toFloat().coerceIn(0f, 1f) * 0.85f
                     Column(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight(),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        if (fraction < 1f) {
-                            Spacer(Modifier.weight((1f - fraction).coerceAtLeast(0.01f)))
+                        Spacer(Modifier.weight((1f - fraction).coerceAtLeast(0.01f)))
+                        if (week.spent > 0) {
+                            Text(
+                                wholeDinars(week.spent),
+                                style = MaterialTheme.typography.labelSmall,
+                                maxLines = 1
+                            )
                         }
                         Box(
                             modifier = Modifier
-                                .fillMaxWidth(0.6f)
+                                .fillMaxWidth(0.7f)
                                 .weight(fraction.coerceAtLeast(0.02f))
                                 .background(
-                                    color = if (week.spent > 0) {
+                                    color = if (week == busiest) {
                                         MaterialTheme.colorScheme.primary
                                     } else {
                                         MaterialTheme.colorScheme.surfaceContainerHighest
                                     },
-                                    shape = RoundedCornerShape(
-                                        topStart = AppSpacing.xs,
-                                        topEnd = AppSpacing.xs
-                                    )
+                                    shape = RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp)
                                 )
                         )
                     }
                 }
             }
-            Spacer(Modifier.height(AppSpacing.xs))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm)
@@ -325,34 +423,24 @@ private fun WeeklyBarChart(weeks: List<WeekBar>, modifier: Modifier = Modifier) 
                     Text(
                         week.label,
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = if (week == busiest) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
                         textAlign = TextAlign.Center,
+                        maxLines = 1,
                         modifier = Modifier.weight(1f)
                     )
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun DashboardTabRow(selected: DashboardTab, onSelect: (DashboardTab) -> Unit) {
-    // Sa krupnim slovima četiri naziva ne staju: tabovi se tada pomeraju
-    // prevlačenjem umesto da se seku („ProdavnKategor").
-    PrimaryScrollableTabRow(selectedTabIndex = selected.ordinal, edgePadding = 0.dp) {
-        DashboardTab.entries.forEach { tab ->
-            Tab(
-                selected = selected == tab,
-                onClick = { onSelect(tab) },
-                modifier = Modifier
-                    .heightIn(min = 48.dp)
-                    .testTag(tab.tag)
-            ) {
+            busiest?.let {
                 Text(
-                    tab.label,
-                    style = MaterialTheme.typography.titleSmall,
-                    maxLines = 1,
-                    modifier = Modifier.padding(horizontal = AppSpacing.md)
+                    "Najveća nedelja: ${wholeDinars(it.spent)} RSD • prosek ${
+                        wholeDinars(weeks.sumOf { w -> w.spent } / weeks.size)
+                    } RSD/ned",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -362,40 +450,78 @@ private fun DashboardTabRow(selected: DashboardTab, onSelect: (DashboardTab) -> 
 private data class DashboardRow(
     val title: String,
     val subtitle: String? = null,
-    val trailing: String? = null
+    val trailing: String? = null,
+    /** Udeo u ukupnom, za traku ispod reda. */
+    val share: Float? = null
 )
 
+private fun share(part: Double, total: Double): Float? =
+    if (total > 0) (part / total).toFloat() else null
+
 @Composable
-private fun DashboardRows(rows: List<DashboardRow>) {
+private fun AnalyticsCard(
+    selected: DashboardTab,
+    onSelect: (DashboardTab) -> Unit,
+    rows: List<DashboardRow>,
+    emptyText: String
+) {
     Surface(
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainer,
+        border = cardBorder,
         modifier = Modifier.fillMaxWidth()
     ) {
-        Column {
+        Column(modifier = Modifier.padding(AppSpacing.lg)) {
+            Text("Analitika troškova", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(AppSpacing.md))
+            PillTabs(selected, onSelect)
+            if (rows.isEmpty()) {
+                Text(
+                    emptyText,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = AppSpacing.lg)
+                )
+            }
             rows.forEachIndexed { index, row ->
-                if (index > 0) {
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = AppSpacing.lg))
-                }
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(AppSpacing.lg)
+                if (index > 0 && row.share == null) HorizontalDivider()
+                Column(
+                    modifier = Modifier.padding(vertical = AppSpacing.md),
+                    verticalArrangement = Arrangement.spacedBy(AppSpacing.xs)
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(row.title, style = MaterialTheme.typography.bodyLarge)
-                        row.subtitle?.let {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(row.title, style = MaterialTheme.typography.bodyLarge)
+                            row.subtitle?.let {
+                                Text(
+                                    it,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        row.trailing?.let {
+                            Spacer(Modifier.width(AppSpacing.md))
+                            Text(it, style = MaterialTheme.typography.titleMedium)
+                        }
+                        row.share?.let {
                             Text(
-                                it,
+                                " (${(it * 100).roundToInt()}%)",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
-                    row.trailing?.let {
-                        Spacer(Modifier.width(AppSpacing.md))
-                        Text(it, style = MaterialTheme.typography.bodyLarge)
+                    row.share?.let {
+                        LinearProgressIndicator(
+                            progress = { it },
+                            drawStopIndicator = {},
+                            gapSize = 0.dp,
+                            trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(8.dp)
+                        )
                     }
                 }
             }
@@ -403,14 +529,80 @@ private fun DashboardRows(rows: List<DashboardRow>) {
     }
 }
 
+/**
+ * Tabovi kao pilule na svetloj podlozi, izabrani beo. Kad sva četiri naziva
+ * ne staju u jedan red (krupna slova, uvećan ekran), ostaje samo izabrani, sa
+ * strelicama levo i desno — isečeni „Prodav" i „Katego" su bili ružni.
+ */
 @Composable
-private fun EmptyTabMessage(text: String) {
-    Text(
-        text,
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(vertical = AppSpacing.lg)
-    )
+private fun PillTabs(selected: DashboardTab, onSelect: (DashboardTab) -> Unit) {
+    val tabs = DashboardTab.entries
+    val style = MaterialTheme.typography.labelLarge
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceContainerLow, MaterialTheme.shapes.small)
+            .padding(AppSpacing.xs)
+    ) {
+        val labelRoom = with(density) { (maxWidth / tabs.size - AppSpacing.xs).roundToPx() }
+        val fits = tabs.all { measurer.measure(it.label, style).size.width <= labelRoom }
+        if (fits) {
+            Row {
+                tabs.forEach { tab ->
+                    val isSelected = tab == selected
+                    Surface(
+                        onClick = { onSelect(tab) },
+                        shape = RoundedCornerShape(10.dp),
+                        color = if (isSelected) MaterialTheme.colorScheme.surfaceContainerLowest else Color.Transparent,
+                        contentColor = if (isSelected) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        shadowElevation = if (isSelected) 1.dp else 0.dp,
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 44.dp)
+                            .testTag(tab.tag)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(tab.label, style = style, maxLines = 1)
+                        }
+                    }
+                }
+            }
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(
+                    onClick = { onSelect(tabs[selected.ordinal - 1]) },
+                    enabled = selected.ordinal > 0
+                ) {
+                    AppIcon(
+                        R.drawable.ic_chevron_right,
+                        contentDescription = "Prethodni prikaz",
+                        modifier = Modifier.rotate(180f)
+                    )
+                }
+                Text(
+                    selected.label,
+                    style = style,
+                    color = MaterialTheme.colorScheme.primary,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag(selected.tag)
+                )
+                IconButton(
+                    onClick = { onSelect(tabs[selected.ordinal + 1]) },
+                    enabled = selected.ordinal < tabs.lastIndex
+                ) {
+                    AppIcon(R.drawable.ic_chevron_right, contentDescription = "Sledeći prikaz")
+                }
+            }
+        }
+    }
 }
 
 private fun monthTitle(month: LocalDate): String =

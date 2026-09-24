@@ -7,20 +7,15 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.testTag
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
@@ -39,7 +34,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -57,6 +51,8 @@ import rs.pametnakupovina.app.ui.components.AppTopBar
 import rs.pametnakupovina.app.ui.components.BottomActionBar
 import rs.pametnakupovina.app.ui.components.LoadingState
 import rs.pametnakupovina.app.ui.components.NoticeBanner
+import rs.pametnakupovina.app.ui.components.TonalActionButton
+import rs.pametnakupovina.app.ui.components.cardBorder
 import rs.pametnakupovina.app.ui.components.PrimaryActionButton
 import rs.pametnakupovina.app.ui.components.StatusPill
 import rs.pametnakupovina.app.ui.components.StatusTone
@@ -66,7 +62,6 @@ import rs.pametnakupovina.app.ui.plural
 
 @Composable
 fun ShoppingListScreen(
-    onBack: () -> Unit,
     onOpenMatching: (Long) -> Unit,
     onOpenProduct: (Long) -> Unit,
     viewModel: ShoppingListViewModel = hiltViewModel(),
@@ -123,7 +118,6 @@ fun ShoppingListScreen(
         topBar = {
             AppTopBar(
                 title = "Moj spisak",
-                onBack = onBack,
                 subtitle = when {
                     state.isOffline -> "Bez mreže, izmene čekaju slanje"
                     state.items.isNotEmpty() -> items(state.items.size)
@@ -134,20 +128,6 @@ fun ShoppingListScreen(
         bottomBar = {
             if (!state.isInitialLoading) {
                 BottomActionBar {
-                    Row(horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm)) {
-                        SecondaryAction(
-                            text = "Dodaj stavku",
-                            icon = R.drawable.ic_add,
-                            onClick = { openEditor(null) },
-                            modifier = Modifier.weight(1f)
-                        )
-                        SecondaryAction(
-                            text = "Nalepi spisak",
-                            icon = R.drawable.ic_content_paste,
-                            onClick = { showPasteDialog = true },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
                     PrimaryActionButton(
                         text = if (state.isSyncing) "Šaljem spisak…" else "Izračunaj",
                         enabled = state.items.isNotEmpty() && !state.isSyncing,
@@ -176,16 +156,34 @@ fun ShoppingListScreen(
             contentPadding = PaddingValues(
                 horizontal = AppSpacing.lg,
                 vertical = AppSpacing.md
-            )
+            ),
+            verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)
         ) {
+            item(key = "actions") {
+                Row(horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm)) {
+                    TonalActionButton(
+                        text = "Dodaj stavku",
+                        icon = R.drawable.ic_add,
+                        primary = true,
+                        onClick = { openEditor(null) },
+                        modifier = Modifier.weight(1f)
+                    )
+                    TonalActionButton(
+                        text = "Nalepi spisak",
+                        icon = R.drawable.ic_content_paste,
+                        onClick = { showPasteDialog = true },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+
             state.errorMessage?.let { message ->
                 item(key = "error") {
                     NoticeBanner(
                         text = message,
                         tone = StatusTone.ERROR,
                         actionLabel = "Pokušaj ponovo",
-                        onAction = viewModel::refresh,
-                        modifier = Modifier.padding(bottom = AppSpacing.md)
+                        onAction = viewModel::refresh
                     )
                 }
             }
@@ -193,11 +191,19 @@ fun ShoppingListScreen(
             if (state.items.isEmpty()) {
                 item(key = "empty") { EmptyList() }
             } else {
-                itemsIndexed(state.items, key = { _, item -> item.localId }) { index, item ->
+                item(key = "header") {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(top = AppSpacing.sm)
+                    ) {
+                        Text("Stavke na spisku", style = MaterialTheme.typography.titleMedium)
+                        Spacer(Modifier.width(AppSpacing.sm))
+                        StatusPill(state.items.size.toString())
+                    }
+                }
+                items(state.items, key = { it.localId }) { item ->
                     DraftItemRow(
                         item = item,
-                        isFirst = index == 0,
-                        isLast = index == state.items.lastIndex,
                         onEdit = { openEditor(item) },
                         onDelete = { delete(item) },
                         onOpenProduct = onOpenProduct
@@ -270,26 +276,6 @@ fun ShoppingListScreen(
 }
 
 @Composable
-private fun SecondaryAction(
-    text: String,
-    icon: Int,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    OutlinedButton(
-        onClick = onClick,
-        contentPadding = PaddingValues(horizontal = AppSpacing.md),
-        modifier = modifier.heightIn(min = 52.dp)
-    ) {
-        AppIcon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
-        Spacer(Modifier.width(AppSpacing.xs))
-        // Uz uvećano pismo „Dodaj stavku" se seklo na „Dodaj": natpis sme u
-        // drugi red, dugme naraste.
-        Text(text, textAlign = TextAlign.Center)
-    }
-}
-
-@Composable
 private fun EmptyList() {
     Column(
         modifier = Modifier
@@ -322,19 +308,10 @@ private fun EmptyList() {
 @Composable
 private fun DraftItemRow(
     item: DraftItemEntity,
-    isFirst: Boolean,
-    isLast: Boolean,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onOpenProduct: (Long) -> Unit
 ) {
-    val corner = 16.dp
-    val shape = when {
-        isFirst && isLast -> RoundedCornerShape(corner)
-        isFirst -> RoundedCornerShape(topStart = corner, topEnd = corner)
-        isLast -> RoundedCornerShape(bottomStart = corner, bottomEnd = corner)
-        else -> RectangleShape
-    }
     val attention = if (item.syncError != null) {
         "Nije poslato" to StatusTone.ERROR
     } else {
@@ -343,8 +320,9 @@ private fun DraftItemRow(
 
     Surface(
         onClick = onEdit,
-        shape = shape,
+        shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainer,
+        border = cardBorder,
         modifier = Modifier.fillMaxWidth()
     ) {
         Column {
@@ -361,6 +339,10 @@ private fun DraftItemRow(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
+                    attention?.let { (text, tone) ->
+                        StatusPill(text, tone)
+                        Spacer(Modifier.size(AppSpacing.xs))
+                    }
                     Text(item.name, style = MaterialTheme.typography.titleMedium)
                     draftRuleLabel(item)?.let { label ->
                         Text(
@@ -368,10 +350,6 @@ private fun DraftItemRow(
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                    }
-                    attention?.let { (text, tone) ->
-                        Spacer(Modifier.size(AppSpacing.xs))
-                        StatusPill(text, tone)
                     }
                     item.syncError?.let { reason ->
                         Text(
@@ -381,11 +359,17 @@ private fun DraftItemRow(
                         )
                     }
                 }
-                Text(
-                    draftAmountLabel(item),
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(horizontal = AppSpacing.sm)
-                )
+                Surface(
+                    shape = MaterialTheme.shapes.small,
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    modifier = Modifier.padding(horizontal = AppSpacing.xs)
+                ) {
+                    Text(
+                        draftAmountLabel(item),
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(horizontal = AppSpacing.md, vertical = AppSpacing.sm)
+                    )
+                }
                 item.canonicalProductId?.let { canonicalProductId ->
                     IconButton(onClick = { onOpenProduct(canonicalProductId) }) {
                         AppIcon(R.drawable.ic_local_offer, contentDescription = "Cene za ${item.name}")
@@ -398,12 +382,6 @@ private fun DraftItemRow(
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-            }
-            if (!isLast) {
-                HorizontalDivider(
-                    modifier = Modifier.padding(start = AppSpacing.lg),
-                    color = MaterialTheme.colorScheme.outlineVariant
-                )
             }
         }
     }

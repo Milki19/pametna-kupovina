@@ -46,6 +46,7 @@ import rs.pametnakupovina.app.data.network.CanonicalProductPricePointDto
 import rs.pametnakupovina.app.alerts.bestPrice
 import rs.pametnakupovina.app.ui.ProductDetailsViewModel
 import rs.pametnakupovina.app.ui.components.AppSpacing
+import rs.pametnakupovina.app.ui.components.cardBorder
 import rs.pametnakupovina.app.ui.components.AppTopBar
 import rs.pametnakupovina.app.ui.components.ErrorState
 import rs.pametnakupovina.app.ui.components.LoadingState
@@ -56,6 +57,14 @@ import rs.pametnakupovina.app.ui.components.StatusTone
 import rs.pametnakupovina.app.ui.date
 import rs.pametnakupovina.app.ui.money
 import rs.pametnakupovina.app.ui.shortDate
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.lazy.itemsIndexed
+import rs.pametnakupovina.app.ui.components.LetterTile
+import rs.pametnakupovina.app.ui.counted
 
 @Composable
 fun ProductDetailsScreen(
@@ -203,50 +212,7 @@ private fun ProductDetailsContent(
         verticalArrangement = Arrangement.spacedBy(AppSpacing.md)
     ) {
         item(key = "header") {
-            Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.xs)) {
-                Text(product.name, style = MaterialTheme.typography.headlineSmall)
-                productMetadata(product).takeIf(String::isNotBlank)?.let {
-                    Text(
-                        it,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Text(
-                    "Cene za ${date(product.requestedDate)}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-
-        if (bestPrice(product) != null || watching) {
-            item(key = "watch") {
-                Surface(
-                    shape = MaterialTheme.shapes.medium,
-                    color = MaterialTheme.colorScheme.surfaceContainer,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = AppSpacing.lg, vertical = AppSpacing.sm)
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Javi mi kad pojeftini", style = MaterialTheme.typography.bodyLarge)
-                            Text(
-                                "Proveravam jednom dnevno",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Switch(
-                            checked = watching,
-                            onCheckedChange = onWatch,
-                            modifier = Modifier.testTag("watch-price")
-                        )
-                    }
-                }
-            }
+            ProductHeader(product, offers, watching, onWatch)
         }
 
         item(key = "offers-header") {
@@ -257,13 +223,19 @@ private fun ProductDetailsContent(
                 NoticeBanner(text = "Za ovaj proizvod još nema važećih cena.")
             }
         } else {
-            item(key = "offers") {
-                GroupedRows(offers) { index, offer ->
+            itemsIndexed(offers) { index, offer ->
+                val cheapest = index == 0 && offers.size > 1 && !offer.priceNeedsCheck &&
+                    !isCaseOf(offer, product)
+                Surface(
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.surfaceContainer,
+                    border = if (cheapest) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else cardBorder,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     OfferRow(
                         offer,
                         product = product,
-                        cheapest = index == 0 && offers.size > 1 && !offer.priceNeedsCheck &&
-                            !isCaseOf(offer, product),
+                        cheapest = cheapest,
                         caseOf = product.packageCount.takeIf { isCaseOf(offer, product) }
                     )
                 }
@@ -287,6 +259,7 @@ private fun <T> GroupedRows(
     Surface(
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainer,
+        border = cardBorder,
         modifier = Modifier.fillMaxWidth()
     ) {
         Column {
@@ -311,6 +284,7 @@ private fun OfferRow(
         modifier = Modifier.padding(horizontal = AppSpacing.lg, vertical = AppSpacing.md),
         verticalAlignment = Alignment.Top
     ) {
+        LetterTile(offer.retailerName, modifier = Modifier.padding(end = AppSpacing.md))
         Column(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(2.dp)
@@ -349,13 +323,13 @@ private fun OfferRow(
                 StatusPill("Proveri cenu", StatusTone.WARNING)
             }
             if (cheapest) {
-                StatusPill("Najjeftinije", StatusTone.POSITIVE)
+                StatusPill("Najbolja cena", StatusTone.POSITIVE)
             }
         }
         Column(horizontalAlignment = Alignment.End) {
             Text(
                 money(offer.effectivePrice),
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.titleLarge,
                 color = if (cheapest) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
             )
             offerUnitPriceLabel(offer, product)?.let {
@@ -385,6 +359,133 @@ private fun PriceHistoryRow(point: CanonicalProductPricePointDto) {
             )
         }
         Text(money(point.effectivePrice), style = MaterialTheme.typography.bodyLarge)
+    }
+}
+
+/**
+ * Ime, pakovanje i barkod, pa najniža, prosečna i najviša cena među lancima
+ * (bez cena za proveru i gajbi), i praćenje cene — sve u jednoj kartici.
+ */
+@Composable
+private fun ProductHeader(
+    product: CanonicalProductDetailsDto,
+    offers: List<CanonicalProductOfferDto>,
+    watching: Boolean,
+    onWatch: (Boolean) -> Unit
+) {
+    val comparable = offers.filterNot { it.priceNeedsCheck || isCaseOf(it, product) }
+    // Lanci, ne prodavnice: devet METRO objekata je jedan lanac.
+    val chains = comparable.map { it.retailerName }.distinct().size
+    Surface(
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        border = cardBorder,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(AppSpacing.lg),
+            verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)
+        ) {
+            product.brand?.let {
+                Text(
+                    it.uppercase(),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+            Text(product.name, style = MaterialTheme.typography.titleLarge)
+            productMetadata(product).takeIf(String::isNotBlank)?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Text(
+                "Cene za ${date(product.requestedDate)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (chains > 1) {
+                val lowest = comparable.minBy { it.effectivePrice }
+                val highest = comparable.maxBy { it.effectivePrice }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(IntrinsicSize.Min)
+                        .background(MaterialTheme.colorScheme.surfaceContainerLow, MaterialTheme.shapes.small)
+                        .padding(AppSpacing.xs)
+                ) {
+                    PriceStat("Najniža", lowest.effectivePrice, lowest.retailerName, highlighted = true, Modifier.weight(1f))
+                    PriceStat(
+                        "Prosečna",
+                        comparable.map { it.effectivePrice }.average(),
+                        counted(chains, "lanac", "lanca", "lanaca"),
+                        highlighted = false,
+                        Modifier.weight(1f)
+                    )
+                    PriceStat("Najviša", highest.effectivePrice, highest.retailerName, highlighted = false, Modifier.weight(1f))
+                }
+            }
+            if (bestPrice(product) != null || watching) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surfaceContainerLow, MaterialTheme.shapes.small)
+                        .padding(horizontal = AppSpacing.md, vertical = AppSpacing.xs)
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Javi mi kad pojeftini", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            "Proveravam jednom dnevno",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = watching,
+                        onCheckedChange = onWatch,
+                        modifier = Modifier.testTag("watch-price")
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PriceStat(
+    label: String,
+    price: Double,
+    note: String,
+    highlighted: Boolean,
+    modifier: Modifier
+) {
+    Surface(
+        shape = MaterialTheme.shapes.small,
+        color = if (highlighted) MaterialTheme.colorScheme.surfaceContainerLowest else androidx.compose.ui.graphics.Color.Transparent,
+        shadowElevation = if (highlighted) 1.dp else 0.dp,
+        modifier = modifier.fillMaxHeight()
+    ) {
+        Column(modifier = Modifier.padding(AppSpacing.sm)) {
+            Text(
+                label.uppercase(),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                money(price),
+                style = MaterialTheme.typography.titleSmall,
+                color = if (highlighted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                note,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2
+            )
+        }
     }
 }
 

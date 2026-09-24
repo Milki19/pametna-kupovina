@@ -2,14 +2,17 @@ package rs.pametnakupovina.app.ui.screens
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -22,7 +25,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -62,6 +64,9 @@ import rs.pametnakupovina.app.data.network.ReceiptDto
 import rs.pametnakupovina.app.ui.ReceiptViewModel
 import rs.pametnakupovina.app.ui.PurchaseViewModel
 import rs.pametnakupovina.app.ui.components.AppIcon
+import rs.pametnakupovina.app.ui.components.TonalActionButton
+import rs.pametnakupovina.app.ui.components.cardBorder
+import rs.pametnakupovina.app.ui.wholeDinars
 import rs.pametnakupovina.app.ui.components.AppSpacing
 import rs.pametnakupovina.app.ui.components.AppTopBar
 import rs.pametnakupovina.app.ui.components.LoadingState
@@ -90,9 +95,9 @@ fun PurchaseScreen(
     LaunchedEffect(sessionId) { sessionId?.let(viewModel::load) }
 
     if (sessionId == null) {
-        PurchaseHistory(sessions, message, onBack, onOpen, onOpenCards)
+        PurchaseHistory(sessions, message, onOpen)
     } else {
-        PurchaseInProgress(session, message, onBack, viewModel)
+        PurchaseInProgress(session, message, onBack, onOpenCards, viewModel)
     }
 }
 
@@ -100,15 +105,13 @@ fun PurchaseScreen(
 private fun PurchaseHistory(
     sessions: List<PurchaseSessionSummary>,
     message: String?,
-    onBack: () -> Unit,
     onOpen: (String) -> Unit,
-    onOpenCards: () -> Unit,
     receiptViewModel: ReceiptViewModel = hiltViewModel()
 ) {
     val (active, finished) = sessions.partition { it.archivedAt == null }
     val receipts by receiptViewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    Scaffold(topBar = { AppTopBar(title = "Istorija", onBack = onBack) }) { padding ->
+    Scaffold(topBar = { AppTopBar(title = "Istorija") }) { padding ->
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -133,14 +136,6 @@ private fun PurchaseHistory(
                         actionLabel = "U redu",
                         onAction = receiptViewModel::dismissMessage
                     )
-                }
-            }
-            item(key = "cards") {
-                OutlinedButton(
-                    onClick = onOpenCards,
-                    modifier = Modifier.fillMaxWidth().testTag("open-cards")
-                ) {
-                    Text("Lojalti kartice")
                 }
             }
             item(key = "scan") {
@@ -199,6 +194,7 @@ private fun SpendingCard(
     Surface(
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainer,
+        border = cardBorder,
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
@@ -223,7 +219,8 @@ private fun SpendingCard(
                 )
                 Text(
                     money(thisMonth.spent),
-                    style = MaterialTheme.typography.headlineSmall
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.primary
                 )
                 Text(
                     counted(receiptCount, "račun", "računa", "računa"),
@@ -232,15 +229,16 @@ private fun SpendingCard(
                 )
             }
 
-            OutlinedButton(
+            TonalActionButton(
+                text = if (scanning) "Skeniram…" else "Skeniraj račun",
+                icon = R.drawable.ic_camera,
+                primary = true,
                 enabled = !scanning,
                 onClick = onScan,
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("scan-receipt")
-            ) {
-                Text(if (scanning) "Skeniram…" else "Skeniraj račun")
-            }
+            )
         }
     }
 }
@@ -250,6 +248,7 @@ private fun ReceiptGroup(receipts: List<ReceiptDto>) {
     Surface(
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainer,
+        border = cardBorder,
         modifier = Modifier.fillMaxWidth()
     ) {
         Column {
@@ -278,7 +277,7 @@ private fun ReceiptGroup(receipts: List<ReceiptDto>) {
                     }
                     Text(
                         money(receipt.totalAmount),
-                        style = MaterialTheme.typography.bodyLarge
+                        style = MaterialTheme.typography.titleMedium
                     )
                 }
             }
@@ -330,6 +329,7 @@ private fun SessionGroup(
     Surface(
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainer,
+        border = cardBorder,
         modifier = Modifier.fillMaxWidth()
     ) {
         Column {
@@ -388,6 +388,7 @@ private fun PurchaseInProgress(
     session: PurchaseSession?,
     message: String?,
     onBack: () -> Unit,
+    onOpenCards: () -> Unit,
     viewModel: PurchaseViewModel
 ) {
     val context = LocalContext.current
@@ -460,7 +461,7 @@ private fun PurchaseInProgress(
             ),
             verticalArrangement = Arrangement.spacedBy(AppSpacing.md)
         ) {
-            item(key = "progress") { PurchaseProgressHeader(session) }
+            item(key = "progress") { PurchaseProgressHeader(session, onOpenCards) }
 
             message?.let {
                 item(key = "message") { NoticeBanner(text = it, tone = StatusTone.ERROR) }
@@ -515,16 +516,14 @@ private fun PurchaseInProgress(
 
             item(key = "finish") {
                 Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)) {
-                    OutlinedButton(
+                    TonalActionButton(
+                        text = if (archived) "Ponovo otvori kupovinu" else "Završi kupovinu",
+                        icon = R.drawable.ic_check_circle,
                         onClick = {
                             if (archived) viewModel.archive(session.id, false) else confirmArchive = true
                         },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 52.dp)
-                    ) {
-                        Text(if (archived) "Ponovo otvori kupovinu" else "Završi kupovinu")
-                    }
+                        modifier = Modifier.fillMaxWidth()
+                    )
                     Text(
                         "Originalni spisak ostaje nepromenjen. Mape traže mrežu ili unapred preuzetu mapu.",
                         style = MaterialTheme.typography.bodySmall,
@@ -568,44 +567,92 @@ private fun PurchaseInProgress(
 }
 
 @Composable
-private fun PurchaseProgressHeader(session: PurchaseSession) {
+private fun PurchaseProgressHeader(session: PurchaseSession, onOpenCards: () -> Unit) {
     val scenario = session.snapshot.scenario
     val total = scenario.items.size
     val recorded = session.progress.values.mapNotNull { it.actualLineTotal?.toBigDecimalOrNull() }
-    Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)) {
-        Row(verticalAlignment = Alignment.Bottom) {
-            Text(
-                "Kupljeno ${session.purchasedCount} od $total",
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.weight(1f)
+    Surface(
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        border = cardBorder,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(AppSpacing.lg),
+            verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)
+        ) {
+            Row(verticalAlignment = Alignment.Bottom) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "NAPREDAK KUPOVINE",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        "Kupljeno ${session.purchasedCount} od $total",
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                }
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        "planirano",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        "${wholeDinars(scenario.basketCost)} RSD",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+            LinearProgressIndicator(
+                progress = { session.purchasedCount.toFloat() / total.coerceAtLeast(1) },
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                gapSize = 0.dp,
+                drawStopIndicator = {},
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(8.dp)
             )
             Text(
-                "još ${total - session.resolvedCount} za odluku",
-                style = MaterialTheme.typography.bodyMedium,
+                "Još ${total - session.resolvedCount} za odluku. Cene u sačuvanom planu se ne osvežavaju.",
+                style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-        }
-        LinearProgressIndicator(
-            progress = { session.purchasedCount.toFloat() / total.coerceAtLeast(1) },
-            color = MaterialTheme.colorScheme.primary,
-            trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-            gapSize = 0.dp,
-            drawStopIndicator = {},
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(8.dp)
-        )
-        Text(
-            "Planirana korpa ${money(scenario.basketCost)}. Cene u sačuvanom planu se ne osvežavaju.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        if (recorded.isNotEmpty()) {
-            Text(
-                "Upisano plaćeno: ${money(recorded.fold(BigDecimal.ZERO, BigDecimal::add).toDouble())} " +
-                    "za ${counted(recorded.size, "stavku", "stavke", "stavki")}",
-                style = MaterialTheme.typography.bodyMedium
-            )
+            if (recorded.isNotEmpty()) {
+                Text(
+                    "Upisano plaćeno: ${money(recorded.fold(BigDecimal.ZERO, BigDecimal::add).toDouble())} " +
+                        "za ${counted(recorded.size, "stavku", "stavke", "stavki")}",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+            // Na kasi: kartica lanca je jedan dodir daleko, kao na nacrtu.
+            Surface(
+                onClick = onOpenCards,
+                shape = MaterialTheme.shapes.small,
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = AppSpacing.md, vertical = AppSpacing.sm),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm)
+                ) {
+                    AppIcon(R.drawable.ic_card, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Text(
+                        "Lojalti kartice za kasu — prikaži barkod",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f)
+                    )
+                    AppIcon(
+                        R.drawable.ic_chevron_right,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         }
     }
 }
@@ -624,6 +671,7 @@ private fun PurchaseStoreSection(
     Surface(
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainer,
+        border = cardBorder,
         modifier = Modifier.fillMaxWidth()
     ) {
         Column {
@@ -672,6 +720,7 @@ private fun ItemGroup(
     Surface(
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainer,
+        border = cardBorder,
         modifier = Modifier.fillMaxWidth()
     ) {
         Column { ItemRows(items, session, archived, onStatus, onDetails) }
@@ -722,7 +771,7 @@ private fun PurchaseItemRow(
             .padding(start = AppSpacing.xs, end = AppSpacing.xs, top = AppSpacing.sm, bottom = AppSpacing.sm),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Checkbox(
+        BoughtCheck(
             checked = purchased,
             enabled = !archived,
             onCheckedChange = { onStatus(if (it) PurchaseStatus.PURCHASED else PurchaseStatus.TO_BUY) },
@@ -806,6 +855,44 @@ private fun PurchaseItemRow(
                             }
                         )
                     }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Kućica iz nacrta: zaobljen kvadrat, pun teal sa kvačicom kad je kupljeno.
+ * Dodirna površina je 48 dp, za ruku koja gura kolica.
+ */
+@Composable
+private fun BoughtCheck(
+    checked: Boolean,
+    enabled: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = modifier
+            .size(48.dp)
+            .toggleable(
+                value = checked,
+                enabled = enabled,
+                role = Role.Checkbox,
+                onValueChange = onCheckedChange
+            )
+    ) {
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = if (checked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerLowest,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+            border = if (checked) null else BorderStroke(2.dp, MaterialTheme.colorScheme.outline),
+            modifier = Modifier.size(28.dp)
+        ) {
+            if (checked) {
+                Box(contentAlignment = Alignment.Center) {
+                    AppIcon(R.drawable.ic_check, contentDescription = null, modifier = Modifier.size(20.dp))
                 }
             }
         }

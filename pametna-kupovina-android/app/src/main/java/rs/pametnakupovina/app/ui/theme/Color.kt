@@ -2,53 +2,60 @@ package rs.pametnakupovina.app.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-val MarketGreen = Color(0xFF176B52)
-val MarketGreenLight = Color(0xFFA9DCCB)
-val MarketGreenDark = Color(0xFF84CDB5)
-val MarketGreenContainer = Color(0xFFD1F2E5)
-val MarketGreenDarkContainer = Color(0xFF124D3D)
-/* Selected chips, segments and tonal buttons. Amber here made every choice
- * look like a warning, since warnings are amber too. */
-val MarketGreenSoft = Color(0xFFC9E7D9)
+/*
+ * Boje iz dizajna „Modern Grocery Intelligence" (stitch, 24.09.2026): tamni
+ * teal za radnje, nana za uspeh, ćilibar za upozorenja, bele kartice na
+ * svetloj pozadini sa hladnim tonom.
+ */
+val Teal = Color(0xFF005C55)
+val TealDeep = Color(0xFF0F766E)
+val TealLight = Color(0xFF80D5CB)
+val TealMist = Color(0xFFD5F3EE)
+val TealInk = Color(0xFF00201D)
+val TealNightContainer = Color(0xFF00504A)
+val TealNightOn = Color(0xFF9CF2E8)
 
-val BasketAmber = Color(0xFF8A5A00)
-val BasketAmberLight = Color(0xFFFFDFA0)
-val BasketAmberDark = Color(0xFFF5C968)
+/* Nana: „Priznato", izabrani čipovi i segmenti. */
+val Mint = Color(0xFFC4FCE4)
+val MintInk = Color(0xFF005236)
+val MintNight = Color(0xFF4EDEA3)
+val MintNightContainer = Color(0xFF00513A)
 
-val Tomato = Color(0xFFBA1A1A)
-val TomatoContainer = Color(0xFFFFDAD6)
-val TomatoDark = Color(0xFFFFB4AB)
+val Amber = Color(0xFF734700)
+val AmberLight = Color(0xFFFFDDB8)
+val AmberInk = Color(0xFF653E00)
+val AmberNight = Color(0xFFFFB95F)
+val AmberNightContainer = Color(0xFF3F2A0B)
 
-val Paper = Color(0xFFF7FAF8)
-val Ink = Color(0xFF17211D)
-val Mist = Color(0xFFE2E9E5)
-val Night = Color(0xFF0F1512)
-val NightSurface = Color(0xFF18201C)
+val Crimson = Color(0xFFBA1A1A)
+val CrimsonContainer = Color(0xFFFFDAD6)
+val CrimsonInk = Color(0xFF93000A)
+val CrimsonNight = Color(0xFFFFB4AB)
+val CrimsonNightContainer = Color(0xFF4A1F1D)
 
 /*
- * Material fills any role left unset from its own baseline, which is tinted
- * purple. A plain Card therefore came out purple-grey on a green-black screen.
- * Every surface step is spelled out here so nothing borrows that tint, and the
- * light steps stop short of pure white.
+ * Material popunjava svaku ulogu koja nije navedena iz svoje ljubičaste
+ * osnove, pa je ovde svaki korak površine naveden. surfaceContainer je bela
+ * kartica, jer sve kartice u aplikaciji crtaju baš tu ulogu.
  */
-val PaperLow = Color(0xFFF1F6F3)
-val PaperContainer = Color(0xFFEAF1ED)
-val PaperContainerHigh = Color(0xFFE3EBE7)
-val PaperContainerHighest = Color(0xFFDCE5E0)
-val InkMuted = Color(0xFF414B46)
-val InkOutline = Color(0xFF6F7B75)
-val InkOutlineFaint = Color(0xFFC2CCC7)
+val Canvas = Color(0xFFFAF8FF)
+val CardWhite = Color(0xFFFFFFFF)
+val CanvasLow = Color(0xFFF2F3FF)
+val CanvasHighest = Color(0xFFDAE2FD)
+val Slate = Color(0xFF131B2E)
+val SlateMuted = Color(0xFF3E4947)
+val SlateOutline = Color(0xFF6E7977)
+val Hairline = Color(0xFFE2E8F0)
+val InverseSlate = Color(0xFF283044)
+val InverseCanvas = Color(0xFFEEF0FF)
 
-val NightLow = Color(0xFF131A16)
-val NightContainer = Color(0xFF18201C)
-val NightContainerHigh = Color(0xFF1E2723)
-val NightContainerHighest = Color(0xFF242E29)
-val NightVariant = Color(0xFF2A3531)
-val Moonlight = Color(0xFFE4EBE7)
-val MoonlightMuted = Color(0xFFC0CBC5)
-val NightOutline = Color(0xFF8A968F)
-val NightOutlineFaint = Color(0xFF3A4642)
-
-/* Distinct from every surface step: sharing a value with one makes Material
- * read the surface as tertiary and paint its text amber. */
-val BasketAmberNightContainer = Color(0xFF3B2F12)
+val Night = Color(0xFF0B1326)
+val NightLowest = Color(0xFF060E20)
+val NightLow = Color(0xFF131B2E)
+val NightCard = Color(0xFF171F33)
+val NightHigh = Color(0xFF222A3D)
+val NightHighest = Color(0xFF2D3449)
+val Moonlight = Color(0xFFDAE2FD)
+val MoonlightMuted = Color(0xFFBDC9C6)
+val NightOutline = Color(0xFF88938F)
+val NightHairline = Color(0xFF2F3A4A)

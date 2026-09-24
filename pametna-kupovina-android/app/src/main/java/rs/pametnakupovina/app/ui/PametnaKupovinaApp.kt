@@ -1,33 +1,43 @@
 package rs.pametnakupovina.app.ui
 
 import android.content.Intent
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.LocalTextStyle
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalDrawerSheet
-import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.core.net.toUri
+import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import kotlinx.coroutines.launch
 import rs.pametnakupovina.app.R
 import rs.pametnakupovina.app.ui.components.AppIcon
 import rs.pametnakupovina.app.ui.components.AppSpacing
@@ -50,6 +60,7 @@ private object Route {
     const val RECOMMENDATION = "recommendation/{listId}"
     const val PRODUCT_DETAILS = "product/{canonicalProductId}"
     const val CARDS = "cards"
+    const val HISTORY = "purchases"
 
     fun matching(listId: Long) = "matching/$listId"
     fun location(listId: Long) = "location/$listId"
@@ -58,6 +69,22 @@ private object Route {
         "product/$canonicalProductId"
 }
 
+/** Tabovi donje trake; ostali ekrani su koraci u toku i traku skrivaju. */
+private enum class Tab(val route: String, val label: String, @DrawableRes val icon: Int) {
+    HOME(Route.DASHBOARD, "Početna", R.drawable.ic_home),
+    LIST(Route.LIST, "Spisak", R.drawable.ic_content_paste),
+    CARDS(Route.CARDS, "Kartice", R.drawable.ic_card),
+    HISTORY(Route.HISTORY, "Istorija", R.drawable.ic_history)
+}
+
+/** Kao tab: jedan primerak svakog taba, a svaki pamti dokle se stiglo u njemu. */
+private fun NavHostController.openTab(route: String) = navigate(route) {
+    popUpTo(graph.findStartDestination().id) { saveState = true }
+    launchSingleTop = true
+    restoreState = true
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PametnaKupovinaApp() {
     val navController = rememberNavController()
@@ -68,8 +95,8 @@ fun PametnaKupovinaApp() {
     // brojke koje dashboard već prikazuje.
     val receiptViewModel: ReceiptViewModel = hiltViewModel()
 
-    val drawerState = rememberDrawerState(DrawerValue.Closed)
-    val drawerScope = rememberCoroutineScope()
+    val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
+    var showMenu by rememberSaveable { mutableStateOf(false) }
     var showAbout by rememberSaveable { mutableStateOf(false) }
     var showHousehold by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
@@ -90,51 +117,78 @@ fun PametnaKupovinaApp() {
         )
     }
 
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        drawerContent = {
-            ModalDrawerSheet {
-                AppDrawerContent(
-                    onScan = {
-                        drawerScope.launch { drawerState.close() }
-                        receiptViewModel.scan(context)
-                    },
-                    onCards = {
-                        drawerScope.launch { drawerState.close() }
-                        navController.navigate(Route.CARDS)
-                    },
-                    onHistory = {
-                        drawerScope.launch { drawerState.close() }
-                        navController.navigate("purchases")
-                    },
-                    onHousehold = {
-                        drawerScope.launch { drawerState.close() }
-                        showHousehold = true
-                    },
-                    onAbout = {
-                        drawerScope.launch { drawerState.close() }
-                        showAbout = true
+    if (showMenu) {
+        ModalBottomSheet(
+            onDismissRequest = { showMenu = false },
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
+        ) {
+            AppMenuContent(
+                onScan = {
+                    showMenu = false
+                    // Ishod skeniranja se javlja na početnom ekranu.
+                    navController.openTab(Route.DASHBOARD)
+                    receiptViewModel.scan(context)
+                },
+                onHousehold = {
+                    showMenu = false
+                    showHousehold = true
+                },
+                onAbout = {
+                    showMenu = false
+                    showAbout = true
+                }
+            )
+        }
+    }
+
+    Scaffold(
+        // Gornji razmak daje svaki ekran sam, kroz svoju traku sa naslovom.
+        contentWindowInsets = WindowInsets(0),
+        bottomBar = {
+            if (Tab.entries.any { it.route == currentRoute }) {
+                NavigationBar {
+                    Tab.entries.forEach { tab ->
+                        NavigationBarItem(
+                            selected = tab.route == currentRoute,
+                            onClick = { navController.openTab(tab.route) },
+                            icon = { AppIcon(tab.icon, contentDescription = null) },
+                            label = { NavLabel(tab.label) },
+                            modifier = Modifier.testTag("tab-${tab.name.lowercase()}")
+                        )
                     }
-                )
+                    NavigationBarItem(
+                        selected = false,
+                        onClick = { showMenu = true },
+                        icon = { AppIcon(R.drawable.ic_menu, contentDescription = null) },
+                        label = { NavLabel("Meni") },
+                        modifier = Modifier.testTag("open-menu")
+                    )
+                }
             }
         }
-    ) {
+    ) { padding ->
         NavHost(
             navController = navController,
-            startDestination = Route.DASHBOARD
+            startDestination = Route.DASHBOARD,
+            modifier = Modifier
+                .padding(padding)
+                .consumeWindowInsets(padding)
         ) {
             composable(Route.DASHBOARD) {
                 DashboardScreen(
-                    onOpenMenu = { drawerScope.launch { drawerState.open() } },
-                    onOpenList = { navController.navigate(Route.LIST) },
+                    onOpenList = { navController.openTab(Route.LIST) },
                     receiptViewModel = receiptViewModel
                 )
             }
 
             composable(Route.CARDS) {
-                LoyaltyCardsScreen(onBack = { navController.popBackStack() })
+                // Strelica samo kad se došlo iz kupovine, da se na kasi vrati
+                // na spisak; kao tab je nema.
+                val fromPurchase = navController.previousBackStackEntry
+                    ?.destination?.route == "purchase/{sessionId}"
+                LoyaltyCardsScreen(onBack = if (fromPurchase) ({ navController.popBackStack() }) else null)
             }
-            composable("purchases") {
+            composable(Route.HISTORY) {
                 PurchaseScreen(onBack = navController::popBackStack,
                     onOpen = { navController.navigate("purchase/$it") },
                     onOpenCards = { navController.navigate(Route.CARDS) })
@@ -147,7 +201,6 @@ fun PametnaKupovinaApp() {
             }
             composable(Route.LIST) {
                 ShoppingListScreen(
-                    onBack = { navController.popBackStack() },
                     onOpenMatching = { listId ->
                         navController.navigate(Route.matching(listId))
                     },
@@ -217,64 +270,39 @@ fun PametnaKupovinaApp() {
     }
 }
 
+/** Sa krupnim slovima pet natpisa ne staje, pa se smanjuju umesto da se seku. */
 @Composable
-private fun AppDrawerContent(
+private fun NavLabel(text: String) {
+    BasicText(
+        text,
+        maxLines = 1,
+        style = LocalTextStyle.current.copy(color = LocalContentColor.current),
+        autoSize = TextAutoSize.StepBased(minFontSize = 8.sp, maxFontSize = LocalTextStyle.current.fontSize)
+    )
+}
+
+@Composable
+private fun AppMenuContent(
     onScan: () -> Unit,
-    onCards: () -> Unit,
-    onHistory: () -> Unit,
     onHousehold: () -> Unit,
     onAbout: () -> Unit
 ) {
-    Column(modifier = Modifier.padding(vertical = AppSpacing.md)) {
-        Text(
-            "Pametna kupovina",
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.padding(horizontal = AppSpacing.lg, vertical = AppSpacing.md)
-        )
-        NavigationDrawerItem(
-            label = { Text("Skener") },
-            icon = { AppIcon(R.drawable.ic_camera, contentDescription = null) },
-            selected = false,
-            onClick = onScan,
-            modifier = Modifier
-                .padding(horizontal = AppSpacing.sm)
-                .testTag("menu-scan")
-        )
-        NavigationDrawerItem(
-            label = { Text("Kartice") },
-            icon = { AppIcon(R.drawable.ic_card, contentDescription = null) },
-            selected = false,
-            onClick = onCards,
-            modifier = Modifier
-                .padding(horizontal = AppSpacing.sm)
-                .testTag("menu-cards")
-        )
-        NavigationDrawerItem(
-            label = { Text("Istorija") },
-            icon = { AppIcon(R.drawable.ic_history, contentDescription = null) },
-            selected = false,
-            onClick = onHistory,
-            modifier = Modifier
-                .padding(horizontal = AppSpacing.sm)
-                .testTag("menu-history")
-        )
-        NavigationDrawerItem(
-            label = { Text("Domaćinstvo") },
-            icon = { AppIcon(R.drawable.ic_home, contentDescription = null) },
-            selected = false,
-            onClick = onHousehold,
-            modifier = Modifier
-                .padding(horizontal = AppSpacing.sm)
-                .testTag("menu-household")
-        )
-        NavigationDrawerItem(
-            label = { Text("O aplikaciji") },
-            icon = { AppIcon(R.drawable.ic_info, contentDescription = null) },
-            selected = false,
-            onClick = onAbout,
-            modifier = Modifier
-                .padding(horizontal = AppSpacing.sm)
-                .testTag("menu-about")
-        )
+    Column(modifier = Modifier.padding(bottom = AppSpacing.lg)) {
+        listOf(
+            Triple("Skeniraj račun", R.drawable.ic_camera, onScan) to "menu-scan",
+            Triple("Domaćinstvo", R.drawable.ic_home, onHousehold) to "menu-household",
+            Triple("O aplikaciji", R.drawable.ic_info, onAbout) to "menu-about"
+        ).forEach { (entry, tag) ->
+            val (label, icon, onClick) = entry
+            NavigationDrawerItem(
+                label = { Text(label) },
+                icon = { AppIcon(icon, contentDescription = null) },
+                selected = false,
+                onClick = onClick,
+                modifier = Modifier
+                    .padding(horizontal = AppSpacing.sm)
+                    .testTag(tag)
+            )
+        }
     }
 }

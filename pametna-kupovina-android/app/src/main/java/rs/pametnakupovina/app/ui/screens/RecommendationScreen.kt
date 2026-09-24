@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.WindowInsets
@@ -18,7 +19,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
@@ -27,10 +27,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.material3.Surface
@@ -70,6 +68,9 @@ import rs.pametnakupovina.app.ui.ProductSearchViewModel
 import rs.pametnakupovina.app.ui.PurchaseViewModel
 import rs.pametnakupovina.app.ui.RecommendationViewModel
 import rs.pametnakupovina.app.ui.components.AppIcon
+import rs.pametnakupovina.app.ui.components.TonalActionButton
+import rs.pametnakupovina.app.ui.components.cardBorder
+import androidx.compose.ui.text.style.TextAlign
 import rs.pametnakupovina.app.ui.components.AppSpacing
 import rs.pametnakupovina.app.ui.components.AppTopBar
 import rs.pametnakupovina.app.ui.components.BottomActionBar
@@ -88,6 +89,10 @@ import rs.pametnakupovina.app.ui.duration
 import rs.pametnakupovina.app.ui.money
 import rs.pametnakupovina.app.ui.plural
 import rs.pametnakupovina.app.ui.wholeDinars
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.ui.unit.sp
 
 @Composable
 fun RecommendationScreen(
@@ -210,7 +215,8 @@ fun RecommendationScreen(
                     },
                     onStart = { scenario, createNew ->
                         purchaseViewModel.start(requireNotNull(state.result), scenario, createNew)
-                    }
+                    },
+                    onChangeOrigin = onBack
                 )
             }
         }
@@ -227,7 +233,8 @@ internal fun RecommendationContent(
     activeLoaded: Boolean,
     onResume: (String) -> Unit,
     onStart: (OptimizationScenarioDto, Boolean) -> Unit,
-    onAlternative: (RecommendationItemDto) -> Unit = {}
+    onAlternative: (RecommendationItemDto) -> Unit = {},
+    onChangeOrigin: () -> Unit = {}
 ) {
     val context = LocalContext.current
     var selectedTypeName by rememberSaveable {
@@ -286,6 +293,10 @@ internal fun RecommendationContent(
                 item(key = "previous-purchase") {
                     PreviousPurchaseBanner(activePurchase, enabled = !saving, onResume = onResume)
                 }
+            }
+
+            item(key = "origin") {
+                OriginCard(origin, onChangeOrigin)
             }
 
             item(key = "scenario-chooser") {
@@ -383,6 +394,7 @@ private fun PreviousPurchaseBanner(
     Surface(
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainer,
+        border = cardBorder,
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
@@ -408,15 +420,14 @@ private fun PreviousPurchaseBanner(
                     )
                 }
             }
-            FilledTonalButton(
+            TonalActionButton(
+                text = "Nastavi prethodnu kupovinu",
                 enabled = enabled,
                 onClick = { onResume(purchase.id) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("resume-previous-purchase")
-            ) {
-                Text("Nastavi prethodnu kupovinu")
-            }
+            )
         }
     }
 }
@@ -427,23 +438,18 @@ internal fun RouteNavigationCard(
     onClick: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.xs)) {
-        OutlinedButton(
+        TonalActionButton(
+            text = if (stopCount == 1) {
+                "Pregled puta do prodavnice"
+            } else {
+                "Pregled rute kroz $stopCount ${plural(stopCount, "prodavnicu", "prodavnice", "prodavnica")}"
+            },
+            icon = R.drawable.ic_directions,
             onClick = onClick,
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 52.dp)
                 .testTag("open-google-maps")
-        ) {
-            AppIcon(R.drawable.ic_directions, contentDescription = null)
-            Spacer(Modifier.width(AppSpacing.sm))
-            Text(
-                if (stopCount == 1) {
-                    "Pregled puta do prodavnice"
-                } else {
-                    "Pregled rute kroz $stopCount ${plural(stopCount, "prodavnicu", "prodavnice", "prodavnica")}"
-                }
-            )
-        }
+        )
         Text(
             "Google Maps prvo prikaže rutu, a navigaciju pokrećeš ti.",
             style = MaterialTheme.typography.bodySmall,
@@ -479,14 +485,14 @@ private fun ScenarioChooser(
                 enabled = scenario.available,
                 shape = MaterialTheme.shapes.medium,
                 color = if (isSelected) {
-                    MaterialTheme.colorScheme.primaryContainer
+                    MaterialTheme.colorScheme.surfaceContainerLowest
                 } else {
-                    MaterialTheme.colorScheme.surfaceContainerHigh
+                    MaterialTheme.colorScheme.surfaceContainerLow
                 },
                 border = if (isSelected) {
                     BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
                 } else {
-                    null
+                    cardBorder
                 },
                 modifier = Modifier
                     .weight(weight)
@@ -499,16 +505,32 @@ private fun ScenarioChooser(
                 ) {
                     // Two lines for every label, so a label that wraps does not
                     // push its price below the others.
-                    Text(
-                        scenarioShortTitle(scenario.type),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    // Sa krupnim slovima se naziv i cena smanjuju, umesto da se
+                    // lome usred reči („Najjeftin/ija", „1.50/1").
+                    // Svaka reč u svom redu: reč koja ne stane pravi treći red,
+                    // a to je prekoračenje, pa se slova smanje.
+                    BasicText(
+                        scenarioShortTitle(scenario.type).replace(' ', '\n'),
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        ),
                         minLines = 2,
-                        maxLines = 2
+                        maxLines = 2,
+                        autoSize = TextAutoSize.StepBased(
+                            minFontSize = 8.sp,
+                            maxFontSize = MaterialTheme.typography.labelMedium.fontSize
+                        )
                     )
-                    Text(
+                    BasicText(
                         scenario.totalCost?.takeIf { scenario.available }?.let(::wholeDinars) ?: "nema",
-                        style = MaterialTheme.typography.titleLarge
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            color = MaterialTheme.colorScheme.onSurface
+                        ),
+                        maxLines = 1,
+                        autoSize = TextAutoSize.StepBased(
+                            minFontSize = 10.sp,
+                            maxFontSize = MaterialTheme.typography.titleLarge.fontSize
+                        )
                     )
                     // Says which number this is, so the cheapest basket
                     // showing the highest figure reads as sense, not error.
@@ -530,58 +552,152 @@ private fun ScenarioChooser(
     }
 }
 
+/** Polazna tačka plana; „Promeni" vraća na izbor lokacije. */
+@Composable
+private fun OriginCard(origin: Pair<Double, Double>, onChange: () -> Unit) {
+    Surface(
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        border = cardBorder,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(AppSpacing.md),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(AppSpacing.md)
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier.size(44.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    AppIcon(R.drawable.ic_my_location, contentDescription = null)
+                }
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "POLAZNA TAČKA",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    coordinatesLabel(origin.first, origin.second),
+                    style = MaterialTheme.typography.bodyLarge
+                )
+            }
+            TonalActionButton(text = "Promeni", onClick = onChange)
+        }
+    }
+}
+
 @Composable
 private fun ScenarioHeroCard(scenario: OptimizationScenarioDto) {
     Surface(
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.primaryContainer,
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        border = cardBorder,
         modifier = Modifier.fillMaxWidth()
     ) {
-        Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Text(
-                scenarioTitle(scenario.type),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+        Column {
+            // Tamna traka na vrhu, kao na nacrtu: ovo je plan o kome se radi.
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(6.dp)
+                    .background(MaterialTheme.colorScheme.primary)
             )
-            if (scenario.available) {
-                val total = scenario.totalCost
-                // The number the screen exists for, at a size that needs no
-                // searching for.
-                Text(
-                    total?.let(::money) ?: "nema cene",
-                    style = MaterialTheme.typography.displaySmall
-                )
-                // Put i vreme is everything above the basket, so the two
-                // parts always add up to the total shown above them.
-                total?.let {
-                    Text(
-                        "korpa ${money(scenario.basketCost)} + put i vreme ${money(it - scenario.basketCost)}",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
+            Column(
+                modifier = Modifier.padding(AppSpacing.lg),
+                verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)
+            ) {
+                // Oznake, naslov i cena jedno ispod drugog: jedno pored drugog
+                // su se sa krupnim slovima lomili po slovima („Prepor/učeni").
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm),
+                    verticalArrangement = Arrangement.spacedBy(AppSpacing.xs)
+                ) {
+                    StatusPill(scenarioBadge(scenario.type), StatusTone.POSITIVE)
+                    if (scenario.available) {
+                        scenario.savingsComparedWithSingleStore?.takeIf { it > 0.0 }?.let { savings ->
+                            StatusPill("Ušteda ${wholeDinars(savings)} RSD", StatusTone.POSITIVE)
+                        }
+                    }
                 }
-                Text(
-                    listOf(
-                        "${scenario.coveredItems} od ${scenario.items.size} " +
-                            plural(scenario.items.size, "stavke", "stavke", "stavki"),
-                        counted(scenario.stopCount, "stajanje", "stajanja", "stajanja"),
-                        distance(scenario.routeDistanceKm)
-                    ).joinToString(" · "),
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                scenario.savingsComparedWithSingleStore?.takeIf { it > 0.0 }?.let { savings ->
+                Text(scenarioTitle(scenario.type), style = MaterialTheme.typography.titleLarge)
+                if (scenario.available) {
+                    // The number the screen exists for, at a size that needs
+                    // no searching for.
                     Text(
-                        "Jeftinije od jedne prodavnice za ${money(savings)}",
-                        style = MaterialTheme.typography.titleMedium,
+                        scenario.totalCost?.let(::money) ?: "nema cene",
+                        style = MaterialTheme.typography.displaySmall,
                         color = MaterialTheme.colorScheme.primary
                     )
                 }
-            } else {
-                Text(scenario.explanation, style = MaterialTheme.typography.bodyMedium)
+                if (scenario.available) {
+                    // Put i vreme is everything above the basket, so the two
+                    // parts always add up to the total shown above them.
+                    scenario.totalCost?.let {
+                        Text(
+                            "korpa ${money(scenario.basketCost)} + put i vreme ${money(it - scenario.basketCost)}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(IntrinsicSize.Min)
+                            .background(MaterialTheme.colorScheme.surfaceContainerLow, MaterialTheme.shapes.small)
+                            .padding(vertical = AppSpacing.md)
+                    ) {
+                        PlanStat("Prodavnice", scenario.stopCount.toString(), Modifier.weight(1f))
+                        PlanStat("Razdaljina", distance(scenario.routeDistanceKm), Modifier.weight(1f))
+                        PlanStat("Vreme", "~${duration(scenario.routeDurationSeconds)}", Modifier.weight(1f))
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        AppIcon(
+                            R.drawable.ic_check_circle,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(Modifier.width(AppSpacing.sm))
+                        Text(
+                            "Pokrivenost korpe",
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(
+                            "${scenario.coveredItems} od ${scenario.items.size} " +
+                                plural(scenario.items.size, "stavke", "stavke", "stavki"),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                } else {
+                    Text(scenario.explanation, style = MaterialTheme.typography.bodyMedium)
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun PlanStat(label: String, value: String, modifier: Modifier) {
+    Column(
+        modifier = modifier.fillMaxHeight(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
+        Text(value, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
     }
 }
 
@@ -593,6 +709,7 @@ private fun StoreSection(
     Surface(
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainer,
+        border = cardBorder,
         modifier = Modifier.fillMaxWidth()
     ) {
         Column {
@@ -616,7 +733,8 @@ private fun StoreSection(
                 }
                 Text(
                     money(items.sumOf { it.lineTotal ?: 0.0 }),
-                    style = MaterialTheme.typography.titleMedium
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -703,6 +821,7 @@ private fun UnresolvedSection(
         Surface(
             shape = MaterialTheme.shapes.medium,
             color = MaterialTheme.colorScheme.surfaceContainer,
+            border = cardBorder,
             modifier = Modifier.fillMaxWidth()
         ) {
             Column {
@@ -770,6 +889,7 @@ internal fun UnlocatedOptionsSection(
         Surface(
             shape = MaterialTheme.shapes.medium,
             color = MaterialTheme.colorScheme.surfaceContainer,
+            border = cardBorder,
             modifier = Modifier.fillMaxWidth()
         ) {
             Column {
@@ -827,20 +947,32 @@ private fun CalculationDetails(
 ) {
     var expanded by rememberSaveable { mutableStateOf(false) }
     val assumptions = result.assumptions
-    Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)) {
-        TextButton(onClick = { expanded = !expanded }) {
-            Text("Kako je računato")
-            AppIcon(
-                if (expanded) R.drawable.ic_expand_less else R.drawable.ic_expand_more,
-                contentDescription = null
-            )
-        }
-        if (expanded) {
-            Surface(
-                shape = MaterialTheme.shapes.medium,
-                color = MaterialTheme.colorScheme.surfaceContainer,
-                modifier = Modifier.fillMaxWidth()
+    Surface(
+        onClick = { expanded = !expanded },
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        border = cardBorder,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column {
+            Row(
+                modifier = Modifier.padding(AppSpacing.lg),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(AppSpacing.md)
             ) {
+                AppIcon(R.drawable.ic_info, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Text(
+                    "Kako je računato",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f)
+                )
+                AppIcon(
+                    if (expanded) R.drawable.ic_expand_less else R.drawable.ic_expand_more,
+                    contentDescription = null
+                )
+            }
+            if (expanded) {
+                HorizontalDivider()
                 Column(
                     modifier = Modifier.padding(AppSpacing.lg),
                     verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)
@@ -949,6 +1081,13 @@ private fun unresolvedStatus(status: RecommendationItemStatusDto): String = when
     RecommendationItemStatusDto.UNMATCHED -> "Nije pronađeno"
     RecommendationItemStatusDto.NO_VALID_PRICE -> "Nema cene"
     RecommendationItemStatusDto.AVAILABLE -> "Dostupno"
+}
+
+/** Oznaka na kartici plana, kao „PREPORUČENO" na nacrtu. */
+private fun scenarioBadge(type: RecommendationScenarioTypeDto): String = when (type) {
+    RecommendationScenarioTypeDto.SINGLE_STORE -> "Najbrže i najlakše"
+    RecommendationScenarioTypeDto.RECOMMENDED_BALANCE -> "Preporučeno"
+    RecommendationScenarioTypeDto.LOWEST_PRICE -> "Najniža cena korpe"
 }
 
 internal fun scenarioTitle(type: RecommendationScenarioTypeDto): String = when (type) {
