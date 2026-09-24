@@ -14,6 +14,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -444,7 +448,15 @@ private fun RuleChooser(
                     onClick = { onSelect(option.rule) },
                     shape = SegmentedButtonDefaults.itemShape(index, RuleOptions.size),
                     icon = {},
-                    label = { Text(option.label, maxLines = 1) }
+                    // Sa krupnim slovima tekst se smanji da stane, umesto „Proizvo".
+                    label = {
+                        BasicText(
+                            option.label,
+                            maxLines = 1,
+                            style = LocalTextStyle.current.copy(color = LocalContentColor.current),
+                            autoSize = TextAutoSize.StepBased(maxFontSize = LocalTextStyle.current.fontSize)
+                        )
+                    }
                 )
             }
         }

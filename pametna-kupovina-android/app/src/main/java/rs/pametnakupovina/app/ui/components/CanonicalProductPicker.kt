@@ -1,9 +1,10 @@
 package rs.pametnakupovina.app.ui.components
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -27,6 +28,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import rs.pametnakupovina.app.R
@@ -267,21 +269,30 @@ private fun ProductSearchResultCard(
                     )
                 }
             }
+            // „Izaberi" se meri prvi i nikad se ne lomi; sa krupnim slovima
+            // popušta „Više o proizvodu".
             Row(
                 modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                TextButton(onClick = { detailsExpanded = !detailsExpanded }) {
-                    Text(if (detailsExpanded) "Manje" else "Više o proizvodu")
+                TextButton(
+                    onClick = { detailsExpanded = !detailsExpanded },
+                    modifier = Modifier.weight(1f, fill = false)
+                ) {
+                    Text(
+                        if (detailsExpanded) "Manje" else "Više o proizvodu",
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
-                Spacer(Modifier.weight(1f))
                 Button(
                     onClick = {
                         if (product.hasUsablePrice) onChoose() else confirmWithoutPrice = true
                     },
                     modifier = Modifier.testTag("product-choose-${product.resultId()}")
                 ) {
-                    Text("Izaberi")
+                    Text("Izaberi", maxLines = 1, softWrap = false)
                 }
             }
         }
@@ -363,35 +374,48 @@ private fun ProductPriceSummary(
         compareBy({ it.priceNeedsCheck }, { it.minimumEffectivePrice ?: Double.MAX_VALUE })
     )
     val shown = if (showAll) offers else offers.take(3)
-    Column {
-        shown.forEach { offer ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    offer.retailerName,
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.weight(1f)
-                )
-                Text(
-                    if (offer.priceNeedsCheck) "proveri cenu" else shortDate(offer.latestPriceDate),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (offer.priceNeedsCheck) {
-                        MaterialTheme.colorScheme.tertiary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                    modifier = Modifier.padding(horizontal = AppSpacing.sm)
-                )
-                offer.minimumEffectivePrice?.let {
-                    Text("od ${money(it)}", style = MaterialTheme.typography.labelLarge)
+    BoxWithConstraints {
+        // Datum je tih podatak: kad nema mesta (krupna slova, uvećan ekran),
+        // odlazi on, a ne ime lanca.
+        val roomForDate = maxWidth > 300.dp * LocalDensity.current.fontScale
+        Column {
+            shown.forEach { offer ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        offer.retailerName,
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (roomForDate || offer.priceNeedsCheck) {
+                        Text(
+                            if (offer.priceNeedsCheck) "proveri cenu" else shortDate(offer.latestPriceDate),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (offer.priceNeedsCheck) {
+                                MaterialTheme.colorScheme.tertiary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                            modifier = Modifier.padding(start = AppSpacing.sm)
+                        )
+                    }
+                    offer.minimumEffectivePrice?.let {
+                        Text(
+                            "od ${money(it)}",
+                            style = MaterialTheme.typography.labelLarge,
+                            modifier = Modifier.padding(start = AppSpacing.sm)
+                        )
+                    }
                 }
             }
-        }
-        if (offers.size > shown.size) {
-            Text(
-                "i u još " + counted(offers.size - shown.size, "lancu", "lanca", "lanaca"),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            if (offers.size > shown.size) {
+                Text(
+                    "i u još " + counted(offers.size - shown.size, "lancu", "lanca", "lanaca"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }

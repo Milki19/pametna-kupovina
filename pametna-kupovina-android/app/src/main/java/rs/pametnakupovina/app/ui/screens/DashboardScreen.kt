@@ -22,7 +22,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
+import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -323,10 +323,10 @@ private fun WeeklyBarChart(weeks: List<WeekBar>, modifier: Modifier = Modifier) 
 
 @Composable
 private fun DashboardTabRow(selected: DashboardTab, onSelect: (DashboardTab) -> Unit) {
-    TabRow(selectedTabIndex = selected.ordinal) {
+    // Sa krupnim slovima četiri naziva ne staju: tabovi se tada pomeraju
+    // prevlačenjem umesto da se seku („ProdavnKategor").
+    PrimaryScrollableTabRow(selectedTabIndex = selected.ordinal, edgePadding = 0.dp) {
         DashboardTab.entries.forEach { tab ->
-            // Bez podrazumevanih 16 dp sa strane teksta: četiri naziva staju
-            // i na uzak telefon, umesto „Prodavnic".
             Tab(
                 selected = selected == tab,
                 onClick = { onSelect(tab) },
@@ -334,7 +334,12 @@ private fun DashboardTabRow(selected: DashboardTab, onSelect: (DashboardTab) -> 
                     .heightIn(min = 48.dp)
                     .testTag(tab.tag)
             ) {
-                Text(tab.label, style = MaterialTheme.typography.titleSmall, maxLines = 1)
+                Text(
+                    tab.label,
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1,
+                    modifier = Modifier.padding(horizontal = AppSpacing.md)
+                )
             }
         }
     }
