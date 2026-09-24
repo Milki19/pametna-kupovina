@@ -1,0 +1,237 @@
+/* Boje i oblici iz istog nacrta kao Android aplikacija 1.7 (teal, bele
+ * kartice sa tankom ivicom). Pismo je sistemsko: na iPhone-u je to SF, koji
+ * je blizak Interu, a ništa se ne učitava sa tuđih servera. */
+:root {
+  --canvas: #faf8ff;
+  --card: #ffffff;
+  --low: #f2f3ff;
+  --high: #dae2fd;
+  --line: #e2e8f0;
+  --ink: #131b2e;
+  --muted: #3e4947;
+  --outline: #6e7977;
+  --primary: #005c55;
+  --on-primary: #ffffff;
+  --primary-mist: #d5f3ee;
+  --hero: #005c55;
+  --on-hero: #ffffff;
+  --mint: #c4fce4;
+  --on-mint: #005236;
+  --amber: #ffddb8;
+  --on-amber: #653e00;
+  --error: #ba1a1a;
+  --error-soft: #ffdad6;
+  --on-error-soft: #93000a;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --canvas: #0b1326;
+    --card: #171f33;
+    --low: #131b2e;
+    --high: #2d3449;
+    --line: #2f3a4a;
+    --ink: #dae2fd;
+    --muted: #bdc9c6;
+    --outline: #88938f;
+    --primary: #80d5cb;
+    --on-primary: #00201d;
+    --primary-mist: #00504a;
+    --hero: #00504a;
+    --on-hero: #9cf2e8;
+    --mint: #00513a;
+    --on-mint: #c4fce4;
+    --amber: #3f2a0b;
+    --on-amber: #ffb95f;
+    --error: #ffb4ab;
+    --error-soft: #4a1f1d;
+    --on-error-soft: #ffb4ab;
+  }
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--canvas);
+  color: var(--ink);
+  font: 16px/1.45 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-variant-numeric: tabular-nums;
+  -webkit-tap-highlight-color: transparent;
+}
+a { color: var(--primary); }
+h1, h2, h3, p { margin: 0; }
+button, input, select, textarea { font: inherit; color: inherit; }
+svg { width: 24px; height: 24px; fill: currentColor; flex: none; }
+
+/* Gornja traka */
+.top {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; align-items: center; gap: 8px;
+  padding: calc(env(safe-area-inset-top) + 12px) 16px 12px;
+  background: var(--canvas);
+}
+.top h1 { font-size: 26px; line-height: 1.2; letter-spacing: -0.015em; }
+.top p { color: var(--muted); font-size: 14px; }
+.titles { min-width: 0; }
+.icon-btn {
+  display: grid; place-items: center;
+  width: 44px; height: 44px; margin-left: -10px;
+  border: 0; border-radius: 50%; background: none; cursor: pointer;
+}
+
+main {
+  display: flex; flex-direction: column; gap: 12px;
+  max-width: 640px; margin: 0 auto;
+  padding: 4px 16px calc(env(safe-area-inset-bottom) + 160px);
+}
+
+/* Donja traka sa tabovima */
+.tabs {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 6;
+  display: flex; justify-content: space-around;
+  padding: 8px 4px calc(env(safe-area-inset-bottom) + 8px);
+  background: var(--card); border-top: 1px solid var(--line);
+}
+.tabs a {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  min-width: 64px; padding: 2px 8px;
+  color: var(--muted); text-decoration: none; font-size: 12px; font-weight: 600;
+}
+.tabs a svg { padding: 3px 16px; width: 56px; height: 30px; border-radius: 15px; }
+.tabs a[aria-current="page"] { color: var(--primary); }
+.tabs a[aria-current="page"] svg { background: var(--mint); color: var(--on-mint); }
+body.flow .tabs { display: none; }
+
+/* Glavna radnja, uvek pod palcem */
+.action-bar {
+  position: fixed; left: 0; right: 0; z-index: 5;
+  bottom: calc(env(safe-area-inset-bottom) + 66px);
+  padding: 12px 16px; background: var(--canvas); border-top: 1px solid var(--line);
+}
+body.flow .action-bar { bottom: 0; padding-bottom: calc(env(safe-area-inset-bottom) + 12px); }
+.action-bar > * { max-width: 608px; margin: 0 auto; }
+
+/* Kartice */
+.card {
+  background: var(--card); border: 1px solid var(--line); border-radius: 16px;
+  padding: 16px; display: flex; flex-direction: column; gap: 8px;
+}
+.card.flush { padding: 0; gap: 0; overflow: hidden; }
+.card.selected { border: 2px solid var(--primary); }
+.card.soft { background: var(--low); border-color: transparent; }
+.hero { background: var(--hero); color: var(--on-hero); border: 0; }
+.stripe { border-top: 6px solid var(--primary); }
+.row { display: flex; flex-direction: row; align-items: center; gap: 12px; }
+.row.top-align { align-items: flex-start; }
+.grow { flex: 1; min-width: 0; }
+.list-row { padding: 14px 16px; border-top: 1px solid var(--line); }
+.list-row:first-child { border-top: 0; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+.label { font-size: 12px; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase; color: var(--muted); }
+.label.accent { color: var(--primary); }
+.name { font-weight: 600; }
+.title { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.3; }
+.price { font-weight: 700; white-space: nowrap; }
+.price.accent { color: var(--primary); }
+.big { font-size: 36px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.15; color: var(--primary); }
+.section { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-weight: 600; font-size: 17px; }
+.strike { text-decoration: line-through; color: var(--outline); }
+.center { text-align: center; }
+
+/* Dugmad */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 48px; padding: 10px 16px;
+  border: 0; border-radius: 12px; cursor: pointer; text-decoration: none;
+  background: var(--high); color: var(--ink); font-weight: 600; text-align: center;
+}
+.btn.primary { background: var(--primary); color: var(--on-primary); }
+.btn.main { width: 100%; min-height: 52px; border-radius: 14px; font-size: 17px; }
+.btn.text { background: none; color: var(--primary); min-height: 44px; padding: 8px; }
+.btn.danger { background: none; color: var(--error); }
+.btn:disabled { opacity: 0.45; cursor: default; }
+.btn:active:not(:disabled) { transform: scale(0.98); }
+.btn svg { width: 20px; height: 20px; }
+.btn-row { display: flex; gap: 8px; }
+.btn-row > .btn { flex: 1; }
+.icon-action { display: grid; place-items: center; width: 44px; height: 44px; border: 0; background: none; color: var(--muted); border-radius: 50%; cursor: pointer; flex: none; }
+
+/* Pilule */
+.pill {
+  display: inline-flex; align-items: center; align-self: flex-start;
+  padding: 3px 10px; border-radius: 999px; font-size: 13px; font-weight: 600;
+  background: var(--high); color: var(--muted); white-space: nowrap;
+}
+.pill.pos { background: var(--mint); color: var(--on-mint); }
+.pill.warn { background: var(--amber); color: var(--on-amber); }
+.pill.err { background: var(--error-soft); color: var(--on-error-soft); }
+.amount { padding: 6px 12px; border-radius: 12px; background: var(--low); font-weight: 600; white-space: nowrap; }
+.badge { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--primary); color: var(--on-primary); font-weight: 700; font-size: 14px; flex: none; }
+.letter { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 12px; background: var(--low); color: var(--primary); font-size: 22px; font-weight: 700; flex: none; }
+
+/* Obaveštenja */
+.notice { display: flex; gap: 12px; padding: 12px 16px; border-radius: 16px; background: var(--high); }
+.notice.warn { background: var(--amber); color: var(--on-amber); }
+.notice.err { background: var(--error-soft); color: var(--on-error-soft); }
+.notice.pos { background: var(--mint); color: var(--on-mint); }
+
+/* Polja */
+input[type=text], input[type=search], input[inputmode], select, textarea {
+  width: 100%; min-height: 48px; padding: 10px 14px;
+  border: 1px solid var(--outline); border-radius: 12px; background: var(--card);
+  font-size: 16px;
+}
+textarea { min-height: 140px; resize: vertical; }
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--primary); outline-offset: 0; border-color: var(--primary); }
+form { display: flex; flex-direction: column; gap: 8px; }
+
+/* Napredak */
+.progress { height: 8px; border-radius: 4px; background: var(--high); overflow: hidden; }
+.progress > span { display: block; height: 100%; background: var(--primary); }
+
+/* Izbor scenarija */
+.scenarios { display: flex; gap: 8px; }
+.scenario {
+  flex: 1; min-width: 0; padding: 12px 10px; border-radius: 16px; cursor: pointer; text-align: left;
+  border: 1px solid var(--line); background: var(--low);
+  display: flex; flex-direction: column; gap: 2px;
+}
+.scenario[aria-pressed="true"] { border: 2px solid var(--primary); background: var(--card); }
+.scenario .price { font-size: 22px; overflow-wrap: anywhere; }
+.stats { display: flex; background: var(--low); border-radius: 12px; padding: 12px 4px; }
+.stats > div { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: space-between; text-align: center; }
+.stats b { font-size: 17px; }
+
+/* Kućice za kupovinu */
+.check { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-top: 1px solid var(--line); cursor: pointer; }
+.check input { appearance: none; -webkit-appearance: none; flex: none; width: 28px; height: 28px; margin: 0; border: 2px solid var(--outline); border-radius: 8px; background: var(--card); display: grid; place-items: center; }
+.check input:checked { background: var(--primary); border-color: var(--primary); }
+.check input:checked::after { content: ""; width: 7px; height: 13px; border: solid var(--on-primary); border-width: 0 3px 3px 0; transform: rotate(45deg) translate(-1px, -1px); }
+
+details summary { cursor: pointer; font-weight: 600; list-style: none; display: flex; align-items: center; gap: 8px; }
+details summary::-webkit-details-marker { display: none; }
+details summary::after { content: "⌄"; margin-left: auto; color: var(--muted); }
+details[open] summary::after { content: "⌃"; }
+
+/* Barkod: crno na belom i u tamnoj temi, čitač na kasi drugo ne čita */
+.code-box { background: #fff; color: #000; border-radius: 16px; padding: 16px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.code-box svg { width: 100%; height: 110px; fill: #000; }
+.code-box .number { font-weight: 600; font-size: 18px; letter-spacing: 0.05em; }
+.overlay { position: fixed; inset: 0; z-index: 20; background: rgba(15, 23, 42, 0.6); display: grid; place-items: center; padding: 16px; }
+.overlay .card { width: 100%; max-width: 480px; }
+.overlay .code-box svg { height: 180px; }
+
+.toast {
+  position: fixed; left: 16px; right: 16px; z-index: 30;
+  bottom: calc(env(safe-area-inset-bottom) + 150px);
+  max-width: 608px; margin: 0 auto; display: flex; align-items: center; gap: 8px;
+  padding: 12px 16px; border-radius: 12px; background: #283044; color: #eef0ff;
+}
+.toast button { margin-left: auto; background: none; border: 0; color: #80d5cb; font-weight: 700; cursor: pointer; min-height: 40px; }
+
+.spinner { width: 28px; height: 28px; border: 3px solid var(--high); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 32px auto 8px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } }
