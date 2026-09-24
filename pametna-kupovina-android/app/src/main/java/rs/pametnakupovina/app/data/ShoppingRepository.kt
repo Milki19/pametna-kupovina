@@ -12,6 +12,7 @@ import rs.pametnakupovina.app.data.local.SyncState
 import rs.pametnakupovina.app.data.network.AccountStateDto
 import rs.pametnakupovina.app.data.network.AddLoyaltyCardRequestDto
 import rs.pametnakupovina.app.data.network.HabitDto
+import rs.pametnakupovina.app.location.Coordinates
 import rs.pametnakupovina.app.data.network.JoinRequestDto
 import rs.pametnakupovina.app.data.network.LoyaltyCardDto
 import rs.pametnakupovina.app.data.network.ReceiptDto
@@ -196,12 +197,15 @@ class ShoppingRepository @Inject constructor(
         query: String,
         page: Int = 0,
         limit: Int = 10,
-        includeWithoutPrice: Boolean = false
+        includeWithoutPrice: Boolean = false,
+        near: Coordinates? = null
     ): CanonicalProductSearchPageDto = api.searchProducts(
         query = query.trim(),
         page = page,
         limit = limit,
-        includeWithoutPrice = includeWithoutPrice
+        includeWithoutPrice = includeWithoutPrice,
+        latitude = near?.latitude,
+        longitude = near?.longitude
     )
 
     suspend fun getProductDetails(

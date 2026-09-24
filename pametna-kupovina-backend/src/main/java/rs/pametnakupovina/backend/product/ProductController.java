@@ -17,6 +17,8 @@ import rs.pametnakupovina.backend.matching.ProductMatchFeedback;
 import rs.pametnakupovina.backend.matching.ProductMatchFeedbackRequest;
 import rs.pametnakupovina.backend.matching.ProductMatchFeedbackService;
 import rs.pametnakupovina.backend.matching.ProductMatchRequest;
+import rs.pametnakupovina.backend.privacy.PreciseLocationPolicy;
+import rs.pametnakupovina.backend.privacy.PreciseLocationPurpose;
 
 import java.util.List;
 
@@ -30,6 +32,7 @@ public class ProductController {
     private final ProductMatchFeedbackService matchFeedbackService;
     private final CanonicalProductDetailsService productDetailsService;
     private final ProductFamilyDetailsService familyDetailsService;
+    private final PreciseLocationPolicy locationPolicy;
 
     public ProductController(
             CanonicalProductSearchService canonicalSearchService,
@@ -37,7 +40,8 @@ public class ProductController {
             ProductMatchDecisionService matchDecisionService,
             ProductMatchFeedbackService matchFeedbackService,
             CanonicalProductDetailsService productDetailsService,
-            ProductFamilyDetailsService familyDetailsService
+            ProductFamilyDetailsService familyDetailsService,
+            PreciseLocationPolicy locationPolicy
     ) {
         this.canonicalSearchService = canonicalSearchService;
         this.fuzzyCandidateService = fuzzyCandidateService;
@@ -45,6 +49,7 @@ public class ProductController {
         this.matchFeedbackService = matchFeedbackService;
         this.productDetailsService = productDetailsService;
         this.familyDetailsService = familyDetailsService;
+        this.locationPolicy = locationPolicy;
     }
 
     @GetMapping("/families/{productFamilyId}")
@@ -109,9 +114,20 @@ public class ProductController {
                     name = "limit",
                     defaultValue = "20"
             ) int limit,
-            @RequestParam(name = "includeWithoutPrice", defaultValue = "false") boolean includeWithoutPrice
+            @RequestParam(name = "includeWithoutPrice", defaultValue = "false") boolean includeWithoutPrice,
+            // Oko kilometar tačno, samo za redosled; ne čuva se.
+            @RequestParam(name = "latitude", required = false) Double latitude,
+            @RequestParam(name = "longitude", required = false) Double longitude
     ) {
         try {
+            if (latitude != null && longitude != null) {
+                return locationPolicy.useForRequest(
+                        PreciseLocationPurpose.SEARCH_RANKING,
+                        latitude,
+                        longitude,
+                        near -> canonicalSearchService.search(query, page, limit, includeWithoutPrice, near)
+                );
+            }
             return canonicalSearchService.search(query, page, limit, includeWithoutPrice);
         } catch (IllegalArgumentException exception) {
             throw new ResponseStatusException(

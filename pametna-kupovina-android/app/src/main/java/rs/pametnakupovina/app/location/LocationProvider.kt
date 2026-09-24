@@ -122,6 +122,20 @@ class FusedLocationProvider @Inject constructor(
     }
 
     /**
+     * Za redosled pretrage: poslednja poznata lokacija, zaokružena na oko
+     * kilometar — bez paljenja GPS-a i bez pitanja za dozvolu. Null kad
+     * dozvole ili lokacije nema, i pretraga tada radi kao i pre.
+     */
+    suspend fun roughLocation(): Coordinates? {
+        if (!hasLocationPermission(context)) return null
+        val location = runCatching { withTimeoutOrNull(1_000L) { awaitLastLocation() } }
+            .getOrNull() ?: return null
+        return Coordinates(roughly(location.latitude), roughly(location.longitude))
+    }
+
+    private fun roughly(degrees: Double) = Math.round(degrees * 100) / 100.0
+
+    /**
      * Kraj ili adresa („Karaburma", „Bulevar kralja Aleksandra 73") kao
      * polazna tačka, bez mape i bez API ključa: Android-ov Geocoder, samo
      * unutar Srbije, da „Karaburma" ne ode u drugu državu.
