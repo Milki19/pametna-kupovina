@@ -49,6 +49,7 @@ import rs.pametnakupovina.app.ui.ReceiptViewModel
 import rs.pametnakupovina.app.ui.components.AppIcon
 import rs.pametnakupovina.app.ui.components.AppSpacing
 import rs.pametnakupovina.app.ui.components.AppTopBar
+import rs.pametnakupovina.app.ui.components.NoticeBanner
 import rs.pametnakupovina.app.ui.counted
 import rs.pametnakupovina.app.ui.date
 import rs.pametnakupovina.app.ui.dateTime
@@ -120,6 +121,19 @@ fun DashboardScreen(
             ),
             verticalArrangement = Arrangement.spacedBy(AppSpacing.md)
         ) {
+            // Skeniranje iz menija javlja ishod ovde; bez ovoga su i uspeh i
+            // greška prolazili ćutke.
+            val receiptNotice = if (receiptState.scanning) "Zavodim račun…" else receiptState.message
+            receiptNotice?.let { text ->
+                item(key = "receipt-notice") {
+                    NoticeBanner(
+                        text = text,
+                        actionLabel = "U redu".takeUnless { receiptState.scanning },
+                        onAction = receiptViewModel::dismissMessage.takeUnless { receiptState.scanning },
+                        modifier = Modifier.testTag("receipt-notice")
+                    )
+                }
+            }
             item(key = "list-shortcut") {
                 ShoppingListShortcutCard(listItemCount, onOpenList)
             }
