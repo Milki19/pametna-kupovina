@@ -231,4 +231,18 @@ class RenamedPriceListTest {
         assertThat(shop("ZONES_1").get("pricing_eligible")).isEqualTo(false);
         assertThat(listsWithoutAddress("ZONES")).containsExactlyInAnyOrder("ZONES - L", "ZONES - M");
     }
+
+    /**
+     * Cash & Carry Plus Kula, Euro Ša M i Matijević (23.09.): naziv
+     * cenovnika duži od 50 znakova rušio je ceo uvoz lanca.
+     */
+    @Test
+    void aLongPriceListNameIsStillShownWithoutAnAddress() {
+        chain("LONG");
+        String list = "Maloprodajni objekat broj 12 - Cash & Carry Plus doo Kula, Lenjinova 3";
+
+        importDay("LONG", priceList("13-09-2026", list));
+
+        assertThat(listsWithoutAddress("LONG")).containsExactly(list);
+    }
 }
