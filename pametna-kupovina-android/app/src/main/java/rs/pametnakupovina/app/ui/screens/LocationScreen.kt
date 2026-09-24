@@ -225,8 +225,8 @@ fun LocationScreen(
                         .size(20.dp)
                 )
                 Text(
-                    "Lokacija služi samo za ovo računanje. Aplikacija je ne prati u " +
-                        "pozadini, a server je ne čuva.",
+                    "Lokacija služi za ovo računanje i za redosled pretrage. Aplikacija " +
+                        "je ne prati u pozadini, a server je ne čuva.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

@@ -14,6 +14,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import rs.pametnakupovina.app.data.BarcodeScanner
 import rs.pametnakupovina.app.data.ShoppingRepository
+import rs.pametnakupovina.app.location.Coordinates
+import rs.pametnakupovina.app.location.FusedLocationProvider
 import rs.pametnakupovina.app.data.network.CanonicalProductSearchItemDto
 
 data class ProductSearchUiState(
@@ -32,8 +34,21 @@ data class ProductSearchUiState(
 @HiltViewModel
 class ProductSearchViewModel @Inject constructor(
     private val repository: ShoppingRepository,
-    private val scanner: BarcodeScanner
+    private val scanner: BarcodeScanner,
+    private val locationProvider: FusedLocationProvider
 ) : ViewModel() {
+
+    // Jednom po otvaranju pretrage: proizvodi iz prodavnica u blizini idu prvi.
+    private var near: Coordinates? = null
+    private var nearAsked = false
+
+    private suspend fun near(): Coordinates? {
+        if (!nearAsked) {
+            nearAsked = true
+            near = locationProvider.roughLocation()
+        }
+        return near
+    }
 
     private val _uiState = MutableStateFlow(ProductSearchUiState())
     val uiState: StateFlow<ProductSearchUiState> = _uiState.asStateFlow()
@@ -136,7 +151,8 @@ class ProductSearchViewModel @Inject constructor(
                 query = query,
                 page = page,
                 limit = PAGE_SIZE,
-                includeWithoutPrice = include
+                includeWithoutPrice = include,
+                near = near()
             )
             if (_uiState.value.query != query || _uiState.value.includeWithoutPrice != include) return@launch
 

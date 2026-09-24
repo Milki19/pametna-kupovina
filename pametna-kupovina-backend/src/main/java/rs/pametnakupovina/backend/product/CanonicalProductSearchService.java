@@ -7,6 +7,7 @@ import rs.pametnakupovina.backend.matching.ProductMatchScorer;
 import rs.pametnakupovina.backend.matching.ProductNameNormalizer;
 import rs.pametnakupovina.backend.matching.ProductQuantityParser;
 import rs.pametnakupovina.backend.matching.SearchSpellingCorrector;
+import rs.pametnakupovina.backend.privacy.PreciseLocation;
 import rs.pametnakupovina.backend.shoppinglist.ShoppingIntentResolver;
 
 import java.math.BigDecimal;
@@ -24,6 +25,7 @@ public class CanonicalProductSearchService {
     private static final int MAX_LIMIT = 100;
     private static final BigDecimal EXACT_EAN_SCORE =
             new BigDecimal("1.0000");
+    private static final int FAR_AWAY = 4;
     private static final Pattern PACKAGE_WORD =
             Pattern.compile("(?<= )([0-9]+|l|ml|lit|g|gr|kg|kom|x)(?= )");
 
@@ -62,10 +64,21 @@ public class CanonicalProductSearchService {
     }
 
     public CanonicalProductSearchPage search(String query, int page, int limit, boolean includeWithoutPrice) {
+        return search(query, page, limit, includeWithoutPrice, null);
+    }
+
+    /** @param near gde je kupac; null = redosled bez blizine */
+    public CanonicalProductSearchPage search(
+            String query,
+            int page,
+            int limit,
+            boolean includeWithoutPrice,
+            PreciseLocation near
+    ) {
         validate(query, page, limit);
 
         String strippedQuery = query.strip();
-        RankedQuery ranked = rank(query, includeWithoutPrice);
+        RankedQuery ranked = rank(query, includeWithoutPrice, near);
         List<ScoredRow> scoredRows = ranked.rows();
 
         int totalElements = scoredRows.size();
@@ -129,7 +142,7 @@ public class CanonicalProductSearchService {
     public List<ProductSearchCandidate> candidates(String query, int limit) {
         validate(query, 0, limit);
 
-        return rank(query, true).rows().stream()
+        return rank(query, true, null).rows().stream()
                 .limit(limit)
                 .map(ScoredRow::source)
                 .map(row -> new ProductSearchCandidate(
@@ -146,7 +159,7 @@ public class CanonicalProductSearchService {
                 .toList();
     }
 
-    private RankedQuery rank(String query, boolean includeWithoutPrice) {
+    private RankedQuery rank(String query, boolean includeWithoutPrice, PreciseLocation near) {
         String normalizedQuery = productNameNormalizer.normalize(query);
 
         if (normalizedQuery.isBlank()) {
@@ -193,6 +206,7 @@ public class CanonicalProductSearchService {
                 productQuantityParser.parse(query);
 
         Map<Long, Integer> typePriorities = typePriorities(normalizedQuery);
+        Map<Long, Integer> nearness = nearness(rows, near);
         String rankedQuery = normalizedQuery;
 
         List<ScoredRow> scoredRows = rows.stream()
@@ -207,6 +221,12 @@ public class CanonicalProductSearchService {
                                 .thenComparing(row -> typeRank(
                                         typePriorities,
                                         row.source()
+                                ))
+                                // Ono što je traženo ostaje ispred, a među
+                                // tim prvo proizvodi iz lanaca u blizini.
+                                .thenComparing(row -> nearness.getOrDefault(
+                                        row.source().productFamilyId(),
+                                        FAR_AWAY
                                 ))
                                 .thenComparing(
                                         ScoredRow::score,
@@ -224,6 +244,27 @@ public class CanonicalProductSearchService {
                 .toList();
 
         return new RankedQuery(correctedQuery, scoredRows);
+    }
+
+    /**
+     * Pojas udaljenosti, ne metri: 300 m i 900 m su isto „blizu", pa unutar
+     * pojasa i dalje odlučuje koliko naziv odgovara upitu.
+     */
+    private Map<Long, Integer> nearness(List<CanonicalProductSearchRow> rows, PreciseLocation near) {
+        if (near == null) {
+            return Map.of();
+        }
+
+        return searchRepository.nearestStoreMeters(
+                        rows.stream().map(CanonicalProductSearchRow::productFamilyId).toList(),
+                        near.latitude(),
+                        near.longitude()
+                ).entrySet().stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, entry -> band(entry.getValue())));
+    }
+
+    private static int band(double meters) {
+        return meters <= 2_000 ? 0 : meters <= 5_000 ? 1 : meters <= 10_000 ? 2 : 3;
     }
 
     private List<CanonicalProductSearchRow> findRows(

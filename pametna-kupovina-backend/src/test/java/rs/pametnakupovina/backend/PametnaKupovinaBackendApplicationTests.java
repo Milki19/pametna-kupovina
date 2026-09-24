@@ -4885,6 +4885,52 @@ class PametnaKupovinaBackendApplicationTests {
     }
 
     /**
+     * Isti proizvod u dva lanca: bez lokacije redosled je kao i do sada
+     * (abecedno), a sa lokacijom prvo ide lanac čija je prodavnica blizu.
+     */
+    @Test
+    void searchPutsProductsFromNearbyChainsFirst() {
+        var normalizer = new rs.pametnakupovina.backend.matching.ProductNameNormalizer();
+        for (String[] chain : new String[][] {
+                {"DALEKO", "ALFA sok od jabuke 1l", "45.2671", "19.8335"}, // Novi Sad
+                {"BLIZU", "ZETA sok od jabuke 1l", "44.8120", "20.5000"}   // Karaburma
+        }) {
+            long retailer = jdbcClient.sql("INSERT INTO app.retailer(code,name) VALUES(?,?) RETURNING id")
+                    .params(chain[0], chain[0]).query(Long.class).single();
+            long format = jdbcClient.sql("INSERT INTO app.store_format(retailer_id,code,name) VALUES(?,'TEST','Test') RETURNING id")
+                    .param(retailer).query(Long.class).single();
+            insertVerifiedStore(retailer, format, chain[0] + "-1", chain[0],
+                    Double.parseDouble(chain[2]), Double.parseDouble(chain[3]), true);
+            long run = jdbcClient.sql("INSERT INTO app.import_run(retailer_id,source_url,status) VALUES(?,'https://example.test/blizina','SUCCEEDED') RETURNING id")
+                    .param(retailer).query(Long.class).single();
+            long product = jdbcClient.sql("""
+                    INSERT INTO app.retailer_product(retailer_id,source_product_key,name,normalized_name,brand)
+                    VALUES(?,?,?,?,?) RETURNING id
+                    """).params(retailer, chain[1], chain[1], normalizer.normalize(chain[1]), chain[1].split(" ")[0])
+                    .query(Long.class).single();
+            jdbcClient.sql("INSERT INTO app.price_observation(retailer_product_id,import_run_id,price_date,regular_price) VALUES(?,?,CURRENT_DATE,149.99)")
+                    .params(product, run).update();
+            productCatalogMaintenanceService.refreshRetailer(retailer);
+        }
+
+        // Prisustvo po lancu inače puni dnevni uvoz iz tekućih ponuda.
+        jdbcClient.sql("""
+                INSERT INTO app.product_retailer_presence(product_family_id,retailer_id,first_seen_date,last_seen_date,
+                    latest_price_date,current_offer_count,store_count,format_count,minimum_effective_price)
+                SELECT product_family_id,retailer_id,CURRENT_DATE,CURRENT_DATE,CURRENT_DATE,1,1,1,149.99
+                FROM app.retailer_product WHERE name LIKE '%sok od jabuke%'
+                """).update();
+
+        assertThat(canonicalProductSearchService.search("sok od jabuke", 0, 20, true).items())
+                .extracting(rs.pametnakupovina.backend.product.CanonicalProductSearchItem::name)
+                .first().asString().startsWithIgnoringCase("alfa");
+        assertThat(canonicalProductSearchService.search("sok od jabuke", 0, 20, true,
+                        new rs.pametnakupovina.backend.privacy.PreciseLocation(44.81, 20.50)).items())
+                .extracting(rs.pametnakupovina.backend.product.CanonicalProductSearchItem::name)
+                .first().asString().startsWithIgnoringCase("zeta");
+    }
+
+    /**
      * Navika sme da odlučuje tek kad je cena ista. Plan ostaje najjeftiniji —
      * ono što kupac obično kupuje ne sme da ga košta ni dinar, jer je cela
      * aplikacija zbog toga i napravljena.

@@ -16,7 +16,9 @@ interface ShoppingApiService {
         @Query("query") query: String,
         @Query("page") page: Int = 0,
         @Query("limit") limit: Int = 10,
-        @Query("includeWithoutPrice") includeWithoutPrice: Boolean = false
+        @Query("includeWithoutPrice") includeWithoutPrice: Boolean = false,
+        @Query("latitude") latitude: Double? = null,
+        @Query("longitude") longitude: Double? = null
     ): CanonicalProductSearchPageDto
 
     @GET("api/v1/products/{canonicalProductId}")

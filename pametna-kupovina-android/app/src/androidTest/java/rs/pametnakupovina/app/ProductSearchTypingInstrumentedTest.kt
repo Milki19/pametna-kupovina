@@ -20,12 +20,14 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
+import com.google.android.gms.location.LocationServices
 import rs.pametnakupovina.app.data.BarcodeScanner
 import rs.pametnakupovina.app.data.ShoppingRepository
 import rs.pametnakupovina.app.data.local.PametnaKupovinaDatabase
 import rs.pametnakupovina.app.data.network.CanonicalProductSearchPageDto
 import rs.pametnakupovina.app.data.network.ShoppingApiService
 import rs.pametnakupovina.app.data.preferences.ClientIdentityStore
+import rs.pametnakupovina.app.location.FusedLocationProvider
 import rs.pametnakupovina.app.ui.ProductSearchViewModel
 import rs.pametnakupovina.app.ui.screens.AlternativePickerDialog
 
@@ -45,7 +47,11 @@ class ProductSearchTypingInstrumentedTest {
             requests.add(query)
             CanonicalProductSearchPageDto(query, page, 10, 20, 2, page == 0)
         } as ShoppingApiService
-        val viewModel = ProductSearchViewModel(ShoppingRepository(api, database.draftItemDao(), ClientIdentityStore(context)), BarcodeScanner())
+        val viewModel = ProductSearchViewModel(
+            ShoppingRepository(api, database.draftItemDao(), ClientIdentityStore(context)),
+            BarcodeScanner(),
+            FusedLocationProvider(context, LocationServices.getFusedLocationProviderClient(context))
+        )
         try {
             compose.setContent {
                 val state by viewModel.uiState.collectAsState()

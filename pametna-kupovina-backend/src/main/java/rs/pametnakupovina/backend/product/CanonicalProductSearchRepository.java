@@ -324,6 +324,62 @@ public class CanonicalProductSearchRepository {
                 ));
     }
 
+    /**
+     * Koliko je daleko najbliža prodavnica (do 20 km) nekog lanca koji danas
+     * ima cenu za proizvod, po proizvodu. Jedan upit: lanci u blizini idu
+     * preko prostornog indeksa, proizvodi preko prisustva po lancu.
+     * ponytail: blizina lanca, ne tačne prodavnice — plan posle proverava
+     * baš tu prodavnicu; dovoljno za redosled pretrage.
+     */
+    public Map<Long, Double> nearestStoreMeters(
+            List<Long> familyIds,
+            double latitude,
+            double longitude
+    ) {
+        if (familyIds.isEmpty()) {
+            return Map.of();
+        }
+
+        return jdbcClient.sql("""
+                        WITH here AS (
+                            SELECT ST_SetSRID(ST_MakePoint(:longitude, :latitude), 4326)::geography
+                                       AS location
+                        ),
+                        nearest_chain AS (
+                            SELECT store.retailer_id,
+                                   MIN(ST_Distance(store.location, here.location)) AS meters
+                            FROM app.store AS store
+                            CROSS JOIN here
+                            WHERE store.active = TRUE
+                              AND store.pricing_eligible = TRUE
+                              AND store.location IS NOT NULL
+                              AND store.geocoding_status IN ('AUTO_VERIFIED', 'MANUALLY_VERIFIED')
+                              AND ST_DWithin(store.location, here.location, 20000)
+                            GROUP BY store.retailer_id
+                        )
+                        SELECT presence.product_family_id,
+                               MIN(nearest_chain.meters) AS meters
+                        FROM app.product_retailer_presence AS presence
+                        JOIN nearest_chain
+                          ON nearest_chain.retailer_id = presence.retailer_id
+                        WHERE presence.product_family_id
+                                  = ANY(STRING_TO_ARRAY(:ids, ',')::BIGINT[])
+                          AND presence.current_offer_count > 0
+                        GROUP BY presence.product_family_id
+                        """)
+                .param("latitude", latitude)
+                .param("longitude", longitude)
+                .param("ids", familyIds.stream().map(String::valueOf)
+                        .collect(Collectors.joining(",")))
+                .query((row, number) -> Map.entry(
+                        row.getLong("product_family_id"),
+                        row.getDouble("meters")
+                ))
+                .list()
+                .stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
     public java.util.Map<Long, List<String>> findKnownRetailers(List<Long> familyIds) {
         if (familyIds.isEmpty()) return java.util.Map.of();
         return jdbcClient.sql("""
