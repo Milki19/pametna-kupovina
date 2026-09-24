@@ -19,5 +19,8 @@ public class LegalPagesConfiguration implements WebMvcConfigurer {
                 "/privatnost/", "/privatnost/index.html");
         registry.addRedirectViewController("/uslovi", "/uslovi/index.html");
         registry.addRedirectViewController("/uslovi/", "/uslovi/index.html");
+        // Web verzija za iPhone: kratka adresa koja se deli prijateljima.
+        registry.addRedirectViewController("/app", "/app/index.html");
+        registry.addRedirectViewController("/app/", "/app/index.html");
     }
 }
