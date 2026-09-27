@@ -7,7 +7,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.HandlerInterceptor;
-import rs.pametnakupovina.backend.shoppinglist.ShoppingListClientTokenPolicy;
+import rs.pametnakupovina.backend.security.DeviceCaller;
 
 import java.time.Duration;
 
@@ -19,17 +19,11 @@ import java.time.Duration;
 @Component
 public class WriteRateLimitInterceptor implements HandlerInterceptor {
 
-    private final ShoppingListClientTokenPolicy clientTokenPolicy;
-    private final AccountRepository accountRepository;
     private final FixedWindowLimiter<Long> perAccount;
 
     public WriteRateLimitInterceptor(
-            ShoppingListClientTokenPolicy clientTokenPolicy,
-            AccountRepository accountRepository,
             @Value("${account.writes-per-minute:120}") int writesPerMinute
     ) {
-        this.clientTokenPolicy = clientTokenPolicy;
-        this.accountRepository = accountRepository;
         this.perAccount = new FixedWindowLimiter<>(writesPerMinute, Duration.ofMinutes(1));
     }
 
@@ -44,19 +38,15 @@ public class WriteRateLimitInterceptor implements HandlerInterceptor {
             return true;
         }
 
-        String clientToken = request.getHeader("X-Client-Token");
+        DeviceCaller caller = DeviceCaller.of(request);
 
-        if (clientToken == null || clientToken.isBlank()) {
+        if (caller == null) {
             // Whoever the endpoint is for will say so itself; this is not the
             // place to invent an authentication rule.
             return true;
         }
 
-        long accountId = accountRepository.forDevice(
-                clientTokenPolicy.validateAndHash(clientToken)
-        );
-
-        if (!perAccount.allow(accountId)) {
+        if (!perAccount.allow(caller.accountId())) {
             throw new ResponseStatusException(
                     HttpStatus.TOO_MANY_REQUESTS,
                     "Previše izmena u kratkom roku. Sačekaj minut pa probaj ponovo."

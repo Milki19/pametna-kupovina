@@ -25,6 +25,29 @@ public class ProductMatchFeedbackService {
             Long decisionId,
             ProductMatchFeedbackRequest request
     ) {
+        if (request == null) {
+            throw new IllegalArgumentException(
+                    "Telo zahteva ne sme biti prazno"
+            );
+        }
+
+        return recordForDevice(
+                decisionId,
+                clientTokenPolicy.validateAndHash(request.clientToken()),
+                request
+        );
+    }
+
+    /**
+     * The same, for a phone the security filter already proved: its token
+     * hash comes from the session, and the request's own token is ignored.
+     */
+    @Transactional
+    public ProductMatchFeedback recordForDevice(
+            Long decisionId,
+            String clientToken,
+            ProductMatchFeedbackRequest request
+    ) {
         if (decisionId == null || decisionId <= 0) {
             throw new IllegalArgumentException(
                     "decisionId mora biti pozitivan broj"
@@ -36,10 +59,6 @@ public class ProductMatchFeedbackService {
                     "Telo zahteva ne sme biti prazno"
             );
         }
-
-        String clientToken = clientTokenPolicy.validateAndHash(
-                request.clientToken()
-        );
 
         if (request.action() == null) {
             throw new IllegalArgumentException(

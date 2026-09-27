@@ -5,15 +5,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.web.server.ResponseStatusException;
-import rs.pametnakupovina.backend.shoppinglist.ShoppingListClientTokenPolicy;
+import rs.pametnakupovina.backend.security.DeviceCaller;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 /**
  * Nothing used to stop one phone from filling the database. Reading stays
@@ -24,31 +19,23 @@ class WriteRateLimitInterceptorTest {
 
     private static final int ALLOWED = 5;
 
-    private final ShoppingListClientTokenPolicy tokenPolicy =
-            mock(ShoppingListClientTokenPolicy.class);
-    private final AccountRepository accountRepository =
-            mock(AccountRepository.class);
+    private static final DeviceCaller FIRST = new DeviceCaller(1L, 11L, "a".repeat(64));
+    private static final DeviceCaller SECOND = new DeviceCaller(2L, 21L, "b".repeat(64));
+
     private WriteRateLimitInterceptor interceptor;
 
     @BeforeEach
     void twoPhonesOnTwoAccounts() {
-        when(tokenPolicy.validateAndHash(anyString()))
-                .thenAnswer(call -> "hash-of-" + call.getArgument(0));
-        when(accountRepository.forDevice("hash-of-prvi")).thenReturn(1L);
-        when(accountRepository.forDevice("hash-of-drugi")).thenReturn(2L);
-
-        interceptor = new WriteRateLimitInterceptor(
-                tokenPolicy, accountRepository, ALLOWED
-        );
+        interceptor = new WriteRateLimitInterceptor(ALLOWED);
     }
 
     @Test
     void writingMoreThanAllowedInAMinuteIsRefused() {
         for (int write = 0; write < ALLOWED; write++) {
-            assertThat(handle(write("prvi"))).isTrue();
+            assertThat(handle(write(FIRST))).isTrue();
         }
 
-        assertThatThrownBy(() -> handle(write("prvi")))
+        assertThatThrownBy(() -> handle(write(FIRST)))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("429")
                 .hasMessageContaining("Sačekaj minut");
@@ -58,47 +45,47 @@ class WriteRateLimitInterceptorTest {
     void oneAccountUsingItsShareLeavesAnotherUntouched() {
         for (int write = 0; write <= ALLOWED; write++) {
             try {
-                handle(write("prvi"));
+                handle(write(FIRST));
             } catch (ResponseStatusException expected) {
                 // Prvi je potrošio svoje.
             }
         }
 
-        assertThat(handle(write("drugi"))).isTrue();
+        assertThat(handle(write(SECOND))).isTrue();
     }
 
     @Test
-    void readingIsNeverCountedAndNeverCostsAQuery() {
+    void readingIsNeverCounted() {
         MockHttpServletRequest request = new MockHttpServletRequest(
                 "GET", "/api/v1/shopping-lists"
         );
-        request.addHeader("X-Client-Token", "prvi");
+        FIRST.attachTo(request);
 
         for (int read = 0; read < ALLOWED * 3; read++) {
             assertThat(handle(request)).isTrue();
         }
 
-        verify(accountRepository, never()).forDevice(anyString());
+        assertThat(handle(write(FIRST))).isTrue();
     }
 
     /**
-     * Which endpoint needs a token is the endpoint's own business; counting
-     * must not start turning anonymous calls away.
+     * Which endpoint needs a phone is the security filter's business;
+     * counting must not start turning anonymous calls away.
      */
     @Test
-    void aWriteWithoutATokenIsLeftToTheEndpoint() {
-        assertThat(handle(new MockHttpServletRequest(
-                "POST", "/api/v1/shopping-lists"
-        ))).isTrue();
-
-        verify(accountRepository, never()).forDevice(anyString());
+    void aWriteWithoutAPhoneIsLeftToTheEndpoint() {
+        for (int write = 0; write < ALLOWED * 3; write++) {
+            assertThat(handle(new MockHttpServletRequest(
+                    "POST", "/api/v1/shopping-lists"
+            ))).isTrue();
+        }
     }
 
-    private MockHttpServletRequest write(String clientToken) {
+    private MockHttpServletRequest write(DeviceCaller caller) {
         MockHttpServletRequest request = new MockHttpServletRequest(
                 "POST", "/api/v1/shopping-lists"
         );
-        request.addHeader("X-Client-Token", clientToken);
+        caller.attachTo(request);
         return request;
     }
 

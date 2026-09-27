@@ -2,7 +2,6 @@ package rs.pametnakupovina.backend.shoppinglist;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import rs.pametnakupovina.backend.account.AccountRepository;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import rs.pametnakupovina.backend.matching.ProductNameNormalizer;
@@ -21,8 +20,6 @@ public class ShoppingListService {
             Set.of("g", "ml", "piece");
 
     private final ShoppingListRepository repository;
-    private final ShoppingListClientTokenPolicy clientTokenPolicy;
-    private final AccountRepository accountRepository;
     private final ShoppingListTextParser textParser;
     private final ProductNameNormalizer productNameNormalizer;
     private final ShoppingIntentResolver shoppingIntentResolver;
@@ -30,16 +27,12 @@ public class ShoppingListService {
 
     public ShoppingListService(
             ShoppingListRepository repository,
-            ShoppingListClientTokenPolicy clientTokenPolicy,
-            AccountRepository accountRepository,
             ShoppingListTextParser textParser,
             ProductNameNormalizer productNameNormalizer,
             ShoppingIntentResolver shoppingIntentResolver,
             ShoppingLineInterpreter lineInterpreter
     ) {
         this.repository = repository;
-        this.clientTokenPolicy = clientTokenPolicy;
-        this.accountRepository = accountRepository;
         this.textParser = textParser;
         this.productNameNormalizer = productNameNormalizer;
         this.shoppingIntentResolver = shoppingIntentResolver;
@@ -49,38 +42,26 @@ public class ShoppingListService {
     @Transactional
     public ShoppingListSummary create(
             CreateShoppingListRequest request,
-            String clientToken
+            long accountId
     ) {
         String name = validListName(
                 request == null ? null : request.name()
         );
 
-        long accountId = accountFor(clientToken);
-
         return repository.create(name, accountId);
     }
 
-    /**
-     * The phone's own random number never leaves this line: it is hashed, and
-     * from there on a list belongs to an account, not to a handset.
-     */
-    private long accountFor(String clientToken) {
-        return accountRepository.forDevice(
-                clientTokenPolicy.validateAndHash(clientToken)
-        );
-    }
 
-    public List<ShoppingListSummary> findAll(String clientToken) {
+    public List<ShoppingListSummary> findAll(long accountId) {
         return repository.findAll(
-                accountFor(clientToken)
+                accountId
         );
     }
 
     public ShoppingListResponse findById(
             Long listId,
-            String clientToken
+            long accountId
     ) {
-        long accountId = accountFor(clientToken);
 
         return repository.findById(listId, accountId)
                 .orElseThrow(() -> new ResponseStatusException(
@@ -91,18 +72,17 @@ public class ShoppingListService {
 
     public ShoppingListResponse requireOwnedList(
             Long listId,
-            String clientToken
+            long accountId
     ) {
-        return findById(listId, clientToken);
+        return findById(listId, accountId);
     }
 
     @Transactional
     public ShoppingListResponse updateList(
             Long listId,
-            String clientToken,
+            long accountId,
             UpdateShoppingListRequest request
     ) {
-        long accountId = accountFor(clientToken);
 
         String name = validListName(
                 request == null ? null : request.name()
@@ -123,10 +103,10 @@ public class ShoppingListService {
     @Transactional
     public ShoppingListItemResponse addItem(
             Long listId,
-            String clientToken,
+            long accountId,
             AddShoppingListItemRequest request
     ) {
-        requireList(listId, clientToken);
+        requireList(listId, accountId);
 
         String name = requiredText(
                 request == null ? null : request.name(),
@@ -227,10 +207,10 @@ public class ShoppingListService {
     @Transactional
     public PasteShoppingListItemsResponse addPastedItems(
             Long listId,
-            String clientToken,
+            long accountId,
             PasteShoppingListItemsRequest request
     ) {
-        requireList(listId, clientToken);
+        requireList(listId, accountId);
 
         String text = request == null ? null : request.text();
 
@@ -304,9 +284,9 @@ public class ShoppingListService {
     public void deleteItem(
             Long listId,
             Long itemId,
-            String clientToken
+            long accountId
     ) {
-        requireList(listId, clientToken);
+        requireList(listId, accountId);
 
         if (!repository.deleteItem(listId, itemId)) {
             throw new ResponseStatusException(
@@ -319,8 +299,7 @@ public class ShoppingListService {
     }
 
     @Transactional
-    public void deleteList(Long listId, String clientToken) {
-        long accountId = accountFor(clientToken);
+    public void deleteList(Long listId, long accountId) {
 
         if (!repository.deactivateList(listId, accountId)) {
             throw listNotFound(listId);
@@ -331,10 +310,10 @@ public class ShoppingListService {
     public ShoppingListItemResponse updateItem(
             Long listId,
             Long itemId,
-            String clientToken,
+            long accountId,
             UpdateShoppingListItemRequest request
     ) {
-        requireList(listId, clientToken);
+        requireList(listId, accountId);
 
         String name = requiredText(
                 request == null ? null : request.name(),
@@ -439,8 +418,7 @@ public class ShoppingListService {
         return updatedItem;
     }
 
-    private void requireList(Long listId, String clientToken) {
-        long accountId = accountFor(clientToken);
+    private void requireList(Long listId, long accountId) {
 
         if (!repository.existsByIdAndAccount(
                 listId,

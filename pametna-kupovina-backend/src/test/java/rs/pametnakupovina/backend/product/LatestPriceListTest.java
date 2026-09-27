@@ -20,6 +20,7 @@ import rs.pametnakupovina.backend.shoppinglist.ShoppingItemRule;
 import rs.pametnakupovina.backend.shoppinglist.ShoppingListService;
 import rs.pametnakupovina.backend.shoppinglist.StoreItemOffer;
 import rs.pametnakupovina.backend.shoppinglist.StoreShoppingOfferRepository;
+import rs.pametnakupovina.backend.TestCallers;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -73,6 +74,9 @@ class LatestPriceListTest {
 
     private static volatile String catalogue = "";
     private static HttpServer csvServer;
+
+    @Autowired
+    private TestCallers callers;
 
     @Autowired
     private PriceImportService priceImportService;
@@ -157,9 +161,9 @@ class LatestPriceListTest {
                 .query(Long.class)
                 .single();
 
-        var list = shoppingListService.create(new CreateShoppingListRequest("Poslednji cenovnik"), "latest");
+        var list = shoppingListService.create(new CreateShoppingListRequest("Poslednji cenovnik"), callers.account("latest"));
         for (String name : List.of("mleko", "jogurt")) {
-            shoppingListService.addItem(list.id(), "latest", new AddShoppingListItemRequest(
+            shoppingListService.addItem(list.id(), callers.account("latest"), new AddShoppingListItemRequest(
                     name, name, null, BigDecimal.ONE, ShoppingItemRule.FLEXIBLE_CATEGORY,
                     new FlexibleItemConstraints(name, null, null, null, null)));
         }

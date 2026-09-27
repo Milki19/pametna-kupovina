@@ -69,7 +69,7 @@ public class ProductMatchDecisionService {
         return decideInternal(
                 query,
                 limit,
-                clientToken,
+                hashOrNull(clientToken),
                 candidate -> true,
                 true,
                 this::canonicalCandidates
@@ -92,7 +92,7 @@ public class ProductMatchDecisionService {
         return decideInternal(
                 query,
                 limit,
-                clientToken,
+                hashOrNull(clientToken),
                 candidateFilter,
                 false,
                 this::canonicalCandidates
@@ -102,11 +102,13 @@ public class ProductMatchDecisionService {
     // Shopping lists match against what the search box finds: products merged
     // across chains, and those sold without a barcode for clients that can
     // confirm one.
+    //
+    // The phone is already proved by its session, so it arrives hashed.
     @Transactional
     public ProductMatchDecision decideFromProductSearch(
             String query,
             int limit,
-            String clientToken,
+            String clientTokenHash,
             Predicate<FuzzyProductCandidate> candidateFilter,
             boolean reuseFeedback,
             boolean includeWithoutBarcode
@@ -114,7 +116,7 @@ public class ProductMatchDecisionService {
         return decideInternal(
                 query,
                 limit,
-                clientToken,
+                clientTokenHash,
                 candidateFilter,
                 reuseFeedback,
                 candidateQuery -> candidateService.findProductSearchCandidates(
@@ -125,6 +127,13 @@ public class ProductMatchDecisionService {
         );
     }
 
+    // Token uređaja je ključ naloga: čuva se samo njegov otisak.
+    private String hashOrNull(String clientToken) {
+        return clientToken == null
+                ? null
+                : clientTokenPolicy.validateAndHash(clientToken);
+    }
+
     private List<FuzzyProductCandidate> canonicalCandidates(String query) {
         return candidateService.findCandidates(query, MAX_LIMIT);
     }
@@ -132,7 +141,7 @@ public class ProductMatchDecisionService {
     private ProductMatchDecision decideInternal(
             String query,
             int limit,
-            String clientToken,
+            String normalizedClientToken,
             Predicate<FuzzyProductCandidate> candidateFilter,
             boolean reuseFeedback,
             Function<String, List<FuzzyProductCandidate>> candidateSource
@@ -146,11 +155,6 @@ public class ProductMatchDecisionService {
                     "Parametar query mora sadržati slovo ili broj"
             );
         }
-
-        // Token uređaja je ključ naloga: čuva se samo njegov otisak.
-        String normalizedClientToken = clientToken == null
-                ? null
-                : clientTokenPolicy.validateAndHash(clientToken);
 
         if (reuseFeedback && normalizedClientToken != null) {
             // A confirmed product without a barcode is not replayed as an

@@ -197,6 +197,9 @@ class PametnaKupovinaBackendApplicationTests {
     private GoogleIdentityVerifier googleVerifier;
 
     @Autowired
+    private TestCallers callers;
+
+    @Autowired
     private rs.pametnakupovina.backend.crash.CrashReportController crashReportController;
 
     @Autowired
@@ -387,6 +390,7 @@ class PametnaKupovinaBackendApplicationTests {
                             app.brand,
                             app.retailer_data_source,
                             app.account_identity,
+                            app.device_session,
                             app.account_device,
                             app.account
                         RESTART IDENTITY
@@ -3305,13 +3309,13 @@ class PametnaKupovinaBackendApplicationTests {
                         new CreateShoppingListRequest(
                                 "Nedeljna kupovina"
                         ),
-                        clientToken
+                        callers.account(clientToken)
                 );
 
         ShoppingListItemResponse createdItem =
                 shoppingListService.addItem(
                         shoppingList.id(),
-                        clientToken,
+                        callers.account(clientToken),
                         new AddShoppingListItemRequest(
                                 "Mleko 1 l",
                                 "  2 x Mleko 1 l  ",
@@ -3337,7 +3341,7 @@ class PametnaKupovinaBackendApplicationTests {
         ShoppingListResponse reloaded =
                 shoppingListService.findById(
                         shoppingList.id(),
-                        clientToken
+                        callers.account(clientToken)
                 );
 
         assertThat(reloaded.items())
@@ -3378,13 +3382,13 @@ class PametnaKupovinaBackendApplicationTests {
         ShoppingListSummary shoppingList =
                 shoppingListService.create(
                         new CreateShoppingListRequest("Piće"),
-                        clientToken
+                        callers.account(clientToken)
                 );
 
         ShoppingListItemResponse item =
                 shoppingListService.addItem(
                         shoppingList.id(),
-                        clientToken,
+                        callers.account(clientToken),
                         new AddShoppingListItemRequest(
                                 "Sok od narandže 1 l",
                                 null,
@@ -3418,21 +3422,21 @@ class PametnaKupovinaBackendApplicationTests {
 
         ShoppingListSummary firstList = shoppingListService.create(
                 new CreateShoppingListRequest("Prva lista"),
-                firstClientToken
+                callers.account(firstClientToken)
         );
 
         ShoppingListSummary secondList = shoppingListService.create(
                 new CreateShoppingListRequest("Druga lista"),
-                secondClientToken
+                callers.account(secondClientToken)
         );
 
-        assertThat(shoppingListService.findAll(firstClientToken))
+        assertThat(shoppingListService.findAll(callers.account(firstClientToken)))
                 .extracting(ShoppingListSummary::id)
                 .containsExactly(firstList.id());
 
         ShoppingListResponse renamed = shoppingListService.updateList(
                 firstList.id(),
-                firstClientToken,
+                callers.account(firstClientToken),
                 new UpdateShoppingListRequest("Preimenovana lista")
         );
 
@@ -3440,7 +3444,7 @@ class PametnaKupovinaBackendApplicationTests {
 
         shoppingListService.addItem(
                 firstList.id(),
-                firstClientToken,
+                callers.account(firstClientToken),
                 new AddShoppingListItemRequest(
                         "Hleb",
                         null,
@@ -3452,7 +3456,7 @@ class PametnaKupovinaBackendApplicationTests {
 
         assertThat(shoppingListService.findById(
                 firstList.id(),
-                firstClientToken
+                callers.account(firstClientToken)
         ).items()).hasSize(1);
 
         // Uređaj se od V95 vodi uz nalog, a spisak pripada nalogu; sam broj
@@ -3474,15 +3478,15 @@ class PametnaKupovinaBackendApplicationTests {
 
         shoppingListService.deleteList(
                 firstList.id(),
-                firstClientToken
+                callers.account(firstClientToken)
         );
 
-        assertThat(shoppingListService.findAll(firstClientToken))
+        assertThat(shoppingListService.findAll(callers.account(firstClientToken)))
                 .isEmpty();
 
         assertThatThrownBy(() -> shoppingListService.findById(
                 firstList.id(),
-                firstClientToken
+                callers.account(firstClientToken)
         )).isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("Spisak nije pronađen");
 
@@ -3495,7 +3499,7 @@ class PametnaKupovinaBackendApplicationTests {
                 .query(Boolean.class)
                 .single()).isFalse();
 
-        assertThat(shoppingListService.findAll(secondClientToken))
+        assertThat(shoppingListService.findAll(callers.account(secondClientToken)))
                 .extracting(ShoppingListSummary::id)
                 .containsExactly(secondList.id());
     }
@@ -3507,31 +3511,28 @@ class PametnaKupovinaBackendApplicationTests {
 
         ShoppingListSummary shoppingList = shoppingListService.create(
                 new CreateShoppingListRequest("Privatna lista"),
-                ownerToken
+                callers.account(ownerToken)
         );
 
-        assertThatThrownBy(() -> shoppingListService.create(
-                new CreateShoppingListRequest("Bez tokena"),
-                " "
-        )).isInstanceOf(ResponseStatusException.class)
-                .hasMessageContaining("X-Client-Token");
+        // A request without a phone never reaches the service: ApiAccessFilter
+        // turns it away (see ApiAccessTest).
 
         assertThatThrownBy(() -> shoppingListService.findById(
                 shoppingList.id(),
-                foreignToken
+                callers.account(foreignToken)
         )).isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("Spisak nije pronađen");
 
         assertThatThrownBy(() -> shoppingListService.updateList(
                 shoppingList.id(),
-                foreignToken,
+                callers.account(foreignToken),
                 new UpdateShoppingListRequest("Tuđa izmena")
         )).isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("Spisak nije pronađen");
 
         assertThatThrownBy(() -> shoppingListService.addItem(
                 shoppingList.id(),
-                foreignToken,
+                callers.account(foreignToken),
                 new AddShoppingListItemRequest(
                         "Tuđa stavka",
                         null,
@@ -3544,13 +3545,13 @@ class PametnaKupovinaBackendApplicationTests {
 
         assertThatThrownBy(() -> shoppingListService.deleteList(
                 shoppingList.id(),
-                foreignToken
+                callers.account(foreignToken)
         )).isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("Spisak nije pronađen");
 
         assertThat(shoppingListService.findById(
                 shoppingList.id(),
-                ownerToken
+                callers.account(ownerToken)
         ).name()).isEqualTo("Privatna lista");
     }
 
@@ -3560,13 +3561,13 @@ class PametnaKupovinaBackendApplicationTests {
 
         ShoppingListSummary shoppingList = shoppingListService.create(
                 new CreateShoppingListRequest("Zalepljeni spisak"),
-                clientToken
+                callers.account(clientToken)
         );
 
         PasteShoppingListItemsResponse result =
                 shoppingListService.addPastedItems(
                         shoppingList.id(),
-                        clientToken,
+                        callers.account(clientToken),
                         new PasteShoppingListItemsRequest(
                                 "  2 x Mleko 1 l  \r\n\r\nHleb\nJogurt x3"
                         )
@@ -3612,7 +3613,7 @@ class PametnaKupovinaBackendApplicationTests {
 
         assertThat(shoppingListService.findById(
                 shoppingList.id(),
-                clientToken
+                callers.account(clientToken)
         ).items()).hasSize(3);
     }
 
@@ -3622,13 +3623,13 @@ class PametnaKupovinaBackendApplicationTests {
 
         ShoppingListSummary shoppingList = shoppingListService.create(
                 new CreateShoppingListRequest("Privatni spisak"),
-                ownerToken
+                callers.account(ownerToken)
         );
 
         assertThatThrownBy(() ->
                 shoppingListService.addPastedItems(
                         shoppingList.id(),
-                        ownerToken,
+                        callers.account(ownerToken),
                         new PasteShoppingListItemsRequest(
                                 " \n\t\r\n"
                         )
@@ -3639,7 +3640,7 @@ class PametnaKupovinaBackendApplicationTests {
         assertThatThrownBy(() ->
                 shoppingListService.addPastedItems(
                         shoppingList.id(),
-                        ownerToken,
+                        callers.account(ownerToken),
                         new PasteShoppingListItemsRequest(
                                 "Mleko\n0 x Hleb"
                         )
@@ -3650,7 +3651,7 @@ class PametnaKupovinaBackendApplicationTests {
         assertThatThrownBy(() ->
                 shoppingListService.addPastedItems(
                         shoppingList.id(),
-                        "pk045-foreign",
+                        callers.account("pk045-foreign"),
                         new PasteShoppingListItemsRequest(
                                 "Mleko"
                         )
@@ -3660,7 +3661,7 @@ class PametnaKupovinaBackendApplicationTests {
 
         assertThat(shoppingListService.findById(
                 shoppingList.id(),
-                ownerToken
+                callers.account(ownerToken)
         ).items()).isEmpty();
     }
 
@@ -3670,12 +3671,12 @@ class PametnaKupovinaBackendApplicationTests {
 
         ShoppingListSummary shoppingList = shoppingListService.create(
                 new CreateShoppingListRequest("Fleksibilna korpa"),
-                clientToken
+                callers.account(clientToken)
         );
 
         ShoppingListItemResponse item = shoppingListService.addItem(
                 shoppingList.id(),
-                clientToken,
+                callers.account(clientToken),
                 new AddShoppingListItemRequest(
                         "Bilo koje mleko",
                         "Bilo koje mleko 1 l",
@@ -3789,12 +3790,12 @@ class PametnaKupovinaBackendApplicationTests {
 
         ShoppingListSummary shoppingList = shoppingListService.create(
                 new CreateShoppingListRequest("Matching korpa"),
-                clientToken
+                callers.account(clientToken)
         );
 
         shoppingListService.addItem(
                 shoppingList.id(),
-                clientToken,
+                callers.account(clientToken),
                 new AddShoppingListItemRequest(
                         "PK046 Imlek mleko 1 l",
                         null,
@@ -3807,7 +3808,7 @@ class PametnaKupovinaBackendApplicationTests {
         ShoppingListMatchingResponse result =
                 shoppingListMatchingService.match(
                         shoppingList.id(),
-                        clientToken
+                        callers.caller(clientToken)
                 );
 
         assertThat(result.readyForOptimization()).isTrue();
@@ -3943,12 +3944,12 @@ class PametnaKupovinaBackendApplicationTests {
 
         ShoppingListSummary shoppingList = shoppingListService.create(
                 new CreateShoppingListRequest("PK049 korpa"),
-                "pk049-owner"
+                callers.account("pk049-owner")
         );
 
         shoppingListService.addItem(
                 shoppingList.id(),
-                "pk049-owner",
+                callers.account("pk049-owner"),
                 new AddShoppingListItemRequest(
                         "PK049 hleb",
                         null,
@@ -4091,13 +4092,13 @@ class PametnaKupovinaBackendApplicationTests {
         String clientToken = "pk050-flexible-prefix";
         ShoppingListSummary shoppingList = shoppingListService.create(
                 new CreateShoppingListRequest("Fleksibilna korpa"),
-                clientToken
+                callers.account(clientToken)
         );
 
         for (String category : List.of("voda", "vino", "hleb")) {
             shoppingListService.addItem(
                     shoppingList.id(),
-                    clientToken,
+                    callers.account(clientToken),
                     new AddShoppingListItemRequest(
                             category,
                             category,
@@ -4343,7 +4344,7 @@ class PametnaKupovinaBackendApplicationTests {
         String clientToken = "pk067-precise-types";
         ShoppingListSummary shoppingList = shoppingListService.create(
                 new CreateShoppingListRequest("Precizni tipovi"),
-                clientToken
+                callers.account(clientToken)
         );
 
         for (String category : List.of(
@@ -4355,7 +4356,7 @@ class PametnaKupovinaBackendApplicationTests {
         )) {
             shoppingListService.addItem(
                     shoppingList.id(),
-                    clientToken,
+                    callers.account(clientToken),
                     new AddShoppingListItemRequest(
                             category,
                             category,
@@ -4568,22 +4569,22 @@ class PametnaKupovinaBackendApplicationTests {
         when(googleVerifier.subjectOf("token-od-google")).thenReturn("isti-covek");
 
         shoppingListService.create(
-                new CreateShoppingListRequest("Stari telefon"), "telefon-1");
-        accountSignInService.signInWithGoogle("telefon-1", "token-od-google");
+                new CreateShoppingListRequest("Stari telefon"), callers.account("telefon-1"));
+        accountSignInService.signInWithGoogle(callers.caller("telefon-1"), "token-od-google");
 
         // Nov telefon: svoj spisak, pa prijava istim nalogom.
         shoppingListService.create(
-                new CreateShoppingListRequest("Novi telefon"), "telefon-2");
-        assertThat(accountSignInService.state("telefon-2").signedIn()).isFalse();
+                new CreateShoppingListRequest("Novi telefon"), callers.account("telefon-2"));
+        assertThat(accountSignInService.state(callers.caller("telefon-2")).signedIn()).isFalse();
 
-        accountSignInService.signInWithGoogle("telefon-2", "token-od-google");
+        accountSignInService.signInWithGoogle(callers.caller("telefon-2"), "token-od-google");
 
-        assertThat(accountSignInService.state("telefon-2").signedIn()).isTrue();
-        assertThat(shoppingListService.findAll("telefon-2"))
+        assertThat(accountSignInService.state(callers.caller("telefon-2")).signedIn()).isTrue();
+        assertThat(shoppingListService.findAll(callers.account("telefon-2")))
                 .extracting(ShoppingListSummary::name)
                 .containsExactlyInAnyOrder("Stari telefon", "Novi telefon");
         // Stari telefon gleda u isti nalog, pa vidi isto.
-        assertThat(shoppingListService.findAll("telefon-1"))
+        assertThat(shoppingListService.findAll(callers.account("telefon-1")))
                 .extracting(ShoppingListSummary::name)
                 .containsExactlyInAnyOrder("Stari telefon", "Novi telefon");
         // Prazan nalog sa kog je telefon prešao se ne zadržava.
@@ -4598,10 +4599,10 @@ class PametnaKupovinaBackendApplicationTests {
      */
     @Test
     void aHouseholdPhoneJoinsWithEverythingItHad() {
-        shoppingListService.create(new CreateShoppingListRequest("Kućni spisak"), "mama");
-        shoppingListService.create(new CreateShoppingListRequest("Tatin spisak"), "tata");
-        loyaltyCardService.add("tata", "Tatina kartica", "123456789", "CODE_128");
-        loyaltyCardService.add("mama", "Ista kartica", "123456789", "CODE_128");
+        shoppingListService.create(new CreateShoppingListRequest("Kućni spisak"), callers.account("mama"));
+        shoppingListService.create(new CreateShoppingListRequest("Tatin spisak"), callers.account("tata"));
+        loyaltyCardService.add(callers.account("tata"), "Tatina kartica", "123456789", "CODE_128");
+        loyaltyCardService.add(callers.account("mama"), "Ista kartica", "123456789", "CODE_128");
         long tata = jdbcClient.sql("""
                         SELECT account_id FROM app.shopping_list WHERE name = 'Tatin spisak'
                         """).query(Long.class).single();
@@ -4610,35 +4611,37 @@ class PametnaKupovinaBackendApplicationTests {
                 VALUES (?,'DOMACINSTVO-1','Pekara','2026-09-01T08:00:00Z',120.00)
                 """).param(tata).update();
 
-        var invite = accountSignInService.invite("mama");
-        accountSignInService.join("tata", invite.code());
+        var invite = accountSignInService.invite(callers.caller("mama"));
+        accountSignInService.join(callers.caller("tata"), invite.code());
 
-        assertThat(shoppingListService.findAll("tata"))
+        assertThat(shoppingListService.findAll(callers.account("tata")))
                 .extracting(ShoppingListSummary::name)
                 .containsExactlyInAnyOrder("Kućni spisak", "Tatin spisak");
-        assertThat(receiptService.history("mama", 50)).singleElement()
+        assertThat(receiptService.history(callers.account("mama"), 50)).singleElement()
                 .satisfies(receipt -> assertThat(receipt.shopName()).isEqualTo("Pekara"));
         // Ista kartica u oba telefona ostaje jedna.
-        assertThat(loyaltyCardService.cards("mama")).singleElement()
+        assertThat(loyaltyCardService.cards(callers.account("mama"))).singleElement()
                 .satisfies(card -> assertThat(card.name()).isEqualTo("Ista kartica"));
         assertThat(jdbcClient.sql("SELECT COUNT(*) FROM app.account")
                 .query(Long.class).single()).isEqualTo(1L);
 
         // Kod radi jednom, a istekao ne radi uopšte.
-        assertThatThrownBy(() -> accountSignInService.join("komsija", invite.code()))
+        assertThatThrownBy(() -> accountSignInService.join(callers.caller("komsija"), invite.code()))
                 .hasMessageContaining("404");
-        var stale = accountSignInService.invite("mama");
+        var stale = accountSignInService.invite(callers.caller("mama"));
         jdbcClient.sql("UPDATE app.account SET invite_expires_at = NOW() - INTERVAL '1 minute'").update();
-        assertThatThrownBy(() -> accountSignInService.join("komsija", stale.code()))
+        assertThatThrownBy(() -> accountSignInService.join(callers.caller("komsija"), stale.code()))
                 .hasMessageContaining("404");
+        // Komšijin telefon je ovde dobio svoj prazan nalog; ne treba nam dalje.
+        accountSignInService.delete(callers.caller("komsija"));
 
         // Brisanje u domaćinstvu: tata izlazi, a mamino ostaje netaknuto.
-        assertThat(accountSignInService.state("mama").household()).isTrue();
-        accountSignInService.delete("tata");
-        assertThat(accountSignInService.state("mama").household()).isFalse();
-        assertThat(receiptService.history("mama", 50)).hasSize(1);
+        assertThat(accountSignInService.state(callers.caller("mama")).household()).isTrue();
+        accountSignInService.delete(callers.caller("tata"));
+        assertThat(accountSignInService.state(callers.caller("mama")).household()).isFalse();
+        assertThat(receiptService.history(callers.account("mama"), 50)).hasSize(1);
         // Poslednji na nalogu briše sve.
-        accountSignInService.delete("mama");
+        accountSignInService.delete(callers.caller("mama"));
         assertThat(jdbcClient.sql("SELECT COUNT(*) FROM app.account").query(Long.class).single()).isZero();
         assertThat(jdbcClient.sql("SELECT COUNT(*) FROM app.receipt").query(Long.class).single()).isZero();
     }
@@ -4677,7 +4680,7 @@ class PametnaKupovinaBackendApplicationTests {
         String code = "https://suf.purs.gov.rs/v/?vl="
                 + "A0xVRURWOExCRHQxT3YxbzA0AQAANAEAAEDr0gEAAAAAAAABg82GSNIAAApNaWxvamtvIDIy";
 
-        var receipt = receiptService.scan("telefon-racun", code);
+        var receipt = receiptService.scan(callers.account("telefon-racun"), code);
 
         assertThat(receipt.invoiceNumber()).isEqualTo("LUEDV8LB-Dt1Ov1o0-308");
         // Ime prodavnice daje tek stranica Poreske uprave; oznaka kupca iz
@@ -4688,11 +4691,11 @@ class PametnaKupovinaBackendApplicationTests {
         assertThat(receipt.itemsRead()).isFalse();
 
         // Skeniran dvaput je i dalje jedan račun.
-        assertThat(receiptService.scan("telefon-racun", code).id())
+        assertThat(receiptService.scan(callers.account("telefon-racun"), code).id())
                 .isEqualTo(receipt.id());
-        assertThat(receiptService.history("telefon-racun", 50)).hasSize(1);
+        assertThat(receiptService.history(callers.account("telefon-racun"), 50)).hasSize(1);
 
-        var spending = receiptService.spending("telefon-racun", null);
+        var spending = receiptService.spending(callers.account("telefon-racun"), null);
         assertThat(spending.byMonth()).singleElement().satisfies(month -> {
             assertThat(month.month()).isEqualTo(java.time.LocalDate.of(2022, 10, 1));
             assertThat(month.spent())
@@ -4703,12 +4706,12 @@ class PametnaKupovinaBackendApplicationTests {
                 assertThat(shop.shopName()).isEqualTo("Nepoznata prodavnica"));
 
         // Tuđi telefon ne vidi ništa od toga.
-        assertThat(receiptService.history("drugi-telefon", 50)).isEmpty();
+        assertThat(receiptService.history(callers.account("drugi-telefon"), 50)).isEmpty();
 
         // Navike se čitaju i kad ih još nema: prazno, bez greške. Ovaj poziv
         // je falio, pa je upit sa greškom u grupisanju stigao na server.
-        assertThat(receiptService.habits("telefon-racun", 20)).isEmpty();
-        assertThat(receiptService.habits("drugi-telefon", 20)).isEmpty();
+        assertThat(receiptService.habits(callers.account("telefon-racun"), 20)).isEmpty();
+        assertThat(receiptService.habits(callers.account("drugi-telefon"), 20)).isEmpty();
     }
 
     /**
@@ -4719,7 +4722,7 @@ class PametnaKupovinaBackendApplicationTests {
     @Test
     void weeklySpendingBucketsTheMonthAndIgnoresEverythingOutsideIt() {
         var list = shoppingListService.create(
-                new CreateShoppingListRequest("Nedeljna potrošnja"), "telefon-nedelja");
+                new CreateShoppingListRequest("Nedeljna potrošnja"), callers.account("telefon-nedelja"));
         long accountId = jdbcClient.sql(
                         "SELECT account_id FROM app.shopping_list WHERE id = ?")
                 .param(list.id()).query(Long.class).single();
@@ -4735,7 +4738,7 @@ class PametnaKupovinaBackendApplicationTests {
         long drugiNalog = jdbcClient.sql(
                         "SELECT account_id FROM app.shopping_list WHERE id = ?")
                 .param(shoppingListService.create(
-                        new CreateShoppingListRequest("Tuđ spisak"), "telefon-druga-nedelja"
+                        new CreateShoppingListRequest("Tuđ spisak"), callers.account("telefon-druga-nedelja")
                 ).id())
                 .query(Long.class).single();
         jdbcClient.sql("""
@@ -4744,7 +4747,7 @@ class PametnaKupovinaBackendApplicationTests {
                 """).param(drugiNalog).update();
 
         var byWeek = receiptService
-                .spending("telefon-nedelja", java.time.LocalDate.of(2026, 6, 1))
+                .spending(callers.account("telefon-nedelja"), java.time.LocalDate.of(2026, 6, 1))
                 .byWeek();
 
         assertThat(byWeek).extracting(w -> w.bucket()).containsExactly(0, 1, 4);
@@ -4770,7 +4773,7 @@ class PametnaKupovinaBackendApplicationTests {
                 """).param(milk).update();
 
         var byCategory = receiptService
-                .spending("telefon-nedelja", java.time.LocalDate.of(2026, 6, 1))
+                .spending(callers.account("telefon-nedelja"), java.time.LocalDate.of(2026, 6, 1))
                 .byCategory();
         assertThat(byCategory).extracting(c -> c.category())
                 .containsExactly("Ostalo", "Mlečni proizvodi i jaja");
@@ -4779,7 +4782,7 @@ class PametnaKupovinaBackendApplicationTests {
 
         // Prazan mesec ne puca, samo je prazan.
         var january = receiptService
-                .spending("telefon-nedelja", java.time.LocalDate.of(2026, 1, 1));
+                .spending(callers.account("telefon-nedelja"), java.time.LocalDate.of(2026, 1, 1));
         assertThat(january.byWeek()).isEmpty();
         assertThat(january.byCategory()).isEmpty();
     }
@@ -4791,58 +4794,58 @@ class PametnaKupovinaBackendApplicationTests {
     @Test
     void aLoyaltyCardIsKeptForTheTillAndNeverShownToAnotherPhone() {
         var card = loyaltyCardService.add(
-                "telefon-kartica", "Super Kartica", "6108560008584550", "EAN_13");
+                callers.account("telefon-kartica"), "Super Kartica", "6108560008584550", "EAN_13");
 
         assertThat(card.cardNumber()).isEqualTo("6108560008584550");
         assertThat(card.barcodeFormat()).isEqualTo("EAN_13");
 
         // Ista kartica dodata dvaput je i dalje jedna, samo osveženog naziva.
         var again = loyaltyCardService.add(
-                "telefon-kartica", "Super kartica (žena)", "6108560008584550", "EAN_13");
+                callers.account("telefon-kartica"), "Super kartica (žena)", "6108560008584550", "EAN_13");
         assertThat(again.id()).isEqualTo(card.id());
-        assertThat(loyaltyCardService.cards("telefon-kartica"))
+        assertThat(loyaltyCardService.cards(callers.account("telefon-kartica")))
                 .singleElement()
                 .satisfies(only ->
                         assertThat(only.name()).isEqualTo("Super kartica (žena)"));
 
-        assertThat(loyaltyCardService.cards("drugi-telefon")).isEmpty();
+        assertThat(loyaltyCardService.cards(callers.account("drugi-telefon"))).isEmpty();
         assertThatThrownBy(() ->
-                loyaltyCardService.remove("drugi-telefon", card.id()))
+                loyaltyCardService.remove(callers.account("drugi-telefon"), card.id()))
                 .hasMessageContaining("404");
 
         // Prazan broj i oblik koda koji nijedna kasa ne čita se odbijaju.
         assertThatThrownBy(() ->
-                loyaltyCardService.add("telefon-kartica", "Prazna", "   ", "EAN_13"))
+                loyaltyCardService.add(callers.account("telefon-kartica"), "Prazna", "   ", "EAN_13"))
                 .hasMessageContaining("ne sme biti prazan");
         assertThatThrownBy(() ->
-                loyaltyCardService.add("telefon-kartica", "Čudna", "123456", "MAGIJA"))
+                loyaltyCardService.add(callers.account("telefon-kartica"), "Čudna", "123456", "MAGIJA"))
                 .hasMessageContaining("Nepoznat oblik");
 
-        loyaltyCardService.remove("telefon-kartica", card.id());
-        assertThat(loyaltyCardService.cards("telefon-kartica")).isEmpty();
+        loyaltyCardService.remove(callers.account("telefon-kartica"), card.id());
+        assertThat(loyaltyCardService.cards(callers.account("telefon-kartica"))).isEmpty();
     }
 
     @Test
     void aPhoneKeepsOneAccountAndTwoPhonesNeverShareLists() {
         var first = shoppingListService.create(
-                new CreateShoppingListRequest("Prvi spisak"), "uredjaj-a");
+                new CreateShoppingListRequest("Prvi spisak"), callers.account("uredjaj-a"));
         shoppingListService.create(
-                new CreateShoppingListRequest("Drugi spisak"), "uredjaj-b");
+                new CreateShoppingListRequest("Drugi spisak"), callers.account("uredjaj-b"));
 
-        assertThat(shoppingListService.findAll("uredjaj-a"))
+        assertThat(shoppingListService.findAll(callers.account("uredjaj-a")))
                 .extracting(ShoppingListSummary::name)
                 .containsExactly("Prvi spisak");
-        assertThat(shoppingListService.findAll("uredjaj-b"))
+        assertThat(shoppingListService.findAll(callers.account("uredjaj-b")))
                 .extracting(ShoppingListSummary::name)
                 .containsExactly("Drugi spisak");
         // Tuđi spisak ne postoji za ovaj telefon — ni da ga vidi, ni da sazna
         // da postoji.
-        assertThatThrownBy(() -> shoppingListService.findById(first.id(), "uredjaj-b"))
+        assertThatThrownBy(() -> shoppingListService.findById(first.id(), callers.account("uredjaj-b")))
                 .hasMessageContaining("404");
 
         // Isti telefon ostaje na istom nalogu koliko god puta se javio.
         shoppingListService.create(
-                new CreateShoppingListRequest("Treći spisak"), "uredjaj-a");
+                new CreateShoppingListRequest("Treći spisak"), callers.account("uredjaj-a"));
         assertThat(jdbcClient.sql(
                         "SELECT COUNT(*) FROM app.account_device").query(Long.class).single())
                 .isEqualTo(2L);
@@ -4961,8 +4964,8 @@ class PametnaKupovinaBackendApplicationTests {
         productCatalogMaintenanceService.refreshRetailer(retailer);
 
         var list = shoppingListService.create(
-                new CreateShoppingListRequest("Navika"), "telefon-navika");
-        shoppingListService.addItem(list.id(), "telefon-navika",
+                new CreateShoppingListRequest("Navika"), callers.account("telefon-navika"));
+        shoppingListService.addItem(list.id(), callers.account("telefon-navika"),
                 new AddShoppingListItemRequest("mleko", "mleko", null, BigDecimal.ONE,
                         ShoppingItemRule.FLEXIBLE_CATEGORY,
                         new FlexibleItemConstraints("mleko", null, null, null, null)));
@@ -4998,7 +5001,7 @@ class PametnaKupovinaBackendApplicationTests {
         assertThat(chosen.productName()).isEqualTo("BETA mleko 2,8%mm 1l");
 
         // Isto to, ispisano kao „šta obično kupuješ".
-        assertThat(receiptService.habits("telefon-navika", 20))
+        assertThat(receiptService.habits(callers.account("telefon-navika"), 20))
                 .singleElement()
                 .satisfies(habit -> {
                     assertThat(habit.productFamilyId()).isEqualTo(betaFamily);
@@ -5144,9 +5147,9 @@ class PametnaKupovinaBackendApplicationTests {
                 JOIN app.retailer_product p ON p.id=a.retailer_product_id
                 WHERE p.retailer_id=? AND t.code='NON_ALCOHOLIC_BEER'
                 """).param(retailer).query(Integer.class).single()).isEqualTo(5);
-        var list = shoppingListService.create(new CreateShoppingListRequest("Beer regression"),"beer-regression");
+        var list = shoppingListService.create(new CreateShoppingListRequest("Beer regression"),callers.account("beer-regression"));
         for (String request : List.of("pivo", "bezalkoholno pivo", "pivo 0.0")) {
-            shoppingListService.addItem(list.id(),"beer-regression",new AddShoppingListItemRequest(
+            shoppingListService.addItem(list.id(),callers.account("beer-regression"),new AddShoppingListItemRequest(
                     request,request,null,BigDecimal.ONE,ShoppingItemRule.FLEXIBLE_CATEGORY,
                     new FlexibleItemConstraints(request,null,null,null,null)));
         }
@@ -5210,12 +5213,12 @@ class PametnaKupovinaBackendApplicationTests {
                 .contains("fruit:FRUIT_YOGURT", "kefir:KEFIR", "ayran:AYRAN", "choco:FLAVORED_MILK", "milk:MILK",
                         "choco-short:FLAVORED_MILK", "vanilla:FLAVORED_MILK")
                 .noneMatch(s -> s.startsWith("wafer:") || s.equals("cheese:MILK"));
-        var list = shoppingListService.create(new CreateShoppingListRequest("M2 amounts"),"m2-amounts");
-        assertThatThrownBy(() -> shoppingListService.addItem(list.id(),"m2-amounts",new AddShoppingListItemRequest(
+        var list = shoppingListService.create(new CreateShoppingListRequest("M2 amounts"),callers.account("m2-amounts"));
+        assertThatThrownBy(() -> shoppingListService.addItem(list.id(),callers.account("m2-amounts"),new AddShoppingListItemRequest(
                 "jogurt nepoznati ukus","jogurt nepoznati ukus",null,BigDecimal.ONE,ShoppingItemRule.FLEXIBLE_CATEGORY,
                 new FlexibleItemConstraints("jogurt nepoznati ukus",null,null,null,null))))
                 .isInstanceOf(ResponseStatusException.class);
-        var item = shoppingListService.addItem(list.id(),"m2-amounts",new AddShoppingListItemRequest(
+        var item = shoppingListService.addItem(list.id(),callers.account("m2-amounts"),new AddShoppingListItemRequest(
                 "jogurt","jogurt 1kg",null,BigDecimal.ONE,ShoppingItemRule.FLEXIBLE_CATEGORY,
                 new FlexibleItemConstraints("jogurt",null,null,null,"g",new BigDecimal("1000"))));
         assertThat(item.flexibleConstraints().targetQuantity()).isEqualByComparingTo("1000");
@@ -5242,9 +5245,9 @@ class PametnaKupovinaBackendApplicationTests {
         jdbcClient.sql("UPDATE app.shopping_list_item SET required_base_unit='ml' WHERE id=?").param(item.id()).update();
         assertThat(storeShoppingOfferRepository.findOffers(list.id(),List.of(store),LocalDate.of(2026,9,6)).getFirst().available()).isFalse();
 
-        var flavors = shoppingListService.create(new CreateShoppingListRequest("M2 flavors"),"m2-flavors");
+        var flavors = shoppingListService.create(new CreateShoppingListRequest("M2 flavors"),callers.account("m2-flavors"));
         for (String name : List.of("jogurt jagoda", "mleko čokoladno", "kefir", "mleko", "jogurt jagoda 1 kg")) {
-            var added = shoppingListService.addItem(flavors.id(), "m2-flavors", new AddShoppingListItemRequest(
+            var added = shoppingListService.addItem(flavors.id(), callers.account("m2-flavors"), new AddShoppingListItemRequest(
                     name,name,null,BigDecimal.ONE,ShoppingItemRule.FLEXIBLE_CATEGORY,
                     new FlexibleItemConstraints(name,null,null,null,null)));
             assertThat(added.matchingStatus()).isEqualTo(ShoppingItemMatchingStatus.CONFIRMED);
@@ -5523,11 +5526,11 @@ class PametnaKupovinaBackendApplicationTests {
                 .refreshEligibility(retailerId);
         ShoppingListSummary shoppingList = shoppingListService.create(
                 new CreateShoppingListRequest("Mapirana korpa"),
-                "mapped-price-owner"
+                callers.account("mapped-price-owner")
         );
         shoppingListService.addItem(
                 shoppingList.id(),
-                "mapped-price-owner",
+                callers.account("mapped-price-owner"),
                 new AddShoppingListItemRequest(
                         "Mapirani proizvod",
                         null,

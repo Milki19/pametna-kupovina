@@ -3,7 +3,6 @@ package rs.pametnakupovina.backend.shoppinglist;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.server.ResponseStatusException;
-import rs.pametnakupovina.backend.account.AccountRepository;
 import rs.pametnakupovina.backend.matching.ProductNameNormalizer;
 
 import java.math.BigDecimal;
@@ -19,10 +18,10 @@ import static org.mockito.Mockito.when;
 
 class ShoppingListServiceCanonicalSelectionTest {
 
+    private static final long ACCOUNT = 3L;
+
     private final ShoppingListRepository repository =
             mock(ShoppingListRepository.class);
-    private final ShoppingListClientTokenPolicy tokenPolicy =
-            mock(ShoppingListClientTokenPolicy.class);
     private final ShoppingListTextParser textParser =
             mock(ShoppingListTextParser.class);
     private final ProductNameNormalizer normalizer =
@@ -31,8 +30,6 @@ class ShoppingListServiceCanonicalSelectionTest {
             mock(ShoppingIntentResolver.class);
     private final ShoppingLineInterpreter lineInterpreter =
             mock(ShoppingLineInterpreter.class);
-    private final AccountRepository accountRepository =
-            mock(AccountRepository.class);
 
     private ShoppingListService service;
 
@@ -40,17 +37,12 @@ class ShoppingListServiceCanonicalSelectionTest {
     void setUp() {
         service = new ShoppingListService(
                 repository,
-                tokenPolicy,
-                accountRepository,
                 textParser,
                 normalizer,
                 intentResolver,
                 lineInterpreter
         );
-        when(tokenPolicy.validateAndHash("client-token"))
-                .thenReturn("client-token-hash");
-        when(accountRepository.forDevice("client-token-hash")).thenReturn(3L);
-        when(repository.existsByIdAndAccount(7L, 3L)).thenReturn(true);
+        when(repository.existsByIdAndAccount(7L, ACCOUNT)).thenReturn(true);
     }
 
     @Test
@@ -62,7 +54,7 @@ class ShoppingListServiceCanonicalSelectionTest {
 
         service.addItem(
                 7L,
-                "client-token",
+                ACCOUNT,
                 new AddShoppingListItemRequest(
                         "Proizvod bez barkoda",
                         "unos korisnika",
@@ -94,7 +86,7 @@ class ShoppingListServiceCanonicalSelectionTest {
 
         assertThatThrownBy(() -> service.addItem(
                 7L,
-                "client-token",
+                ACCOUNT,
                 new AddShoppingListItemRequest(
                         "Nepostojeći proizvod",
                         null,
@@ -122,7 +114,7 @@ class ShoppingListServiceCanonicalSelectionTest {
 
         assertThatThrownBy(() -> service.addItem(
                 7L,
-                "client-token",
+                ACCOUNT,
                 new AddShoppingListItemRequest(
                         "Pogrešan barkod",
                         null,
@@ -142,7 +134,7 @@ class ShoppingListServiceCanonicalSelectionTest {
     void flexibleItemCannotSelectCanonicalProduct() {
         assertThatThrownBy(() -> service.addItem(
                 7L,
-                "client-token",
+                ACCOUNT,
                 new AddShoppingListItemRequest(
                         "Voda",
                         null,
@@ -170,7 +162,7 @@ class ShoppingListServiceCanonicalSelectionTest {
 
         service.addItem(
                 7L,
-                "client-token",
+                ACCOUNT,
                 new AddShoppingListItemRequest(
                         "Grčki jogurt Pilos 400 g",
                         "grcki jogurt",
@@ -202,7 +194,7 @@ class ShoppingListServiceCanonicalSelectionTest {
 
         assertThatThrownBy(() -> service.addItem(
                 7L,
-                "client-token",
+                ACCOUNT,
                 new AddShoppingListItemRequest(
                         "Nepostojeća porodica",
                         null,

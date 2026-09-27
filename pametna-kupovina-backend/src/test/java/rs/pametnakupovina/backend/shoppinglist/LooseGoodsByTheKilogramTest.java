@@ -13,6 +13,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 import rs.pametnakupovina.backend.priceimport.PriceImportService;
+import rs.pametnakupovina.backend.TestCallers;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -73,6 +74,9 @@ class LooseGoodsByTheKilogramTest {
             + "8;Sveže i prerađeno meso;" + TURKEY_MINCE + ";;;kg;Test format;399,99;;13-09-2026;399,99;;;10\n";
 
     private static HttpServer csvServer;
+
+    @Autowired
+    private TestCallers callers;
 
     @Autowired
     private PriceImportService priceImportService;
@@ -164,10 +168,10 @@ class LooseGoodsByTheKilogramTest {
         assertThat(soldByTheKilogram(MANGO)).isFalse();
         assertThat(soldByTheKilogram(TURKEY_MINCE)).isFalse();
 
-        var list = shoppingListService.create(new CreateShoppingListRequest("Pijaca"), TOKEN);
+        var list = shoppingListService.create(new CreateShoppingListRequest("Pijaca"), callers.account(TOKEN));
         shoppingListService.addPastedItems(
                 list.id(),
-                TOKEN,
+                callers.account(TOKEN),
                 new PasteShoppingListItemsRequest("""
                         jabuke 2kg
                         ćevapi 3kg

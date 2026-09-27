@@ -13,6 +13,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 import rs.pametnakupovina.backend.priceimport.PriceImportService;
+import rs.pametnakupovina.backend.TestCallers;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -79,6 +80,9 @@ class SlavaListTest {
             """;
 
     private static HttpServer csvServer;
+
+    @Autowired
+    private TestCallers callers;
 
     @Autowired
     private PriceImportService priceImportService;
@@ -152,11 +156,11 @@ class SlavaListTest {
     @Test
     void everyLineLandsOnWhatTheShopperMeans() {
         long shop = shop();
-        var list = shoppingListService.create(new CreateShoppingListRequest("Slava"), TOKEN);
+        var list = shoppingListService.create(new CreateShoppingListRequest("Slava"), callers.account(TOKEN));
 
         List<ShoppingListItemResponse> items = shoppingListService.addPastedItems(
                 list.id(),
-                TOKEN,
+                callers.account(TOKEN),
                 new PasteShoppingListItemsRequest("""
                         Ulje
                         Ćevapi 1kg
@@ -195,11 +199,11 @@ class SlavaListTest {
 
     @Test
     void aLinePastedBeforeTheWordsWereKnownIsReadAgain() {
-        var list = shoppingListService.create(new CreateShoppingListRequest("Stari spisak"), TOKEN);
+        var list = shoppingListService.create(new CreateShoppingListRequest("Stari spisak"), callers.account(TOKEN));
         // How "Kisela voda 1.75" was stored before a bare number was read.
         ShoppingListItemResponse old = shoppingListService.addItem(
                 list.id(),
-                TOKEN,
+                callers.account(TOKEN),
                 new AddShoppingListItemRequest(
                         "Kisela voda 1.75",
                         "Kisela voda 1.75",
@@ -209,9 +213,9 @@ class SlavaListTest {
                 )
         );
 
-        matchingService.match(list.id(), TOKEN, true);
+        matchingService.match(list.id(), callers.caller(TOKEN), true);
 
-        ShoppingListItemResponse reread = shoppingListService.findById(list.id(), TOKEN)
+        ShoppingListItemResponse reread = shoppingListService.findById(list.id(), callers.account(TOKEN))
                 .items()
                 .stream()
                 .filter(item -> item.id().equals(old.id()))

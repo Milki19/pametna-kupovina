@@ -19,6 +19,7 @@ import rs.pametnakupovina.backend.shoppinglist.ShoppingItemRule;
 import rs.pametnakupovina.backend.shoppinglist.ShoppingListService;
 import rs.pametnakupovina.backend.shoppinglist.StoreItemOffer;
 import rs.pametnakupovina.backend.shoppinglist.StoreShoppingOfferRepository;
+import rs.pametnakupovina.backend.TestCallers;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -62,6 +63,9 @@ class PriceCheckTest {
     private static final LocalDate PRICE_DATE = LocalDate.of(2026, 9, 13);
 
     private static HttpServer csvServer;
+
+    @Autowired
+    private TestCallers callers;
 
     @Autowired
     private PriceImportService priceImportService;
@@ -222,11 +226,11 @@ class PriceCheckTest {
 
         var list = shoppingListService.create(
                 new CreateShoppingListRequest("Šećer"),
-                "price-check"
+                callers.account("price-check")
         );
         shoppingListService.addItem(
                 list.id(),
-                "price-check",
+                callers.account("price-check"),
                 new AddShoppingListItemRequest(
                         "Šećer 25 kg",
                         "Šećer 25 kg",

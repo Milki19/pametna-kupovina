@@ -4,8 +4,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
-import rs.pametnakupovina.backend.account.AccountRepository;
-import rs.pametnakupovina.backend.shoppinglist.ShoppingListClientTokenPolicy;
 
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -27,8 +25,6 @@ public class ReceiptService {
     private static final ZoneId BELGRADE = ZoneId.of("Europe/Belgrade");
 
     private final ReceiptRepository receiptRepository;
-    private final AccountRepository accountRepository;
-    private final ShoppingListClientTokenPolicy clientTokenPolicy;
     private final FiscalVerificationUrlReader verificationUrlReader;
     private final FiscalReceiptClient receiptClient;
     private final FiscalReceiptJournalParser journalParser;
@@ -36,16 +32,12 @@ public class ReceiptService {
 
     public ReceiptService(
             ReceiptRepository receiptRepository,
-            AccountRepository accountRepository,
-            ShoppingListClientTokenPolicy clientTokenPolicy,
             FiscalVerificationUrlReader verificationUrlReader,
             FiscalReceiptClient receiptClient,
             FiscalReceiptJournalParser journalParser,
             ReceiptItemMatcher itemMatcher
     ) {
         this.receiptRepository = receiptRepository;
-        this.accountRepository = accountRepository;
-        this.clientTokenPolicy = clientTokenPolicy;
         this.verificationUrlReader = verificationUrlReader;
         this.receiptClient = receiptClient;
         this.journalParser = journalParser;
@@ -53,10 +45,9 @@ public class ReceiptService {
     }
 
     @Transactional
-    public Receipt scan(String clientToken, String scannedUrl) {
+    public Receipt scan(long accountId, String scannedUrl) {
         String verificationUrl = FiscalVerificationUrlReader.canonical(scannedUrl);
         FiscalReceiptStamp stamp = verificationUrlReader.read(verificationUrl);
-        long accountId = accountFor(clientToken);
 
         // Ime prodavnice daje tek stranica Poreske uprave (readItems).
         long receiptId = receiptRepository.save(
@@ -75,23 +66,22 @@ public class ReceiptService {
                 ));
     }
 
-    public List<Receipt> history(String clientToken, int limit) {
+    public List<Receipt> history(long accountId, int limit) {
         return receiptRepository.findAll(
-                accountFor(clientToken),
+                accountId,
                 Math.clamp(limit, 1, MOST_RECEIPTS)
         );
     }
 
-    public Receipt one(String clientToken, long receiptId) {
-        return receiptRepository.findById(accountFor(clientToken), receiptId)
+    public Receipt one(long accountId, long receiptId) {
+        return receiptRepository.findById(accountId, receiptId)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
                         "Račun nije pronađen: " + receiptId
                 ));
     }
 
-    public Spending spending(String clientToken, LocalDate month) {
-        long accountId = accountFor(clientToken);
+    public Spending spending(long accountId, LocalDate month) {
         LocalDate weekMonth = (month != null ? month : LocalDate.now(BELGRADE))
                 .withDayOfMonth(1);
 
@@ -146,18 +136,13 @@ public class ReceiptService {
     }
 
     /** Šta kupac obično kupuje — ono što računi znaju, a spisak ne. */
-    public List<ReceiptRepository.Habit> habits(String clientToken, int limit) {
+    public List<ReceiptRepository.Habit> habits(long accountId, int limit) {
         return receiptRepository.whatTheyBuy(
-                accountFor(clientToken),
+                accountId,
                 Math.clamp(limit, 1, MOST_HABITS)
         );
     }
 
-    private long accountFor(String clientToken) {
-        return accountRepository.forDevice(
-                clientTokenPolicy.validateAndHash(clientToken)
-        );
-    }
 
     public record Spending(
             List<ReceiptRepository.MonthlySpending> byMonth,

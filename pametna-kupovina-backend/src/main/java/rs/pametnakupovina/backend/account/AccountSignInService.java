@@ -4,7 +4,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
-import rs.pametnakupovina.backend.shoppinglist.ShoppingListClientTokenPolicy;
+import rs.pametnakupovina.backend.security.DeviceCaller;
 
 import java.security.SecureRandom;
 import java.time.Duration;
@@ -24,32 +24,29 @@ public class AccountSignInService {
     private static final SecureRandom RANDOM = new SecureRandom();
 
     private final AccountRepository accountRepository;
-    private final ShoppingListClientTokenPolicy clientTokenPolicy;
     private final GoogleIdentityVerifier googleVerifier;
 
     public AccountSignInService(
             AccountRepository accountRepository,
-            ShoppingListClientTokenPolicy clientTokenPolicy,
             GoogleIdentityVerifier googleVerifier
     ) {
         this.accountRepository = accountRepository;
-        this.clientTokenPolicy = clientTokenPolicy;
         this.googleVerifier = googleVerifier;
     }
 
-    public AccountState state(String clientToken) {
-        return accountRepository.state(accountFor(clientToken));
+    public AccountState state(DeviceCaller caller) {
+        return accountRepository.state(caller.accountId());
     }
 
     /** Brisanje iz same aplikacije; vidi {@link AccountRepository#forget}. */
-    public void delete(String clientToken) {
-        accountRepository.forget(clientTokenPolicy.validateAndHash(clientToken));
+    public void delete(DeviceCaller caller) {
+        accountRepository.forget(caller.clientTokenHash());
     }
 
     @Transactional
-    public AccountState signInWithGoogle(String clientToken, String idToken) {
+    public AccountState signInWithGoogle(DeviceCaller caller, String idToken) {
         String subject = googleVerifier.subjectOf(idToken);
-        long deviceAccount = accountFor(clientToken);
+        long deviceAccount = caller.accountId();
 
         Optional<Long> known = accountRepository.findByIdentity(
                 GoogleIdentityVerifier.PROVIDER,
@@ -78,12 +75,12 @@ public class AccountSignInService {
      * Kod koji drugi telefon u domaćinstvu skenira da bi ušao u ovaj nalog.
      * Dovoljno dug da se ne pogađa, pa mu ne treba brojanje pokušaja.
      */
-    public Invite invite(String clientToken) {
+    public Invite invite(DeviceCaller caller) {
         byte[] secret = new byte[24];
         RANDOM.nextBytes(secret);
         String code = Base64.getUrlEncoder().withoutPadding().encodeToString(secret);
 
-        accountRepository.saveInvite(accountFor(clientToken), code, INVITE_VALID_FOR);
+        accountRepository.saveInvite(caller.accountId(), code, INVITE_VALID_FOR);
 
         return new Invite(code, INVITE_VALID_FOR.toMinutes());
     }
@@ -93,7 +90,7 @@ public class AccountSignInService {
      * isto kao prijava istim Google nalogom na drugom telefonu.
      */
     @Transactional
-    public AccountState join(String clientToken, String code) {
+    public AccountState join(DeviceCaller caller, String code) {
         if (code == null || code.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Kod ne sme biti prazan.");
         }
@@ -103,15 +100,9 @@ public class AccountSignInService {
                         "Kod je istekao ili je već iskorišćen. Zatraži novi."
                 ));
 
-        accountRepository.moveEverything(accountFor(clientToken), household);
+        accountRepository.moveEverything(caller.accountId(), household);
 
         return accountRepository.state(household);
-    }
-
-    private long accountFor(String clientToken) {
-        return accountRepository.forDevice(
-                clientTokenPolicy.validateAndHash(clientToken)
-        );
     }
 
     /**

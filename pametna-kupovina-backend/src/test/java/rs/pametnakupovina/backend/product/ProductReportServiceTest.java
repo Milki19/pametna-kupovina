@@ -2,7 +2,6 @@ package rs.pametnakupovina.backend.product;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.web.server.ResponseStatusException;
-import rs.pametnakupovina.backend.shoppinglist.ShoppingListClientTokenPolicy;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -19,7 +18,7 @@ class ProductReportServiceTest {
 
     private final ProductReportRepository repository = mock(ProductReportRepository.class);
     private final ProductReportService service =
-            new ProductReportService(repository, new ShoppingListClientTokenPolicy());
+            new ProductReportService(repository);
 
     @Test
     void aReportWithAReasonIsKeptForReview() {
@@ -28,7 +27,7 @@ class ProductReportServiceTest {
         when(repository.insert(eq(42L), eq(7L), eq(ProductReportReason.WRONG_PRICE), eq("Gajba, ne flaša"), any()))
                 .thenReturn(3L);
 
-        ProductReportResponse response = service.report(42L, "telefon",
+        ProductReportResponse response = service.report(42L, "a".repeat(64),
                 new ProductReportRequest(ProductReportReason.WRONG_PRICE, "  Gajba, ne flaša ", 7L));
 
         assertThat(response).isEqualTo(new ProductReportResponse(3L, "NEW"));
