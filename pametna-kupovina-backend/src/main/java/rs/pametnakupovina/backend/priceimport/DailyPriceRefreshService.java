@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import rs.pametnakupovina.backend.market.MarketRepository;
 import rs.pametnakupovina.backend.priceimport.maxi.MaxiPriceImportCoordinator;
 
 import javax.sql.DataSource;
@@ -21,7 +22,6 @@ import java.util.Set;
 @Service
 public class DailyPriceRefreshService {
     private static final Logger log = LoggerFactory.getLogger(DailyPriceRefreshService.class);
-    private static final ZoneId ZONE = ZoneId.of("Europe/Belgrade");
     /** The five sources the freshness rule is about. */
     static final List<String> CORE = List.of("LIDL", "EUROPROM", "IDEA_RODA", "UNIVEREXPORT", "MAXI");
     /** Delhaize's chain-wide list for Maxi, beside Maxi's own store files. */
@@ -39,15 +39,25 @@ public class DailyPriceRefreshService {
     private final PriceImportService imports;
     private final MaxiPriceImportCoordinator maxi;
     private final ImportRunRecovery recovery;
+    private final MarketRepository markets;
 
     public DailyPriceRefreshService(JdbcTemplate jdbc, DataSource dataSource,
                                    PriceImportService imports, MaxiPriceImportCoordinator maxi,
-                                   ImportRunRecovery recovery) {
+                                   ImportRunRecovery recovery, MarketRepository markets) {
         this.jdbc = jdbc;
         this.dataSource = dataSource;
         this.imports = imports;
         this.maxi = maxi;
         this.recovery = recovery;
+        this.markets = markets;
+    }
+
+    /**
+     * The cycle's chains are all in the default market, and its day is that
+     * market's day. A market of its own gets a cycle of its own.
+     */
+    private ZoneId zone() {
+        return markets.defaultMarket().timeZone();
     }
 
     public Map<String, Object> refresh(boolean manual) {
@@ -63,7 +73,7 @@ public class DailyPriceRefreshService {
                 // Owning this lock proves a preceding RUNNING cycle no longer has a coordinator.
                 jdbc.update("UPDATE app.price_refresh_cycle SET status='FAILED', finished_at=now() WHERE status='RUNNING'");
                 recovery.recover();
-                LocalDate today = LocalDate.now(ZONE);
+                LocalDate today = LocalDate.now(zone());
                 if (!manual && !due(today)) return Map.of("status", "NOT_DUE");
                 long id = jdbc.queryForObject("""
                         INSERT INTO app.price_refresh_cycle(cycle_date,status) VALUES (?,'RUNNING') RETURNING id
@@ -112,7 +122,7 @@ public class DailyPriceRefreshService {
     }
 
     private boolean due(LocalDate today) {
-        if (ZonedDateTime.now(ZONE).getHour() < 8) return false;
+        if (ZonedDateTime.now(zone()).getHour() < 8) return false;
         return Boolean.TRUE.equals(jdbc.queryForObject("""
                 SELECT COUNT(*) < 3
                   AND COUNT(*) FILTER (WHERE status='SUCCEEDED')=0
@@ -200,7 +210,7 @@ public class DailyPriceRefreshService {
         Set<LocalDate> days = new HashSet<>(jdbc.query("""
                 SELECT DISTINCT cycle_date FROM app.price_refresh_cycle WHERE status='SUCCEEDED'
                 """, (rs, n) -> rs.getObject(1, LocalDate.class)));
-        return Map.of("consecutiveSuccessfulDays", consecutiveDays(days, LocalDate.now(ZONE)),
+        return Map.of("consecutiveSuccessfulDays", consecutiveDays(days, LocalDate.now(zone())),
                 "requiredDays", 7,
                 "freshnessRule", "Svih pet osnovnih lanaca bez grešaka; cenovnik od danas ili juče. "
                         + "METRO, Super Vero i Delhaize katalog idu posle njih; njihova greška je upozorenje.",

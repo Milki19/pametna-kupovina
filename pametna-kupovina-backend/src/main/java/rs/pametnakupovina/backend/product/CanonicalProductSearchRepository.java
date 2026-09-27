@@ -100,12 +100,17 @@ public class CanonicalProductSearchRepository {
                                ), 1) AS package_count,
                                EXISTS (
                                    SELECT 1 FROM app.product_retailer_presence AS presence
+                                   JOIN app.retailer AS presence_retailer
+                                     ON presence_retailer.id = presence.retailer_id
+                                   JOIN app.market AS presence_market
+                                     ON presence_market.id = presence_retailer.market_id
                                    WHERE presence.product_family_id=family.id
                                      AND presence.current_offer_count > 0
                                      AND presence.minimum_effective_price > 0
+                                     -- "Today" is the chain's market's today.
                                      AND presence.latest_price_date BETWEEN
-                                         (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Belgrade')::date - ?
-                                         AND (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Belgrade')::date
+                                         (CURRENT_TIMESTAMP AT TIME ZONE presence_market.time_zone)::date - ?
+                                         AND (CURRENT_TIMESTAMP AT TIME ZONE presence_market.time_zone)::date
                                ) AS has_usable_price,
                                GREATEST(
                                    1,
@@ -253,10 +258,15 @@ public class CanonicalProductSearchRepository {
                         FROM app.product_retailer_presence AS presence
                         JOIN app.retailer AS retailer
                           ON retailer.id = presence.retailer_id
+                        JOIN app.market AS market
+                          ON market.id = retailer.market_id
+                        -- A price is compared with what the product costs in
+                        -- the chain's own market and currency.
                         LEFT JOIN app.product_family_typical_price
                             AS typical_price
                           ON typical_price.product_family_id =
                               presence.product_family_id
+                         AND typical_price.market_id = retailer.market_id
                         -- The chain's lowest price that needs no checking.
                         -- Only a product several chains price has a
                         -- typical price to compare with.
@@ -287,7 +297,7 @@ public class CanonicalProductSearchRepository {
                                   product.retailer_id,
                                   offer.scope_key,
                                   offer.price_date,
-                                  CURRENT_DATE
+                                  (NOW() AT TIME ZONE market.time_zone)::DATE
                               )
                               AND product.package_count =
                                   app.family_base_package_count(product.product_family_id)

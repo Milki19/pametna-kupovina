@@ -1,6 +1,7 @@
 package rs.pametnakupovina.backend.product;
 
 import org.springframework.stereotype.Service;
+import rs.pametnakupovina.backend.market.MarketRepository;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -10,11 +11,14 @@ import java.util.Optional;
 public class CanonicalProductDetailsService {
 
     private final CanonicalProductDetailsRepository repository;
+    private final MarketRepository marketRepository;
 
     public CanonicalProductDetailsService(
-            CanonicalProductDetailsRepository repository
+            CanonicalProductDetailsRepository repository,
+            MarketRepository marketRepository
     ) {
         this.repository = repository;
+        this.marketRepository = marketRepository;
     }
 
     public Optional<CanonicalProductDetailsResponse> find(
@@ -33,8 +37,10 @@ public class CanonicalProductDetailsService {
             );
         }
 
+        // The catalogue is read without an account, so its day is the
+        // default market's.
         LocalDate date = requestedDate == null
-                ? LocalDate.now()
+                ? marketRepository.defaultMarket().today()
                 : requestedDate;
 
         return repository.findProduct(productId).map(product -> {

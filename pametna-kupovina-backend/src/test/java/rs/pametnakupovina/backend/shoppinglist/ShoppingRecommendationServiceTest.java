@@ -2,6 +2,8 @@ package rs.pametnakupovina.backend.shoppinglist;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.web.server.ResponseStatusException;
+import rs.pametnakupovina.backend.market.MarketRepository;
+import rs.pametnakupovina.backend.market.TestMarkets;
 import rs.pametnakupovina.backend.routing.RouteMatrix;
 import rs.pametnakupovina.backend.routing.RouteMatrixEntry;
 import rs.pametnakupovina.backend.routing.RouteMatrixProvider;
@@ -18,6 +20,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -25,6 +28,7 @@ import static org.mockito.Mockito.when;
 class ShoppingRecommendationServiceTest {
 
     private static final LocalDate DATE = LocalDate.of(2026, 8, 5);
+    private static final int SERBIA = TestMarkets.serbia().id();
 
     @Test
     void returnsSingleBalancedAndExactTwoStoreMinimum() {
@@ -49,7 +53,8 @@ class ShoppingRecommendationServiceTest {
                         nearbyRepository,
                         offerRepository,
                         routeProvider,
-                        properties
+                        properties,
+                        markets()
                 );
 
         ShoppingListItemResponse firstItem = item(
@@ -79,6 +84,7 @@ class ShoppingRecommendationServiceTest {
                 .thenReturn(Optional.of(shoppingList));
 
         when(nearbyRepository.findPricingEligibleNearby(
+                SERBIA,
                 44.0,
                 19.0,
                 15_000,
@@ -173,7 +179,8 @@ class ShoppingRecommendationServiceTest {
                         mock(NearbyStoreRepository.class),
                         mock(StoreShoppingOfferRepository.class),
                         mock(RouteMatrixProvider.class),
-                        new ShoppingOptimizationProperties()
+                        new ShoppingOptimizationProperties(),
+                        markets()
                 );
 
         assertThatThrownBy(() -> service.recommend(
@@ -237,6 +244,7 @@ class ShoppingRecommendationServiceTest {
         ));
 
         when(nearbyRepository.findPricingEligibleNearby(
+                SERBIA,
                 44.0,
                 19.0,
                 15_000,
@@ -259,7 +267,8 @@ class ShoppingRecommendationServiceTest {
                         nearbyRepository,
                         offerRepository,
                         routeProvider,
-                        new ShoppingOptimizationProperties()
+                        new ShoppingOptimizationProperties(),
+                        markets()
                 ).recommend(12L, 44.0, 19.0, DATE);
 
         assertThat(response.recommendedBalance().available())
@@ -332,6 +341,7 @@ class ShoppingRecommendationServiceTest {
                 )
         ));
         when(nearbyRepository.findPricingEligibleNearby(
+                SERBIA,
                 44.0,
                 19.0,
                 15_000,
@@ -355,7 +365,8 @@ class ShoppingRecommendationServiceTest {
                         nearbyRepository,
                         offerRepository,
                         routeProvider,
-                        new ShoppingOptimizationProperties()
+                        new ShoppingOptimizationProperties(),
+                        markets()
                 ).recommend(20L, 44.0, 19.0, DATE);
 
         assertThat(response.singleStore().complete()).isFalse();
@@ -388,7 +399,7 @@ class ShoppingRecommendationServiceTest {
         RouteMatrixProvider routeProvider = mock(RouteMatrixProvider.class);
         ShoppingRecommendationService service = new ShoppingRecommendationService(
                 listRepository, nearbyRepository, offerRepository, routeProvider,
-                new ShoppingOptimizationProperties());
+                new ShoppingOptimizationProperties(), markets());
 
         ShoppingListItemResponse milk = item(1L, "Mleko", 101L);
         ShoppingListItemResponse breast = new ShoppingListItemResponse(
@@ -402,9 +413,9 @@ class ShoppingRecommendationServiceTest {
 
         NearbyStore near = store(1L, "A");
         NearbyStore far = store(3L, "C");
-        when(nearbyRepository.findPricingEligibleNearby(44.0, 19.0, 15_000, 20))
+        when(nearbyRepository.findPricingEligibleNearby(SERBIA, 44.0, 19.0, 15_000, 20))
                 .thenReturn(List.of(near));
-        when(nearbyRepository.findNearestCarrying(44.0, 19.0, List.of(555L), List.of(), 40_000, 3))
+        when(nearbyRepository.findNearestCarrying(SERBIA, 44.0, 19.0, List.of(555L), List.of(), 40_000, 3))
                 .thenReturn(List.of(far));
         when(offerRepository.findOffers(eq(10L), anyList(), eq(DATE), eq(true)))
                 .thenAnswer(call -> offersFor(call.getArgument(1), List.of(
@@ -590,5 +601,11 @@ class ShoppingRecommendationServiceTest {
         return offers.stream()
                 .filter(offer -> storeIds.contains(offer.storeId()))
                 .toList();
+    }
+
+    private static MarketRepository markets() {
+        MarketRepository markets = mock(MarketRepository.class);
+        when(markets.forShoppingList(anyLong())).thenReturn(TestMarkets.serbia());
+        return markets;
     }
 }

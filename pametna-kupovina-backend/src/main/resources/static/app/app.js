@@ -146,15 +146,45 @@ async function loadList() {
 
 // ---------- Oblik brojeva i datuma (1.086,92 RSD, 24.09.2026.) ----------
 
+// Tržište naloga: valuta i znaci za hiljade i decimale. Srbija dok server ne
+// kaže drugačije, i poslednje poznato kad nema veze.
+const DEFAULT_MARKET = { currency: 'RSD', currencyMinorUnits: 2, locale: 'sr-Latn-RS', timeZone: 'Europe/Belgrade' };
+let market = saved.get('market', DEFAULT_MARKET);
+let separators = separatorsOf(market.locale);
+
+function separatorsOf(locale) {
+  try {
+    const parts = new Intl.NumberFormat(locale).formatToParts(12345.6);
+    return {
+      group: parts.find(part => part.type === 'group')?.value ?? '.',
+      decimal: parts.find(part => part.type === 'decimal')?.value ?? ','
+    };
+  } catch { return { group: '.', decimal: ',' }; }
+}
+
+async function refreshMarket() {
+  try {
+    const account = await api('GET', 'accounts/me');
+    if (!account?.market || JSON.stringify(account.market) === JSON.stringify(market)) return false;
+    market = account.market;
+    separators = separatorsOf(market.locale);
+    saved.set('market', market);
+    return true;
+  } catch { return false; }
+}
+
 function number(value, decimals) {
   const [whole, part] = Math.abs(value).toFixed(decimals).split('.');
-  return (value < 0 ? '−' : '') + whole.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + (part ? ',' + part : '');
+  return (value < 0 ? '−' : '') + whole.replace(/\B(?=(\d{3})+(?!\d))/g, separators.group)
+    + (part ? separators.decimal + part : '');
 }
-const money = value => number(value, 2) + ' RSD';
-const dinars = value => number(Math.round(value), 0);
+const money = value => number(value, market.currencyMinorUnits) + ' ' + market.currency;
+const whole = value => number(Math.round(value), 0);
 function decimal(value, max = 2) {
   const text = number(value, max);
-  return text.includes(',') ? text.replace(/0+$/, '').replace(/,$/, '') : text;
+  return text.includes(separators.decimal)
+    ? text.replace(/0+$/, '').replace(new RegExp('\\' + separators.decimal + '$'), '')
+    : text;
 }
 function date(iso) {
   const [y, m, d] = String(iso).slice(0, 10).split('-');
@@ -602,14 +632,14 @@ function renderRecommendation() {
       <div class="scenarios">${scenarios.map(x => `
         <button class="scenario" aria-pressed="${x.type === s.type}" data-act="scenario" data-type="${x.type}" ${x.available ? '' : 'disabled'}>
           <span class="small muted">${scenarioShort[x.type]}</span>
-          <span class="price">${x.available && x.totalCost != null ? dinars(x.totalCost) : 'nema'}</span>
+          <span class="price">${x.available && x.totalCost != null ? whole(x.totalCost) : 'nema'}</span>
           <span class="small muted">ukupno</span>
-          ${x.available ? `<span class="small muted">korpa ${dinars(x.basketCost)}</span>` : ''}
+          ${x.available ? `<span class="small muted">korpa ${whole(x.basketCost)}</span>` : ''}
         </button>`).join('')}
       </div>
       <div class="card stripe">
         <div class="row" style="flex-wrap:wrap;gap:8px">${pill(scenarioBadge[s.type], 'pos')}
-          ${s.available && s.savingsComparedWithSingleStore > 0 ? pill(`Ušteda ${dinars(s.savingsComparedWithSingleStore)} RSD`, 'pos') : ''}</div>
+          ${s.available && s.savingsComparedWithSingleStore > 0 ? pill(`Ušteda ${whole(s.savingsComparedWithSingleStore)} ${market.currency}`, 'pos') : ''}</div>
         <div class="title">${scenarioTitle[s.type]}</div>
         ${s.available ? `
           <div class="big">${s.totalCost != null ? money(s.totalCost) : 'nema cene'}</div>
@@ -704,7 +734,7 @@ function showPurchase() {
       <div class="card">
         <div class="row top-align">
           <div class="grow"><div class="label">Napredak kupovine</div><div class="title">Kupljeno ${bought} od ${total}</div></div>
-          <div style="text-align:right"><div class="small muted">planirano</div><div class="price accent">${dinars(s.basketCost)} RSD</div></div>
+          <div style="text-align:right"><div class="small muted">planirano</div><div class="price accent">${whole(s.basketCost)} ${market.currency}</div></div>
         </div>
         <div class="progress"><span style="width:${total ? bought / total * 100 : 0}%"></span></div>
         <p class="muted small">Cene u sačuvanom planu se ne osvežavaju.</p>
@@ -1098,3 +1128,4 @@ document.addEventListener('submit', event => {
 
 window.addEventListener('hashchange', route);
 route();
+refreshMarket().then(changed => { if (changed) route(); });

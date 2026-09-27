@@ -74,14 +74,18 @@ public class ChainRegistrationService {
                 .optional()
                 .orElse(null);
 
+        // The chain sells in the country whose portal published its list.
         long retailerId = existing != null ? existing : jdbcClient.sql("""
-                        INSERT INTO app.retailer (code, name, dataset_url)
-                        VALUES (:code, :name, :datasetUrl)
+                        INSERT INTO app.retailer (code, name, dataset_url, market_id)
+                        SELECT :code, :name, :datasetUrl, candidate.market_id
+                        FROM app.government_dataset_candidate AS candidate
+                        WHERE candidate.id = :candidateId
                         RETURNING id
                         """)
                 .param("code", code)
                 .param("name", name)
                 .param("datasetUrl", candidate.datasetPageUrl())
+                .param("candidateId", candidateId)
                 .query(Long.class)
                 .single();
 

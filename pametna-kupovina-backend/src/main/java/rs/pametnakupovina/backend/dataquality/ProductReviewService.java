@@ -36,8 +36,14 @@ public class ProductReviewService {
                                right_family.id AS right_id,
                                right_family.display_name AS right_name,
                                right_side.retailers AS right_retailers,
-                               right_side.lowest_price AS right_lowest_price
+                               right_side.lowest_price AS right_lowest_price,
+                               default_market.currency_code
                         FROM app.product_merge_suggestion AS suggestion
+                        -- Prices of one currency compare; the review shows
+                        -- the default market's.
+                        CROSS JOIN (
+                            SELECT id, currency_code FROM app.market WHERE is_default
+                        ) AS default_market
                         JOIN app.product_family AS left_family
                           ON left_family.id = suggestion.left_family_id
                         JOIN app.product_family AS right_family
@@ -46,7 +52,9 @@ public class ProductReviewService {
                           ON brand.id = left_family.brand_id
                         CROSS JOIN LATERAL (
                             SELECT STRING_AGG(retailer.name, ', ' ORDER BY retailer.name) AS retailers,
-                                   MIN(presence.minimum_effective_price) AS lowest_price
+                                   MIN(presence.minimum_effective_price) FILTER (
+                                       WHERE retailer.market_id = default_market.id
+                                   ) AS lowest_price
                             FROM app.product_retailer_presence AS presence
                             JOIN app.retailer AS retailer
                               ON retailer.id = presence.retailer_id
@@ -54,7 +62,9 @@ public class ProductReviewService {
                         ) AS left_side
                         CROSS JOIN LATERAL (
                             SELECT STRING_AGG(retailer.name, ', ' ORDER BY retailer.name) AS retailers,
-                                   MIN(presence.minimum_effective_price) AS lowest_price
+                                   MIN(presence.minimum_effective_price) FILTER (
+                                       WHERE retailer.market_id = default_market.id
+                                   ) AS lowest_price
                             FROM app.product_retailer_presence AS presence
                             JOIN app.retailer AS retailer
                               ON retailer.id = presence.retailer_id
@@ -74,13 +84,15 @@ public class ProductReviewService {
                                 resultSet.getLong("left_id"),
                                 resultSet.getString("left_name"),
                                 resultSet.getString("left_retailers"),
-                                resultSet.getBigDecimal("left_lowest_price")
+                                resultSet.getBigDecimal("left_lowest_price"),
+                                resultSet.getString("currency_code")
                         ),
                         new ProductMergeSuggestionReview.Side(
                                 resultSet.getLong("right_id"),
                                 resultSet.getString("right_name"),
                                 resultSet.getString("right_retailers"),
-                                resultSet.getBigDecimal("right_lowest_price")
+                                resultSet.getBigDecimal("right_lowest_price"),
+                                resultSet.getString("currency_code")
                         )
                 ))
                 .list();

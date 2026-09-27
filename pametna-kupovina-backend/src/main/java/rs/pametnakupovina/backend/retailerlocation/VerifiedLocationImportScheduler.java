@@ -2,9 +2,13 @@ package rs.pametnakupovina.backend.retailerlocation;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.scheduling.annotation.SchedulingConfigurer;
+import org.springframework.scheduling.config.ScheduledTaskRegistrar;
 import org.springframework.stereotype.Component;
+import rs.pametnakupovina.backend.market.MarketRepository;
+import rs.pametnakupovina.backend.market.MarketSchedule;
 import rs.pametnakupovina.backend.retailerlocation.dis.DisLocationImportService;
 import rs.pametnakupovina.backend.retailerlocation.europrom.EuropromLocationImportService;
 import rs.pametnakupovina.backend.retailerlocation.idearoda.IdeaRodaLocationImportService;
@@ -12,6 +16,10 @@ import rs.pametnakupovina.backend.retailerlocation.lidl.LidlLocationImportServic
 import rs.pametnakupovina.backend.retailerlocation.maxi.MaxiLocationImportService;
 import rs.pametnakupovina.backend.retailerlocation.univerexport.UniverexportLocationImportService;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 
@@ -20,18 +28,16 @@ import java.util.function.Supplier;
         name = "verified-location-import.schedule.enabled",
         havingValue = "true"
 )
-public class VerifiedLocationImportScheduler {
+public class VerifiedLocationImportScheduler implements SchedulingConfigurer {
 
     private static final Logger log = LoggerFactory.getLogger(
             VerifiedLocationImportScheduler.class
     );
 
-    private final DisLocationImportService disImportService;
-    private final EuropromLocationImportService europromImportService;
-    private final LidlLocationImportService lidlImportService;
-    private final MaxiLocationImportService maxiImportService;
-    private final IdeaRodaLocationImportService ideaRodaImportService;
-    private final UniverexportLocationImportService univerexportImportService;
+    private final MarketRepository marketRepository;
+    private final String cron;
+    /** In the order they have always run. */
+    private final Map<String, Supplier<RetailerLocationImportResult>> importers;
     private final AtomicBoolean running = new AtomicBoolean(false);
 
     public VerifiedLocationImportScheduler(
@@ -40,21 +46,41 @@ public class VerifiedLocationImportScheduler {
             LidlLocationImportService lidlImportService,
             MaxiLocationImportService maxiImportService,
             IdeaRodaLocationImportService ideaRodaImportService,
-            UniverexportLocationImportService univerexportImportService
+            UniverexportLocationImportService univerexportImportService,
+            MarketRepository marketRepository,
+            @Value("${verified-location-import.schedule.cron:0 0 2 * * SUN}")
+            String cron
     ) {
-        this.disImportService = disImportService;
-        this.europromImportService = europromImportService;
-        this.lidlImportService = lidlImportService;
-        this.maxiImportService = maxiImportService;
-        this.ideaRodaImportService = ideaRodaImportService;
-        this.univerexportImportService = univerexportImportService;
+        this.marketRepository = marketRepository;
+        this.cron = cron;
+
+        Map<String, Supplier<RetailerLocationImportResult>> importers =
+                new LinkedHashMap<>();
+        importers.put("DIS", disImportService::importLatest);
+        importers.put("EUROPROM", europromImportService::importLatest);
+        importers.put("LIDL", lidlImportService::importLatest);
+        importers.put("MAXI", maxiImportService::importLatest);
+        importers.put("IDEA_RODA", ideaRodaImportService::importLatest);
+        importers.put("UNIVEREXPORT", univerexportImportService::importLatest);
+        this.importers = Collections.unmodifiableMap(importers);
     }
 
-    @Scheduled(
-            cron = "${verified-location-import.schedule.cron:0 0 2 * * SUN}",
-            zone = "${verified-location-import.schedule.zone:Europe/Belgrade}"
-    )
+    @Override
+    public void configureTasks(ScheduledTaskRegistrar registrar) {
+        MarketSchedule.addCronTasks(
+                registrar,
+                marketRepository,
+                cron,
+                List.copyOf(importers.keySet()),
+                this::importLocations
+        );
+    }
+
     public void importVerifiedLocations() {
+        importLocations(List.copyOf(importers.keySet()));
+    }
+
+    private void importLocations(List<String> retailerCodes) {
         if (!running.compareAndSet(false, true)) {
             log.warn(
                     "Preskočena sinhronizacija lokacija: prethodna još traje."
@@ -63,21 +89,7 @@ public class VerifiedLocationImportScheduler {
         }
 
         try {
-            importRetailer("DIS", disImportService::importLatest);
-            importRetailer(
-                    "EUROPROM",
-                    europromImportService::importLatest
-            );
-            importRetailer("LIDL", lidlImportService::importLatest);
-            importRetailer("MAXI", maxiImportService::importLatest);
-            importRetailer(
-                    "IDEA_RODA",
-                    ideaRodaImportService::importLatest
-            );
-            importRetailer(
-                    "UNIVEREXPORT",
-                    univerexportImportService::importLatest
-            );
+            retailerCodes.forEach(code -> importRetailer(code, importers.get(code)));
         } finally {
             running.set(false);
         }

@@ -110,7 +110,10 @@ public class AccountRepository {
                 .update();
     }
 
-    /** Whether anyone has signed in, and whether other phones share it. */
+    /**
+     * Whether anyone has signed in, whether other phones share it, and the
+     * market it shops in.
+     */
     public AccountSignInService.AccountState state(long accountId) {
         return jdbcClient.sql("""
                         SELECT EXISTS (
@@ -118,11 +121,26 @@ public class AccountRepository {
                                    WHERE account_id = :accountId
                                ) AS signed_in,
                                (SELECT COUNT(*) FROM app.account_device
-                                WHERE account_id = :accountId) > 1 AS household
+                                WHERE account_id = :accountId) > 1 AS household,
+                               market.code, market.currency_code,
+                               market.currency_minor_units, market.locale,
+                               market.default_language, market.time_zone
+                        FROM app.account AS account
+                        JOIN app.market AS market ON market.id = account.market_id
+                        WHERE account.id = :accountId
                         """)
                 .param("accountId", accountId)
                 .query((row, number) -> new AccountSignInService.AccountState(
-                        row.getBoolean("signed_in"), row.getBoolean("household")))
+                        row.getBoolean("signed_in"),
+                        row.getBoolean("household"),
+                        new AccountSignInService.MarketSettings(
+                                row.getString("code"),
+                                row.getString("currency_code"),
+                                row.getInt("currency_minor_units"),
+                                row.getString("locale"),
+                                row.getString("default_language"),
+                                row.getString("time_zone")
+                        )))
                 .single();
     }
 

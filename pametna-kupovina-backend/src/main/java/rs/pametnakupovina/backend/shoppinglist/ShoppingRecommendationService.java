@@ -3,6 +3,8 @@ package rs.pametnakupovina.backend.shoppinglist;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
+import rs.pametnakupovina.backend.market.Market;
+import rs.pametnakupovina.backend.market.MarketRepository;
 import rs.pametnakupovina.backend.routing.RouteMatrix;
 import rs.pametnakupovina.backend.routing.RouteMatrixEntry;
 import rs.pametnakupovina.backend.routing.RouteMatrixProvider;
@@ -36,7 +38,6 @@ public class ShoppingRecommendationService {
 
 
     private static final String USER_WAYPOINT_ID = "USER";
-    private static final String CURRENCY = "RSD";
     private static final String DISCLAIMER =
             "Prikazane cene su iz cenovnika za navedeni datum; "
                     + "zalihe i cena na kasi nisu garantovane.";
@@ -49,28 +50,35 @@ public class ShoppingRecommendationService {
     private final StoreShoppingOfferRepository offerRepository;
     private final RouteMatrixProvider routeMatrixProvider;
     private final ShoppingOptimizationProperties properties;
+    private final MarketRepository marketRepository;
 
     public ShoppingRecommendationService(
             ShoppingListRepository shoppingListRepository,
             NearbyStoreRepository nearbyStoreRepository,
             StoreShoppingOfferRepository offerRepository,
             RouteMatrixProvider routeMatrixProvider,
-            ShoppingOptimizationProperties properties
+            ShoppingOptimizationProperties properties,
+            MarketRepository marketRepository
     ) {
         this.shoppingListRepository = shoppingListRepository;
         this.nearbyStoreRepository = nearbyStoreRepository;
         this.offerRepository = offerRepository;
         this.routeMatrixProvider = routeMatrixProvider;
         this.properties = properties;
+        this.marketRepository = marketRepository;
     }
 
+    /**
+     * @param requestedDate the day the prices are for; without one, today
+     *                      where the list's market is
+     */
     public ShoppingRecommendationResponse recommend(
             Long listId,
             double latitude,
             double longitude,
-            LocalDate asOfDate
+            LocalDate requestedDate
     ) {
-        validate(latitude, longitude, asOfDate);
+        validate(latitude, longitude);
 
         ShoppingListResponse shoppingList = shoppingListRepository
                 .findById(listId)
@@ -78,6 +86,19 @@ public class ShoppingRecommendationService {
                         HttpStatus.NOT_FOUND,
                         "Spisak nije pronađen: " + listId
                 ));
+
+        // Prices, travel costs and "today" are the market's; a shop across
+        // the border quotes another currency and never enters the plan.
+        Market market = marketRepository.forShoppingList(listId);
+        LocalDate asOfDate = requestedDate != null
+                ? requestedDate
+                : market.today();
+
+        if (asOfDate.isAfter(market.today())) {
+            throw badRequest(
+                    "Datum obračuna ne može biti u budućnosti"
+            );
+        }
 
         List<Long> blockingItemIds = shoppingList.items().stream()
                 .filter(item -> item.matchingRule()
@@ -99,6 +120,7 @@ public class ShoppingRecommendationService {
 
         List<NearbyStore> nearbyStores =
                 nearbyStoreRepository.findPricingEligibleNearby(
+                        market.id(),
                         latitude,
                         longitude,
                         properties.getCandidateRadiusMeters(),
@@ -114,7 +136,7 @@ public class ShoppingRecommendationService {
         // chain is what it spends its time on. Asking once for both costs a
         // little more than the larger half and saves the whole smaller one.
         List<StoreShoppingOfferRepository.PriceListEntry> priceListEntries =
-                offerRepository.findPriceListEntriesWithoutLocation();
+                offerRepository.findPriceListEntriesWithoutLocation(market.id());
 
         Map<String, List<Long>> storesByChain = new LinkedHashMap<>();
         nearbyStores.forEach(store -> storesByChain
@@ -164,7 +186,8 @@ public class ShoppingRecommendationService {
                 .filter(java.util.Objects::nonNull).distinct().toList();
         if (!missingFamilies.isEmpty() || !missingProducts.isEmpty()) {
             List<NearbyStore> fartherStores = nearbyStoreRepository
-                    .findNearestCarrying(latitude, longitude, missingFamilies, missingProducts,
+                    .findNearestCarrying(market.id(), latitude, longitude,
+                            missingFamilies, missingProducts,
                             FARTHER_RADIUS_METERS, FARTHER_STORES)
                     .stream()
                     .filter(store -> !nearbyStoreIds.contains(store.storeId()))
@@ -239,7 +262,7 @@ public class ShoppingRecommendationService {
 
         List<EvaluatedPlan> evaluatedSingles =
                 singleStorePlans.stream()
-                        .map(plan -> evaluate(plan, routeMatrix))
+                        .map(plan -> evaluate(plan, routeMatrix, market))
                         .toList();
 
         List<EvaluatedPlan> evaluatedAll = new ArrayList<>(
@@ -248,7 +271,7 @@ public class ShoppingRecommendationService {
 
         evaluatedAll.addAll(
                 twoStorePlans.stream()
-                        .map(plan -> evaluate(plan, routeMatrix))
+                        .map(plan -> evaluate(plan, routeMatrix, market))
                         .toList()
         );
 
@@ -290,7 +313,7 @@ public class ShoppingRecommendationService {
                 nearbyStores.size(),
                 singleStorePlans.size(),
                 twoStorePlans.size(),
-                assumptions(),
+                assumptions(market),
                 singleScenario,
                 recommendedScenario,
                 lowestPriceScenario,
@@ -582,7 +605,8 @@ public class ShoppingRecommendationService {
 
     private EvaluatedPlan evaluate(
             CandidatePlan plan,
-            RouteMatrix routeMatrix
+            RouteMatrix routeMatrix,
+            Market market
     ) {
         RouteEvaluation route = evaluateRoute(
                 plan.stores(),
@@ -591,7 +615,7 @@ public class ShoppingRecommendationService {
 
         BigDecimal travelCost = money(
                 BigDecimal.valueOf(route.distanceKm())
-                        .multiply(properties.getCostPerKm())
+                        .multiply(market.travelCostPerKm())
         );
 
         BigDecimal timeCost = money(
@@ -601,11 +625,11 @@ public class ShoppingRecommendationService {
                                 8,
                                 RoundingMode.HALF_UP
                         )
-                        .multiply(properties.getValuePerHour())
+                        .multiply(market.valuePerHour())
         );
 
         BigDecimal stopCost = money(
-                properties.getCostPerStop().multiply(
+                market.costPerStop().multiply(
                         BigDecimal.valueOf(plan.stores().size())
                 )
         );
@@ -1143,23 +1167,22 @@ public class ShoppingRecommendationService {
         return "STORE:" + store.storeId();
     }
 
-    private OptimizationAssumptions assumptions() {
+    private OptimizationAssumptions assumptions(Market market) {
         return new OptimizationAssumptions(
                 properties.getCandidateRadiusMeters(),
                 properties.getMaxCandidateStores(),
                 properties.getMaxPriceAgeDays(),
-                money(properties.getCostPerKm()),
-                money(properties.getValuePerHour()),
-                money(properties.getCostPerStop()),
+                money(market.travelCostPerKm()),
+                money(market.valuePerHour()),
+                money(market.costPerStop()),
                 money(properties.getStraightLineAverageSpeedKmh()),
-                CURRENCY
+                market.currencyCode()
         );
     }
 
     private void validate(
             double latitude,
-            double longitude,
-            LocalDate asOfDate
+            double longitude
     ) {
         if (!Double.isFinite(latitude)
                 || latitude < -90
@@ -1177,22 +1200,9 @@ public class ShoppingRecommendationService {
             );
         }
 
-        if (asOfDate == null) {
-            throw badRequest("Datum obračuna je obavezan");
-        }
-
-        if (asOfDate.isAfter(LocalDate.now())) {
-            throw badRequest(
-                    "Datum obračuna ne može biti u budućnosti"
-            );
-        }
-
         if (properties.getCandidateRadiusMeters() <= 0
                 || properties.getMaxCandidateStores() <= 0
                 || properties.getMaxCandidateStores() > 20
-                || negative(properties.getCostPerKm())
-                || negative(properties.getValuePerHour())
-                || negative(properties.getCostPerStop())
                 || properties.getStraightLineAverageSpeedKmh() == null
                 || properties.getStraightLineAverageSpeedKmh()
                 .compareTo(BigDecimal.ZERO) <= 0) {
@@ -1200,10 +1210,6 @@ public class ShoppingRecommendationService {
                     "Shopping optimization konfiguracija nije ispravna"
             );
         }
-    }
-
-    private boolean negative(BigDecimal value) {
-        return value == null || value.compareTo(BigDecimal.ZERO) < 0;
     }
 
     private ResponseStatusException badRequest(String message) {

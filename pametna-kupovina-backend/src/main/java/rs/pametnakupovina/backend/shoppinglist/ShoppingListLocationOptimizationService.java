@@ -3,6 +3,8 @@ package rs.pametnakupovina.backend.shoppinglist;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
+import rs.pametnakupovina.backend.market.Market;
+import rs.pametnakupovina.backend.market.MarketRepository;
 import rs.pametnakupovina.backend.retailerlocation.RetailerLocationRepository;
 import rs.pametnakupovina.backend.retailerlocation.RetailerLocationResponse;
 import rs.pametnakupovina.backend.routing.RouteMatrix;
@@ -31,22 +33,35 @@ public class ShoppingListLocationOptimizationService {
 
     private final RouteMatrixProvider routeMatrixProvider;
 
+    private final MarketRepository marketRepository;
+
     public ShoppingListLocationOptimizationService(
             ShoppingListOptimizationService optimizationService,
             RetailerLocationRepository locationRepository,
-            RouteMatrixProvider routeMatrixProvider
+            RouteMatrixProvider routeMatrixProvider,
+            MarketRepository marketRepository
     ) {
         this.optimizationService = optimizationService;
         this.locationRepository = locationRepository;
         this.routeMatrixProvider = routeMatrixProvider;
+        this.marketRepository = marketRepository;
     }
 
+    /**
+     * @param requestedCostPerKm in the list's market currency; without one,
+     *                           the market's own travel cost
+     */
     public LocationOptimizationResponse optimize(
             Long listId,
             double latitude,
             double longitude,
-            BigDecimal costPerKm
+            BigDecimal requestedCostPerKm
     ) {
+        Market market = marketRepository.forShoppingList(listId);
+        BigDecimal costPerKm = requestedCostPerKm != null
+                ? requestedCostPerKm
+                : market.travelCostPerKm();
+
         validate(latitude, longitude, costPerKm);
 
         ShoppingListOptimizationResponse priceOptimization =
@@ -141,7 +156,7 @@ public class ShoppingListLocationOptimizationService {
                         2,
                         RoundingMode.HALF_UP
                 ),
-                "RSD",
+                market.currencyCode(),
                 routeMatrix.distanceMethod(),
                 recommendation,
                 recommendedStrategy,

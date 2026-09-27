@@ -4,8 +4,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.scheduling.annotation.SchedulingConfigurer;
+import org.springframework.scheduling.config.ScheduledTaskRegistrar;
 import org.springframework.stereotype.Component;
+import rs.pametnakupovina.backend.market.MarketRepository;
+import rs.pametnakupovina.backend.market.MarketSchedule;
 
 import java.util.Arrays;
 import java.util.List;
@@ -16,21 +19,28 @@ import java.util.concurrent.atomic.AtomicBoolean;
         name = "price-import.schedule.enabled",
         havingValue = "true"
 )
-public class PriceImportScheduler {
+public class PriceImportScheduler implements SchedulingConfigurer {
 
     private static final Logger log =
             LoggerFactory.getLogger(PriceImportScheduler.class);
 
     private final PriceImportService priceImportService;
+    private final MarketRepository marketRepository;
     private final List<String> retailerCodes;
+    private final String cron;
     private final AtomicBoolean running = new AtomicBoolean(false);
 
     public PriceImportScheduler(
             PriceImportService priceImportService,
+            MarketRepository marketRepository,
             @Value("${price-import.schedule.retailers:EUROPROM}")
-            String configuredRetailerCodes
+            String configuredRetailerCodes,
+            @Value("${price-import.schedule.cron:0 0 3 * * *}")
+            String cron
     ) {
         this.priceImportService = priceImportService;
+        this.marketRepository = marketRepository;
+        this.cron = cron;
         this.retailerCodes = Arrays.stream(
                         configuredRetailerCodes.split(",")
                 )
@@ -40,11 +50,22 @@ public class PriceImportScheduler {
                 .toList();
     }
 
-    @Scheduled(
-            cron = "${price-import.schedule.cron:0 0 3 * * *}",
-            zone = "${price-import.schedule.zone:Europe/Belgrade}"
-    )
+    @Override
+    public void configureTasks(ScheduledTaskRegistrar registrar) {
+        MarketSchedule.addCronTasks(
+                registrar,
+                marketRepository,
+                cron,
+                retailerCodes,
+                this::importRetailers
+        );
+    }
+
     public void importConfiguredRetailers() {
+        importRetailers(retailerCodes);
+    }
+
+    private void importRetailers(List<String> retailerCodes) {
         if (!running.compareAndSet(false, true)) {
             log.warn("Preskočen raspored: prethodni import još traje.");
             return;

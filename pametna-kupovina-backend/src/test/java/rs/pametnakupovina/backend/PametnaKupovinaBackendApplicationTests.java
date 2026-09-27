@@ -255,6 +255,9 @@ class PametnaKupovinaBackendApplicationTests {
     private ReceiptService receiptService;
 
     @Autowired
+    private rs.pametnakupovina.backend.market.MarketRepository marketRepository;
+
+    @Autowired
     private LoyaltyCardService loyaltyCardService;
 
     @Autowired
@@ -277,7 +280,7 @@ class PametnaKupovinaBackendApplicationTests {
     void dailyRefreshPersistsEveryOutcomeAndDoesNotCountRepeatedRunsAsDays() {
         var importer = org.mockito.Mockito.mock(PriceImportService.class);
         var maxi = org.mockito.Mockito.mock(rs.pametnakupovina.backend.priceimport.maxi.MaxiPriceImportCoordinator.class);
-        var today = LocalDate.now(java.time.ZoneId.of("Europe/Belgrade"));
+        var today = rs.pametnakupovina.backend.market.TestMarkets.serbia().today();
         var result = new ImportResult(1L,today,2,2,2,0,"SUCCEEDED");
         org.mockito.Mockito.when(importer.importPrices(org.mockito.ArgumentMatchers.anyString())).thenReturn(result);
         var stores = java.util.stream.IntStream.range(0,6).mapToObj(i ->
@@ -286,7 +289,8 @@ class PametnaKupovinaBackendApplicationTests {
                 new rs.pametnakupovina.backend.priceimport.maxi.MaxiLatestImportResult(today,6,6,"SUCCEEDED",stores));
         var service = new rs.pametnakupovina.backend.priceimport.DailyPriceRefreshService(
                 new org.springframework.jdbc.core.JdbcTemplate(testDataSource),testDataSource,importer,maxi,
-                new rs.pametnakupovina.backend.priceimport.ImportRunRecovery(jdbcClient));
+                new rs.pametnakupovina.backend.priceimport.ImportRunRecovery(jdbcClient),
+                new rs.pametnakupovina.backend.market.MarketRepository(jdbcClient));
         assertThat(service.refresh(true).get("status")).isEqualTo("SUCCEEDED");
         assertThat(service.refresh(true).get("status")).isEqualTo("SUCCEEDED");
         assertThat(service.refresh(false).get("status")).isEqualTo("NOT_DUE");
@@ -307,7 +311,8 @@ class PametnaKupovinaBackendApplicationTests {
         var maxi = org.mockito.Mockito.mock(rs.pametnakupovina.backend.priceimport.maxi.MaxiPriceImportCoordinator.class);
         var service = new rs.pametnakupovina.backend.priceimport.DailyPriceRefreshService(
                 new org.springframework.jdbc.core.JdbcTemplate(testDataSource),testDataSource,importer,maxi,
-                new rs.pametnakupovina.backend.priceimport.ImportRunRecovery(jdbcClient));
+                new rs.pametnakupovina.backend.priceimport.ImportRunRecovery(jdbcClient),
+                new rs.pametnakupovina.backend.market.MarketRepository(jdbcClient));
         jdbcClient.sql("INSERT INTO app.price_refresh_cycle(cycle_date,status) VALUES (CURRENT_DATE,'RUNNING')").update();
         try (var connection = testDataSource.getConnection(); var statement = connection.createStatement()) {
             statement.execute("SELECT pg_advisory_lock(134712,1)");
@@ -943,6 +948,7 @@ class PametnaKupovinaBackendApplicationTests {
                 .update();
 
         assertThat(nearbyStoreRepository.findPricingEligibleNearby(
+                rs.pametnakupovina.backend.market.TestMarkets.serbia().id(),
                 44.274,
                 19.880,
                 1000,
@@ -955,6 +961,78 @@ class PametnaKupovinaBackendApplicationTests {
                 10
         )).extracting(NearbyStore::storeId)
                 .containsExactly(eligibleId, ineligibleId);
+    }
+
+    /**
+     * A shop across the border sits on the same map but sells in another
+     * currency, so a plan never sums its prices with Serbia's.
+     */
+    @Test
+    void pricingRecommendationsStayInTheListsMarket() {
+        int croatia = jdbcClient.sql("""
+                        INSERT INTO app.market (
+                            code, name, currency_code, locale, default_language,
+                            time_zone, travel_cost_per_km, value_per_hour, cost_per_stop
+                        )
+                        VALUES ('HR', 'Hrvatska', 'EUR', 'hr-HR', 'hr',
+                                'Europe/Zagreb', 0.20, 8.00, 1.00)
+                        RETURNING id
+                        """)
+                .query(Integer.class)
+                .single();
+        Long retailerId = jdbcClient.sql("""
+                        INSERT INTO app.retailer (code, name, market_id)
+                        VALUES ('MARKET_TEST_HR', 'Preko granice', ?)
+                        RETURNING id
+                        """)
+                .param(1, croatia)
+                .query(Long.class)
+                .single();
+        Long formatId = jdbcClient.sql("""
+                        INSERT INTO app.store_format (retailer_id, code, name)
+                        VALUES (?, 'STANDARD', 'Standard')
+                        RETURNING id
+                        """)
+                .param(1, retailerId)
+                .query(Long.class)
+                .single();
+        Long storeId = insertVerifiedStore(
+                retailerId, formatId, "HR-1", "Preko granice", 45.1, 19.2, true
+        );
+        int serbia = marketRepository.defaultMarket().id();
+
+        assertThat(nearbyStoreRepository.findPricingEligibleNearby(serbia, 45.1, 19.2, 1000, 10))
+                .extracting(NearbyStore::storeId)
+                .doesNotContain(storeId);
+        assertThat(nearbyStoreRepository.findPricingEligibleNearby(croatia, 45.1, 19.2, 1000, 10))
+                .extracting(NearbyStore::storeId)
+                .containsExactly(storeId);
+        assertThat(nearbyStoreRepository.findNearby(45.1, 19.2, 1000, 10))
+                .extracting(NearbyStore::storeId)
+                .contains(storeId);
+        assertThat(marketRepository.forRetailerCode("MARKET_TEST_HR").currencyCode())
+                .isEqualTo("EUR");
+    }
+
+    /**
+     * Everything that existed before markets is Serbia's: an account, the
+     * phone's view of it and a receipt written without naming a market.
+     */
+    @Test
+    void anAccountAndItsReceiptsShopInTheDefaultMarket() {
+        var state = accountSignInService.state(callers.caller("telefon-trziste"));
+        assertThat(state.market().code()).isEqualTo("RS");
+        assertThat(state.market().currency()).isEqualTo("RSD");
+        assertThat(state.market().timeZone()).isEqualTo("Europe/Belgrade");
+
+        long accountId = callers.account("telefon-trziste");
+        jdbcClient.sql("""
+                INSERT INTO app.receipt(account_id,verification_key,shop_name,issued_at,total_amount)
+                VALUES (?,'TRZISTE-1','Pekara','2026-09-01T08:00:00Z',120.00)
+                """).param(accountId).update();
+
+        assertThat(receiptService.history(accountId, 10)).singleElement()
+                .satisfies(receipt -> assertThat(receipt.currency()).isEqualTo("RSD"));
     }
 
     @AfterAll
@@ -4434,7 +4512,7 @@ class PametnaKupovinaBackendApplicationTests {
                 INSERT INTO app.product_retailer_presence(product_family_id,retailer_id,first_seen_date,last_seen_date,
                     latest_price_date,current_offer_count,store_count,format_count,minimum_effective_price)
                 SELECT product_family_id,retailer_id,d,d,d,1,0,1,100 FROM app.retailer_product
-                CROSS JOIN LATERAL (SELECT (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Belgrade')::date +
+                CROSS JOIN LATERAL (SELECT app.market_today(app.default_market_id()) +
                     CASE source_product_key WHEN 'old' THEN -31 WHEN 'future' THEN 1 ELSE 0 END AS d) dates
                 WHERE retailer_id=? AND source_product_key<>'missing'
                 """).param(retailer).update();

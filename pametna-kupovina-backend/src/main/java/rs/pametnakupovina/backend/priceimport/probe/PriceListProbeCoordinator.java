@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import rs.pametnakupovina.backend.priceimport.GovernmentDataResourceDiscoveryClient;
 import rs.pametnakupovina.backend.priceimport.GovernmentDatasetCandidate;
 import rs.pametnakupovina.backend.priceimport.GovernmentDatasetCatalogRepository;
+import rs.pametnakupovina.backend.market.MarketRepository;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -29,11 +30,11 @@ public class PriceListProbeCoordinator {
 
     private static final Logger log =
             LoggerFactory.getLogger(PriceListProbeCoordinator.class);
-    private static final ZoneId ZONE = ZoneId.of("Europe/Belgrade");
 
     private final GovernmentDatasetCatalogRepository repository;
     private final PriceListProbeService probeService;
     private final GovernmentDataResourceDiscoveryClient discoveryClient;
+    private final MarketRepository marketRepository;
     private final HttpClient httpClient;
     private final Duration requestTimeout;
 
@@ -41,6 +42,7 @@ public class PriceListProbeCoordinator {
             GovernmentDatasetCatalogRepository repository,
             PriceListProbeService probeService,
             GovernmentDataResourceDiscoveryClient discoveryClient,
+            MarketRepository marketRepository,
             @Value("${price-import.http.connect-timeout-seconds:20}")
             long connectTimeoutSeconds,
             @Value("${price-import.http.request-timeout-seconds:900}")
@@ -49,6 +51,7 @@ public class PriceListProbeCoordinator {
         this.repository = repository;
         this.probeService = probeService;
         this.discoveryClient = discoveryClient;
+        this.marketRepository = marketRepository;
         this.requestTimeout = Duration.ofSeconds(requestTimeoutSeconds);
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(connectTimeoutSeconds))
@@ -62,14 +65,17 @@ public class PriceListProbeCoordinator {
                 ? candidate.title()
                 : candidate.organizationName();
 
-        PublishedFile file = latestPublishedFile(candidate);
+        // A portal publishes on its own country's calendar.
+        ZoneId zone = marketRepository.forGovernmentDataset(candidateId).timeZone();
+        PublishedFile file = latestPublishedFile(candidate, zone);
         PriceListProbeReport report;
 
         try {
             report = probe(
                     label,
                     file.url(),
-                    file.publishedOn()
+                    file.publishedOn(),
+                    zone
             );
         } catch (IOException | InterruptedException exception) {
             if (exception instanceof InterruptedException) {
@@ -104,10 +110,10 @@ public class PriceListProbeCoordinator {
      * The daily import already asks the dataset page for the current one; the
      * probe has to judge that same file, not a file nobody will import.
      */
-    private PublishedFile latestPublishedFile(GovernmentDatasetCandidate candidate) {
+    private PublishedFile latestPublishedFile(GovernmentDatasetCandidate candidate, ZoneId zone) {
         LocalDate knownDate = candidate.resourceLastModified() == null
                 ? null
-                : candidate.resourceLastModified().atZone(ZONE).toLocalDate();
+                : candidate.resourceLastModified().atZone(zone).toLocalDate();
 
         if (candidate.datasetPageUrl() == null
                 || candidate.datasetPageUrl().isBlank()) {
@@ -129,7 +135,7 @@ public class PriceListProbeCoordinator {
                     discovered.url(),
                     discovered.lastModified() == null
                             ? knownDate
-                            : discovered.lastModified().atZone(ZONE).toLocalDate()
+                            : discovered.lastModified().atZone(zone).toLocalDate()
             );
         } catch (RuntimeException exception) {
             log.warn(
@@ -146,7 +152,7 @@ public class PriceListProbeCoordinator {
     private record PublishedFile(String url, LocalDate publishedOn) {
     }
 
-    private PriceListProbeReport probe(String label, String url, LocalDate publishedOn)
+    private PriceListProbeReport probe(String label, String url, LocalDate publishedOn, ZoneId zone)
             throws IOException, InterruptedException {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
@@ -167,7 +173,7 @@ public class PriceListProbeCoordinator {
 
             // The probe stops after enough rows, so a 90 MB file is never
             // downloaded whole just to be judged.
-            return probeService.probe(label, body, LocalDate.now(ZONE), publishedOn);
+            return probeService.probe(label, body, LocalDate.now(zone), publishedOn);
         }
     }
 

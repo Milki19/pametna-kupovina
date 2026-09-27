@@ -17,7 +17,8 @@ public record ProductMergeSuggestionReview(
             long productFamilyId,
             String name,
             String retailers,
-            BigDecimal lowestPrice
+            BigDecimal lowestPrice,
+            String currency
     ) {
     }
 }

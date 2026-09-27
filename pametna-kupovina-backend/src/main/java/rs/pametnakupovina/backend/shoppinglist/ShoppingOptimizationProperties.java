@@ -5,6 +5,11 @@ import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 
+/**
+ * What the search for shops needs regardless of the country. What a
+ * kilometre, an hour and a stop cost is in a currency, so it is the market's
+ * (app.market).
+ */
 @Component
 @ConfigurationProperties(prefix = "shopping.optimization")
 public class ShoppingOptimizationProperties {
@@ -12,9 +17,6 @@ public class ShoppingOptimizationProperties {
     private int candidateRadiusMeters = 15_000;
     private int maxCandidateStores = 20;
     private int maxPriceAgeDays = 30;
-    private BigDecimal costPerKm = new BigDecimal("20.00");
-    private BigDecimal valuePerHour = new BigDecimal("400.00");
-    private BigDecimal costPerStop = new BigDecimal("80.00");
     private BigDecimal straightLineAverageSpeedKmh =
             new BigDecimal("30.00");
 
@@ -40,30 +42,6 @@ public class ShoppingOptimizationProperties {
 
     public void setMaxPriceAgeDays(int maxPriceAgeDays) {
         this.maxPriceAgeDays = maxPriceAgeDays;
-    }
-
-    public BigDecimal getCostPerKm() {
-        return costPerKm;
-    }
-
-    public void setCostPerKm(BigDecimal costPerKm) {
-        this.costPerKm = costPerKm;
-    }
-
-    public BigDecimal getValuePerHour() {
-        return valuePerHour;
-    }
-
-    public void setValuePerHour(BigDecimal valuePerHour) {
-        this.valuePerHour = valuePerHour;
-    }
-
-    public BigDecimal getCostPerStop() {
-        return costPerStop;
-    }
-
-    public void setCostPerStop(BigDecimal costPerStop) {
-        this.costPerStop = costPerStop;
     }
 
     public BigDecimal getStraightLineAverageSpeedKmh() {

@@ -3,6 +3,8 @@ package rs.pametnakupovina.backend.priceimport.probe;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import rs.pametnakupovina.backend.market.MarketRepository;
+import rs.pametnakupovina.backend.market.TestMarkets;
 import rs.pametnakupovina.backend.priceimport.GovernmentDataResourceDiscoveryClient;
 import rs.pametnakupovina.backend.priceimport.GovernmentDataResourceDiscoveryClient.DiscoveredCsvResource;
 import rs.pametnakupovina.backend.priceimport.GovernmentDatasetCandidate;
@@ -156,8 +158,11 @@ class PriceListProbeCoordinatorTest {
                 "CSV", null, "DISCOVERED", null, null, null, null, null
         ));
 
+        MarketRepository markets = mock(MarketRepository.class);
+        when(markets.forGovernmentDataset(anyLong())).thenReturn(TestMarkets.serbia());
+
         return new PriceListProbeCoordinator(
-                repository, new PriceListProbeService(), discoveryClient, 5, 20
+                repository, new PriceListProbeService(), discoveryClient, markets, 5, 20
         );
     }
 }

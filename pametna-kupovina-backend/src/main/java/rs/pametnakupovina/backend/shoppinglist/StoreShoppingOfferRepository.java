@@ -695,6 +695,11 @@ public class StoreShoppingOfferRepository {
                                 AS typical_price
                               ON typical_price.product_family_id =
                                   product.product_family_id
+                             AND typical_price.market_id = (
+                                 SELECT chain.market_id
+                                 FROM app.retailer AS chain
+                                 WHERE chain.id = product.retailer_id
+                             )
                             -- "6 kom" of something sold by volume or weight
                             -- counts bottles, cans and bags, so six bottles
                             -- and a case of six compare by price (V73). Not
@@ -1253,7 +1258,7 @@ public class StoreShoppingOfferRepository {
     }
 
     /** Published price lists that no shop location could be attached to. */
-    public List<PriceListEntry> findPriceListEntriesWithoutLocation() {
+    public List<PriceListEntry> findPriceListEntriesWithoutLocation(int marketId) {
         return jdbcClient.sql("""
                         SELECT store.id AS store_id,
                                retailer.code AS retailer_code,
@@ -1269,8 +1274,10 @@ public class StoreShoppingOfferRepository {
                          AND mapping.verification_status = 'VERIFIED'
                         WHERE store.active = TRUE
                           AND store.location IS NULL
+                          AND retailer.market_id = :marketId
                         ORDER BY retailer.code, store.name
                         """)
+                .param("marketId", marketId)
                 .query((resultSet, rowNumber) -> new PriceListEntry(
                         resultSet.getLong("store_id"),
                         resultSet.getString("retailer_code"),

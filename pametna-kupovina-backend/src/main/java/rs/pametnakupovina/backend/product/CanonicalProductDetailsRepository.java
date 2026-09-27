@@ -221,6 +221,11 @@ public class CanonicalProductDetailsRepository {
                                 AS typical_price
                               ON typical_price.product_family_id =
                                   retailer_product.product_family_id
+                             AND typical_price.market_id = (
+                                 SELECT chain.market_id
+                                 FROM app.retailer AS chain
+                                 WHERE chain.id = retailer_product.retailer_id
+                             )
                             LEFT JOIN app.store AS store
                               ON store.id = observation.store_id
                             LEFT JOIN app.store_format AS store_format

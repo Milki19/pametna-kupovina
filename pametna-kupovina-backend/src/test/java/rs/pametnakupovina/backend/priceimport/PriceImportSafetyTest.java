@@ -12,7 +12,6 @@ import org.testcontainers.utility.DockerImageName;
 
 import java.sql.Types;
 import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -52,7 +51,7 @@ class PriceImportSafetyTest {
     @Autowired
     private RetailerDataSourceRepository dataSourceRepository;
 
-    private static final LocalDate TODAY = LocalDate.now(ZoneId.of("Europe/Belgrade"));
+    private static final LocalDate TODAY = rs.pametnakupovina.backend.market.TestMarkets.serbia().today();
 
     @Test
     void staticMedianHandlesOddAndEvenWindows() {

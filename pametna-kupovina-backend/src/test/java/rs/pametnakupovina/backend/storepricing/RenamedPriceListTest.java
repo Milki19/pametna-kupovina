@@ -193,7 +193,8 @@ class RenamedPriceListTest {
     }
 
     private List<String> listsWithoutAddress(String retailerCode) {
-        return offerRepository.findPriceListEntriesWithoutLocation()
+        return offerRepository.findPriceListEntriesWithoutLocation(
+                        rs.pametnakupovina.backend.market.TestMarkets.serbia().id())
                 .stream()
                 .filter(entry -> entry.retailerCode().equals(retailerCode))
                 .map(StoreShoppingOfferRepository.PriceListEntry::label)

@@ -39,7 +39,7 @@ public class ShoppingListLocationOptimizationController {
             @RequestParam("longitude") double longitude,
             @RequestParam(
                     name = "costPerKm",
-                    defaultValue = "20"
+                    required = false
             ) BigDecimal costPerKm
     ) {
         shoppingListService.requireOwnedList(listId, caller.accountId());

@@ -45,10 +45,6 @@ public class ShoppingRecommendationController {
     ) {
         shoppingListService.requireOwnedList(listId, caller.accountId());
 
-        LocalDate resolvedDate = date == null
-                ? LocalDate.now()
-                : date;
-
         return preciseLocationPolicy.useForRequest(
                 PreciseLocationPurpose.SHOPPING_LIST_OPTIMIZATION,
                 latitude,
@@ -57,7 +53,7 @@ public class ShoppingRecommendationController {
                         listId,
                         location.latitude(),
                         location.longitude(),
-                        resolvedDate
+                        date
                 )
         );
     }
