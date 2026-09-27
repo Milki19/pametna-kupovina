@@ -12,6 +12,7 @@ import rs.pametnakupovina.backend.matching.ProductMatchFeedbackRequest;
 import rs.pametnakupovina.backend.matching.ProductMatchFeedbackService;
 import rs.pametnakupovina.backend.matching.ProductMatchStatus;
 import rs.pametnakupovina.backend.matching.ProductNameNormalizer;
+import rs.pametnakupovina.backend.security.DeviceCaller;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -48,9 +49,9 @@ public class ShoppingListMatchingService {
     @Transactional
     public ShoppingListMatchingResponse match(
             Long listId,
-            String clientToken
+            DeviceCaller caller
     ) {
-        return match(listId, clientToken, false);
+        return match(listId, caller, false);
     }
 
     // Only a client that can confirm a product sold without a barcode asks
@@ -58,13 +59,13 @@ public class ShoppingListMatchingService {
     @Transactional
     public ShoppingListMatchingResponse match(
             Long listId,
-            String clientToken,
+            DeviceCaller caller,
             boolean includeProductsWithoutBarcode
     ) {
         ShoppingListResponse shoppingList =
                 shoppingListService.requireOwnedList(
                         listId,
-                        clientToken
+                        caller.accountId()
                 );
 
         List<ShoppingItemMatchResult> results = new ArrayList<>();
@@ -74,7 +75,7 @@ public class ShoppingListMatchingService {
             results.add(matchItem(
                     listId,
                     item,
-                    clientToken,
+                    caller,
                     includeProductsWithoutBarcode
             ));
         }
@@ -138,10 +139,10 @@ public class ShoppingListMatchingService {
     public ShoppingListItemResponse resolve(
             Long listId,
             Long itemId,
-            String clientToken,
+            DeviceCaller caller,
             ResolveShoppingItemMatchRequest request
     ) {
-        shoppingListService.requireOwnedList(listId, clientToken);
+        shoppingListService.requireOwnedList(listId, caller.accountId());
 
         if (request == null || request.action() == null) {
             throw badRequest("Match action je obavezan");
@@ -179,10 +180,11 @@ public class ShoppingListMatchingService {
                 );
             }
 
-            feedbackService.record(
+            feedbackService.recordForDevice(
                     item.matchingDecisionId(),
+                    caller.clientTokenHash(),
                     new ProductMatchFeedbackRequest(
-                            clientToken,
+                            null,
                             ProductMatchFeedbackAction.CONFIRMED,
                             request.canonicalProductId(),
                             request.note(),
@@ -216,10 +218,11 @@ public class ShoppingListMatchingService {
                 );
             }
 
-            feedbackService.record(
+            feedbackService.recordForDevice(
                     item.matchingDecisionId(),
+                    caller.clientTokenHash(),
                     new ProductMatchFeedbackRequest(
-                            clientToken,
+                            null,
                             ProductMatchFeedbackAction.REJECTED,
                             null,
                             request.note()
@@ -338,7 +341,7 @@ public class ShoppingListMatchingService {
     private ShoppingItemMatchResult matchItem(
             Long listId,
             ShoppingListItemResponse item,
-            String clientToken,
+            DeviceCaller caller,
             boolean includeProductsWithoutBarcode
     ) {
         if (item.matchingStatus()
@@ -366,7 +369,7 @@ public class ShoppingListMatchingService {
             decision = decisionService.decideFromProductSearch(
                     query,
                     CANDIDATE_LIMIT,
-                    clientToken,
+                    caller.clientTokenHash(),
                     candidate -> satisfiesConstraints(
                             candidate,
                             constraints
@@ -378,7 +381,7 @@ public class ShoppingListMatchingService {
             decision = decisionService.decideFromProductSearch(
                     item.name(),
                     CANDIDATE_LIMIT,
-                    clientToken,
+                    caller.clientTokenHash(),
                     candidate -> true,
                     true,
                     includeProductsWithoutBarcode

@@ -51,9 +51,7 @@ services:
       DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
       DB_USERNAME: ${POSTGRES_USER}
       DB_PASSWORD: ${POSTGRES_PASSWORD}
-      # Also set in application-production.properties; repeated here so a jar
-      # built without that file still never opens the administrative endpoints.
-      ADMIN_API_KEY_REQUIRED: "true"
+      # Without a key the administrative endpoints answer nobody.
       ADMIN_API_KEY: ${ADMIN_API_KEY:?ADMIN_API_KEY is required}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       SHOPPING_MAX_PRICE_AGE_DAYS: ${SHOPPING_MAX_PRICE_AGE_DAYS:-30}

@@ -4,7 +4,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
-import rs.pametnakupovina.backend.shoppinglist.ShoppingListClientTokenPolicy;
 
 @Service
 public class ProductReportService {
@@ -12,20 +11,18 @@ public class ProductReportService {
     private static final int MAX_NOTE_LENGTH = 500;
 
     private final ProductReportRepository repository;
-    private final ShoppingListClientTokenPolicy clientTokenPolicy;
 
     public ProductReportService(
-            ProductReportRepository repository,
-            ShoppingListClientTokenPolicy clientTokenPolicy
+            ProductReportRepository repository
     ) {
         this.repository = repository;
-        this.clientTokenPolicy = clientTokenPolicy;
     }
 
+    /** @param clientTokenHash the reporting phone, or null when it is not known */
     @Transactional
     public ProductReportResponse report(
             Long canonicalProductId,
-            String clientToken,
+            String clientTokenHash,
             ProductReportRequest request
     ) {
         if (request == null || request.reason() == null) {
@@ -48,10 +45,6 @@ public class ProductReportService {
                 && !repository.listingBelongsToProduct(canonicalProductId, request.retailerProductId())) {
             throw badRequest("Ta ponuda ne pripada ovom proizvodu.");
         }
-
-        String clientTokenHash = clientToken == null || clientToken.isBlank()
-                ? null
-                : clientTokenPolicy.validateAndHash(clientToken);
 
         long id = repository.insert(
                 canonicalProductId,

@@ -5,17 +5,15 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import rs.pametnakupovina.backend.security.DeviceCaller;
 
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/loyalty-cards")
 public class LoyaltyCardController {
-
-    private static final String CLIENT_TOKEN_HEADER = "X-Client-Token";
 
     private final LoyaltyCardService cardService;
 
@@ -25,18 +23,18 @@ public class LoyaltyCardController {
 
     @GetMapping
     public List<LoyaltyCard> cards(
-            @RequestHeader(CLIENT_TOKEN_HEADER) String clientToken
+            DeviceCaller caller
     ) {
-        return cardService.cards(clientToken);
+        return cardService.cards(caller.accountId());
     }
 
     @PostMapping
     public LoyaltyCard add(
-            @RequestHeader(CLIENT_TOKEN_HEADER) String clientToken,
+            DeviceCaller caller,
             @RequestBody AddLoyaltyCardRequest request
     ) {
         return cardService.add(
-                clientToken,
+                caller.accountId(),
                 request.name(),
                 request.cardNumber(),
                 request.barcodeFormat()
@@ -45,10 +43,10 @@ public class LoyaltyCardController {
 
     @DeleteMapping("/{cardId}")
     public void remove(
-            @RequestHeader(CLIENT_TOKEN_HEADER) String clientToken,
+            DeviceCaller caller,
             @PathVariable("cardId") long cardId
     ) {
-        cardService.remove(clientToken, cardId);
+        cardService.remove(caller.accountId(), cardId);
     }
 
     public record AddLoyaltyCardRequest(

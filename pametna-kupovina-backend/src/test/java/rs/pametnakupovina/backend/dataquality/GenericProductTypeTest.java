@@ -22,6 +22,7 @@ import rs.pametnakupovina.backend.shoppinglist.ShoppingItemRule;
 import rs.pametnakupovina.backend.shoppinglist.ShoppingListService;
 import rs.pametnakupovina.backend.shoppinglist.StoreItemOffer;
 import rs.pametnakupovina.backend.shoppinglist.StoreShoppingOfferRepository;
+import rs.pametnakupovina.backend.TestCallers;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -99,6 +100,9 @@ class GenericProductTypeTest {
     }
 
     private static HttpServer csvServer;
+
+    @Autowired
+    private TestCallers callers;
 
     @Autowired
     private PriceImportService priceImportService;
@@ -190,7 +194,7 @@ class GenericProductTypeTest {
     }
 
     private String chosenFor(String word, long listId, long shop) {
-        shoppingListService.addItem(listId, "generic", new AddShoppingListItemRequest(
+        shoppingListService.addItem(listId, callers.account("generic"), new AddShoppingListItemRequest(
                 word, word, null, BigDecimal.ONE, ShoppingItemRule.FLEXIBLE_CATEGORY,
                 new FlexibleItemConstraints(word, null, null, null, null)));
         return offerRepository.findPriceListOffers(listId, List.of(shop), PRICE_DAY)
@@ -262,7 +266,7 @@ class GenericProductTypeTest {
         assertThat(typeOf(MEAT_BUREK)).isNull();
 
         long shop = shopOf(retailerId, "GENERIC");
-        long list = shoppingListService.create(new CreateShoppingListRequest("Opšte reči"), "generic").id();
+        long list = shoppingListService.create(new CreateShoppingListRequest("Opšte reči"), callers.account("generic")).id();
 
         assertThat(chosenFor("so", list, shop)).isEqualTo(SALT);
         // Fresh beef, not the cheaper salami or trotters.
@@ -278,7 +282,7 @@ class GenericProductTypeTest {
         // Fresh first, even where frozen is cheaper; frozen where a shop has
         // no fresh, unless the list says fresh.
         long frozenShop = shopOf(importChain("FROZEN", "/frozen.csv"), "FROZEN");
-        long frozenList = shoppingListService.create(new CreateShoppingListRequest("Samo smrznuto"), "generic").id();
+        long frozenList = shoppingListService.create(new CreateShoppingListRequest("Samo smrznuto"), callers.account("generic")).id();
         assertThat(typeOf(ONLY_FROZEN_BEEF)).isEqualTo("FROZEN_MEAT");
         assertThat(chosenFor("meso", frozenList, frozenShop)).isEqualTo(ONLY_FROZEN_BEEF);
         assertThat(chosenFor("riba", frozenList, frozenShop)).isEqualTo(ONLY_FROZEN_HAKE);

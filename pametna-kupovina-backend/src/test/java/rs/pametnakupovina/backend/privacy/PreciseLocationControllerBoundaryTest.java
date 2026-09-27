@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
 import rs.pametnakupovina.backend.retailerlocation.RetailerLocationController;
 import rs.pametnakupovina.backend.retailerlocation.RetailerLocationService;
+import rs.pametnakupovina.backend.security.DeviceCaller;
 import rs.pametnakupovina.backend.shoppinglist.ShoppingListLocationOptimizationController;
 import rs.pametnakupovina.backend.shoppinglist.ShoppingListLocationOptimizationService;
 import rs.pametnakupovina.backend.shoppinglist.ShoppingListService;
@@ -19,11 +20,14 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 
 import static org.assertj.core.api.Assertions.assertThat;
+
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 class PreciseLocationControllerBoundaryTest {
+
+    private static final DeviceCaller PHONE = new DeviceCaller(1L, 1L, "a".repeat(64));
 
     private static final double LATITUDE = 44.234567;
     private static final double LONGITUDE = 19.876543;
@@ -56,7 +60,7 @@ class PreciseLocationControllerBoundaryTest {
                     policy
             ).optimize(
                     1L,
-                    "test-client-token",
+                    PHONE,
                     LATITUDE,
                     LONGITUDE,
                     new BigDecimal("20.00")
@@ -93,7 +97,7 @@ class PreciseLocationControllerBoundaryTest {
                     policy
             ).recommend(
                     1L,
-                    "test-client-token",
+                    PHONE,
                     LATITUDE,
                     LONGITUDE,
                     recommendationDate
@@ -108,7 +112,7 @@ class PreciseLocationControllerBoundaryTest {
 
             verify(shoppingListService, times(2)).requireOwnedList(
                     1L,
-                    "test-client-token"
+                    PHONE.accountId()
             );
 
             verify(nearbyStoreService).findNearby(

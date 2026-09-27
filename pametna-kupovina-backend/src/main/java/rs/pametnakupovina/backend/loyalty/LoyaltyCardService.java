@@ -3,8 +3,6 @@ package rs.pametnakupovina.backend.loyalty;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
-import rs.pametnakupovina.backend.account.AccountRepository;
-import rs.pametnakupovina.backend.shoppinglist.ShoppingListClientTokenPolicy;
 
 import java.util.List;
 import java.util.Set;
@@ -28,30 +26,23 @@ public class LoyaltyCardService {
     );
 
     private final LoyaltyCardRepository cardRepository;
-    private final AccountRepository accountRepository;
-    private final ShoppingListClientTokenPolicy clientTokenPolicy;
 
     public LoyaltyCardService(
-            LoyaltyCardRepository cardRepository,
-            AccountRepository accountRepository,
-            ShoppingListClientTokenPolicy clientTokenPolicy
+            LoyaltyCardRepository cardRepository
     ) {
         this.cardRepository = cardRepository;
-        this.accountRepository = accountRepository;
-        this.clientTokenPolicy = clientTokenPolicy;
     }
 
-    public List<LoyaltyCard> cards(String clientToken) {
-        return cardRepository.findAll(accountFor(clientToken));
+    public List<LoyaltyCard> cards(long accountId) {
+        return cardRepository.findAll(accountId);
     }
 
     public LoyaltyCard add(
-            String clientToken,
+            long accountId,
             String name,
             String cardNumber,
             String barcodeFormat
     ) {
-        long accountId = accountFor(clientToken);
 
         if (cardRepository.findAll(accountId).size() >= MOST_CARDS) {
             throw badRequest(
@@ -67,8 +58,8 @@ public class LoyaltyCardService {
         );
     }
 
-    public void remove(String clientToken, long cardId) {
-        if (!cardRepository.delete(accountFor(clientToken), cardId)) {
+    public void remove(long accountId, long cardId) {
+        if (!cardRepository.delete(accountId, cardId)) {
             throw new ResponseStatusException(
                     HttpStatus.NOT_FOUND,
                     "Kartica nije pronađena: " + cardId
@@ -118,11 +109,6 @@ public class LoyaltyCardService {
         return format;
     }
 
-    private long accountFor(String clientToken) {
-        return accountRepository.forDevice(
-                clientTokenPolicy.validateAndHash(clientToken)
-        );
-    }
 
     private static ResponseStatusException badRequest(String reason) {
         return new ResponseStatusException(HttpStatus.BAD_REQUEST, reason);

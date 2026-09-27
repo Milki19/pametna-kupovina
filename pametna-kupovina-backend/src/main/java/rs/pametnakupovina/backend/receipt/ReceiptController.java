@@ -5,18 +5,16 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import rs.pametnakupovina.backend.security.DeviceCaller;
 
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/receipts")
 public class ReceiptController {
-
-    private static final String CLIENT_TOKEN_HEADER = "X-Client-Token";
 
     private final ReceiptService receiptService;
 
@@ -26,42 +24,42 @@ public class ReceiptController {
 
     @PostMapping
     public Receipt scan(
-            @RequestHeader(CLIENT_TOKEN_HEADER) String clientToken,
+            DeviceCaller caller,
             @RequestBody ScanReceiptRequest request
     ) {
-        return receiptService.scan(clientToken, request.verificationUrl());
+        return receiptService.scan(caller.accountId(), request.verificationUrl());
     }
 
     @GetMapping
     public List<Receipt> history(
-            @RequestHeader(CLIENT_TOKEN_HEADER) String clientToken,
+            DeviceCaller caller,
             @RequestParam(name = "limit", defaultValue = "50") int limit
     ) {
-        return receiptService.history(clientToken, limit);
+        return receiptService.history(caller.accountId(), limit);
     }
 
     @GetMapping("/spending")
     public ReceiptService.Spending spending(
-            @RequestHeader(CLIENT_TOKEN_HEADER) String clientToken,
+            DeviceCaller caller,
             @RequestParam(name = "month", required = false) java.time.LocalDate month
     ) {
-        return receiptService.spending(clientToken, month);
+        return receiptService.spending(caller.accountId(), month);
     }
 
     @GetMapping("/habits")
     public List<ReceiptRepository.Habit> habits(
-            @RequestHeader(CLIENT_TOKEN_HEADER) String clientToken,
+            DeviceCaller caller,
             @RequestParam(name = "limit", defaultValue = "20") int limit
     ) {
-        return receiptService.habits(clientToken, limit);
+        return receiptService.habits(caller.accountId(), limit);
     }
 
     @GetMapping("/{receiptId}")
     public Receipt one(
-            @RequestHeader(CLIENT_TOKEN_HEADER) String clientToken,
+            DeviceCaller caller,
             @PathVariable("receiptId") long receiptId
     ) {
-        return receiptService.one(clientToken, receiptId);
+        return receiptService.one(caller.accountId(), receiptId);
     }
 
     public record ScanReceiptRequest(@NotBlank String verificationUrl) {

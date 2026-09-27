@@ -20,6 +20,7 @@ import rs.pametnakupovina.backend.shoppinglist.ShoppingItemRule;
 import rs.pametnakupovina.backend.shoppinglist.ShoppingListService;
 import rs.pametnakupovina.backend.shoppinglist.StoreItemOffer;
 import rs.pametnakupovina.backend.shoppinglist.StoreShoppingOfferRepository;
+import rs.pametnakupovina.backend.TestCallers;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -82,6 +83,9 @@ class PackOfPiecesTest {
     private static final LocalDate PRICE_DATE = LocalDate.of(2026, 9, 13);
 
     private static HttpServer csvServer;
+
+    @Autowired
+    private TestCallers callers;
 
     @Autowired
     private PriceImportService priceImportService;
@@ -214,11 +218,11 @@ class PackOfPiecesTest {
     ) {
         var list = shoppingListService.create(
                 new CreateShoppingListRequest(name),
-                "pack-of-pieces"
+                callers.account("pack-of-pieces")
         );
         shoppingListService.addItem(
                 list.id(),
-                "pack-of-pieces",
+                callers.account("pack-of-pieces"),
                 new AddShoppingListItemRequest(
                         name,
                         name,
