@@ -1,5 +1,6 @@
 package rs.pametnakupovina.app
 
+import androidx.test.platform.app.InstrumentationRegistry
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.Modifier
@@ -69,8 +70,8 @@ class PriceAwarePickerInstrumentedTest {
             canonicalProductPicker("Pilos",null,ProductSearchUiState(query="Pilos",results=listOf(product)),
                 {},{ selected=true },{},{},{},{ include=it })
         } } }
-        compose.onNodeWithText("Nemamo aktuelnu cenu").assertExists()
-        compose.onNodeWithText("Zabeležen kod: Lidl").assertExists()
+        compose.onNodeWithText(text(R.string.picker_no_current_price)).assertExists()
+        compose.onNodeWithText(text(R.string.picker_recorded_at, "Lidl")).assertExists()
         compose.onNodeWithText("Poklapanje: 38%").assertDoesNotExist()
         compose.onNodeWithTag("include-without-price").performClick()
         compose.runOnIdle { assertTrue(include) }
@@ -95,3 +96,7 @@ class PriceAwarePickerInstrumentedTest {
         compose.runOnIdle { assertTrue(saved) }
     }
 }
+
+/** A text as the app shows it on this device, so the test runs in any language. */
+private fun text(id: Int, vararg args: Any): String =
+    InstrumentationRegistry.getInstrumentation().targetContext.getString(id, *args)

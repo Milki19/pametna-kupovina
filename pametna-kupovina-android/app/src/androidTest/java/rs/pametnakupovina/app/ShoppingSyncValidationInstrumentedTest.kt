@@ -16,6 +16,7 @@ import rs.pametnakupovina.app.data.ItemSyncValidationException
 import rs.pametnakupovina.app.data.pushPendingItems
 import rs.pametnakupovina.app.data.local.*
 import rs.pametnakupovina.app.data.network.*
+import rs.pametnakupovina.app.text.asString
 import rs.pametnakupovina.app.ui.toUserMessage
 
 @RunWith(AndroidJUnit4::class)
@@ -47,15 +48,18 @@ class ShoppingSyncValidationInstrumentedTest {
                 fail("Calculation must not silently omit an invalid row")
             } catch (error: ItemSyncValidationException) {
                 assertEquals(listOf("jogurt nepoznati ukus"),error.itemNames)
-                assertTrue(error.toUserMessage("offline").contains("jogurt nepoznati ukus"))
-                assertFalse(error.toUserMessage("offline").contains("offline"))
+                val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+                val shown = error.toUserMessage(R.string.error_server_problem).asString(context)
+                assertTrue(shown.contains("jogurt nepoznati ukus"))
+                assertFalse(shown == context.getString(R.string.error_server_problem))
             }
             assertEquals(listOf("jogurt","mleko","kefir"),sent)
             assertEquals(4,dao.getAllItems().size)
             assertEquals(3,dao.getAllItems().count { it.syncState == "SYNCED" })
             val rejected = dao.getAllItems().single { it.syncState == "PENDING_CREATE" }
             assertNull(rejected.remoteId)
-            assertEquals("Server nije prihvatio ovu stavku.", rejected.syncError)
+            // No reason from the server: the row keeps a blank error, shown as a generic text.
+            assertEquals("", rejected.syncError)
             // Correcting one row retries only that row, without duplicating prior successes.
             dao.update(rejected.copy(name="jogurt jagoda",category="jogurt jagoda"))
             pushPendingItems(api,dao,42)

@@ -1,5 +1,6 @@
 package rs.pametnakupovina.app
 
+import androidx.test.platform.app.InstrumentationRegistry
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -31,12 +32,12 @@ class ResumePurchaseScreenInstrumentedTest {
             }
         }
         compose.onNodeWithTag("recommendation-list").performScrollToNode(hasTestTag("resume-previous-purchase"))
-        compose.onNodeWithText("Nastavi prethodnu kupovinu").performClick()
+        compose.onNodeWithText(text(R.string.rec_resume_previous)).performClick()
         compose.runOnIdle { assertEquals("saved-id",resumed); assertEquals(0,newCount) }
         compose.onNodeWithTag("start-or-resume-purchase").performClick()
         compose.onNodeWithTag("confirm-new-purchase").assertIsDisplayed()
         compose.runOnIdle { assertEquals(0,newCount) }
-        compose.onNodeWithText("Otkaži").performClick()
+        compose.onNodeWithText(text(R.string.common_cancel)).performClick()
         compose.onNodeWithTag("start-or-resume-purchase").performClick()
         compose.onNodeWithTag("confirm-new-purchase").performClick()
         compose.runOnIdle { assertEquals(1,newCount) }
@@ -55,7 +56,11 @@ class ResumePurchaseScreenInstrumentedTest {
                     })
             }
         }
-        compose.onNodeWithText("Započni kupovinu po ovom planu").performClick()
+        compose.onNodeWithText(text(R.string.rec_start_purchase)).performClick()
         compose.runOnIdle { assertTrue(started) }
     }
 }
+
+/** A text as the app shows it on this device, so the test runs in any language. */
+private fun text(id: Int, vararg args: Any): String =
+    InstrumentationRegistry.getInstrumentation().targetContext.getString(id, *args)
