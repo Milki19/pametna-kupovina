@@ -60,3 +60,30 @@ jobs:
 
       - name: Run Android unit tests and assemble debug APK
         run: ./gradlew --no-daemon testDebugUnitTest assembleDebug
+
+  android-release:
+    name: Android release build (R8, not published)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: pametna-kupovina-android
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      # Proves R8 and the release checks still pass against the duckdns
+      # server. No keystore here, so the APK is unsigned; it is neither
+      # uploaded nor sent anywhere. Signed APKs are built on request only.
+      - name: Assemble release APK
+        run: ./gradlew --no-daemon assembleRelease -PBACKEND_BASE_URL=https://pametna-kupovina.duckdns.org/
