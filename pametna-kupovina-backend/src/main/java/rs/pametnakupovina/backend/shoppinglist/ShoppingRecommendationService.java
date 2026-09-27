@@ -30,6 +30,11 @@ import java.util.stream.Collectors;
 @Service
 public class ShoppingRecommendationService {
 
+    /** ponytail: krug i broj dodatnih radnji su procena; podesiti po povratnim informacijama. */
+    private static final int FARTHER_RADIUS_METERS = 40_000;
+    private static final int FARTHER_STORES = 3;
+
+
     private static final String USER_WAYPOINT_ID = "USER";
     private static final String CURRENCY = "RSD";
     private static final String DISCLAIMER =
@@ -142,7 +147,56 @@ public class ShoppingRecommendationService {
         Set<Long> itemsWithAnyNearbyOffer = offerRows.stream()
                 .filter(StoreItemOffer::available)
                 .map(StoreItemOffer::itemId)
-                .collect(java.util.stream.Collectors.toSet());
+                .collect(java.util.stream.Collectors.toCollection(java.util.HashSet::new));
+
+        // Izabran proizvod koji nema nijedna prodavnica u krugu traži se
+        // dalje: najbliža radnja lanca koji ga prodaje ulazi u plan, pa plan
+        // (prvo pokrivenost, pa cena) sam odluči da li vredi skoknuti tamo.
+        List<ShoppingListItemResponse> missing = shoppingList.items().stream()
+                .filter(item -> item.matchingRule() != ShoppingItemRule.FLEXIBLE_CATEGORY)
+                .filter(item -> !itemsWithAnyNearbyOffer.contains(item.id()))
+                .toList();
+        List<Long> missingFamilies = missing.stream()
+                .map(ShoppingListItemResponse::matchedProductFamilyId)
+                .filter(java.util.Objects::nonNull).distinct().toList();
+        List<Long> missingProducts = missing.stream()
+                .map(ShoppingListItemResponse::matchedCanonicalProductId)
+                .filter(java.util.Objects::nonNull).distinct().toList();
+        if (!missingFamilies.isEmpty() || !missingProducts.isEmpty()) {
+            List<NearbyStore> fartherStores = nearbyStoreRepository
+                    .findNearestCarrying(latitude, longitude, missingFamilies, missingProducts,
+                            FARTHER_RADIUS_METERS, FARTHER_STORES)
+                    .stream()
+                    .filter(store -> !nearbyStoreIds.contains(store.storeId()))
+                    .toList();
+            if (!fartherStores.isEmpty()) {
+                Map<String, List<Long>> fartherByChain = new LinkedHashMap<>();
+                fartherStores.forEach(store -> fartherByChain
+                        .computeIfAbsent(store.retailerCode(), code -> new ArrayList<>())
+                        .add(store.storeId()));
+                Set<Long> fartherIds = fartherStores.stream()
+                        .map(NearbyStore::storeId)
+                        .collect(java.util.stream.Collectors.toSet());
+                List<StoreItemOffer> fartherOffers = preferFreshOffers(
+                        findOffersForChains(listId, fartherByChain, asOfDate).stream()
+                                .filter(offer -> fartherIds.contains(offer.storeId()))
+                                .toList(),
+                        asOfDate,
+                        properties.getMaxPriceAgeDays()
+                );
+                nearbyStores = java.util.stream.Stream
+                        .concat(nearbyStores.stream(), fartherStores.stream())
+                        .toList();
+                offerRows = java.util.stream.Stream
+                        .concat(offerRows.stream(), fartherOffers.stream())
+                        .toList();
+                offersByStore = groupOffersByStore(offerRows);
+                fartherOffers.stream()
+                        .filter(StoreItemOffer::available)
+                        .map(StoreItemOffer::itemId)
+                        .forEach(itemsWithAnyNearbyOffer::add);
+            }
+        }
 
         List<CandidatePlan> singleStorePlans = new ArrayList<>();
 
