@@ -55,6 +55,7 @@ import rs.pametnakupovina.app.data.amountLabel
 import rs.pametnakupovina.app.data.network.OptimizationScenarioDto
 import rs.pametnakupovina.app.data.network.PurchaseQuantityDto
 import rs.pametnakupovina.app.data.network.RecommendationItemDto
+import rs.pametnakupovina.app.data.network.ShoppingItemRuleDto
 import rs.pametnakupovina.app.data.network.RecommendationItemStatusDto
 import rs.pametnakupovina.app.data.network.RecommendationScenarioTypeDto
 import rs.pametnakupovina.app.data.network.RecommendationStoreDto
@@ -216,7 +217,11 @@ fun RecommendationScreen(
                     onStart = { scenario, createNew ->
                         purchaseViewModel.start(requireNotNull(state.result), scenario, createNew)
                     },
-                    onChangeOrigin = onBack
+                    onChangeOrigin = onBack,
+                    onSimilar = { item ->
+                        val (latitude, longitude) = requireNotNull(location)
+                        viewModel.useSimilar(listId, item.itemId, latitude, longitude)
+                    }
                 )
             }
         }
@@ -234,7 +239,8 @@ internal fun RecommendationContent(
     onResume: (String) -> Unit,
     onStart: (OptimizationScenarioDto, Boolean) -> Unit,
     onAlternative: (RecommendationItemDto) -> Unit = {},
-    onChangeOrigin: () -> Unit = {}
+    onChangeOrigin: () -> Unit = {},
+    onSimilar: (RecommendationItemDto) -> Unit = {}
 ) {
     val context = LocalContext.current
     var selectedTypeName by rememberSaveable {
@@ -351,7 +357,7 @@ internal fun RecommendationContent(
 
             if (unresolved.isNotEmpty()) {
                 item(key = "unresolved-${selected.type}") {
-                    UnresolvedSection(unresolved, onAlternative)
+                    UnresolvedSection(unresolved, onAlternative, onSimilar)
                 }
             }
 
@@ -814,7 +820,8 @@ private fun PlanItemRow(item: RecommendationItemDto) {
 @Composable
 private fun UnresolvedSection(
     items: List<RecommendationItemDto>,
-    onAlternative: (RecommendationItemDto) -> Unit
+    onAlternative: (RecommendationItemDto) -> Unit,
+    onSimilar: (RecommendationItemDto) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)) {
         SectionHeader("Bez ponude", trailing = items.size.toString())
@@ -847,8 +854,18 @@ private fun UnresolvedSection(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(end = AppSpacing.sm)
                         )
-                        TextButton(onClick = { onAlternative(item) }) {
-                            Text("Pogledaj zamene")
+                        // Tvoja ideja: „ovog nema ovde, evo sličnog". Slično
+                        // (bilo koji brend) se bira samo, a zamene su za ručni izbor.
+                        Row {
+                            if (item.matchingRule != ShoppingItemRuleDto.FLEXIBLE_CATEGORY) {
+                                TextButton(
+                                    onClick = { onSimilar(item) },
+                                    modifier = Modifier.testTag("use-similar-${item.itemId}")
+                                ) { Text("Uzmi slično") }
+                            }
+                            TextButton(onClick = { onAlternative(item) }) {
+                                Text("Pogledaj zamene")
+                            }
                         }
                     }
                     if (index < items.lastIndex) {
