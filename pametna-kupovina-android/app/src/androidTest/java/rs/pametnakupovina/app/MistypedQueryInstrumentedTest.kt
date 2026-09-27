@@ -7,6 +7,7 @@ import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Rule
 import org.junit.Test
 import rs.pametnakupovina.app.data.network.CanonicalProductSearchItemDto
@@ -58,8 +59,8 @@ class MistypedQueryInstrumentedTest {
         composeRule.onNodeWithTag("search-corrected")
             .assertIsDisplayed()
             .assertTextContains(
-                "Nema rezultata za „mlkeo“. " +
-                    "Prikazani su rezultati za „mleko“."
+                InstrumentationRegistry.getInstrumentation().targetContext
+                    .getString(R.string.picker_corrected_query, "mlkeo", "mleko")
             )
         composeRule.onNodeWithTag("product-result-1").assertIsDisplayed()
     }
