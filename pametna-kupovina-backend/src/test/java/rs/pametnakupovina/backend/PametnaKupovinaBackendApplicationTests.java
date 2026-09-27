@@ -288,7 +288,8 @@ class PametnaKupovinaBackendApplicationTests {
         org.mockito.Mockito.when(maxi.importLatest()).thenReturn(
                 new rs.pametnakupovina.backend.priceimport.maxi.MaxiLatestImportResult(today,6,6,"SUCCEEDED",stores));
         var service = new rs.pametnakupovina.backend.priceimport.DailyPriceRefreshService(
-                new org.springframework.jdbc.core.JdbcTemplate(testDataSource),testDataSource,importer,maxi,
+                new org.springframework.jdbc.core.JdbcTemplate(testDataSource),testDataSource,
+                java.util.List.of(new rs.pametnakupovina.backend.priceimport.serbia.SerbianPriceSources(importer,maxi,jdbcClient)),
                 new rs.pametnakupovina.backend.priceimport.ImportRunRecovery(jdbcClient),
                 new rs.pametnakupovina.backend.market.MarketRepository(jdbcClient));
         assertThat(service.refresh(true).get("status")).isEqualTo("SUCCEEDED");
@@ -310,7 +311,8 @@ class PametnaKupovinaBackendApplicationTests {
         var importer = org.mockito.Mockito.mock(PriceImportService.class);
         var maxi = org.mockito.Mockito.mock(rs.pametnakupovina.backend.priceimport.maxi.MaxiPriceImportCoordinator.class);
         var service = new rs.pametnakupovina.backend.priceimport.DailyPriceRefreshService(
-                new org.springframework.jdbc.core.JdbcTemplate(testDataSource),testDataSource,importer,maxi,
+                new org.springframework.jdbc.core.JdbcTemplate(testDataSource),testDataSource,
+                java.util.List.of(new rs.pametnakupovina.backend.priceimport.serbia.SerbianPriceSources(importer,maxi,jdbcClient)),
                 new rs.pametnakupovina.backend.priceimport.ImportRunRecovery(jdbcClient),
                 new rs.pametnakupovina.backend.market.MarketRepository(jdbcClient));
         jdbcClient.sql("INSERT INTO app.price_refresh_cycle(cycle_date,status) VALUES (CURRENT_DATE,'RUNNING')").update();

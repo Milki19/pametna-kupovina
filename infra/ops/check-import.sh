@@ -17,7 +17,7 @@ problem=""
 if ! curl --silent --max-time 20 $insecure "$health_url" | grep -q '"status":"UP"'; then
     problem="server ne odgovara na $health_url"
 else
-    statuses="$(compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At -c "SELECT COALESCE(STRING_AGG(status, '"','"' ORDER BY id), '"'nije pokrenut'"') FROM app.price_refresh_cycle WHERE cycle_date = app.market_today(app.default_market_id())"')"
+    statuses="$(compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At -c "SELECT COALESCE(STRING_AGG(status, '"','"' ORDER BY id), '"'nije pokrenut'"') FROM app.price_refresh_cycle WHERE market_id = app.default_market_id() AND cycle_date = app.market_today(app.default_market_id())"')"
     case ",$statuses," in
         *,SUCCEEDED,*|*,WARNING,*) ;;
         *) problem="dnevni uvoz cena nije uspeo ($statuses)" ;;

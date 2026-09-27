@@ -5,6 +5,8 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
 import java.time.ZoneId;
+import java.util.List;
+import java.util.Optional;
 
 /**
  * Markets are a handful of rows that change with a migration, not with a
@@ -48,6 +50,25 @@ public class MarketRepository {
                         + " FROM app.market AS market WHERE market.is_default")
                 .query(ROW_MAPPER)
                 .single();
+    }
+
+    /** Every market the app runs in, the default one first. */
+    public List<Market> active() {
+        return jdbcClient.sql("SELECT " + COLUMNS + """
+                         FROM app.market AS market
+                        WHERE market.active
+                        ORDER BY market.is_default DESC, market.code
+                        """)
+                .query(ROW_MAPPER)
+                .list();
+    }
+
+    public Optional<Market> forCode(String code) {
+        return jdbcClient.sql("SELECT " + COLUMNS
+                        + " FROM app.market AS market WHERE market.code = :code")
+                .param("code", code)
+                .query(ROW_MAPPER)
+                .optional();
     }
 
     public Market forAccount(long accountId) {
