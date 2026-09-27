@@ -94,6 +94,8 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.ui.unit.sp
+import rs.pametnakupovina.app.data.similarKind
+import androidx.compose.material3.OutlinedTextField
 
 @Composable
 fun RecommendationScreen(
@@ -115,6 +117,44 @@ fun RecommendationScreen(
     var alternativeItem by remember { mutableStateOf<RecommendationItemDto?>(null) }
     var replacing by remember { mutableStateOf(false) }
     var replacementError by remember { mutableStateOf<String?>(null) }
+    var similarFor by remember { mutableStateOf<RecommendationItemDto?>(null) }
+    similarFor?.let { item ->
+        // Predlog vrste se pokaže pre zamene: imena u katalogu su neujednačena.
+        var kind by remember(item.itemId) { mutableStateOf(similarKind(item.requestedName, item.productBrand)) }
+        AlertDialog(
+            onDismissRequest = { similarFor = null },
+            title = { Text("Uzmi slično") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)) {
+                    Text(
+                        "Umesto „${item.requestedName}“ plan uzima najjeftinije od ove vrste, bilo koji brend.",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    OutlinedTextField(
+                        value = kind,
+                        onValueChange = { kind = it },
+                        label = { Text("Vrsta") },
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("similar-kind")
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = kind.isNotBlank(),
+                    onClick = {
+                        similarFor = null
+                        val (latitude, longitude) = requireNotNull(location)
+                        viewModel.useSimilar(listId, item.itemId, kind, latitude, longitude)
+                    },
+                    modifier = Modifier.testTag("confirm-similar")
+                ) { Text("Zameni") }
+            },
+            dismissButton = { TextButton(onClick = { similarFor = null }) { Text("Otkaži") } }
+        )
+    }
 
     LaunchedEffect(alternativeItem?.itemId) {
         alternativeItem?.let { item ->
@@ -218,10 +258,7 @@ fun RecommendationScreen(
                         purchaseViewModel.start(requireNotNull(state.result), scenario, createNew)
                     },
                     onChangeOrigin = onBack,
-                    onSimilar = { item ->
-                        val (latitude, longitude) = requireNotNull(location)
-                        viewModel.useSimilar(listId, item.itemId, latitude, longitude)
-                    }
+                    onSimilar = { item -> similarFor = item }
                 )
             }
         }

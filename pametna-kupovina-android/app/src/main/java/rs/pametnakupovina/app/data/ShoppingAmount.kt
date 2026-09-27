@@ -56,34 +56,46 @@ fun amountLabel(value: Double, unit: String?, packageCount: Int = 1): String {
 }
 
 /**
- * „Može i drugi brend": od proizvoda ostaju vrsta i količina, a bira se
- * najjeftinije slično. „PERUTNINA PTUJ pileća prsa 250 g" postaje „pileća
- * prsa", 250 g. Katalog piše brend velikim slovima na početku naziva, pa se
- * skida i kad brend ne znamo; oznake kao „f52" i procenti prekidaju naziv.
+ * Predlog vrste za „Može i drugi brend": „PERUTNINA PTUJ pileća prsa 250 g"
+ * → „pileća prsa". Katalog piše brend velikim slovima na početku naziva, pa
+ * se skida i kad brend ne znamo; kratke oznake („pp", „tb") se preskaču, a
+ * brojevi i procenti prekidaju naziv. Imena su neujednačena, pa kupac
+ * predlog vidi i može da ga ispravi pre čuvanja.
  */
-fun similarItem(name: String, brand: String?, packages: Double, rawInput: String? = null): DraftItemInput {
-    val amount = parseShoppingAmount(name)
-    val brandWords = brand.orEmpty().lowercase().split(Regex("[^\\p{L}]+")).filter { it.length > 1 }.toSet()
-    val kind = (amount?.name ?: name)
+fun similarKind(name: String, brand: String?): String {
+    val words = (parseShoppingAmount(name)?.name ?: name)
         .split(Regex("[\\s,;]+"))
         .filter(String::isNotBlank)
+    val brandWords = brand.orEmpty().lowercase().split(Regex("[^\\p{L}]+")).filter { it.length > 1 }.toSet()
+    fun isWord(word: String) = word.length > 2 && word.all(Char::isLetter)
+    val kind = words
         .dropWhile { word ->
-            word.lowercase() in brandWords ||
-                (word.length > 1 && word.any(Char::isLetter) && word.none(Char::isLowerCase))
+            word.lowercase() in brandWords || !isWord(word) ||
+                word.none(Char::isLowerCase)
         }
-        .filterNot { it.lowercase() in brandWords }
         .takeWhile { word -> word.all(Char::isLetter) }
+        .filter { word -> isWord(word) && word.lowercase() !in brandWords }
         .take(2)
-        .joinToString(" ")
-        .lowercase()
-        .ifBlank { name.trim() }
+        .ifEmpty { words.filter(::isWord).take(2) }
+    return kind.joinToString(" ").lowercase().ifBlank { name.trim().lowercase() }
+}
+
+/** Stavka „bilo koji brend": data vrsta i količina iz naziva proizvoda. */
+fun similarItem(
+    name: String,
+    packages: Double,
+    rawInput: String? = null,
+    kind: String = similarKind(name, null)
+): DraftItemInput {
+    val amount = parseShoppingAmount(name)?.amount
+    val category = kind.trim().ifBlank { similarKind(name, null) }
     return DraftItemInput(
-        name = kind,
+        name = category,
         rawInput = rawInput,
         quantity = packages,
         matchingRule = rs.pametnakupovina.app.data.network.ShoppingItemRuleDto.FLEXIBLE_CATEGORY,
-        category = kind,
-        targetQuantity = amount?.amount?.value,
-        requiredBaseUnit = amount?.amount?.unit
+        category = category,
+        targetQuantity = amount?.value,
+        requiredBaseUnit = amount?.unit
     )
 }

@@ -381,10 +381,10 @@ class RecommendationViewModel @Inject constructor(
     suspend fun alternativeQuery(itemId: Long) = repository.alternativeQuery(itemId)
 
     /** „Uzmi slično": stavka postaje „bilo koji brend" i plan se računa ponovo. */
-    fun useSimilar(listId: Long, itemId: Long, latitude: Double, longitude: Double) {
+    fun useSimilar(listId: Long, itemId: Long, kind: String, latitude: Double, longitude: Double) {
         viewModelScope.launch {
             try {
-                repository.replaceWithSimilar(itemId)
+                repository.replaceWithSimilar(itemId, kind)
                 _uiState.value = RecommendationUiState(isLoading = true)
                 _uiState.value = RecommendationUiState(
                     result = repository.getRecommendations(listId, latitude, longitude)
