@@ -1,7 +1,8 @@
-package rs.pametnakupovina.backend.receipt;
+package rs.pametnakupovina.backend.receipt.serbia;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.web.server.ResponseStatusException;
+import rs.pametnakupovina.backend.receipt.FiscalReceiptStamp;
 
 import java.math.BigDecimal;
 import java.time.Instant;

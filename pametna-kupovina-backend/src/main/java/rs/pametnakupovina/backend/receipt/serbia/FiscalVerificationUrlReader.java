@@ -1,9 +1,10 @@
-package rs.pametnakupovina.backend.receipt;
+package rs.pametnakupovina.backend.receipt.serbia;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ResponseStatusException;
+import rs.pametnakupovina.backend.receipt.FiscalReceiptStamp;
 
 import java.math.BigDecimal;
 import java.net.URI;

@@ -1,4 +1,4 @@
-package rs.pametnakupovina.backend.receipt;
+package rs.pametnakupovina.backend.receipt.serbia;
 
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;

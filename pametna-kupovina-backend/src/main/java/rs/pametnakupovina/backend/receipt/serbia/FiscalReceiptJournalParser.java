@@ -1,6 +1,7 @@
-package rs.pametnakupovina.backend.receipt;
+package rs.pametnakupovina.backend.receipt.serbia;
 
 import org.springframework.stereotype.Component;
+import rs.pametnakupovina.backend.receipt.Receipt;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
