@@ -39,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -46,6 +47,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import rs.pametnakupovina.app.R
 import rs.pametnakupovina.app.location.hasLocationPermission
+import rs.pametnakupovina.app.text.asString
 import rs.pametnakupovina.app.ui.LocationViewModel
 import rs.pametnakupovina.app.ui.components.AppIcon
 import rs.pametnakupovina.app.ui.components.AppSpacing
@@ -106,19 +108,21 @@ fun LocationScreen(
         (!coordinatesValid && (latitudeText.isNotBlank() || longitudeText.isNotBlank()))
 
     Scaffold(
-        topBar = { AppTopBar(title = "Odakle krećeš", onBack = onBack) },
+        topBar = { AppTopBar(title = stringResource(R.string.location_title), onBack = onBack) },
         bottomBar = {
             BottomActionBar {
                 if (coordinatesValid) {
                     Text(
-                        "Polazna tačka: " +
-                            coordinatesLabel(requireNotNull(latitude), requireNotNull(longitude)),
+                        stringResource(
+                            R.string.location_starting_point_value,
+                            coordinatesLabel(requireNotNull(latitude), requireNotNull(longitude))
+                        ),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 PrimaryActionButton(
-                    text = "Prikaži preporuke",
+                    text = stringResource(R.string.location_show_recommendations),
                     enabled = coordinatesValid && !state.isResolving,
                     onClick = {
                         onCalculate(requireNotNull(latitude), requireNotNull(longitude))
@@ -136,9 +140,9 @@ fun LocationScreen(
             verticalArrangement = Arrangement.spacedBy(AppSpacing.md)
         ) {
             StepCard(
-                step = "KORAK 2 OD 3",
-                title = "Polazna tačka",
-                text = "Put računamo od polazne tačke do prodavnica u blizini."
+                step = stringResource(R.string.location_step),
+                title = stringResource(R.string.location_starting_point),
+                text = stringResource(R.string.location_step_text)
             )
 
             Surface(
@@ -184,11 +188,13 @@ fun LocationScreen(
                     }
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            if (state.isResolving) "Tražim lokaciju…" else "Koristi trenutnu lokaciju",
+                            stringResource(
+                                if (state.isResolving) R.string.location_resolving else R.string.location_use_current
+                            ),
                             style = MaterialTheme.typography.titleMedium
                         )
                         Text(
-                            "Samo za ovo računanje",
+                            stringResource(R.string.location_use_current_hint),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -204,14 +210,14 @@ fun LocationScreen(
             OutlinedTextField(
                 value = address,
                 onValueChange = { address = it },
-                label = { Text("Ili upiši adresu ili kraj") },
-                placeholder = { Text("npr. Karaburma, Beograd") },
+                label = { Text(stringResource(R.string.location_address_label)) },
+                placeholder = { Text(stringResource(R.string.location_address_placeholder)) },
                 trailingIcon = {
                     IconButton(
                         enabled = address.isNotBlank() && !state.isResolving,
                         onClick = findAddress
                     ) {
-                        AppIcon(R.drawable.ic_search, contentDescription = "Pronađi adresu")
+                        AppIcon(R.drawable.ic_search, contentDescription = stringResource(R.string.location_find_address))
                     }
                 },
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
@@ -224,7 +230,7 @@ fun LocationScreen(
 
             state.message?.let { message ->
                 NoticeBanner(
-                    text = message,
+                    text = message.asString(),
                     tone = if (state.isError) StatusTone.ERROR else StatusTone.POSITIVE
                 )
             }
@@ -233,7 +239,7 @@ fun LocationScreen(
                 Column {
                     TextButton(onClick = {
                         context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
-                    }) { Text("Otvori podešavanja lokacije") }
+                    }) { Text(stringResource(R.string.location_open_location_settings)) }
                     TextButton(onClick = {
                         context.startActivity(
                             Intent(
@@ -241,7 +247,7 @@ fun LocationScreen(
                                 Uri.parse("package:" + context.packageName)
                             )
                         )
-                    }) { Text("Otvori dozvole aplikacije") }
+                    }) { Text(stringResource(R.string.location_open_app_permissions)) }
                 }
             }
 
@@ -255,8 +261,7 @@ fun LocationScreen(
                         .size(20.dp)
                 )
                 Text(
-                    "Lokacija služi za ovo računanje i za redosled pretrage. Aplikacija " +
-                        "je ne prati u pozadini, a server je ne čuva.",
+                    stringResource(R.string.location_privacy_note),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -265,7 +270,7 @@ fun LocationScreen(
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
             TextButton(onClick = { showManual = !manualVisible }) {
-                Text("Unesi koordinate ručno")
+                Text(stringResource(R.string.location_enter_manually))
                 AppIcon(
                     if (manualVisible) R.drawable.ic_expand_less else R.drawable.ic_expand_more,
                     contentDescription = null
@@ -276,8 +281,8 @@ fun LocationScreen(
                 OutlinedTextField(
                     value = latitudeText,
                     onValueChange = { latitudeText = it },
-                    label = { Text("Geografska širina") },
-                    placeholder = { Text("npr. 44.8170") },
+                    label = { Text(stringResource(R.string.location_latitude)) },
+                    placeholder = { Text(stringResource(R.string.location_latitude_placeholder)) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     isError = latitudeText.isNotBlank() &&
                         (latitude == null || latitude !in -90.0..90.0),
@@ -287,8 +292,8 @@ fun LocationScreen(
                 OutlinedTextField(
                     value = longitudeText,
                     onValueChange = { longitudeText = it },
-                    label = { Text("Geografska dužina") },
-                    placeholder = { Text("npr. 20.4930") },
+                    label = { Text(stringResource(R.string.location_longitude)) },
+                    placeholder = { Text(stringResource(R.string.location_longitude_placeholder)) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     isError = longitudeText.isNotBlank() &&
                         (longitude == null || longitude !in -180.0..180.0),
@@ -300,7 +305,7 @@ fun LocationScreen(
                     horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm)
                 ) {
                     Text(
-                        "Koordinate dobijaš u Google mapama kad dugo pritisneš tačku na mapi.",
+                        stringResource(R.string.location_coordinates_hint),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

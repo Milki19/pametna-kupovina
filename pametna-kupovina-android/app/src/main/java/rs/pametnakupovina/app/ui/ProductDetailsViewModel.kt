@@ -14,18 +14,21 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import rs.pametnakupovina.app.R
 import rs.pametnakupovina.app.alerts.PriceWatchStore
 import rs.pametnakupovina.app.alerts.WatchedProduct
 import rs.pametnakupovina.app.alerts.bestPrice
 import rs.pametnakupovina.app.data.ShoppingRepository
 import rs.pametnakupovina.app.data.network.CanonicalProductDetailsDto
 import rs.pametnakupovina.app.data.network.ProductReportReasonDto
+import rs.pametnakupovina.app.text.UiText
+import rs.pametnakupovina.app.text.uiText
 
 data class ProductDetailsUiState(
     val isLoading: Boolean = true,
     val product: CanonicalProductDetailsDto? = null,
-    val errorMessage: String? = null,
-    val reportMessage: String? = null,
+    val errorMessage: UiText? = null,
+    val reportMessage: UiText? = null,
     val isReporting: Boolean = false
 )
 
@@ -73,7 +76,7 @@ class ProductDetailsViewModel @Inject constructor(
                 ProductDetailsUiState(
                     isLoading = false,
                     errorMessage = error.toUserMessage(
-                        "Detalji proizvoda trenutno nisu dostupni."
+                        R.string.product_load_error
                     )
                 )
             }
@@ -87,11 +90,11 @@ class ProductDetailsViewModel @Inject constructor(
             val message = try {
                 repository.reportProduct(canonicalProductId, reason, note)
                 onSent()
-                "Hvala, proverićemo."
+                uiText(R.string.product_report_thanks)
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
-                error.toUserMessage("Prijava nije poslata. Pokušaj ponovo.")
+                error.toUserMessage(R.string.product_report_failed)
             }
             _uiState.update { it.copy(isReporting = false, reportMessage = message) }
         }

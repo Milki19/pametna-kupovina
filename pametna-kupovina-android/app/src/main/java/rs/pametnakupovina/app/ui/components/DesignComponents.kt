@@ -39,6 +39,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -167,14 +168,14 @@ fun AppTopBar(
             // iz menija; oba istovremeno bi značila da jedno od njih laže.
             if (onBack != null) {
                 IconButton(onClick = onBack) {
-                    AppIcon(R.drawable.ic_arrow_back, contentDescription = "Nazad")
+                    AppIcon(R.drawable.ic_arrow_back, contentDescription = stringResource(R.string.ui_back))
                 }
             } else if (onMenu != null) {
                 IconButton(
                     onClick = onMenu,
                     modifier = Modifier.testTag("open-menu")
                 ) {
-                    AppIcon(R.drawable.ic_menu, contentDescription = "Meni")
+                    AppIcon(R.drawable.ic_menu, contentDescription = stringResource(R.string.app_menu))
                 }
             }
         },

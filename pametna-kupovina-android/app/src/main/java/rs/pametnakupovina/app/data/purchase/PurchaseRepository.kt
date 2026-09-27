@@ -7,10 +7,14 @@ import java.util.UUID
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import rs.pametnakupovina.app.R
 import rs.pametnakupovina.app.data.local.PametnaKupovinaDatabase
 import rs.pametnakupovina.app.data.local.PurchaseSessionEntity
 import rs.pametnakupovina.app.data.network.ShoppingRecommendationDto
 import rs.pametnakupovina.app.data.network.OptimizationScenarioDto
+import rs.pametnakupovina.app.text.UserFacingException
+import rs.pametnakupovina.app.text.requireUser
+import rs.pametnakupovina.app.text.uiText
 
 @Singleton
 class PurchaseRepository @Inject constructor(
@@ -26,9 +30,9 @@ class PurchaseRepository @Inject constructor(
 
     suspend fun start(result: ShoppingRecommendationDto, scenario: OptimizationScenarioDto,
         createNew: Boolean = false): String = database.withTransaction {
-        require(scenario.available && scenario.items.isNotEmpty()) { "Plan još nije dostupan." }
-        require(scenario in listOf(result.singleStore, result.recommendedBalance, result.lowestPrice)) {
-            "Plan ne pripada ovom računanju."
+        requireUser(scenario.available && scenario.items.isNotEmpty()) { uiText(R.string.purchase_error_plan_unavailable) }
+        requireUser(scenario in listOf(result.singleStore, result.recommendedBalance, result.lowestPrice)) {
+            uiText(R.string.purchase_error_plan_mismatch)
         }
         require(scenario.items.map { it.itemId }.distinct().size == scenario.items.size)
         // Repeated taps/reopening recommendations must not reset a shopping session.
@@ -50,8 +54,8 @@ class PurchaseRepository @Inject constructor(
 
     suspend fun update(id: String, itemId: Long, update: (PurchaseItemProgress) -> PurchaseItemProgress) {
         database.withTransaction {
-            val session = dao.get(id)?.let(::decode) ?: error("Kupovina nije pronađena.")
-            require(session.archivedAt == null) { "Prvo ponovo otvori arhiviranu kupovinu." }
+            val session = dao.get(id)?.let(::decode) ?: throw UserFacingException(uiText(R.string.purchase_error_not_found))
+            requireUser(session.archivedAt == null) { uiText(R.string.purchase_error_archived) }
             val item = session.snapshot.scenario.items.single { it.itemId == itemId }
             val current = session.progress[itemId] ?: PurchaseItemProgress()
             val next = validatePurchaseProgress(update(current), item.purchaseQuantity?.packages ?: item.requestedQuantity)
@@ -63,14 +67,14 @@ class PurchaseRepository @Inject constructor(
 
     suspend fun archive(id: String, archived: Boolean) {
         database.withTransaction {
-            require(dao.get(id) != null) { "Kupovina nije pronađena." }
+            requireUser(dao.get(id) != null) { uiText(R.string.purchase_error_not_found) }
             dao.archive(id, if (archived) System.currentTimeMillis() else null)
         }
     }
 
     private fun decode(entity: PurchaseSessionEntity): PurchaseSession {
         val snapshot = json.decodeFromString<PurchaseSnapshot>(entity.snapshotJson)
-        require(snapshot.version == 1) { "Za ovaj plan je potrebna novija verzija aplikacije." }
+        requireUser(snapshot.version == 1) { uiText(R.string.purchase_error_newer_app) }
         return PurchaseSession(entity.id, entity.createdAt, entity.archivedAt, snapshot,
             json.decodeFromString(entity.progressJson))
     }

@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Recommendation screen: the three plans, the route and the replacements. -->
+<resources>
+    <string name="rec_title">Preporuke</string>
+    <string name="rec_loading">Računam tri scenarija…</string>
+    <string name="rec_location_missing_title">Lokacija više nije dostupna</string>
+    <string name="rec_location_missing_message">Vrati se i ponovo izaberi polaznu tačku.</string>
+    <string name="rec_error_title">Rezultat nije dostupan</string>
+
+    <!-- Similar product and replacements -->
+    <string name="rec_use_similar">Uzmi slično</string>
+    <string name="rec_similar_explanation">Umesto „%1$s“ plan uzima najjeftinije od ove vrste, bilo koji brend.</string>
+    <string name="rec_similar_kind_label">Vrsta</string>
+    <string name="rec_replace">Zameni</string>
+    <string name="rec_view_alternatives">Pogledaj zamene</string>
+    <string name="rec_alternative_title">Zamena za: %1$s</string>
+    <string name="rec_alternative_calculating">Računam…</string>
+    <string name="rec_alternative_help">Proveri vrstu, masnoću i pakovanje, zamena nikad nije automatska. Menja aktivni spisak i ponovo računa plan; sačuvane kupovine ostaju iste.</string>
+    <string name="rec_alternative_packages">Broj pakovanja novog proizvoda</string>
+
+    <!-- Starting and resuming a purchase -->
+    <string name="rec_new_purchase_title">Započni novu kupovinu?</string>
+    <string name="rec_new_purchase_message">Novi plan počinje sa praznim kućicama. Prethodna kupovina i čekirane stavke ostaju u „Kupovine“.</string>
+    <string name="rec_new_purchase_confirm">Započni novu kupovinu</string>
+    <string name="rec_saving_plan">Čuvam plan…</string>
+    <string name="rec_checking_purchases">Proveravam sačuvane kupovine…</string>
+    <string name="rec_start_purchase">Započni kupovinu po ovom planu</string>
+    <string name="rec_previous_title">Već imaš započetu kupovinu</string>
+    <string name="rec_previous_progress">Plan od %1$s · kupljeno %2$d od %3$d</string>
+    <string name="rec_resume_previous">Nastavi prethodnu kupovinu</string>
+
+    <!-- Route -->
+    <string name="rec_route_single">Pregled puta do prodavnice</string>
+    <plurals name="rec_route_stores">
+        <item quantity="one">Pregled rute kroz %d prodavnicu</item>
+        <item quantity="few">Pregled rute kroz %d prodavnice</item>
+        <item quantity="other">Pregled rute kroz %d prodavnica</item>
+    </plurals>
+    <string name="rec_route_hint">Google Maps prvo prikaže rutu, a navigaciju pokrećeš ti.</string>
+    <string name="rec_maps_not_installed">Instaliraj Google Maps ili pregledač da otvoriš rutu.</string>
+
+    <!-- Origin -->
+    <string name="rec_origin_label">POLAZNA TAČKA</string>
+    <string name="rec_change_origin">Promeni</string>
+
+    <!-- Scenarios -->
+    <string name="rec_no_price_short">nema</string>
+    <string name="rec_no_price">nema cene</string>
+    <string name="rec_total_caption">ukupno</string>
+    <string name="rec_basket_short">korpa %1$s</string>
+    <string name="rec_savings">Ušteda %1$s RSD</string>
+    <string name="rec_basket_plus_travel">korpa %1$s + put i vreme %2$s</string>
+    <string name="rec_stat_stores">Prodavnice</string>
+    <string name="rec_stat_distance">Razdaljina</string>
+    <string name="rec_stat_time">Vreme</string>
+    <string name="rec_coverage">Pokrivenost korpe</string>
+    <plurals name="rec_covered_of">
+        <item quantity="one">%1$d od %2$d stavke</item>
+        <item quantity="few">%1$d od %2$d stavke</item>
+        <item quantity="other">%1$d od %2$d stavki</item>
+    </plurals>
+    <string name="rec_badge_single_store">Najbrže i najlakše</string>
+    <string name="rec_badge_balance">Preporučeno</string>
+    <string name="rec_badge_lowest_price">Najniža cena korpe</string>
+    <string name="rec_scenario_single_store">Jedna prodavnica</string>
+    <string name="rec_scenario_balance">Preporučeni balans</string>
+    <string name="rec_scenario_lowest_price">Najniža cena</string>
+    <string name="rec_short_single_store">Jedna stanica</string>
+    <string name="rec_short_balance">Najbolje ukupno</string>
+    <string name="rec_short_lowest_price">Najjeftinija korpa</string>
+
+    <!-- Stores and items -->
+    <string name="rec_store_leg">%1$s · oko %2$s</string>
+    <string name="rec_store_no_items">Nema dodeljenih stavki.</string>
+    <string name="rec_many_small_packs">Mnogo malih pakovanja</string>
+    <string name="rec_surplus">dobijaš %1$s, %2$s više</string>
+    <string name="rec_unresolved_header">Bez ponude</string>
+    <string name="rec_status_needs_confirmation">Treba potvrda</string>
+    <string name="rec_status_unmatched">Nije pronađeno</string>
+    <string name="rec_status_no_price">Nema cene</string>
+    <string name="rec_status_available">Dostupno</string>
+
+    <!-- Chains without known addresses -->
+    <string name="rec_unlocated_header">Lanci bez poznate adrese</string>
+    <string name="rec_unlocated_notice_title">Ne znamo u kojoj prodavnici važi ova cena</string>
+    <string name="rec_unlocated_notice_text">Ovi lanci objavljuju cene, ali ne i adrese prodavnica. Zato nisu u planu i ne možemo da potvrdimo da prodavnica kod tebe ima ovaj proizvod po ovoj ceni.</string>
+    <string name="rec_unlocated_selected_basket">Korpa u izabranom planu: %1$s.</string>
+    <string name="rec_unconfirmed_store">Nepotvrđena prodavnica</string>
+    <string name="rec_cheaper_basket">Jeftinija korpa</string>
+
+    <!-- How it was calculated -->
+    <string name="rec_calc_title">Kako je računato</string>
+    <string name="rec_calc_data_as_of">Cene su iz cenovnika od %1$s; cenovnik ne govori da li je artikal na polici.</string>
+    <string name="rec_calc_no_prices">Za ovaj scenario nema važećih cena.</string>
+    <string name="rec_calc_costs">Korpa %1$s, put %2$s, vreme %3$s, stajanja %4$s.</string>
+    <string name="rec_calc_rates">Put računamo %1$s po kilometru, vreme %2$s po satu i %3$s po stajanju.</string>
+    <string name="rec_calc_approximate">Udaljenosti su procena vazdušnom linijom, pravi put je obično duži.</string>
+    <plurals name="rec_calc_candidates">
+        <item quantity="one">Razmotreno %1$d prodavnica u krugu od %2$s km.</item>
+        <item quantity="few">Razmotreno %1$d prodavnice u krugu od %2$s km.</item>
+        <item quantity="other">Razmotreno %1$d prodavnica u krugu od %2$s km.</item>
+    </plurals>
+    <plurals name="rec_calc_max_age">
+        <item quantity="one">Prednost imaju cene ne starije od %d dan.</item>
+        <item quantity="few">Prednost imaju cene ne starije od %d dana.</item>
+        <item quantity="other">Prednost imaju cene ne starije od %d dana.</item>
+    </plurals>
+    <string name="rec_calc_sources">Izvori cena: %1$s.</string>
+    <string name="rec_calc_sources_none">nisu navedeni</string>
+
+    <!-- Warnings on the plan -->
+    <plurals name="rec_warning_unrecognised">
+        <item quantity="one">Ne prepoznajemo %d stavku, pa nije u računu.</item>
+        <item quantity="few">Ne prepoznajemo %d stavke, pa nisu u računu.</item>
+        <item quantity="other">Ne prepoznajemo %d stavki, pa nisu u računu.</item>
+    </plurals>
+    <plurals name="rec_warning_unpriced">
+        <item quantity="one">Plan je nepotpun: %d stavka nema ponudu u ovim prodavnicama.</item>
+        <item quantity="few">Plan je nepotpun: %d stavke nemaju ponudu u ovim prodavnicama.</item>
+        <item quantity="other">Plan je nepotpun: %d stavki nema ponudu u ovim prodavnicama.</item>
+    </plurals>
+    <string name="rec_warning_small_packs">Od mnogo malih pakovanja: %1$s. Proveri da li ti tako odgovara ili izaberi veće pakovanje.</string>
+    <string name="rec_warning_old_prices">Cene su iz cenovnika od %1$s, ne od danas. Proveri ih pre kupovine.</string>
+</resources>

@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -34,6 +35,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -56,9 +59,10 @@ import rs.pametnakupovina.app.ui.components.cardBorder
 import rs.pametnakupovina.app.ui.components.PrimaryActionButton
 import rs.pametnakupovina.app.ui.components.StatusPill
 import rs.pametnakupovina.app.ui.components.StatusTone
+import rs.pametnakupovina.app.text.UiText
+import rs.pametnakupovina.app.text.asString
+import rs.pametnakupovina.app.text.uiText
 import rs.pametnakupovina.app.ui.decimal
-import rs.pametnakupovina.app.ui.items
-import rs.pametnakupovina.app.ui.plural
 
 @Composable
 fun ShoppingListScreen(
@@ -68,6 +72,7 @@ fun ShoppingListScreen(
     productSearchViewModel: ProductSearchViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val productSearchState by productSearchViewModel.uiState
         .collectAsStateWithLifecycle()
@@ -82,8 +87,8 @@ fun ShoppingListScreen(
     LaunchedEffect(state.notice) {
         state.notice?.let { message ->
             snackbar.showSnackbar(
-                message = message,
-                actionLabel = "U redu",
+                message = message.resolve(resources),
+                actionLabel = resources.getString(R.string.list_snackbar_ok),
                 duration = SnackbarDuration.Long
             )
             viewModel.clearNotice()
@@ -104,8 +109,8 @@ fun ShoppingListScreen(
         scope.launch {
             snackbar.currentSnackbarData?.dismiss()
             val result = snackbar.showSnackbar(
-                message = "Obrisano: ${item.name}",
-                actionLabel = "Vrati",
+                message = resources.getString(R.string.list_snackbar_deleted, item.name),
+                actionLabel = resources.getString(R.string.list_snackbar_undo),
                 duration = SnackbarDuration.Long
             )
             if (result == SnackbarResult.ActionPerformed) {
@@ -117,10 +122,11 @@ fun ShoppingListScreen(
     Scaffold(
         topBar = {
             AppTopBar(
-                title = "Moj spisak",
+                title = stringResource(R.string.list_title),
                 subtitle = when {
-                    state.isOffline -> "Bez mreže, izmene čekaju slanje"
-                    state.items.isNotEmpty() -> items(state.items.size)
+                    state.isOffline -> stringResource(R.string.list_subtitle_offline)
+                    state.items.isNotEmpty() ->
+                        pluralStringResource(R.plurals.count_items, state.items.size, state.items.size)
                     else -> null
                 }
             )
@@ -129,7 +135,9 @@ fun ShoppingListScreen(
             if (!state.isInitialLoading) {
                 BottomActionBar {
                     PrimaryActionButton(
-                        text = if (state.isSyncing) "Šaljem spisak…" else "Izračunaj",
+                        text = stringResource(
+                            if (state.isSyncing) R.string.list_action_sending else R.string.list_action_calculate
+                        ),
                         enabled = state.items.isNotEmpty() && !state.isSyncing,
                         onClick = { viewModel.prepareMatching(onOpenMatching) }
                     )
@@ -144,7 +152,7 @@ fun ShoppingListScreen(
                     .fillMaxSize()
                     .padding(padding)
             ) {
-                LoadingState("Učitavanje spiska…")
+                LoadingState(stringResource(R.string.list_loading))
             }
             return@Scaffold
         }
@@ -162,14 +170,14 @@ fun ShoppingListScreen(
             item(key = "actions") {
                 Row(horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm)) {
                     TonalActionButton(
-                        text = "Dodaj stavku",
+                        text = stringResource(R.string.list_add_item),
                         icon = R.drawable.ic_add,
                         primary = true,
                         onClick = { openEditor(null) },
                         modifier = Modifier.weight(1f)
                     )
                     TonalActionButton(
-                        text = "Nalepi spisak",
+                        text = stringResource(R.string.list_paste_list),
                         icon = R.drawable.ic_content_paste,
                         onClick = { showPasteDialog = true },
                         modifier = Modifier.weight(1f)
@@ -180,9 +188,9 @@ fun ShoppingListScreen(
             state.errorMessage?.let { message ->
                 item(key = "error") {
                     NoticeBanner(
-                        text = message,
+                        text = message.asString(),
                         tone = StatusTone.ERROR,
-                        actionLabel = "Pokušaj ponovo",
+                        actionLabel = stringResource(R.string.common_retry),
                         onAction = viewModel::refresh
                     )
                 }
@@ -196,7 +204,7 @@ fun ShoppingListScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.padding(top = AppSpacing.sm)
                     ) {
-                        Text("Stavke na spisku", style = MaterialTheme.typography.titleMedium)
+                        Text(stringResource(R.string.list_items_header), style = MaterialTheme.typography.titleMedium)
                         Spacer(Modifier.width(AppSpacing.sm))
                         StatusPill(state.items.size.toString())
                     }
@@ -245,22 +253,23 @@ fun ShoppingListScreen(
     state.skippedItems?.let { skipped ->
         AlertDialog(
             onDismissRequest = viewModel::dismissSkipped,
-            title = { Text("Neke stavke nisu poslate") },
+            title = { Text(stringResource(R.string.list_skipped_title)) },
             text = {
                 Text(
-                    "Server nije prihvatio: ${skipped.names.joinToString(", ")}. " +
-                        "Razlog piše ispod stavke. Možeš da računaš bez " +
-                        plural(skipped.names.size, "nje", "njih", "njih") +
-                        " ili da prvo " + plural(skipped.names.size, "izmeniš stavku.", "izmeniš stavke.", "izmeniš stavke.")
+                    pluralStringResource(
+                        R.plurals.list_skipped_text,
+                        skipped.names.size,
+                        skipped.names.joinToString(", ")
+                    )
                 )
             },
             confirmButton = {
                 TextButton(onClick = { viewModel.calculateWithoutSkipped(onOpenMatching) }) {
-                    Text("Računaj bez " + plural(skipped.names.size, "nje", "njih", "njih"))
+                    Text(pluralStringResource(R.plurals.list_skipped_calculate_without, skipped.names.size))
                 }
             },
             dismissButton = {
-                TextButton(onClick = viewModel::dismissSkipped) { Text("Izmeni") }
+                TextButton(onClick = viewModel::dismissSkipped) { Text(stringResource(R.string.list_skipped_edit)) }
             }
         )
     }
@@ -290,9 +299,9 @@ private fun EmptyList() {
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.size(48.dp)
         )
-        Text("Spisak je prazan", style = MaterialTheme.typography.titleLarge)
+        Text(stringResource(R.string.list_empty_title), style = MaterialTheme.typography.titleLarge)
         Text(
-            "Nalepi spisak iz poruke ili beleške, ili dodaj stavku po stavku.",
+            stringResource(R.string.list_empty_text),
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
@@ -313,9 +322,9 @@ private fun DraftItemRow(
     onOpenProduct: (Long) -> Unit
 ) {
     val attention = if (item.syncError != null) {
-        "Nije poslato" to StatusTone.ERROR
+        stringResource(R.string.list_status_not_sent) to StatusTone.ERROR
     } else {
-        draftAttention(item.matchingStatus)
+        draftAttention(item.matchingStatus)?.let { (text, tone) -> stringResource(text) to tone }
     }
 
     Surface(
@@ -346,14 +355,15 @@ private fun DraftItemRow(
                     Text(item.name, style = MaterialTheme.typography.titleMedium)
                     draftRuleLabel(item)?.let { label ->
                         Text(
-                            label,
+                            label.asString(),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     item.syncError?.let { reason ->
                         Text(
-                            reason,
+                            // Blank when the server gave no reason of its own.
+                            reason.ifBlank { stringResource(R.string.list_sync_error_rejected) },
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.error
                         )
@@ -372,13 +382,13 @@ private fun DraftItemRow(
                 }
                 item.canonicalProductId?.let { canonicalProductId ->
                     IconButton(onClick = { onOpenProduct(canonicalProductId) }) {
-                        AppIcon(R.drawable.ic_local_offer, contentDescription = "Cene za ${item.name}")
+                        AppIcon(R.drawable.ic_local_offer, contentDescription = stringResource(R.string.list_cd_prices_for, item.name))
                     }
                 }
                 IconButton(onClick = onDelete) {
                     AppIcon(
                         R.drawable.ic_delete,
-                        contentDescription = "Obriši ${item.name}",
+                        contentDescription = stringResource(R.string.list_cd_delete, item.name),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
@@ -395,26 +405,27 @@ internal fun draftAmountLabel(item: DraftItemEntity): String =
  * Says how an item is chosen only when that differs from the default of
  * taking the best offer, which is what most of a pasted list is.
  */
-internal fun draftRuleLabel(item: DraftItemEntity): String? = when (item.matchingRule) {
+internal fun draftRuleLabel(item: DraftItemEntity): UiText? = when (item.matchingRule) {
     // A pasted line that names one product has no barcode until one is found.
     ShoppingItemRuleDto.EXACT_PRODUCT.name ->
-        "Tačan barkod".takeIf { item.canonicalProductId != null || !item.barcode.isNullOrBlank() }
-    ShoppingItemRuleDto.PRODUCT_FAMILY.name -> "Isti proizvod, sve varijante"
+        uiText(R.string.list_rule_exact_barcode)
+            .takeIf { item.canonicalProductId != null || !item.barcode.isNullOrBlank() }
+    ShoppingItemRuleDto.PRODUCT_FAMILY.name -> uiText(R.string.list_rule_same_product)
     else -> {
         val category = item.category?.trim().orEmpty()
-        listOfNotNull(
-            category
-                .takeUnless { it.isEmpty() || it.equals(item.name.trim(), ignoreCase = true) }
-                ?.let { "kategorija $it" },
-            item.requiredBrand?.takeIf(String::isNotBlank)?.let { "brend $it" }
-        ).joinToString(", ")
-            .replaceFirstChar { it.uppercaseChar() }
-            .ifEmpty { null }
+            .takeUnless { it.isEmpty() || it.equals(item.name.trim(), ignoreCase = true) }
+        val brand = item.requiredBrand?.takeIf(String::isNotBlank)
+        when {
+            category != null && brand != null -> uiText(R.string.list_rule_category_brand, category, brand)
+            category != null -> uiText(R.string.list_rule_category, category)
+            brand != null -> uiText(R.string.list_rule_brand, brand)
+            else -> null
+        }
     }
 }
 
-private fun draftAttention(status: String): Pair<String, StatusTone>? = when (status) {
-    "NEEDS_CONFIRMATION" -> "Treba tvoja potvrda" to StatusTone.WARNING
-    "UNMATCHED" -> "Nije pronađeno" to StatusTone.ERROR
+private fun draftAttention(status: String): Pair<Int, StatusTone>? = when (status) {
+    "NEEDS_CONFIRMATION" -> R.string.list_status_needs_confirmation to StatusTone.WARNING
+    "UNMATCHED" -> R.string.list_status_not_found to StatusTone.ERROR
     else -> null
 }

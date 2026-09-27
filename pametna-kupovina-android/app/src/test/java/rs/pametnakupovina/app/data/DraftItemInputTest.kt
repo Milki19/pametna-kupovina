@@ -3,7 +3,10 @@ package rs.pametnakupovina.app.data
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Test
+import rs.pametnakupovina.app.R
 import rs.pametnakupovina.app.data.network.ShoppingItemRuleDto
+import rs.pametnakupovina.app.text.UserFacingException
+import rs.pametnakupovina.app.text.uiText
 
 class DraftItemInputTest {
 
@@ -18,8 +21,8 @@ class DraftItemInputTest {
 
     @Test
     fun `pakovanje bez jedinice se ne cuva`() {
-        val error = assertThrows(IllegalArgumentException::class.java) { pivo(null).validated() }
-        assertEquals("Za veličinu pakovanja izaberi jedinicu: kg, g, l, ml ili kom.", error.message)
+        val error = assertThrows(UserFacingException::class.java) { pivo(null).validated() }
+        assertEquals(uiText(R.string.list_error_package_unit_required), error.text)
     }
 
     @Test

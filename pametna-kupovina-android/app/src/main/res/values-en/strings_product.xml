@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Product details -->
+    <string name="product_title">Product prices</string>
+    <string name="product_report_error">Report a problem</string>
+    <string name="product_loading_offers">Loading offers…</string>
+    <string name="product_prices_unavailable">Prices unavailable</string>
+    <string name="product_load_error">Product details aren\'t available right now.</string>
+    <string name="product_report_reason_wrong_price">The price is wrong</string>
+    <string name="product_report_reason_not_same">These aren\'t the same product</string>
+    <string name="product_report_reason_other">Something else</string>
+    <string name="product_report_note">Note (optional)</string>
+    <string name="product_report_sending">Sending…</string>
+    <string name="product_report_send">Send</string>
+    <string name="product_report_thanks">Thanks, we\'ll check it.</string>
+    <string name="product_report_failed">The report wasn\'t sent. Try again.</string>
+    <string name="product_current_offers">Current offers</string>
+    <string name="product_no_offers">There are no valid prices for this product yet.</string>
+    <string name="product_price_history">Recent price changes</string>
+    <string name="product_offer_scope_and_date">%1$s · prices from %2$s</string>
+    <string name="product_offer_sale">On sale, regularly %1$s</string>
+    <string name="product_offer_case">Pack of %1$d pcs · %2$s each</string>
+    <string name="product_offer_suspicious">Less than half the usual price at other chains</string>
+    <string name="product_check_price">Check price</string>
+    <string name="product_best_price">Best price</string>
+    <string name="product_prices_for_date">Prices for %1$s</string>
+    <string name="product_stat_lowest">Lowest</string>
+    <string name="product_stat_average">Average</string>
+    <string name="product_stat_highest">Highest</string>
+    <plurals name="product_chain_count">
+        <item quantity="one">%d chain</item>
+        <item quantity="other">%d chains</item>
+    </plurals>
+    <string name="product_watch_title">Tell me when it gets cheaper</string>
+    <string name="product_watch_subtitle">I check once a day</string>
+    <!-- A chain's own per-unit price, shown when the size is unknown. -->
+    <string name="product_unit_price_chain">unit %1$s</string>
+    <string name="product_barcode_meta">barcode %1$s</string>
+    <string name="product_scope_one_store">One store</string>
+    <string name="product_scope_format">Format %1$s</string>
+    <string name="product_scope_format_unknown">unknown</string>
+    <string name="product_scope_all_stores">All of the chain\'s stores</string>
+
+    <!-- Product search and picker -->
+    <string name="picker_search_unavailable">Product search isn\'t available right now.</string>
+    <string name="picker_query_label">Name or barcode</string>
+    <string name="picker_clear_search">Clear search</string>
+    <string name="picker_scan_barcode">Scan barcode</string>
+    <string name="picker_price_not_stock">A listed price doesn\'t mean the product is in stock.</string>
+    <string name="picker_include_without_price">Also show products without a price</string>
+    <string name="picker_searching">Searching products…</string>
+    <string name="picker_no_results">No products found.</string>
+    <string name="picker_no_results_with_price">No results with a current price. Change your search or include products without a price.</string>
+    <string name="picker_corrected_query">No results for “%1$s”. Showing results for “%2$s”.</string>
+    <string name="picker_loading_more">Loading…</string>
+    <string name="picker_show_more">Show more (%1$d of %2$d)</string>
+    <string name="picker_add_without_price_title">Add a product without a price?</string>
+    <string name="picker_add_without_price_text">We know this product, but we don\'t have a current price. We can\'t count it in the basket total until we find an offer.</string>
+    <string name="picker_add_anyway">Add anyway</string>
+    <string name="picker_back_to_results">Back to results</string>
+    <string name="picker_not_nearby">Not in stores near you</string>
+    <string name="picker_nearest_store">Nearest store that has it: %1$s</string>
+    <string name="picker_barcode_line">Barcode: %1$s</string>
+    <string name="picker_category_line">Category: %1$s</string>
+    <string name="picker_barcode_variants">%1$d barcode variants</string>
+    <string name="picker_less">Less</string>
+    <string name="picker_more_about">More about the product</string>
+    <string name="picker_choose">Choose</string>
+    <string name="picker_selected">Selected product</string>
+    <string name="picker_change_selection">Change selection</string>
+    <string name="picker_recorded_at">Seen at: %1$s</string>
+    <string name="picker_no_current_price">No current price</string>
+    <string name="picker_check_price">check price</string>
+    <string name="picker_price_from">from %1$s</string>
+    <plurals name="picker_more_chains">
+        <item quantity="one">and %d more chain</item>
+        <item quantity="other">and %d more chains</item>
+    </plurals>
+
+    <!-- Barcode image -->
+    <string name="barcode_content_description">Barcode: %1$s</string>
+</resources>

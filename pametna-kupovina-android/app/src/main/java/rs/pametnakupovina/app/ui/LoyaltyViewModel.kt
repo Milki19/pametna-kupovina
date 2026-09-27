@@ -11,15 +11,18 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import rs.pametnakupovina.app.R
 import rs.pametnakupovina.app.data.BarcodeScanner
 import rs.pametnakupovina.app.data.ScanCancelled
 import rs.pametnakupovina.app.data.ShoppingRepository
 import rs.pametnakupovina.app.data.network.LoyaltyCardDto
+import rs.pametnakupovina.app.text.UiText
+import rs.pametnakupovina.app.text.uiText
 
 data class LoyaltyUiState(
     val cards: List<LoyaltyCardDto> = emptyList(),
     val busy: Boolean = false,
-    val message: String? = null,
+    val message: UiText? = null,
     val shown: LoyaltyCardDto? = null
 )
 
@@ -50,16 +53,16 @@ class LoyaltyViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(busy = true, message = null) }
 
-            val message = try {
+            val message: UiText? = try {
                 val scanned = scanner.anyBarcode(activityContext)
                 onScanned(scanned.value, scanned.format)
                 null
             } catch (cancelled: ScanCancelled) {
                 null
             } catch (failed: MlKitException) {
-                "Skeniranje nije uspelo. Probaj ponovo."
+                uiText(R.string.loyalty_scan_failed_retry)
             } catch (failure: Exception) {
-                "Skeniranje nije uspelo."
+                uiText(R.string.loyalty_scan_failed)
             }
 
             _uiState.update { it.copy(busy = false, message = message) }
@@ -70,12 +73,12 @@ class LoyaltyViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(busy = true, message = null) }
 
-            val message = try {
+            val message: UiText? = try {
                 repository.addLoyaltyCard(name, cardNumber, barcodeFormat)
                 refresh()
                 null
             } catch (failure: Exception) {
-                "Kartica nije sačuvana. Proveri broj pa probaj ponovo."
+                uiText(R.string.loyalty_not_saved)
             }
 
             _uiState.update { it.copy(busy = false, message = message) }

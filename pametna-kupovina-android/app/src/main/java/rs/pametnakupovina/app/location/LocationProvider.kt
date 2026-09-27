@@ -22,6 +22,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import rs.pametnakupovina.app.R
+import rs.pametnakupovina.app.text.UiText
+import rs.pametnakupovina.app.text.UserFacingException
+import rs.pametnakupovina.app.text.uiText
 
 data class Coordinates(
     val latitude: Double,
@@ -33,7 +37,7 @@ data class Coordinates(
     }
 }
 
-class LocationUnavailableException(message: String) : Exception(message)
+class LocationUnavailableException(text: UiText) : UserFacingException(text)
 
 private val CyrillicToLatin = "абвгдђежзијклљмнњопрстћуфхцчџш".toList().zip(
     listOf(
@@ -64,13 +68,13 @@ class FusedLocationProvider @Inject constructor(
     suspend fun currentLocation(): Coordinates {
         if (!hasLocationPermission(context)) {
             throw LocationUnavailableException(
-                "Dozvola za lokaciju nije odobrena."
+                uiText(R.string.location_permission_missing)
             )
         }
 
         val manager = context.getSystemService(Context.LOCATION_SERVICE) as android.location.LocationManager
         if (!androidx.core.location.LocationManagerCompat.isLocationEnabled(manager)) {
-            throw LocationUnavailableException("Lokacijske usluge su isključene. Uključi ih u podešavanjima pa pokušaj ponovo.")
+            throw LocationUnavailableException(uiText(R.string.location_services_off))
         }
 
         val priority = if (hasFineLocationPermission(context)) {
@@ -114,8 +118,7 @@ class FusedLocationProvider @Inject constructor(
                     )
             }
         ) ?: throw LocationUnavailableException(
-                "Lokacija nije pronađena. Uključi lokacijske usluge " +
-                    "ili upiši adresu."
+                uiText(R.string.location_not_found_enable_services)
             )
 
         return Coordinates(location.latitude, location.longitude)
@@ -144,7 +147,7 @@ class FusedLocationProvider @Inject constructor(
     suspend fun findAddress(query: String): Pair<Coordinates, String> = withContext(Dispatchers.IO) {
         if (!Geocoder.isPresent()) {
             throw LocationUnavailableException(
-                "Pretraga adrese ne radi na ovom telefonu. Unesi koordinate ručno."
+                uiText(R.string.location_geocoder_missing)
             )
         }
         val geocoder = Geocoder(context, Locale.forLanguageTag("sr-Latn-RS"))
@@ -154,12 +157,12 @@ class FusedLocationProvider @Inject constructor(
             .recoverCatching { search() }
             .getOrElse {
                 throw LocationUnavailableException(
-                    "Pretraga adrese trenutno ne radi. Probaj ponovo za koji trenutak."
+                    uiText(R.string.location_geocoder_unavailable)
                 )
             }
             ?.firstOrNull()
             ?: throw LocationUnavailableException(
-                "Adresa nije pronađena. Dodaj grad, npr. „Karaburma, Beograd“."
+                uiText(R.string.location_address_not_found)
             )
         Coordinates(found.latitude, found.longitude) to toLatin(found.getAddressLine(0) ?: query)
     }

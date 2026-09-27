@@ -4,6 +4,7 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import rs.pametnakupovina.app.R
 import rs.pametnakupovina.app.location.Coordinates
 
 private fun Coordinates.queryValue(): String = "$latitude,$longitude"
@@ -42,7 +43,7 @@ fun launchGoogleMapsDirections(context: Context, url: String) {
     } catch (_: ActivityNotFoundException) {
         try { context.startActivity(Intent(Intent.ACTION_VIEW, uri)) }
         catch (_: ActivityNotFoundException) {
-            android.widget.Toast.makeText(context, "Instaliraj Google Maps ili pregledač da otvoriš rutu.",
+            android.widget.Toast.makeText(context, context.getString(R.string.rec_maps_not_installed),
                 android.widget.Toast.LENGTH_LONG).show()
         }
     }

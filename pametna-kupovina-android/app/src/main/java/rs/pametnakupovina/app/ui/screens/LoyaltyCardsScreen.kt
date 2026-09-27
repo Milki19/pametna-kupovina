@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.ui.graphics.Color
 import rs.pametnakupovina.app.R
 import rs.pametnakupovina.app.data.network.LoyaltyCardDto
+import rs.pametnakupovina.app.text.asString
 import rs.pametnakupovina.app.ui.components.LetterTile
 import rs.pametnakupovina.app.ui.components.StatusPill
 import rs.pametnakupovina.app.ui.components.TonalActionButton
@@ -33,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -86,7 +88,7 @@ fun LoyaltyCardsScreen(
                         textAlign = TextAlign.Center
                     )
                     Text(
-                        "Ako kod ne prolazi, kasirka može da ukuca broj.",
+                        stringResource(R.string.loyalty_cashier_hint),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
@@ -94,11 +96,11 @@ fun LoyaltyCardsScreen(
                 }
             },
             confirmButton = {
-                TextButton(onClick = { viewModel.show(null) }) { Text("Zatvori") }
+                TextButton(onClick = { viewModel.show(null) }) { Text(stringResource(R.string.common_close)) }
             },
             dismissButton = {
                 TextButton(onClick = { viewModel.remove(card.id) }) {
-                    Text("Obriši karticu")
+                    Text(stringResource(R.string.loyalty_delete))
                 }
             }
         )
@@ -107,25 +109,25 @@ fun LoyaltyCardsScreen(
     if (adding) {
         AlertDialog(
             onDismissRequest = { adding = false },
-            title = { Text("Nova kartica") },
+            title = { Text(stringResource(R.string.loyalty_new_card)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.md)) {
                     OutlinedTextField(
                         value = name,
                         onValueChange = { name = it },
-                        label = { Text("Naziv") },
+                        label = { Text(stringResource(R.string.loyalty_name)) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth().testTag("card-name")
                     )
                     OutlinedTextField(
                         value = number,
                         onValueChange = { number = it },
-                        label = { Text("Broj sa kartice") },
+                        label = { Text(stringResource(R.string.loyalty_number)) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth().testTag("card-number")
                     )
                     TonalActionButton(
-                        text = if (state.busy) "Skeniram…" else "Skeniraj kod sa kartice",
+                        text = stringResource(if (state.busy) R.string.loyalty_scanning else R.string.loyalty_scan),
                         icon = R.drawable.ic_camera,
                         enabled = !state.busy,
                         onClick = {
@@ -138,7 +140,7 @@ fun LoyaltyCardsScreen(
                     )
                     if (number.isNotBlank()) {
                         Text(
-                            "Oblik koda: $format",
+                            stringResource(R.string.loyalty_code_format, format),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -155,16 +157,16 @@ fun LoyaltyCardsScreen(
                         format = "CODE_128"
                         adding = false
                     }
-                ) { Text("Sačuvaj") }
+                ) { Text(stringResource(R.string.common_save)) }
             },
             dismissButton = {
-                TextButton(onClick = { adding = false }) { Text("Odustani") }
+                TextButton(onClick = { adding = false }) { Text(stringResource(R.string.loyalty_cancel)) }
             }
         )
     }
 
     Scaffold(
-        topBar = { AppTopBar(title = "Lojalti kartice", onBack = onBack) }
+        topBar = { AppTopBar(title = stringResource(R.string.loyalty_title), onBack = onBack) }
     ) { padding ->
         LazyColumn(
             modifier = Modifier
@@ -182,9 +184,9 @@ fun LoyaltyCardsScreen(
             state.message?.let {
                 item(key = "message") {
                     NoticeBanner(
-                        text = it,
+                        text = it.asString(),
                         tone = StatusTone.ERROR,
-                        actionLabel = "U redu",
+                        actionLabel = stringResource(R.string.dashboard_ok),
                         onAction = viewModel::dismissMessage
                     )
                 }
@@ -196,13 +198,13 @@ fun LoyaltyCardsScreen(
                     horizontalArrangement = Arrangement.spacedBy(AppSpacing.md)
                 ) {
                     Text(
-                        "Barkodovi za kasu",
+                        stringResource(R.string.loyalty_subtitle),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.weight(1f)
                     )
                     TonalActionButton(
-                        text = "Dodaj karticu",
+                        text = stringResource(R.string.loyalty_add),
                         icon = R.drawable.ic_add,
                         primary = true,
                         onClick = { adding = true },
@@ -214,9 +216,7 @@ fun LoyaltyCardsScreen(
             if (state.cards.isEmpty()) {
                 item(key = "empty") {
                     Text(
-                        "Dodaj kartice koje nosiš u novčaniku pa ih na kasi " +
-                            "otvori odavde. Kartice stoje uz nalog, pa " +
-                            "prelaze i na nov telefon.",
+                        stringResource(R.string.loyalty_empty),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -231,7 +231,7 @@ fun LoyaltyCardsScreen(
                 if (state.cards.size > 1) {
                     item(key = "wallet-header") {
                         Text(
-                            "Tvoj novčanik",
+                            stringResource(R.string.loyalty_wallet),
                             style = MaterialTheme.typography.titleMedium,
                             modifier = Modifier.padding(top = AppSpacing.sm)
                         )
@@ -259,7 +259,7 @@ fun LoyaltyCardsScreen(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            StatusPill("Barkod", StatusTone.POSITIVE)
+                            StatusPill(stringResource(R.string.loyalty_barcode), StatusTone.POSITIVE)
                         }
                     }
                 }
@@ -305,7 +305,7 @@ private fun FeaturedCard(card: LoyaltyCardDto, onOpen: () -> Unit) {
                 }
             }
             Text(
-                "Dodirni za veći kod",
+                stringResource(R.string.loyalty_tap_to_enlarge),
                 style = MaterialTheme.typography.bodySmall
             )
         }

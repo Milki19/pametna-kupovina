@@ -12,11 +12,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import rs.pametnakupovina.app.R
 import rs.pametnakupovina.app.data.BarcodeScanner
 import rs.pametnakupovina.app.data.ShoppingRepository
 import rs.pametnakupovina.app.location.Coordinates
 import rs.pametnakupovina.app.location.FusedLocationProvider
 import rs.pametnakupovina.app.data.network.CanonicalProductSearchItemDto
+import rs.pametnakupovina.app.text.UiText
 
 data class ProductSearchUiState(
     val query: String = "",
@@ -27,7 +29,7 @@ data class ProductSearchUiState(
     val results: List<CanonicalProductSearchItemDto> = emptyList(),
     val totalElements: Long = 0,
     val hasNext: Boolean = false,
-    val errorMessage: String? = null,
+    val errorMessage: UiText? = null,
     val includeWithoutPrice: Boolean = false,
     // Pretraga je znala gde je kupac, pa „nema u blizini" nešto znači.
     val locationKnown: Boolean = false
@@ -183,7 +185,7 @@ class ProductSearchViewModel @Inject constructor(
                     isSearching = false,
                     isLoadingMore = false,
                     errorMessage = error.toUserMessage(
-                        "Pretraga proizvoda trenutno nije dostupna."
+                        R.string.picker_search_unavailable
                     )
                 )
             }

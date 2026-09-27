@@ -10,11 +10,16 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import rs.pametnakupovina.app.location.Coordinates
 import rs.pametnakupovina.app.location.FusedLocationProvider
+import rs.pametnakupovina.app.R
+import rs.pametnakupovina.app.text.UiText
+import rs.pametnakupovina.app.text.UserFacingException
+import rs.pametnakupovina.app.text.asUiText
+import rs.pametnakupovina.app.text.uiText
 
 data class LocationUiState(
     val isResolving: Boolean = false,
     val coordinates: Coordinates? = null,
-    val message: String? = null,
+    val message: UiText? = null,
     val isError: Boolean = false,
     /** Greška koju rešavaju podešavanja telefona, a ne druga adresa. */
     val offerSettings: Boolean = false
@@ -30,21 +35,21 @@ class LocationViewModel @Inject constructor(
 
     fun resolveCurrentLocation() = resolve(offerSettings = true) {
         locationProvider.currentLocation() to
-            "Lokacija je pronađena. Proveri je i pokreni računanje."
+            uiText(R.string.location_found_current)
     }
 
     fun findAddress(query: String) {
         if (query.isBlank()) return
         resolve(offerSettings = false) {
             locationProvider.findAddress(query.trim()).let { (coordinates, label) ->
-                coordinates to "Pronađeno: $label"
+                coordinates to uiText(R.string.location_found_address, label)
             }
         }
     }
 
     private fun resolve(
         offerSettings: Boolean,
-        lookup: suspend () -> Pair<Coordinates, String>
+        lookup: suspend () -> Pair<Coordinates, UiText>
     ) {
         if (_uiState.value.isResolving) return
 
@@ -57,8 +62,9 @@ class LocationViewModel @Inject constructor(
                 throw error
             } catch (error: Exception) {
                 LocationUiState(
-                    message = error.message
-                        ?: "Lokacija nije pronađena. Upiši adresu.",
+                    message = (error as? UserFacingException)?.text
+                        ?: error.message?.asUiText()
+                        ?: uiText(R.string.location_not_found_type_address),
                     isError = true,
                     offerSettings = offerSettings
                 )
@@ -68,7 +74,7 @@ class LocationViewModel @Inject constructor(
 
     fun permissionDenied() {
         _uiState.value = LocationUiState(
-            message = "Dozvola nije odobrena. Možeš je uključiti u podešavanjima aplikacije ili upisati adresu.",
+            message = uiText(R.string.location_permission_denied),
             isError = true,
             offerSettings = true
         )

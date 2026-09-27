@@ -36,6 +36,11 @@ import rs.pametnakupovina.app.data.network.ShoppingListMatchingDto
 import rs.pametnakupovina.app.data.network.ShoppingRecommendationDto
 import rs.pametnakupovina.app.data.network.UpdateShoppingListItemRequestDto
 import rs.pametnakupovina.app.data.preferences.ClientIdentityStore
+import rs.pametnakupovina.app.R
+import rs.pametnakupovina.app.text.UserFacingException
+import rs.pametnakupovina.app.text.requireUser
+import rs.pametnakupovina.app.text.requireUserNotNull
+import rs.pametnakupovina.app.text.uiText
 
 data class DraftItemInput(
     val name: String,
@@ -53,58 +58,58 @@ data class DraftItemInput(
     val targetQuantity: Double? = null
 ) {
     fun validated(): DraftItemInput {
-        require(name.isNotBlank()) { "Naziv stavke je obavezan." }
-        require(quantity.isFinite() && quantity > 0) {
-            "Količina mora biti veća od nule."
+        requireUser(name.isNotBlank()) { uiText(R.string.list_error_name_required) }
+        requireUser(quantity.isFinite() && quantity > 0) {
+            uiText(R.string.list_error_quantity_positive)
         }
-        require(targetQuantity == null || (targetQuantity.isFinite() && targetQuantity > 0
+        requireUser(targetQuantity == null || (targetQuantity.isFinite() && targetQuantity > 0
             && matchingRule == ShoppingItemRuleDto.FLEXIBLE_CATEGORY
             && requiredBaseUnit in setOf("g", "ml", "piece", "kom", "komad"))) {
-            "Ukupna količina mora biti pozitivna i imati jedinicu g, ml ili piece."
+            uiText(R.string.list_error_target_quantity)
         }
         when (matchingRule) {
             ShoppingItemRuleDto.EXACT_PRODUCT -> {
-                require(productFamilyId == null) {
-                    "Tačna stavka ne može imati porodicu proizvoda."
+                requireUser(productFamilyId == null) {
+                    uiText(R.string.list_error_exact_no_family)
                 }
             }
 
             ShoppingItemRuleDto.PRODUCT_FAMILY -> {
-                require(productFamilyId != null && productFamilyId > 0) {
-                    "Za isti proizvod izaberi porodicu proizvoda."
+                requireUser(productFamilyId != null && productFamilyId > 0) {
+                    uiText(R.string.list_error_family_required)
                 }
-                require(canonicalProductId == null && barcode == null) {
-                    "Porodična stavka ne može imati tačan barkod."
+                requireUser(canonicalProductId == null && barcode == null) {
+                    uiText(R.string.list_error_family_no_barcode)
                 }
             }
 
             ShoppingItemRuleDto.FLEXIBLE_CATEGORY -> {
-                require(canonicalProductId == null && productFamilyId == null) {
-                    "Fleksibilna stavka ne može imati izabran proizvod."
+                requireUser(canonicalProductId == null && productFamilyId == null) {
+                    uiText(R.string.list_error_flexible_no_product)
                 }
-                require(!category.isNullOrBlank()) {
-                    "Za fleksibilnu stavku izaberi kategoriju."
+                requireUser(!category.isNullOrBlank()) {
+                    uiText(R.string.list_error_flexible_category_required)
                 }
                 if (
                     minPackageQuantity != null &&
                     maxPackageQuantity != null
                 ) {
-                    require(minPackageQuantity <= maxPackageQuantity) {
-                        "Minimalno pakovanje ne može biti veće od maksimalnog."
+                    requireUser(minPackageQuantity <= maxPackageQuantity) {
+                        uiText(R.string.list_error_package_min_over_max)
                     }
                 }
-                require(minPackageQuantity == null || minPackageQuantity > 0) {
-                    "Minimalno pakovanje mora biti veće od nule."
+                requireUser(minPackageQuantity == null || minPackageQuantity > 0) {
+                    uiText(R.string.list_error_package_min_positive)
                 }
-                require(maxPackageQuantity == null || maxPackageQuantity > 0) {
-                    "Maksimalno pakovanje mora biti veće od nule."
+                requireUser(maxPackageQuantity == null || maxPackageQuantity > 0) {
+                    uiText(R.string.list_error_package_max_positive)
                 }
                 // "Pakovanje od 6" alone was read as 6 ml or 6 g.
-                require(
+                requireUser(
                     (minPackageQuantity == null && maxPackageQuantity == null) ||
                         !requiredBaseUnit.isNullOrBlank()
                 ) {
-                    "Za veličinu pakovanja izaberi jedinicu: kg, g, l, ml ili kom."
+                    uiText(R.string.list_error_package_unit_required)
                 }
             }
         }
@@ -125,8 +130,8 @@ data class DraftItemInput(
                 }
                 ?.takeIf(String::isNotBlank)
                 ?.also { unit ->
-                    require(unit in setOf("g", "ml", "piece")) {
-                        "Jedinica mora biti g, ml ili piece."
+                    requireUser(unit in setOf("g", "ml", "piece")) {
+                        uiText(R.string.list_error_unit_invalid)
                     }
                 }
         )
@@ -238,21 +243,21 @@ class ShoppingRepository @Inject constructor(
     }
 
     suspend fun alternativeQuery(itemId: Long): String {
-        val item = requireNotNull(dao.findByRemoteId(itemId)) { "Stavka nije u aktivnom spisku." }
+        val item = requireUserNotNull(dao.findByRemoteId(itemId)) { uiText(R.string.list_error_item_not_in_list) }
         return item.rawInput?.takeIf { it.isNotBlank() } ?: item.name
     }
 
     /** Stavka koje nema u planu postaje „slično, bilo koji brend" (vidi [similarItem]). */
     suspend fun replaceWithSimilar(itemId: Long, kind: String) {
-        val item = requireNotNull(dao.findByRemoteId(itemId)) { "Stavka nije u aktivnom spisku." }
-        require(item.syncState != SyncState.PENDING_DELETE.name) { "Stavka je obrisana." }
+        val item = requireUserNotNull(dao.findByRemoteId(itemId)) { uiText(R.string.list_error_item_not_in_list) }
+        requireUser(item.syncState != SyncState.PENDING_DELETE.name) { uiText(R.string.list_error_item_deleted) }
         updateItem(item, similarItem(item.name, item.quantity, item.rawInput, kind))
     }
 
     suspend fun replaceWithAlternative(itemId: Long, product: rs.pametnakupovina.app.data.network.CanonicalProductSearchItemDto, packages: Double) {
-        val item = requireNotNull(dao.findByRemoteId(itemId)) { "Stavka nije u aktivnom spisku." }
-        require(item.syncState != SyncState.PENDING_DELETE.name) { "Stavka je obrisana." }
-        require(product.hasUsablePrice) { "Izabrani proizvod nema aktuelnu cenu." }
+        val item = requireUserNotNull(dao.findByRemoteId(itemId)) { uiText(R.string.list_error_item_not_in_list) }
+        requireUser(item.syncState != SyncState.PENDING_DELETE.name) { uiText(R.string.list_error_item_deleted) }
+        requireUser(product.hasUsablePrice) { uiText(R.string.list_error_product_no_price) }
         updateItem(item, DraftItemInput(name=product.name,rawInput=item.rawInput,
             productFamilyId=requireNotNull(product.productFamilyId),quantity=packages,
             matchingRule=ShoppingItemRuleDto.PRODUCT_FAMILY))
@@ -265,7 +270,7 @@ class ShoppingRepository @Inject constructor(
      */
     suspend fun pasteItems(text: String): Int {
         val parsed = PastedListParser.parse(text)
-        require(parsed.isNotEmpty()) { "Unesi bar jednu nepraznu stavku." }
+        requireUser(parsed.isNotEmpty()) { uiText(R.string.list_error_paste_empty) }
 
         parsed.forEach { line ->
             dao.insert(line.toFlexibleDraftInput().toEntity(syncState = SyncState.PENDING_PASTE))
@@ -282,8 +287,8 @@ class ShoppingRepository @Inject constructor(
             synchronizeAndRefresh()
             local = dao.findByRemoteId(itemId)
         }
-        val item = requireNotNull(local) {
-            "Stavka više nije dostupna na lokalnom spisku."
+        val item = requireUserNotNull(local) {
+            uiText(R.string.list_error_item_not_local)
         }
         val flexibleCategory = category.trim().ifBlank { item.name.trim() }
 
@@ -473,10 +478,13 @@ internal fun parseHouseholdCode(scanned: String): Pair<String, Long>? {
 class ItemSyncValidationException(
     val rejected: List<RejectedItem>,
     val listId: Long
-) : IllegalArgumentException(
-    "Server nije prihvatio: " + rejected.joinToString("; ") { item ->
-        item.reason?.let { "${item.name} (${it.trimEnd('.')})" } ?: item.name
-    } + ". Ostale stavke su poslate."
+) : UserFacingException(
+    uiText(
+        R.string.list_error_server_rejected,
+        rejected.joinToString("; ") { item ->
+            item.reason?.let { "${item.name} (${it.trimEnd('.')})" } ?: item.name
+        }
+    )
 ) {
     val itemNames: List<String> get() = rejected.map { it.name }
 }
@@ -546,7 +554,9 @@ internal suspend fun pushPendingItems(api: ShoppingApiService, dao: DraftItemDao
         } catch (error: HttpException) {
             if (error.code() !in setOf(400, 422)) throw error
             val reason = error.serverMessage()
-            dao.update(item.copy(syncError = reason ?: "Server nije prihvatio ovu stavku."))
+            // Blank when the server gave no reason; the row then shows a
+            // general one in the reader's language.
+            dao.update(item.copy(syncError = reason ?: ""))
             rejected += RejectedItem(item.name, reason)
         }
     }

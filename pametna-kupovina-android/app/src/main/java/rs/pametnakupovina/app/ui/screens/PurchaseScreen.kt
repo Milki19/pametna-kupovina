@@ -41,6 +41,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
@@ -57,6 +59,10 @@ import rs.pametnakupovina.app.data.purchase.PurchaseSession
 import rs.pametnakupovina.app.data.purchase.PurchaseStatus
 import rs.pametnakupovina.app.data.purchase.validatePurchaseProgress
 import rs.pametnakupovina.app.location.Coordinates
+import rs.pametnakupovina.app.text.UiText
+import rs.pametnakupovina.app.text.UserFacingException
+import rs.pametnakupovina.app.text.asString
+import rs.pametnakupovina.app.text.uiText
 import rs.pametnakupovina.app.navigation.googleMapsDirectionsUrl
 import rs.pametnakupovina.app.navigation.launchGoogleMapsDirections
 import rs.pametnakupovina.app.data.network.MonthlySpendingDto
@@ -74,12 +80,10 @@ import rs.pametnakupovina.app.ui.components.NoticeBanner
 import rs.pametnakupovina.app.ui.components.SectionHeader
 import rs.pametnakupovina.app.ui.components.StatusPill
 import rs.pametnakupovina.app.ui.components.StatusTone
-import rs.pametnakupovina.app.ui.counted
 import rs.pametnakupovina.app.ui.date
 import rs.pametnakupovina.app.ui.dateTime
 import rs.pametnakupovina.app.ui.decimal
 import rs.pametnakupovina.app.ui.money
-import rs.pametnakupovina.app.ui.plural
 
 @Composable
 fun PurchaseScreen(
@@ -106,14 +110,14 @@ fun PurchaseScreen(
 @Composable
 private fun PurchaseHistory(
     sessions: List<PurchaseSessionSummary>,
-    message: String?,
+    message: UiText?,
     onOpen: (String) -> Unit,
     receiptViewModel: ReceiptViewModel = hiltViewModel()
 ) {
     val (active, finished) = sessions.partition { it.archivedAt == null }
     val receipts by receiptViewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    Scaffold(topBar = { AppTopBar(title = "Istorija") }) { padding ->
+    Scaffold(topBar = { AppTopBar(title = stringResource(R.string.purchase_history_title)) }) { padding ->
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -128,14 +132,14 @@ private fun PurchaseHistory(
             verticalArrangement = Arrangement.spacedBy(AppSpacing.md)
         ) {
             message?.let {
-                item(key = "message") { NoticeBanner(text = it, tone = StatusTone.ERROR) }
+                item(key = "message") { NoticeBanner(text = it.asString(), tone = StatusTone.ERROR) }
             }
             receipts.message?.let {
                 item(key = "receipt-message") {
                     NoticeBanner(
-                        text = it,
+                        text = it.asString(),
                         tone = StatusTone.NEUTRAL,
-                        actionLabel = "U redu",
+                        actionLabel = stringResource(R.string.purchase_ok),
                         onAction = receiptViewModel::dismissMessage
                     )
                 }
@@ -150,7 +154,7 @@ private fun PurchaseHistory(
             }
             if (receipts.receipts.isNotEmpty()) {
                 item(key = "receipts-header") {
-                    SectionHeader("Računi", trailing = receipts.receipts.size.toString())
+                    SectionHeader(stringResource(R.string.purchase_receipts_header), trailing = receipts.receipts.size.toString())
                 }
                 item(key = "receipts") { ReceiptGroup(receipts.receipts) }
             }
@@ -159,21 +163,19 @@ private fun PurchaseHistory(
             }
             if (active.isNotEmpty()) {
                 item(key = "active-header") {
-                    SectionHeader("U toku", trailing = active.size.toString())
+                    SectionHeader(stringResource(R.string.purchase_active_header), trailing = active.size.toString())
                 }
                 item(key = "active") { SessionGroup(active, onOpen) }
             }
             if (finished.isNotEmpty()) {
                 item(key = "finished-header") {
-                    SectionHeader("Završene", trailing = finished.size.toString())
+                    SectionHeader(stringResource(R.string.purchase_finished_header), trailing = finished.size.toString())
                 }
                 item(key = "finished") { SessionGroup(finished, onOpen) }
             }
             item(key = "storage-note") {
                 Text(
-                    "Planovi i napredak su na ovom telefonu i rade bez mreže; " +
-                        "brisanje podataka aplikacije briše i njih. Skenirani " +
-                        "računi stoje uz nalog, pa ostaju i kad promeniš telefon.",
+                    stringResource(R.string.purchase_storage_note),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -206,10 +208,9 @@ private fun SpendingCard(
             val thisMonth = byMonth.firstOrNull()
 
             if (thisMonth == null) {
-                Text("Potrošnja", style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.purchase_spending_title), style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "Skeniraj račun posle kupovine pa ćeš ovde videti koliko " +
-                        "je otišlo i gde.",
+                    stringResource(R.string.purchase_spending_empty),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -225,14 +226,14 @@ private fun SpendingCard(
                     color = MaterialTheme.colorScheme.primary
                 )
                 Text(
-                    counted(receiptCount, "račun", "računa", "računa"),
+                    pluralStringResource(R.plurals.purchase_receipt_count, receiptCount, receiptCount),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
             TonalActionButton(
-                text = if (scanning) "Skeniram…" else "Skeniraj račun",
+                text = stringResource(if (scanning) R.string.purchase_scanning else R.string.purchase_scan_receipt),
                 icon = R.drawable.ic_camera,
                 primary = true,
                 enabled = !scanning,
@@ -288,10 +289,14 @@ private fun ReceiptGroup(receipts: List<ReceiptDto>) {
 }
 
 /** „2026-09-01" postaje „septembar 2026.". */
-private fun monthName(isoMonth: String): String = try {
-    rs.pametnakupovina.app.ui.monthName(java.time.LocalDate.parse(isoMonth))
-} catch (invalid: Exception) {
-    isoMonth
+@Composable
+private fun monthName(isoMonth: String): String {
+    val month = try {
+        java.time.LocalDate.parse(isoMonth)
+    } catch (invalid: Exception) {
+        null
+    }
+    return month?.let { rs.pametnakupovina.app.ui.monthName(it) } ?: isoMonth
 }
 
 @Composable
@@ -309,9 +314,9 @@ private fun EmptyPurchases() {
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.size(48.dp)
         )
-        Text("Još nema sačuvanih kupovina", style = MaterialTheme.typography.titleLarge)
+        Text(stringResource(R.string.purchase_empty_title), style = MaterialTheme.typography.titleLarge)
         Text(
-            "Izračunaj plan i izaberi „Započni kupovinu po ovom planu“.",
+            stringResource(R.string.purchase_empty_hint),
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
@@ -349,7 +354,12 @@ private fun SessionGroup(
                     ) {
                         Text(dateTime(saved.createdAt), style = MaterialTheme.typography.titleMedium)
                         Text(
-                            "${saved.listName} · kupljeno ${saved.purchasedCount} od ${saved.itemCount}",
+                            stringResource(
+                                R.string.purchase_session_progress,
+                                saved.listName,
+                                saved.purchasedCount,
+                                saved.itemCount
+                            ),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -388,7 +398,7 @@ private fun SessionGroup(
 @Composable
 private fun PurchaseInProgress(
     session: PurchaseSession?,
-    message: String?,
+    message: UiText?,
     onBack: () -> Unit,
     onOpenCards: () -> Unit,
     viewModel: PurchaseViewModel,
@@ -404,9 +414,13 @@ private fun PurchaseInProgress(
     Scaffold(
         topBar = {
             AppTopBar(
-                title = "U kupovini",
+                title = stringResource(R.string.purchase_in_progress_title),
                 subtitle = session?.let {
-                    "Plan od ${date(it.snapshot.calculationDate)} · ${scenarioTitle(it.snapshot.scenario.type)}"
+                    stringResource(
+                        R.string.purchase_plan_subtitle,
+                        date(it.snapshot.calculationDate),
+                        scenarioTitle(it.snapshot.scenario.type)
+                    )
                 },
                 onBack = onBack,
                 actions = {
@@ -420,7 +434,7 @@ private fun PurchaseInProgress(
                                 )
                             )
                         }) {
-                            AppIcon(R.drawable.ic_directions, contentDescription = "Pregled rute u Google Maps")
+                            AppIcon(R.drawable.ic_directions, contentDescription = stringResource(R.string.purchase_route_overview))
                         }
                     }
                 }
@@ -435,12 +449,12 @@ private fun PurchaseInProgress(
             ) {
                 if (message != null) {
                     NoticeBanner(
-                        text = message,
+                        text = message.asString(),
                         tone = StatusTone.ERROR,
                         modifier = Modifier.padding(AppSpacing.lg)
                     )
                 } else {
-                    LoadingState("Učitavam sačuvanu kupovinu…")
+                    LoadingState(stringResource(R.string.purchase_loading_session))
                 }
             }
             return@Scaffold
@@ -468,12 +482,12 @@ private fun PurchaseInProgress(
             item(key = "progress") { PurchaseProgressHeader(session, onOpenCards) }
 
             if (receipts != null && receiptViewModel != null) {
-                val receiptNotice = if (receipts.scanning) "Zavodim račun…" else receipts.message
+                val receiptNotice = if (receipts.scanning) uiText(R.string.purchase_logging_receipt) else receipts.message
                 receiptNotice?.let { text ->
                     item(key = "receipt-notice") {
                         NoticeBanner(
-                            text = text,
-                            actionLabel = "U redu".takeUnless { receipts.scanning },
+                            text = text.asString(),
+                            actionLabel = stringResource(R.string.purchase_ok).takeUnless { receipts.scanning },
                             onAction = receiptViewModel::dismissMessage.takeUnless { receipts.scanning }
                         )
                     }
@@ -481,20 +495,19 @@ private fun PurchaseInProgress(
             }
 
             message?.let {
-                item(key = "message") { NoticeBanner(text = it, tone = StatusTone.ERROR) }
+                item(key = "message") { NoticeBanner(text = it.asString(), tone = StatusTone.ERROR) }
             }
             if (archived) {
                 item(key = "archived") {
                     NoticeBanner(
-                        text = "Ova kupovina je završena. Kućice su zaključane dok je ponovo ne otvoriš, " +
-                            "a račun možeš da skeniraš i sada."
+                        text = stringResource(R.string.purchase_archived_notice)
                     )
                 }
             }
             if (!scenario.complete) {
                 item(key = "incomplete") {
                     NoticeBanner(
-                        text = "Plan nije potpun. Stavke bez ponude su na dnu.",
+                        text = stringResource(R.string.purchase_incomplete_notice),
                         tone = StatusTone.WARNING
                     )
                 }
@@ -526,7 +539,7 @@ private fun PurchaseInProgress(
             if (unresolved.isNotEmpty()) {
                 item(key = "unresolved") {
                     Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)) {
-                        SectionHeader("Bez prodavnice", trailing = unresolved.size.toString())
+                        SectionHeader(stringResource(R.string.purchase_no_store_header), trailing = unresolved.size.toString())
                         ItemGroup(unresolved, session, archived, onStatus) { editingId = it }
                     }
                 }
@@ -538,7 +551,9 @@ private fun PurchaseInProgress(
                     // račun skenira odavde, i pre i posle završetka.
                     if (receipts != null && receiptViewModel != null) {
                         TonalActionButton(
-                            text = if (receipts.scanning) "Zavodim račun…" else "Skeniraj račun",
+                            text = stringResource(
+                                if (receipts.scanning) R.string.purchase_logging_receipt else R.string.purchase_scan_receipt
+                            ),
                             icon = R.drawable.ic_camera,
                             primary = true,
                             enabled = !receipts.scanning,
@@ -549,7 +564,7 @@ private fun PurchaseInProgress(
                         )
                     }
                     TonalActionButton(
-                        text = if (archived) "Ponovo otvori kupovinu" else "Završi kupovinu",
+                        text = stringResource(if (archived) R.string.purchase_reopen else R.string.purchase_finish),
                         icon = R.drawable.ic_check_circle,
                         onClick = {
                             if (archived) viewModel.archive(session.id, false) else confirmArchive = true
@@ -557,7 +572,7 @@ private fun PurchaseInProgress(
                         modifier = Modifier.fillMaxWidth()
                     )
                     Text(
-                        "Originalni spisak ostaje nepromenjen. Mape traže mrežu ili unapred preuzetu mapu.",
+                        stringResource(R.string.purchase_footer_note),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -569,12 +584,14 @@ private fun PurchaseInProgress(
     if (session != null && confirmArchive) {
         AlertDialog(
             onDismissRequest = { confirmArchive = false },
-            title = { Text("Završi kupovinu?") },
+            title = { Text(stringResource(R.string.purchase_finish_confirm_title)) },
             text = {
                 Text(
-                    "Kupljeno ${session.purchasedCount} od ${session.snapshot.scenario.items.size}. " +
-                        "Nekupljene stavke neće biti označene kao kupljene. Plan i napomene ostaju u istoriji.\n\n" +
-                        "U troškove ulazi skenirani račun, ne sama kupovina."
+                    stringResource(
+                        R.string.purchase_finish_confirm_text,
+                        session.purchasedCount,
+                        session.snapshot.scenario.items.size
+                    )
                 )
             },
             confirmButton = {
@@ -586,19 +603,25 @@ private fun PurchaseInProgress(
                             receiptViewModel.scan(context)
                         },
                         modifier = Modifier.testTag("finish-and-scan")
-                    ) { Text("Završi i skeniraj račun") }
+                    ) { Text(stringResource(R.string.purchase_finish_and_scan)) }
                 } else {
                     TextButton(onClick = {
                         viewModel.archive(session.id, true)
                         confirmArchive = false
-                    }) { Text("Završi") }
+                    }) { Text(stringResource(R.string.purchase_finish_short)) }
                 }
             },
             dismissButton = {
                 TextButton(onClick = {
                     if (receiptViewModel != null) viewModel.archive(session.id, true)
                     confirmArchive = false
-                }) { Text(if (receiptViewModel != null) "Samo završi" else "Nazad") }
+                }) {
+                    Text(
+                        stringResource(
+                            if (receiptViewModel != null) R.string.purchase_just_finish else R.string.purchase_back
+                        )
+                    )
+                }
             }
         )
     }
@@ -631,18 +654,18 @@ private fun PurchaseProgressHeader(session: PurchaseSession, onOpenCards: () -> 
             Row(verticalAlignment = Alignment.Bottom) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        "NAPREDAK KUPOVINE",
+                        stringResource(R.string.purchase_progress_label),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        "Kupljeno ${session.purchasedCount} od $total",
+                        stringResource(R.string.purchase_bought_of, session.purchasedCount, total),
                         style = MaterialTheme.typography.titleLarge
                     )
                 }
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
-                        "planirano",
+                        stringResource(R.string.purchase_planned_label),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -664,14 +687,18 @@ private fun PurchaseProgressHeader(session: PurchaseSession, onOpenCards: () -> 
                     .height(8.dp)
             )
             Text(
-                "Još ${total - session.resolvedCount} za odluku. Cene u sačuvanom planu se ne osvežavaju.",
+                stringResource(R.string.purchase_remaining, total - session.resolvedCount),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             if (recorded.isNotEmpty()) {
                 Text(
-                    "Upisano plaćeno: ${money(recorded.fold(BigDecimal.ZERO, BigDecimal::add).toDouble())} " +
-                        "za ${counted(recorded.size, "stavku", "stavke", "stavki")}",
+                    pluralStringResource(
+                        R.plurals.purchase_paid_for_items,
+                        recorded.size,
+                        recorded.size,
+                        money(recorded.fold(BigDecimal.ZERO, BigDecimal::add).toDouble())
+                    ),
                     style = MaterialTheme.typography.bodyMedium
                 )
             }
@@ -689,7 +716,7 @@ private fun PurchaseProgressHeader(session: PurchaseSession, onOpenCards: () -> 
                 ) {
                     AppIcon(R.drawable.ic_card, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                     Text(
-                        "Lojalti kartice za kasu — prikaži barkod",
+                        stringResource(R.string.purchase_loyalty_cards_link),
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.weight(1f)
                     )
@@ -745,7 +772,7 @@ private fun PurchaseStoreSection(
                 IconButton(onClick = onRoute) {
                     AppIcon(
                         R.drawable.ic_directions,
-                        contentDescription = "Put do prodavnice ${store.retailerName}",
+                        contentDescription = stringResource(R.string.purchase_route_to_store, store.retailerName),
                         tint = MaterialTheme.colorScheme.primary
                     )
                 }
@@ -842,10 +869,10 @@ private fun PurchaseItemRow(
             }
             purchaseStatus(progress, item)?.let { (text, tone) -> StatusPill(text, tone) }
             if (progress.note.isNotBlank()) {
-                Text("Napomena: ${progress.note}", style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.purchase_note_value, progress.note), style = MaterialTheme.typography.bodySmall)
             }
             progress.actualLineTotal?.toDoubleOrNull()?.let {
-                Text("Plaćeno ${money(it)}", style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.purchase_paid_value, money(it)), style = MaterialTheme.typography.bodySmall)
             }
             if (item.storeId == null) {
                 Text(
@@ -869,25 +896,25 @@ private fun PurchaseItemRow(
                     onClick = { menuOpen = true },
                     modifier = Modifier.testTag("item-menu-${item.itemId}")
                 ) {
-                    AppIcon(R.drawable.ic_more_vert, contentDescription = "Još za ${item.requestedName}")
+                    AppIcon(R.drawable.ic_more_vert, contentDescription = stringResource(R.string.purchase_more_for_item, item.requestedName))
                 }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                     DropdownMenuItem(
-                        text = { Text("Nema u prodavnici") },
+                        text = { Text(stringResource(R.string.purchase_not_in_store)) },
                         onClick = {
                             menuOpen = false
                             onStatus(PurchaseStatus.NOT_FOUND)
                         }
                     )
                     DropdownMenuItem(
-                        text = { Text("Preskoči") },
+                        text = { Text(stringResource(R.string.purchase_skip)) },
                         onClick = {
                             menuOpen = false
                             onStatus(PurchaseStatus.SKIPPED)
                         }
                     )
                     DropdownMenuItem(
-                        text = { Text("Detalji") },
+                        text = { Text(stringResource(R.string.purchase_details)) },
                         onClick = {
                             menuOpen = false
                             onDetails()
@@ -895,7 +922,7 @@ private fun PurchaseItemRow(
                     )
                     if (progress.status != PurchaseStatus.TO_BUY || progress.boughtPackages > 0) {
                         DropdownMenuItem(
-                            text = { Text("Vrati na spisak") },
+                            text = { Text(stringResource(R.string.purchase_back_to_list)) },
                             onClick = {
                                 menuOpen = false
                                 onStatus(PurchaseStatus.TO_BUY)
@@ -946,19 +973,33 @@ private fun BoughtCheck(
     }
 }
 
+@Composable
 private fun purchaseStatus(
     progress: PurchaseItemProgress,
     item: RecommendationItemDto
 ): Pair<String, StatusTone>? {
     val planned = item.purchaseQuantity?.packages ?: item.requestedQuantity
-    val partial = progress.boughtPackages.takeIf { it > 0 }
-        ?.let { ", kupljeno ${decimal(it)} od ${decimal(planned)}" }
-        .orEmpty()
+    val bought = progress.boughtPackages.takeIf { it > 0 }?.let { decimal(it) }
     return when (progress.status) {
-        PurchaseStatus.NOT_FOUND -> "Nema u prodavnici$partial" to StatusTone.WARNING
-        PurchaseStatus.SKIPPED -> "Preskočeno$partial" to StatusTone.NEUTRAL
-        PurchaseStatus.TO_BUY -> partial.takeIf { it.isNotEmpty() }
-            ?.let { "Delimično$it" to StatusTone.NEUTRAL }
+        PurchaseStatus.NOT_FOUND -> {
+            val text = if (bought == null) {
+                stringResource(R.string.purchase_not_in_store)
+            } else {
+                stringResource(R.string.purchase_status_not_found_partial, bought, decimal(planned))
+            }
+            text to StatusTone.WARNING
+        }
+        PurchaseStatus.SKIPPED -> {
+            val text = if (bought == null) {
+                stringResource(R.string.purchase_status_skipped)
+            } else {
+                stringResource(R.string.purchase_status_skipped_partial, bought, decimal(planned))
+            }
+            text to StatusTone.NEUTRAL
+        }
+        PurchaseStatus.TO_BUY -> bought?.let {
+            stringResource(R.string.purchase_status_partial, it, decimal(planned)) to StatusTone.NEUTRAL
+        }
         PurchaseStatus.PURCHASED -> null
     }
 }
@@ -974,7 +1015,7 @@ private fun PurchaseDetailsDialog(
     var bought by rememberSaveable(item.itemId) { mutableStateOf(formatQuantity(progress.boughtPackages).replace('.', ',')) }
     var note by rememberSaveable(item.itemId) { mutableStateOf(progress.note) }
     var price by rememberSaveable(item.itemId) { mutableStateOf(progress.actualLineTotal.orEmpty()) }
-    var error by remember { mutableStateOf<String?>(null) }
+    var error by remember { mutableStateOf<UiText?>(null) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -983,12 +1024,11 @@ private fun PurchaseDetailsDialog(
             LazyColumn(verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)) {
                 item {
                     Text(
-                        "Planirano: ${decimal(planned)} " +
-                            if (planned % 1.0 == 0.0) {
-                                plural(planned.toInt(), "pakovanje", "pakovanja", "pakovanja")
-                            } else {
-                                "pakovanja"
-                            },
+                        if (planned % 1.0 == 0.0) {
+                            pluralStringResource(R.plurals.purchase_planned_packages, planned.toInt(), decimal(planned))
+                        } else {
+                            stringResource(R.string.purchase_planned_packages_fraction, decimal(planned))
+                        },
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
@@ -996,7 +1036,7 @@ private fun PurchaseDetailsDialog(
                     OutlinedTextField(
                         value = bought,
                         onValueChange = { bought = it },
-                        label = { Text("Kupljeno (može delimično)") },
+                        label = { Text(stringResource(R.string.purchase_bought_field)) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         singleLine = true
                     )
@@ -1005,7 +1045,7 @@ private fun PurchaseDetailsDialog(
                     OutlinedTextField(
                         value = price,
                         onValueChange = { price = it },
-                        label = { Text("Stvarni ukupan iznos, RSD (opciono)") },
+                        label = { Text(stringResource(R.string.purchase_actual_total_field)) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         singleLine = true
                     )
@@ -1014,11 +1054,11 @@ private fun PurchaseDetailsDialog(
                     OutlinedTextField(
                         value = note,
                         onValueChange = { note = it },
-                        label = { Text("Napomena") }
+                        label = { Text(stringResource(R.string.purchase_note_field)) }
                     )
                 }
                 error?.let {
-                    item { Text(it, color = MaterialTheme.colorScheme.error) }
+                    item { Text(it.asString(), color = MaterialTheme.colorScheme.error) }
                 }
             }
         },
@@ -1037,10 +1077,10 @@ private fun PurchaseDetailsDialog(
                     )
                     onSave(next)
                 } catch (e: IllegalArgumentException) {
-                    error = e.message
+                    error = (e as? UserFacingException)?.text ?: uiText(R.string.error_check_input)
                 }
-            }) { Text("Sačuvaj") }
+            }) { Text(stringResource(R.string.common_save)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Otkaži") } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) } }
     )
 }

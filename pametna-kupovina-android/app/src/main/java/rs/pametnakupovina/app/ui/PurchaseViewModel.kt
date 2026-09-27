@@ -1,5 +1,6 @@
 package rs.pametnakupovina.app.ui
 
+import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -9,8 +10,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
+import rs.pametnakupovina.app.R
 import rs.pametnakupovina.app.data.purchase.*
 import rs.pametnakupovina.app.data.network.*
+import rs.pametnakupovina.app.text.UiText
+import rs.pametnakupovina.app.text.UserFacingException
+import rs.pametnakupovina.app.text.uiText
 
 @HiltViewModel
 class PurchaseViewModel @Inject constructor(private val repository: PurchaseRepository) : ViewModel() {
@@ -19,7 +24,7 @@ class PurchaseViewModel @Inject constructor(private val repository: PurchaseRepo
     private val _session = MutableStateFlow<PurchaseSession?>(null)
     val session = _session.asStateFlow()
     private var observeJob: kotlinx.coroutines.Job? = null
-    private val _message = MutableStateFlow<String?>(null)
+    private val _message = MutableStateFlow<UiText?>(null)
     val message = _message.asStateFlow()
     private val _createdId = MutableStateFlow<String?>(null)
     val createdId = _createdId.asStateFlow()
@@ -37,14 +42,14 @@ class PurchaseViewModel @Inject constructor(private val repository: PurchaseRepo
         _activeLoaded.value = false
         activeJob = viewModelScope.launch {
             repository.observeActive(listId)
-                .catch { _message.value = it.message ?: "Započeta kupovina nije dostupna." }
+                .catch { _message.value = it.userText(R.string.purchase_error_active_unavailable) }
                 .collect { _activePurchase.value = it; _activeLoaded.value = true }
         }
     }
 
     init {
         viewModelScope.launch {
-            repository.sessions.catch { _message.value = it.message ?: "Sačuvane kupovine nisu dostupne." }
+            repository.sessions.catch { _message.value = it.userText(R.string.purchase_error_sessions_unavailable) }
                 .collect { _sessions.value = it }
         }
     }
@@ -53,7 +58,7 @@ class PurchaseViewModel @Inject constructor(private val repository: PurchaseRepo
         observeJob?.cancel()
         _session.value = null
         observeJob = viewModelScope.launch {
-            repository.observe(id).catch { _message.value = it.message ?: "Kupovina nije dostupna." }
+            repository.observe(id).catch { _message.value = it.userText(R.string.purchase_error_session_unavailable) }
                 .collect { _session.value = it }
         }
     }
@@ -81,7 +86,11 @@ class PurchaseViewModel @Inject constructor(private val repository: PurchaseRepo
             _message.value = null
             try { block() }
             catch (error: CancellationException) { throw error }
-            catch (error: Exception) { _message.value = error.message ?: "Čuvanje nije uspelo. Pokušaj ponovo." }
+            catch (error: Exception) { _message.value = error.userText(R.string.purchase_error_save_failed) }
         }
     }
+
+    /** The refusal the shopper can act on, or [fallback] for anything else. */
+    private fun Throwable.userText(@StringRes fallback: Int): UiText =
+        (this as? UserFacingException)?.text ?: uiText(fallback)
 }

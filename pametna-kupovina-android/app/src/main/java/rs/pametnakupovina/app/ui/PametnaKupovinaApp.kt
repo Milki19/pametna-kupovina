@@ -2,6 +2,7 @@ package rs.pametnakupovina.app.ui
 
 import android.content.Intent
 import androidx.annotation.DrawableRes
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
@@ -27,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.core.net.toUri
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
@@ -70,11 +72,11 @@ private object Route {
 }
 
 /** Tabovi donje trake; ostali ekrani su koraci u toku i traku skrivaju. */
-private enum class Tab(val route: String, val label: String, @DrawableRes val icon: Int) {
-    HOME(Route.DASHBOARD, "Početna", R.drawable.ic_home),
-    LIST(Route.LIST, "Spisak", R.drawable.ic_content_paste),
-    CARDS(Route.CARDS, "Kartice", R.drawable.ic_card),
-    HISTORY(Route.HISTORY, "Istorija", R.drawable.ic_history)
+private enum class Tab(val route: String, @StringRes val label: Int, @DrawableRes val icon: Int) {
+    HOME(Route.DASHBOARD, R.string.app_tab_home, R.drawable.ic_home),
+    LIST(Route.LIST, R.string.app_tab_list, R.drawable.ic_content_paste),
+    CARDS(Route.CARDS, R.string.app_tab_cards, R.drawable.ic_card),
+    HISTORY(Route.HISTORY, R.string.app_tab_history, R.drawable.ic_history)
 }
 
 /** Kao tab: jedan primerak svakog taba, a svaki pamti dokle se stiglo u njemu. */
@@ -152,7 +154,7 @@ fun PametnaKupovinaApp() {
                             selected = tab.route == currentRoute,
                             onClick = { navController.openTab(tab.route) },
                             icon = { AppIcon(tab.icon, contentDescription = null) },
-                            label = { NavLabel(tab.label) },
+                            label = { NavLabel(stringResource(tab.label)) },
                             modifier = Modifier.testTag("tab-${tab.name.lowercase()}")
                         )
                     }
@@ -160,7 +162,7 @@ fun PametnaKupovinaApp() {
                         selected = false,
                         onClick = { showMenu = true },
                         icon = { AppIcon(R.drawable.ic_menu, contentDescription = null) },
-                        label = { NavLabel("Meni") },
+                        label = { NavLabel(stringResource(R.string.app_menu)) },
                         modifier = Modifier.testTag("open-menu")
                     )
                 }
@@ -291,13 +293,13 @@ private fun AppMenuContent(
 ) {
     Column(modifier = Modifier.padding(bottom = AppSpacing.lg)) {
         listOf(
-            Triple("Skeniraj račun", R.drawable.ic_camera, onScan) to "menu-scan",
-            Triple("Domaćinstvo", R.drawable.ic_home, onHousehold) to "menu-household",
-            Triple("O aplikaciji", R.drawable.ic_info, onAbout) to "menu-about"
+            Triple(R.string.app_menu_scan_receipt, R.drawable.ic_camera, onScan) to "menu-scan",
+            Triple(R.string.app_menu_household, R.drawable.ic_home, onHousehold) to "menu-household",
+            Triple(R.string.app_menu_about, R.drawable.ic_info, onAbout) to "menu-about"
         ).forEach { (entry, tag) ->
             val (label, icon, onClick) = entry
             NavigationDrawerItem(
-                label = { Text(label) },
+                label = { Text(stringResource(label)) },
                 icon = { AppIcon(icon, contentDescription = null) },
                 selected = false,
                 onClick = onClick,

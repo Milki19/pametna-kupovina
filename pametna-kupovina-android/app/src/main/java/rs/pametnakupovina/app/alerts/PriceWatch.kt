@@ -143,7 +143,11 @@ private fun notifyDrop(context: Context, watched: WatchedProduct, price: Double,
     ) return
 
     context.getSystemService(NotificationManager::class.java).createNotificationChannel(
-        NotificationChannel(CHANNEL, "Pojeftinjenja", NotificationManager.IMPORTANCE_DEFAULT)
+        NotificationChannel(
+            CHANNEL,
+            context.getString(R.string.price_watch_channel),
+            NotificationManager.IMPORTANCE_DEFAULT
+        )
     )
     val open = PendingIntent.getActivity(
         context, 0,
@@ -154,8 +158,10 @@ private fun notifyDrop(context: Context, watched: WatchedProduct, price: Double,
         watched.canonicalProductId.toInt(),
         NotificationCompat.Builder(context, CHANNEL)
             .setSmallIcon(R.drawable.ic_local_offer)
-            .setContentTitle("Pojeftinilo: ${watched.name}")
-            .setContentText("${money(watched.price)} → ${money(price)} ($retailer)")
+            .setContentTitle(context.getString(R.string.price_watch_title, watched.name))
+            .setContentText(
+                context.getString(R.string.price_watch_text, money(watched.price), money(price), retailer)
+            )
             .setContentIntent(open)
             .setAutoCancel(true)
             .build()

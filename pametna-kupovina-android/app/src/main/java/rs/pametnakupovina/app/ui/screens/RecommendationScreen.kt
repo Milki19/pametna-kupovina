@@ -45,6 +45,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -63,6 +65,10 @@ import rs.pametnakupovina.app.data.network.ShoppingRecommendationDto
 import rs.pametnakupovina.app.data.network.UnlocatedPriceOptionDto
 import rs.pametnakupovina.app.data.purchase.PurchaseSession
 import rs.pametnakupovina.app.location.Coordinates
+import rs.pametnakupovina.app.text.UiText
+import rs.pametnakupovina.app.text.asString
+import rs.pametnakupovina.app.text.uiPlural
+import rs.pametnakupovina.app.text.uiText
 import rs.pametnakupovina.app.navigation.googleMapsDirectionsUrl
 import rs.pametnakupovina.app.navigation.launchGoogleMapsDirections
 import rs.pametnakupovina.app.ui.ProductSearchViewModel
@@ -71,6 +77,7 @@ import rs.pametnakupovina.app.ui.RecommendationViewModel
 import rs.pametnakupovina.app.ui.components.AppIcon
 import rs.pametnakupovina.app.ui.components.TonalActionButton
 import rs.pametnakupovina.app.ui.components.cardBorder
+import androidx.annotation.StringRes
 import androidx.compose.ui.text.style.TextAlign
 import rs.pametnakupovina.app.ui.components.AppSpacing
 import rs.pametnakupovina.app.ui.components.AppTopBar
@@ -82,13 +89,11 @@ import rs.pametnakupovina.app.ui.components.PrimaryActionButton
 import rs.pametnakupovina.app.ui.components.SectionHeader
 import rs.pametnakupovina.app.ui.components.StatusPill
 import rs.pametnakupovina.app.ui.components.StatusTone
-import rs.pametnakupovina.app.ui.counted
 import rs.pametnakupovina.app.ui.date
 import rs.pametnakupovina.app.ui.decimal
 import rs.pametnakupovina.app.ui.distance
 import rs.pametnakupovina.app.ui.duration
 import rs.pametnakupovina.app.ui.money
-import rs.pametnakupovina.app.ui.plural
 import rs.pametnakupovina.app.ui.wholeDinars
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.text.BasicText
@@ -116,24 +121,24 @@ fun RecommendationScreen(
     val searchState by productSearchViewModel.uiState.collectAsStateWithLifecycle()
     var alternativeItem by remember { mutableStateOf<RecommendationItemDto?>(null) }
     var replacing by remember { mutableStateOf(false) }
-    var replacementError by remember { mutableStateOf<String?>(null) }
+    var replacementError by remember { mutableStateOf<UiText?>(null) }
     var similarFor by remember { mutableStateOf<RecommendationItemDto?>(null) }
     similarFor?.let { item ->
         // Predlog vrste se pokaže pre zamene: imena u katalogu su neujednačena.
         var kind by remember(item.itemId) { mutableStateOf(similarKind(item.requestedName, item.productBrand)) }
         AlertDialog(
             onDismissRequest = { similarFor = null },
-            title = { Text("Uzmi slično") },
+            title = { Text(stringResource(R.string.rec_use_similar)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)) {
                     Text(
-                        "Umesto „${item.requestedName}“ plan uzima najjeftinije od ove vrste, bilo koji brend.",
+                        stringResource(R.string.rec_similar_explanation, item.requestedName),
                         style = MaterialTheme.typography.bodyMedium
                     )
                     OutlinedTextField(
                         value = kind,
                         onValueChange = { kind = it },
-                        label = { Text("Vrsta") },
+                        label = { Text(stringResource(R.string.rec_similar_kind_label)) },
                         singleLine = true,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -150,9 +155,9 @@ fun RecommendationScreen(
                         viewModel.useSimilar(listId, item.itemId, kind, latitude, longitude)
                     },
                     modifier = Modifier.testTag("confirm-similar")
-                ) { Text("Zameni") }
+                ) { Text(stringResource(R.string.rec_replace)) }
             },
-            dismissButton = { TextButton(onClick = { similarFor = null }) { Text("Otkaži") } }
+            dismissButton = { TextButton(onClick = { similarFor = null }) { Text(stringResource(R.string.common_cancel)) } }
         )
     }
 
@@ -174,7 +179,7 @@ fun RecommendationScreen(
             name = item.requestedName,
             state = searchState,
             saving = replacing,
-            error = replacementError,
+            error = replacementError?.asString(),
             onQuery = productSearchViewModel::updateQuery,
             onRetry = productSearchViewModel::retry,
             onMore = productSearchViewModel::loadNextPage,
@@ -215,7 +220,7 @@ fun RecommendationScreen(
     }
 
     Scaffold(
-        topBar = { AppTopBar(title = "Preporuke", onBack = onBack) },
+        topBar = { AppTopBar(title = stringResource(R.string.rec_title), onBack = onBack) },
         // The pinned action bar pads itself for the navigation bar, so the
         // content only needs the top and the sides.
         contentWindowInsets = ScaffoldDefaults.contentWindowInsets
@@ -229,14 +234,14 @@ fun RecommendationScreen(
         ) {
             when {
                 location == null -> ErrorState(
-                    title = "Lokacija više nije dostupna",
-                    message = "Vrati se i ponovo izaberi polaznu tačku.",
+                    title = stringResource(R.string.rec_location_missing_title),
+                    message = stringResource(R.string.rec_location_missing_message),
                     onRetry = onBack
                 )
-                state.isLoading -> LoadingState("Računam tri scenarija…")
+                state.isLoading -> LoadingState(stringResource(R.string.rec_loading))
                 state.errorMessage != null -> ErrorState(
-                    title = "Rezultat nije dostupan",
-                    message = requireNotNull(state.errorMessage),
+                    title = stringResource(R.string.rec_error_title),
+                    message = requireNotNull(state.errorMessage).asString(),
                     onRetry = {
                         val (latitude, longitude) = requireNotNull(location)
                         viewModel.load(listId, latitude, longitude)
@@ -246,7 +251,7 @@ fun RecommendationScreen(
                     result = requireNotNull(state.result),
                     origin = requireNotNull(location),
                     saving = saving,
-                    saveError = saveError,
+                    saveError = saveError?.asString(),
                     activePurchase = activePurchase,
                     activeLoaded = activeLoaded,
                     onResume = onOpenPurchase,
@@ -294,12 +299,9 @@ internal fun RecommendationContent(
     if (confirmNew) {
         AlertDialog(
             onDismissRequest = { confirmNew = false },
-            title = { Text("Započni novu kupovinu?") },
+            title = { Text(stringResource(R.string.rec_new_purchase_title)) },
             text = {
-                Text(
-                    "Novi plan počinje sa praznim kućicama. Prethodna kupovina i " +
-                        "čekirane stavke ostaju u „Kupovine“."
-                )
+                Text(stringResource(R.string.rec_new_purchase_message))
             },
             confirmButton = {
                 TextButton(
@@ -309,10 +311,10 @@ internal fun RecommendationContent(
                         confirmNew = false
                         onStart(selected, true)
                     }
-                ) { Text("Započni novu kupovinu") }
+                ) { Text(stringResource(R.string.rec_new_purchase_confirm)) }
             },
             dismissButton = {
-                TextButton(onClick = { confirmNew = false }) { Text("Otkaži") }
+                TextButton(onClick = { confirmNew = false }) { Text(stringResource(R.string.common_cancel)) }
             }
         )
     }
@@ -356,7 +358,7 @@ internal fun RecommendationContent(
 
             scenarioWarnings(selected, result).forEachIndexed { index, warning ->
                 item(key = "warning-${selected.type}-$index") {
-                    NoticeBanner(text = warning, tone = StatusTone.WARNING)
+                    NoticeBanner(text = warning.asString(), tone = StatusTone.WARNING)
                 }
             }
 
@@ -413,9 +415,9 @@ internal fun RecommendationContent(
             BottomActionBar {
                 PrimaryActionButton(
                     text = when {
-                        saving -> "Čuvam plan…"
-                        !activeLoaded -> "Proveravam sačuvane kupovine…"
-                        else -> "Započni kupovinu po ovom planu"
+                        saving -> stringResource(R.string.rec_saving_plan)
+                        !activeLoaded -> stringResource(R.string.rec_checking_purchases)
+                        else -> stringResource(R.string.rec_start_purchase)
                     },
                     enabled = !saving && activeLoaded,
                     modifier = Modifier.testTag("start-or-resume-purchase"),
@@ -454,17 +456,21 @@ private fun PreviousPurchaseBanner(
                     tint = MaterialTheme.colorScheme.primary
                 )
                 Column {
-                    Text("Već imaš započetu kupovinu", style = MaterialTheme.typography.titleMedium)
+                    Text(stringResource(R.string.rec_previous_title), style = MaterialTheme.typography.titleMedium)
                     Text(
-                        "Plan od ${date(purchase.snapshot.calculationDate)} · " +
-                            "kupljeno ${purchase.purchasedCount} od ${purchase.snapshot.scenario.items.size}",
+                        stringResource(
+                            R.string.rec_previous_progress,
+                            date(purchase.snapshot.calculationDate),
+                            purchase.purchasedCount,
+                            purchase.snapshot.scenario.items.size
+                        ),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
             TonalActionButton(
-                text = "Nastavi prethodnu kupovinu",
+                text = stringResource(R.string.rec_resume_previous),
                 enabled = enabled,
                 onClick = { onResume(purchase.id) },
                 modifier = Modifier
@@ -483,9 +489,9 @@ internal fun RouteNavigationCard(
     Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.xs)) {
         TonalActionButton(
             text = if (stopCount == 1) {
-                "Pregled puta do prodavnice"
+                stringResource(R.string.rec_route_single)
             } else {
-                "Pregled rute kroz $stopCount ${plural(stopCount, "prodavnicu", "prodavnice", "prodavnica")}"
+                pluralStringResource(R.plurals.rec_route_stores, stopCount, stopCount)
             },
             icon = R.drawable.ic_directions,
             onClick = onClick,
@@ -494,7 +500,7 @@ internal fun RouteNavigationCard(
                 .testTag("open-google-maps")
         )
         Text(
-            "Google Maps prvo prikaže rutu, a navigaciju pokrećeš ti.",
+            stringResource(R.string.rec_route_hint),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = AppSpacing.sm)
@@ -553,7 +559,7 @@ private fun ScenarioChooser(
                     // Svaka reč u svom redu: reč koja ne stane pravi treći red,
                     // a to je prekoračenje, pa se slova smanje.
                     BasicText(
-                        scenarioShortTitle(scenario.type).replace(' ', '\n'),
+                        stringResource(scenarioShortTitle(scenario.type)).replace(' ', '\n'),
                         style = MaterialTheme.typography.labelMedium.copy(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         ),
@@ -565,7 +571,8 @@ private fun ScenarioChooser(
                         )
                     )
                     BasicText(
-                        scenario.totalCost?.takeIf { scenario.available }?.let(::wholeDinars) ?: "nema",
+                        scenario.totalCost?.takeIf { scenario.available }?.let(::wholeDinars)
+                            ?: stringResource(R.string.rec_no_price_short),
                         style = MaterialTheme.typography.titleLarge.copy(
                             color = MaterialTheme.colorScheme.onSurface
                         ),
@@ -578,13 +585,13 @@ private fun ScenarioChooser(
                     // Says which number this is, so the cheapest basket
                     // showing the highest figure reads as sense, not error.
                     Text(
-                        "ukupno",
+                        stringResource(R.string.rec_total_caption),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     if (scenario.available) {
                         Text(
-                            "korpa ${wholeDinars(scenario.basketCost)}",
+                            stringResource(R.string.rec_basket_short, wholeDinars(scenario.basketCost)),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -621,7 +628,7 @@ private fun OriginCard(origin: Pair<Double, Double>, onChange: () -> Unit) {
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    "POLAZNA TAČKA",
+                    stringResource(R.string.rec_origin_label),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -630,7 +637,7 @@ private fun OriginCard(origin: Pair<Double, Double>, onChange: () -> Unit) {
                     style = MaterialTheme.typography.bodyLarge
                 )
             }
-            TonalActionButton(text = "Promeni", onClick = onChange)
+            TonalActionButton(text = stringResource(R.string.rec_change_origin), onClick = onChange)
         }
     }
 }
@@ -661,10 +668,10 @@ private fun ScenarioHeroCard(scenario: OptimizationScenarioDto) {
                     horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm),
                     verticalArrangement = Arrangement.spacedBy(AppSpacing.xs)
                 ) {
-                    StatusPill(scenarioBadge(scenario.type), StatusTone.POSITIVE)
+                    StatusPill(stringResource(scenarioBadge(scenario.type)), StatusTone.POSITIVE)
                     if (scenario.available) {
                         scenario.savingsComparedWithSingleStore?.takeIf { it > 0.0 }?.let { savings ->
-                            StatusPill("Ušteda ${wholeDinars(savings)} RSD", StatusTone.POSITIVE)
+                            StatusPill(stringResource(R.string.rec_savings, wholeDinars(savings)), StatusTone.POSITIVE)
                         }
                     }
                 }
@@ -673,7 +680,7 @@ private fun ScenarioHeroCard(scenario: OptimizationScenarioDto) {
                     // The number the screen exists for, at a size that needs
                     // no searching for.
                     Text(
-                        scenario.totalCost?.let(::money) ?: "nema cene",
+                        scenario.totalCost?.let(::money) ?: stringResource(R.string.rec_no_price),
                         style = MaterialTheme.typography.displaySmall,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -683,7 +690,11 @@ private fun ScenarioHeroCard(scenario: OptimizationScenarioDto) {
                     // parts always add up to the total shown above them.
                     scenario.totalCost?.let {
                         Text(
-                            "korpa ${money(scenario.basketCost)} + put i vreme ${money(it - scenario.basketCost)}",
+                            stringResource(
+                                R.string.rec_basket_plus_travel,
+                                money(scenario.basketCost),
+                                money(it - scenario.basketCost)
+                            ),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -695,9 +706,9 @@ private fun ScenarioHeroCard(scenario: OptimizationScenarioDto) {
                             .background(MaterialTheme.colorScheme.surfaceContainerLow, MaterialTheme.shapes.small)
                             .padding(vertical = AppSpacing.md)
                     ) {
-                        PlanStat("Prodavnice", scenario.stopCount.toString(), Modifier.weight(1f))
-                        PlanStat("Razdaljina", distance(scenario.routeDistanceKm), Modifier.weight(1f))
-                        PlanStat("Vreme", "~${duration(scenario.routeDurationSeconds)}", Modifier.weight(1f))
+                        PlanStat(stringResource(R.string.rec_stat_stores), scenario.stopCount.toString(), Modifier.weight(1f))
+                        PlanStat(stringResource(R.string.rec_stat_distance), distance(scenario.routeDistanceKm), Modifier.weight(1f))
+                        PlanStat(stringResource(R.string.rec_stat_time), "~${duration(scenario.routeDurationSeconds)}", Modifier.weight(1f))
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         AppIcon(
@@ -708,13 +719,17 @@ private fun ScenarioHeroCard(scenario: OptimizationScenarioDto) {
                         )
                         Spacer(Modifier.width(AppSpacing.sm))
                         Text(
-                            "Pokrivenost korpe",
+                            stringResource(R.string.rec_coverage),
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.weight(1f)
                         )
                         Text(
-                            "${scenario.coveredItems} od ${scenario.items.size} " +
-                                plural(scenario.items.size, "stavke", "stavke", "stavki"),
+                            pluralStringResource(
+                                R.plurals.rec_covered_of,
+                                scenario.items.size,
+                                scenario.coveredItems,
+                                scenario.items.size
+                            ),
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -769,7 +784,11 @@ private fun StoreSection(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        "${distance(store.distanceFromPreviousKm)} · oko ${duration(store.durationFromPreviousSeconds)}",
+                        stringResource(
+                            R.string.rec_store_leg,
+                            distance(store.distanceFromPreviousKm),
+                            duration(store.durationFromPreviousSeconds)
+                        ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -783,7 +802,7 @@ private fun StoreSection(
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             if (items.isEmpty()) {
                 Text(
-                    "Nema dodeljenih stavki.",
+                    stringResource(R.string.rec_store_no_items),
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(AppSpacing.lg)
                 )
@@ -843,11 +862,11 @@ private fun PlanItemRow(item: RecommendationItemDto) {
                 )
             }
             if (manySmallPacks(item)) {
-                StatusPill("Mnogo malih pakovanja", StatusTone.WARNING)
+                StatusPill(stringResource(R.string.rec_many_small_packs), StatusTone.WARNING)
             }
         }
         Text(
-            item.lineTotal?.let(::money) ?: "nema",
+            item.lineTotal?.let(::money) ?: stringResource(R.string.rec_no_price_short),
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.padding(start = AppSpacing.sm)
         )
@@ -861,7 +880,7 @@ private fun UnresolvedSection(
     onSimilar: (RecommendationItemDto) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)) {
-        SectionHeader("Bez ponude", trailing = items.size.toString())
+        SectionHeader(stringResource(R.string.rec_unresolved_header), trailing = items.size.toString())
         Surface(
             shape = MaterialTheme.shapes.medium,
             color = MaterialTheme.colorScheme.surfaceContainer,
@@ -883,7 +902,7 @@ private fun UnresolvedSection(
                                 style = MaterialTheme.typography.titleMedium,
                                 modifier = Modifier.weight(1f)
                             )
-                            StatusPill(unresolvedStatus(item.resultStatus), StatusTone.WARNING)
+                            StatusPill(stringResource(unresolvedStatus(item.resultStatus)), StatusTone.WARNING)
                         }
                         Text(
                             item.explanation,
@@ -898,10 +917,10 @@ private fun UnresolvedSection(
                                 TextButton(
                                     onClick = { onSimilar(item) },
                                     modifier = Modifier.testTag("use-similar-${item.itemId}")
-                                ) { Text("Uzmi slično") }
+                                ) { Text(stringResource(R.string.rec_use_similar)) }
                             }
                             TextButton(onClick = { onAlternative(item) }) {
-                                Text("Pogledaj zamene")
+                                Text(stringResource(R.string.rec_view_alternatives))
                             }
                         }
                     }
@@ -925,17 +944,15 @@ internal fun UnlocatedOptionsSection(
     selected: OptimizationScenarioDto
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)) {
-        SectionHeader("Lanci bez poznate adrese")
+        SectionHeader(stringResource(R.string.rec_unlocated_header))
         NoticeBanner(
-            title = "Ne znamo u kojoj prodavnici važi ova cena",
-            text = "Ovi lanci objavljuju cene, ali ne i adrese prodavnica. Zato " +
-                "nisu u planu i ne možemo da potvrdimo da prodavnica kod tebe " +
-                "ima ovaj proizvod po ovoj ceni.",
+            title = stringResource(R.string.rec_unlocated_notice_title),
+            text = stringResource(R.string.rec_unlocated_notice_text),
             tone = StatusTone.WARNING
         )
         if (selected.available) {
             Text(
-                "Korpa u izabranom planu: ${money(selected.basketCost)}.",
+                stringResource(R.string.rec_unlocated_selected_basket, money(selected.basketCost)),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -968,14 +985,18 @@ internal fun UnlocatedOptionsSection(
                             horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm)
                         ) {
                             Text(
-                                "${option.coveredItems} od ${option.totalItems} " +
-                                    plural(option.totalItems, "stavke", "stavke", "stavki"),
+                                pluralStringResource(
+                                    R.plurals.rec_covered_of,
+                                    option.totalItems,
+                                    option.coveredItems,
+                                    option.totalItems
+                                ),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            StatusPill("Nepotvrđena prodavnica", StatusTone.WARNING)
+                            StatusPill(stringResource(R.string.rec_unconfirmed_store), StatusTone.WARNING)
                             if (cheaper) {
-                                StatusPill("Jeftinija korpa", StatusTone.POSITIVE)
+                                StatusPill(stringResource(R.string.rec_cheaper_basket), StatusTone.POSITIVE)
                             }
                         }
                         Text(
@@ -1016,7 +1037,7 @@ private fun CalculationDetails(
             ) {
                 AppIcon(R.drawable.ic_info, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 Text(
-                    "Kako je računato",
+                    stringResource(R.string.rec_calc_title),
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.weight(1f)
                 )
@@ -1033,28 +1054,44 @@ private fun CalculationDetails(
                 ) {
                     listOfNotNull(
                         // date() already ends with the ordinal full stop.
-                        scenario.dataAsOf?.let {
-                            "Cene su iz cenovnika od ${date(it)}; cenovnik ne " +
-                                "govori da li je artikal na polici."
-                        }
-                            ?: "Za ovaj scenario nema važećih cena.",
+                        scenario.dataAsOf?.let { stringResource(R.string.rec_calc_data_as_of, date(it)) }
+                            ?: stringResource(R.string.rec_calc_no_prices),
                         scenario.disclaimer.ifBlank { result.disclaimer },
                         scenario.takeIf { it.available }?.let {
-                            "Korpa ${money(it.basketCost)}, put ${money(it.travelCost)}, " +
-                                "vreme ${money(it.timeCost)}, stajanja ${money(it.stopCost)}."
+                            stringResource(
+                                R.string.rec_calc_costs,
+                                money(it.basketCost),
+                                money(it.travelCost),
+                                money(it.timeCost),
+                                money(it.stopCost)
+                            )
                         },
-                        "Put računamo ${money(assumptions.costPerKm)} po kilometru, vreme " +
-                            "${money(assumptions.valuePerHour)} po satu i ${money(assumptions.costPerStop)} po stajanju.",
+                        stringResource(
+                            R.string.rec_calc_rates,
+                            money(assumptions.costPerKm),
+                            money(assumptions.valuePerHour),
+                            money(assumptions.costPerStop)
+                        ),
                         if (scenario.approximateRoute) {
-                            "Udaljenosti su procena vazdušnom linijom, pravi put je obično duži."
+                            stringResource(R.string.rec_calc_approximate)
                         } else {
                             null
                         },
-                        "Razmotreno ${counted(result.candidateStoreCount, "prodavnica", "prodavnice", "prodavnica")} " +
-                            "u krugu od ${decimal(assumptions.candidateRadiusMeters / 1000.0, 1)} km.",
-                        "Prednost imaju cene ne starije od " +
-                            counted(assumptions.maxPriceAgeDays, "dan", "dana", "dana") + ".",
-                        "Izvori cena: ${priceSourceNames(scenario)}."
+                        pluralStringResource(
+                            R.plurals.rec_calc_candidates,
+                            result.candidateStoreCount,
+                            result.candidateStoreCount,
+                            decimal(assumptions.candidateRadiusMeters / 1000.0, 1)
+                        ),
+                        pluralStringResource(
+                            R.plurals.rec_calc_max_age,
+                            assumptions.maxPriceAgeDays,
+                            assumptions.maxPriceAgeDays
+                        ),
+                        stringResource(
+                            R.string.rec_calc_sources,
+                            priceSourceNames(scenario, stringResource(R.string.rec_calc_sources_none))
+                        )
                     ).forEach { line ->
                         Text(line, style = MaterialTheme.typography.bodyMedium)
                     }
@@ -1067,7 +1104,7 @@ private fun CalculationDetails(
 private fun scenarioWarnings(
     scenario: OptimizationScenarioDto,
     result: ShoppingRecommendationDto
-): List<String> = buildList {
+): List<UiText> = buildList {
     if (!scenario.available) return@buildList
     val missing = scenario.items.size - scenario.coveredItems
     if (!scenario.complete && missing > 0) {
@@ -1076,32 +1113,21 @@ private fun scenarioWarnings(
         val unrecognised = scenario.unmatchedItems.coerceAtMost(missing)
         val unpriced = missing - unrecognised
         if (unrecognised > 0) {
-            add(
-                "Ne prepoznajemo " +
-                    counted(unrecognised, "stavku", "stavke", "stavki") + ", pa " +
-                    plural(unrecognised, "nije", "nisu", "nisu") + " u računu."
-            )
+            add(uiPlural(R.plurals.rec_warning_unrecognised, unrecognised))
         }
         if (unpriced > 0) {
-            add(
-                "Plan je nepotpun: " +
-                    counted(unpriced, "stavka nema", "stavke nemaju", "stavki nema") +
-                    " ponudu u ovim prodavnicama."
-            )
+            add(uiPlural(R.plurals.rec_warning_unpriced, unpriced))
         }
     }
     // "Šećer 25 kg" as fifty half-kilo bags is cheaper but rarely what anyone
     // wants to carry, so the plan says so instead of hiding it.
     val smallPacks = scenario.items.filter(::manySmallPacks).map { it.requestedName }
     if (smallPacks.isNotEmpty()) {
-        add(
-            "Od mnogo malih pakovanja: ${smallPacks.joinToString(", ")}. " +
-                "Proveri da li ti tako odgovara ili izaberi veće pakovanje."
-        )
+        add(uiText(R.string.rec_warning_small_packs, smallPacks.joinToString(", ")))
     }
     val asOf = scenario.dataAsOf
     if (asOf != null && asOf != result.requestedDate) {
-        add("Cene su iz cenovnika od ${date(asOf)}, ne od danas. Proveri ih pre kupovine.")
+        add(uiText(R.string.rec_warning_old_prices, date(asOf)))
     }
 }
 
@@ -1119,7 +1145,7 @@ private fun basketRange(option: UnlocatedPriceOptionDto): String =
         money(option.lowestBasketCost).removeSuffix(" RSD") + " – " + money(option.highestBasketCost)
     }
 
-private fun priceSourceNames(scenario: OptimizationScenarioDto): String =
+private fun priceSourceNames(scenario: OptimizationScenarioDto, none: String): String =
     scenario.priceSources
         .map { code ->
             scenario.stores.firstOrNull { it.retailerCode == code }?.retailerName
@@ -1128,37 +1154,45 @@ private fun priceSourceNames(scenario: OptimizationScenarioDto): String =
         }
         .distinct()
         .joinToString()
-        .ifBlank { "nisu navedeni" }
+        .ifBlank { none }
 
-private fun unresolvedStatus(status: RecommendationItemStatusDto): String = when (status) {
-    RecommendationItemStatusDto.NEEDS_CONFIRMATION -> "Treba potvrda"
-    RecommendationItemStatusDto.UNMATCHED -> "Nije pronađeno"
-    RecommendationItemStatusDto.NO_VALID_PRICE -> "Nema cene"
-    RecommendationItemStatusDto.AVAILABLE -> "Dostupno"
+@StringRes
+private fun unresolvedStatus(status: RecommendationItemStatusDto): Int = when (status) {
+    RecommendationItemStatusDto.NEEDS_CONFIRMATION -> R.string.rec_status_needs_confirmation
+    RecommendationItemStatusDto.UNMATCHED -> R.string.rec_status_unmatched
+    RecommendationItemStatusDto.NO_VALID_PRICE -> R.string.rec_status_no_price
+    RecommendationItemStatusDto.AVAILABLE -> R.string.rec_status_available
 }
 
 /** Oznaka na kartici plana, kao „PREPORUČENO" na nacrtu. */
-private fun scenarioBadge(type: RecommendationScenarioTypeDto): String = when (type) {
-    RecommendationScenarioTypeDto.SINGLE_STORE -> "Najbrže i najlakše"
-    RecommendationScenarioTypeDto.RECOMMENDED_BALANCE -> "Preporučeno"
-    RecommendationScenarioTypeDto.LOWEST_PRICE -> "Najniža cena korpe"
+@StringRes
+private fun scenarioBadge(type: RecommendationScenarioTypeDto): Int = when (type) {
+    RecommendationScenarioTypeDto.SINGLE_STORE -> R.string.rec_badge_single_store
+    RecommendationScenarioTypeDto.RECOMMENDED_BALANCE -> R.string.rec_badge_balance
+    RecommendationScenarioTypeDto.LOWEST_PRICE -> R.string.rec_badge_lowest_price
 }
 
-internal fun scenarioTitle(type: RecommendationScenarioTypeDto): String = when (type) {
-    RecommendationScenarioTypeDto.SINGLE_STORE -> "Jedna prodavnica"
-    RecommendationScenarioTypeDto.RECOMMENDED_BALANCE -> "Preporučeni balans"
-    RecommendationScenarioTypeDto.LOWEST_PRICE -> "Najniža cena"
+@StringRes
+internal fun scenarioTitleRes(type: RecommendationScenarioTypeDto): Int = when (type) {
+    RecommendationScenarioTypeDto.SINGLE_STORE -> R.string.rec_scenario_single_store
+    RecommendationScenarioTypeDto.RECOMMENDED_BALANCE -> R.string.rec_scenario_balance
+    RecommendationScenarioTypeDto.LOWEST_PRICE -> R.string.rec_scenario_lowest_price
 }
+
+@Composable
+internal fun scenarioTitle(type: RecommendationScenarioTypeDto): String =
+    stringResource(scenarioTitleRes(type))
 
 /**
  * Each scenario wins at a different thing, so the label has to say which.
  * "Najjeftinije" alone read as a promise about the total, and the cheapest
  * basket can carry the dearest journey.
  */
-internal fun scenarioShortTitle(type: RecommendationScenarioTypeDto): String = when (type) {
-    RecommendationScenarioTypeDto.SINGLE_STORE -> "Jedna stanica"
-    RecommendationScenarioTypeDto.RECOMMENDED_BALANCE -> "Najbolje ukupno"
-    RecommendationScenarioTypeDto.LOWEST_PRICE -> "Najjeftinija korpa"
+@StringRes
+internal fun scenarioShortTitle(type: RecommendationScenarioTypeDto): Int = when (type) {
+    RecommendationScenarioTypeDto.SINGLE_STORE -> R.string.rec_short_single_store
+    RecommendationScenarioTypeDto.RECOMMENDED_BALANCE -> R.string.rec_short_balance
+    RecommendationScenarioTypeDto.LOWEST_PRICE -> R.string.rec_short_lowest_price
 }
 
 /**
@@ -1203,6 +1237,7 @@ internal fun itemPriceBreakdown(item: RecommendationItemDto): String? {
  * One quiet line under a product: how many packs when more than one, the
  * price per kilo or litre for comparing, and any surplus from whole packs.
  */
+@Composable
 internal fun itemQuantityLine(item: RecommendationItemDto): String? {
     val quantity = item.purchaseQuantity
     val packages = quantity?.packages ?: item.requestedQuantity
@@ -1211,15 +1246,16 @@ internal fun itemQuantityLine(item: RecommendationItemDto): String? {
         quantity?.unitPrice?.let { price ->
             quantity.baseUnit?.let { "${money(price)}/${perUnit(it)}" }
         },
-        quantity?.let(::surplus)
+        quantity?.let { surplus(it) }
     ).joinToString(" · ").ifEmpty { null }
 }
 
+@Composable
 private fun surplus(quantity: PurchaseQuantityDto): String? {
     val unit = quantity.baseUnit ?: return null
     val extra = quantity.extraAmount?.takeIf { it > 0 } ?: return null
     val supplied = quantity.suppliedAmount ?: return null
-    return "dobijaš ${amountLabel(supplied, unit)}, ${amountLabel(extra, unit)} više"
+    return stringResource(R.string.rec_surplus, amountLabel(supplied, unit), amountLabel(extra, unit))
 }
 
 private fun perUnit(baseUnit: String): String = when (baseUnit) {

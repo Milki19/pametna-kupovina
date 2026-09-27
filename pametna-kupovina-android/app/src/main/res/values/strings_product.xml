@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Product details -->
+    <string name="product_title">Cene proizvoda</string>
+    <string name="product_report_error">Prijavi grešku</string>
+    <string name="product_loading_offers">Učitavam ponude…</string>
+    <string name="product_prices_unavailable">Cene nisu dostupne</string>
+    <string name="product_load_error">Detalji proizvoda trenutno nisu dostupni.</string>
+    <string name="product_report_reason_wrong_price">Cena nije tačna</string>
+    <string name="product_report_reason_not_same">Ovo nisu isti proizvodi</string>
+    <string name="product_report_reason_other">Nešto drugo</string>
+    <string name="product_report_note">Napomena (opciono)</string>
+    <string name="product_report_sending">Šaljem…</string>
+    <string name="product_report_send">Pošalji</string>
+    <string name="product_report_thanks">Hvala, proverićemo.</string>
+    <string name="product_report_failed">Prijava nije poslata. Pokušaj ponovo.</string>
+    <string name="product_current_offers">Aktuelne ponude</string>
+    <string name="product_no_offers">Za ovaj proizvod još nema važećih cena.</string>
+    <string name="product_price_history">Poslednje promene cena</string>
+    <string name="product_offer_scope_and_date">%1$s · cene od %2$s</string>
+    <string name="product_offer_sale">Akcija, redovno %1$s</string>
+    <string name="product_offer_case">Pakovanje od %1$d kom · %2$s po komadu</string>
+    <string name="product_offer_suspicious">Manje od pola uobičajene cene u drugim lancima</string>
+    <string name="product_check_price">Proveri cenu</string>
+    <string name="product_best_price">Najbolja cena</string>
+    <string name="product_prices_for_date">Cene za %1$s</string>
+    <string name="product_stat_lowest">Najniža</string>
+    <string name="product_stat_average">Prosečna</string>
+    <string name="product_stat_highest">Najviša</string>
+    <plurals name="product_chain_count">
+        <item quantity="one">%d lanac</item>
+        <item quantity="few">%d lanca</item>
+        <item quantity="other">%d lanaca</item>
+    </plurals>
+    <string name="product_watch_title">Javi mi kad pojeftini</string>
+    <string name="product_watch_subtitle">Proveravam jednom dnevno</string>
+    <!-- A chain's own per-unit price, shown when the size is unknown. -->
+    <string name="product_unit_price_chain">jed. %1$s</string>
+    <string name="product_barcode_meta">barkod %1$s</string>
+    <string name="product_scope_one_store">Jedan objekat</string>
+    <string name="product_scope_format">Format %1$s</string>
+    <string name="product_scope_format_unknown">nepoznat</string>
+    <string name="product_scope_all_stores">Svi objekti lanca</string>
+
+    <!-- Product search and picker -->
+    <string name="picker_search_unavailable">Pretraga proizvoda trenutno nije dostupna.</string>
+    <string name="picker_query_label">Naziv ili barkod</string>
+    <string name="picker_clear_search">Obriši pretragu</string>
+    <string name="picker_scan_barcode">Skeniraj barkod</string>
+    <string name="picker_price_not_stock">Cena u cenovniku nije potvrda da proizvoda ima na stanju.</string>
+    <string name="picker_include_without_price">Prikaži i proizvode bez cene</string>
+    <string name="picker_searching">Pretražujem proizvode…</string>
+    <string name="picker_no_results">Nema pronađenih proizvoda.</string>
+    <string name="picker_no_results_with_price">Nema rezultata sa aktuelnom cenom. Promeni upit ili uključi proizvode bez cene.</string>
+    <string name="picker_corrected_query">Nema rezultata za „%1$s“. Prikazani su rezultati za „%2$s“.</string>
+    <string name="picker_loading_more">Učitavam…</string>
+    <string name="picker_show_more">Prikaži još (%1$d od %2$d)</string>
+    <string name="picker_add_without_price_title">Dodaj proizvod bez cene?</string>
+    <string name="picker_add_without_price_text">Proizvod poznajemo, ali nemamo aktuelnu cenu. Ne možemo ga uračunati u cenu korpe dok ne pronađemo ponudu.</string>
+    <string name="picker_add_anyway">Dodaj ipak</string>
+    <string name="picker_back_to_results">Nazad na rezultate</string>
+    <string name="picker_not_nearby">Nema ga u radnjama blizu tebe</string>
+    <string name="picker_nearest_store">Najbliža radnja koja ga ima: %1$s</string>
+    <string name="picker_barcode_line">Barkod: %1$s</string>
+    <string name="picker_category_line">Kategorija: %1$s</string>
+    <string name="picker_barcode_variants">%1$d barkod varijante</string>
+    <string name="picker_less">Manje</string>
+    <string name="picker_more_about">Više o proizvodu</string>
+    <string name="picker_choose">Izaberi</string>
+    <string name="picker_selected">Izabran proizvod</string>
+    <string name="picker_change_selection">Promeni izbor</string>
+    <string name="picker_recorded_at">Zabeležen kod: %1$s</string>
+    <string name="picker_no_current_price">Nemamo aktuelnu cenu</string>
+    <string name="picker_check_price">proveri cenu</string>
+    <string name="picker_price_from">od %1$s</string>
+    <plurals name="picker_more_chains">
+        <item quantity="one">i u još %d lancu</item>
+        <item quantity="few">i u još %d lanca</item>
+        <item quantity="other">i u još %d lanaca</item>
+    </plurals>
+
+    <!-- Barcode image -->
+    <string name="barcode_content_description">Crtični kod: %1$s</string>
+</resources>

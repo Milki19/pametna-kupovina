@@ -21,6 +21,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -33,7 +34,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import rs.pametnakupovina.app.BuildConfig
+import rs.pametnakupovina.app.R
 import rs.pametnakupovina.app.data.preferences.ClientIdentityStore
+import rs.pametnakupovina.app.text.UiText
+import rs.pametnakupovina.app.text.asString
+import rs.pametnakupovina.app.text.uiText
 import rs.pametnakupovina.app.ui.components.AppSpacing
 
 data class AboutUiState(
@@ -42,7 +47,7 @@ data class AboutUiState(
     val household: Boolean = false,
     val signingIn: Boolean = false,
     val deleting: Boolean = false,
-    val message: String? = null
+    val message: UiText? = null
 )
 
 @HiltViewModel
@@ -92,7 +97,7 @@ class AboutViewModel @Inject constructor(
                 throw error
             } catch (_: Exception) {
                 _uiState.update {
-                    it.copy(deleting = false, message = "Brisanje nije uspelo. Proveri internet i probaj ponovo.")
+                    it.copy(deleting = false, message = uiText(R.string.about_delete_failed))
                 }
             }
         }
@@ -109,13 +114,13 @@ class AboutViewModel @Inject constructor(
                     googleSignInClient.idToken(activityContext)
                 )
                 _uiState.update { it.copy(signedIn = state.signedIn) }
-                if (state.signedIn) "Prijavljen si. Spiskovi su sada vezani za nalog." else null
+                if (state.signedIn) uiText(R.string.about_signed_in_message) else null
             } catch (cancelled: SignInCancelled) {
                 null
             } catch (missing: NoGoogleAccount) {
-                "Na telefonu nema nijednog Google naloga."
+                uiText(R.string.about_no_google_account)
             } catch (failure: Exception) {
-                "Prijava nije uspela. Probaj ponovo kasnije."
+                uiText(R.string.about_sign_in_failed)
             }
 
             _uiState.update { it.copy(signingIn = false, message = message) }
@@ -141,16 +146,22 @@ fun AboutDialog(
     if (confirmDelete) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
-            title = { Text(if (state.household) "Izađi i obriši?" else "Obrisati sve?") },
+            title = {
+                Text(
+                    stringResource(
+                        if (state.household) R.string.about_delete_title_household else R.string.about_delete_title
+                    )
+                )
+            },
             text = {
                 Text(
-                    if (state.household) {
-                        "Ovaj telefon izlazi iz domaćinstva i briše sve sa sebe. " +
-                            "Zajednički spisak, računi i kartice ostaju ukućanima."
-                    } else {
-                        "Brišu se spiskovi, skenirani računi, kartice i prijava, i na " +
-                            "serveru i na telefonu. Ne može da se vrati. Aplikacija će se zatvoriti."
-                    }
+                    stringResource(
+                        if (state.household) {
+                            R.string.about_delete_text_household
+                        } else {
+                            R.string.about_delete_text
+                        }
+                    )
                 )
             },
             confirmButton = {
@@ -158,37 +169,34 @@ fun AboutDialog(
                     enabled = !state.deleting,
                     onClick = { viewModel.deleteEverything(context) },
                     modifier = Modifier.testTag("about-delete-confirm")
-                ) { Text(if (state.deleting) "Brišem…" else "Obriši", color = MaterialTheme.colorScheme.error) }
+                ) { Text(stringResource(if (state.deleting) R.string.about_deleting else R.string.about_delete), color = MaterialTheme.colorScheme.error) }
             },
-            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Otkaži") } }
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text(stringResource(R.string.common_cancel)) } }
         )
     }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("O aplikaciji") },
+        title = { Text(stringResource(R.string.about_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)) {
                 Text(
-                    "Pametna kupovina ${BuildConfig.VERSION_NAME}",
+                    stringResource(R.string.about_version, BuildConfig.VERSION_NAME),
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Text(
-                    "Cene su iz zvaničnih cenovnika trgovaca. Merodavna je " +
-                        "cena u prodavnici.",
+                    stringResource(R.string.about_prices_disclaimer),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 if (state.signedIn) {
                     Text(
-                        "Prijavljen si preko Google-a, pa ćeš spiskove naći i " +
-                            "na drugom telefonu.",
+                        stringResource(R.string.about_signed_in),
                         style = MaterialTheme.typography.bodyMedium
                     )
                 } else {
                     Text(
-                        "Spiskovi su vezani za ovaj telefon. Prijavi se da ih " +
-                            "nađeš i na drugom.",
+                        stringResource(R.string.about_signed_out),
                         style = MaterialTheme.typography.bodyMedium
                     )
                     TextButton(
@@ -197,15 +205,17 @@ fun AboutDialog(
                         modifier = Modifier.testTag("about-sign-in")
                     ) {
                         Text(
-                            if (state.signingIn) "Prijavljujem…"
-                            else "Prijavi se preko Google-a"
+                            stringResource(
+                                if (state.signingIn) R.string.about_signing_in
+                                else R.string.about_sign_in
+                            )
                         )
                     }
                 }
 
                 state.message?.let { message ->
                     Text(
-                        message,
+                        message.asString(),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.testTag("about-message")
@@ -217,13 +227,15 @@ fun AboutDialog(
                     modifier = Modifier.testTag("about-delete")
                 ) {
                     Text(
-                        if (state.household) "Izađi iz domaćinstva i obriši podatke" else "Obriši moje podatke",
+                        stringResource(
+                            if (state.household) R.string.about_delete_data_household else R.string.about_delete_data
+                        ),
                         color = MaterialTheme.colorScheme.error
                     )
                 }
 
                 Text(
-                    "Broj uređaja (za pitanja o podacima):",
+                    stringResource(R.string.about_device_number),
                     style = MaterialTheme.typography.bodyMedium
                 )
                 SelectionContainer {
@@ -241,7 +253,7 @@ fun AboutDialog(
                 onClick = { onOpenLink(PRIVACY_URL) },
                 modifier = Modifier.testTag("about-privacy")
             ) {
-                Text("Politika privatnosti")
+                Text(stringResource(R.string.about_privacy_policy))
             }
         },
         dismissButton = {
@@ -249,7 +261,7 @@ fun AboutDialog(
                 onClick = { onOpenLink(TERMS_URL) },
                 modifier = Modifier.testTag("about-terms")
             ) {
-                Text("Uslovi korišćenja")
+                Text(stringResource(R.string.about_terms))
             }
         }
     )

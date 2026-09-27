@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- App shell (navigation, menu, shared components), About, Household and Location. -->
+<resources>
+    <!-- Navigation and menu -->
+    <string name="app_tab_home">Home</string>
+    <string name="app_tab_list">List</string>
+    <string name="app_tab_cards">Cards</string>
+    <string name="app_tab_history">History</string>
+    <string name="app_menu">Menu</string>
+    <string name="app_menu_scan_receipt">Scan receipt</string>
+    <string name="app_menu_household">Household</string>
+    <string name="app_menu_about">About</string>
+
+    <!-- Shared components -->
+    <string name="ui_back">Back</string>
+
+    <!-- About -->
+    <string name="about_title">About</string>
+    <string name="about_version">Pametna kupovina %1$s</string>
+    <string name="about_prices_disclaimer">Prices come from the retailers\' official price lists. The price in the store is what counts.</string>
+    <string name="about_signed_in">You\'re signed in with Google, so you\'ll find your lists on another phone too.</string>
+    <string name="about_signed_out">Your lists are tied to this phone. Sign in to find them on another one too.</string>
+    <string name="about_sign_in">Sign in with Google</string>
+    <string name="about_signing_in">Signing in…</string>
+    <string name="about_signed_in_message">You\'re signed in. Your lists are now tied to your account.</string>
+    <string name="about_no_google_account">There is no Google account on this phone.</string>
+    <string name="about_sign_in_failed">Sign-in failed. Try again later.</string>
+    <string name="about_delete_data">Delete my data</string>
+    <string name="about_delete_data_household">Leave the household and delete data</string>
+    <string name="about_delete_title">Delete everything?</string>
+    <string name="about_delete_title_household">Leave and delete?</string>
+    <string name="about_delete_text">Your lists, scanned receipts, cards and sign-in are deleted, both on the server and on this phone. This can\'t be undone. The app will close.</string>
+    <string name="about_delete_text_household">This phone leaves the household and deletes everything on it. The shared list, receipts and cards stay with the rest of the household.</string>
+    <string name="about_delete">Delete</string>
+    <string name="about_deleting">Deleting…</string>
+    <string name="about_delete_failed">Deleting failed. Check your internet connection and try again.</string>
+    <string name="about_device_number">Device number (for questions about your data):</string>
+    <string name="about_privacy_policy">Privacy policy</string>
+    <string name="about_terms">Terms of use</string>
+
+    <!-- Household -->
+    <string name="household_title">Household</string>
+    <string name="household_qr_description">QR code for joining the household</string>
+    <string name="household_code_validity">Valid for 15 minutes</string>
+    <string name="household_join_instructions">Have the other household member open Menu → Household → Join in their app and scan this code.</string>
+    <string name="household_intro">Household members share the same list, receipts and cards. When someone joins, everything they had on their phone becomes shared.</string>
+    <string name="household_invite">Invite a household member</string>
+    <string name="household_new_code">New code</string>
+    <string name="household_join">Join (scan code)</string>
+    <string name="household_invite_failed">The code wasn\'t created. Check your internet connection and try again.</string>
+    <string name="household_join_failed">Joining failed. Try again.</string>
+    <string name="household_joined">You now share the list, receipts and cards.</string>
+    <string name="household_not_a_code">That\'s not a household code.</string>
+
+    <!-- Location -->
+    <string name="location_title">Where are you starting from</string>
+    <string name="location_starting_point_value">Starting point: %1$s</string>
+    <string name="location_show_recommendations">Show recommendations</string>
+    <string name="location_step">STEP 2 OF 3</string>
+    <string name="location_starting_point">Starting point</string>
+    <string name="location_step_text">We calculate the route from the starting point to nearby stores.</string>
+    <string name="location_resolving">Finding location…</string>
+    <string name="location_use_current">Use current location</string>
+    <string name="location_use_current_hint">Only for this calculation</string>
+    <string name="location_address_label">Or enter an address or neighborhood</string>
+    <string name="location_address_placeholder">e.g. Karaburma, Belgrade</string>
+    <string name="location_find_address">Find address</string>
+    <string name="location_open_location_settings">Open location settings</string>
+    <string name="location_open_app_permissions">Open app permissions</string>
+    <string name="location_privacy_note">Your location is used for this calculation and to order search results. The app doesn\'t track it in the background, and the server doesn\'t store it.</string>
+    <string name="location_enter_manually">Enter coordinates manually</string>
+    <string name="location_latitude">Latitude</string>
+    <string name="location_latitude_placeholder">e.g. 44.8170</string>
+    <string name="location_longitude">Longitude</string>
+    <string name="location_longitude_placeholder">e.g. 20.4930</string>
+    <string name="location_coordinates_hint">You can get coordinates in Google Maps by long-pressing a point on the map.</string>
+    <string name="location_found_current">Location found. Check it and start the calculation.</string>
+    <string name="location_found_address">Found: %1$s</string>
+    <string name="location_not_found_type_address">Location not found. Enter an address.</string>
+    <string name="location_permission_denied">Permission wasn\'t granted. You can turn it on in the app settings or enter an address.</string>
+    <string name="location_permission_missing">Location permission wasn\'t granted.</string>
+    <string name="location_services_off">Location services are off. Turn them on in settings and try again.</string>
+    <string name="location_not_found_enable_services">Location not found. Turn on location services or enter an address.</string>
+    <string name="location_geocoder_missing">Address search doesn\'t work on this phone. Enter coordinates manually.</string>
+    <string name="location_geocoder_unavailable">Address search isn\'t working right now. Try again in a moment.</string>
+    <string name="location_address_not_found">Address not found. Add the city, e.g. “Karaburma, Belgrade”.</string>
+</resources>

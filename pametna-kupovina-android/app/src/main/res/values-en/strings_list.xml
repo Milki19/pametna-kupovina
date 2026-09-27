@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Shopping list, item editor, pasted list and product check. -->
+<resources>
+    <!-- Shopping list screen -->
+    <string name="list_title">My list</string>
+    <string name="list_subtitle_offline">Offline, changes are waiting to be sent</string>
+    <string name="list_action_sending">Sending list…</string>
+    <string name="list_action_calculate">Calculate</string>
+    <string name="list_loading">Loading list…</string>
+    <string name="list_add_item">Add item</string>
+    <string name="list_paste_list">Paste list</string>
+    <string name="list_items_header">Items on the list</string>
+    <string name="list_snackbar_ok">OK</string>
+    <string name="list_snackbar_deleted">Deleted: %1$s</string>
+    <string name="list_snackbar_undo">Undo</string>
+    <string name="list_empty_title">Your list is empty</string>
+    <string name="list_empty_text">Paste a list from a message or note, or add items one by one.</string>
+    <string name="list_skipped_title">Some items weren\'t sent</string>
+    <plurals name="list_skipped_text">
+        <item quantity="one">The server didn\'t accept: %1$s. The reason is shown under the item. You can calculate without it or edit the item first.</item>
+        <item quantity="other">The server didn\'t accept: %1$s. The reason is shown under the items. You can calculate without them or edit the items first.</item>
+    </plurals>
+    <plurals name="list_skipped_calculate_without">
+        <item quantity="one">Calculate without it</item>
+        <item quantity="other">Calculate without them</item>
+    </plurals>
+    <string name="list_skipped_edit">Edit</string>
+
+    <!-- One row of the list -->
+    <string name="list_status_not_sent">Not sent</string>
+    <string name="list_status_needs_confirmation">Needs your confirmation</string>
+    <string name="list_status_not_found">Not found</string>
+    <string name="list_sync_error_rejected">The server didn\'t accept this item.</string>
+    <string name="list_cd_prices_for">Prices for %1$s</string>
+    <string name="list_cd_delete">Delete %1$s</string>
+    <string name="list_rule_exact_barcode">Exact barcode</string>
+    <string name="list_rule_same_product">Same product, all variants</string>
+    <string name="list_rule_category">Category %1$s</string>
+    <string name="list_rule_brand">Brand %1$s</string>
+    <string name="list_rule_category_brand">Category %1$s, brand %2$s</string>
+
+    <!-- Item editor -->
+    <string name="list_editor_title_new">New item</string>
+    <string name="list_editor_title_edit">Edit item</string>
+    <string name="list_rule_option_any">Any</string>
+    <string name="list_rule_option_any_desc">Type “milk” and the app picks the best-value product and pack size.</string>
+    <string name="list_rule_option_product">Product</string>
+    <string name="list_rule_option_product_desc">Pick a product from search. All its barcode variants count.</string>
+    <string name="list_rule_option_barcode">Barcode</string>
+    <string name="list_rule_option_barcode_desc">Only the chosen variant, no substitutes.</string>
+    <string name="list_editor_any_brand">Another brand is fine</string>
+    <string name="list_editor_any_brand_desc">Takes the cheapest similar product in the plan\'s stores.</string>
+    <string name="list_editor_similar_kind">Kind (any brand)</string>
+    <string name="list_editor_amount_value">Amount: %1$s</string>
+    <string name="list_editor_package_count">Number of packs</string>
+    <string name="list_editor_what_label">What are you buying</string>
+    <string name="list_editor_what_placeholder">e.g. milk</string>
+    <string name="list_editor_amount_title">How much do you need in total</string>
+    <string name="list_editor_amount_label">Amount (optional)</string>
+    <string name="list_editor_suggestion">Suggestion: %1$s</string>
+    <string name="list_editor_amount_mode_hint" formatted="false">We pick whole packs, with at most 25% extra.</string>
+    <string name="list_editor_count_mode_hint">Without an amount, you buy as many packs as you enter below.</string>
+    <string name="list_editor_times">Times</string>
+    <string name="list_editor_total">Total: %1$s</string>
+    <string name="list_editor_advanced">Advanced: category, brand, pack size</string>
+    <string name="list_editor_category">Category</string>
+    <string name="list_editor_category_hint">Usually the same as the name.</string>
+    <string name="list_editor_brand">Only this brand (optional)</string>
+    <string name="list_editor_package_from">Pack size from</string>
+    <string name="list_editor_package_to">to</string>
+    <string name="list_cd_less">Less</string>
+    <string name="list_cd_more">More</string>
+    <string name="list_package_error_positive">Enter a number greater than zero.</string>
+    <string name="list_package_error_unit">Choose a unit above: kg, g, l, ml or kom.</string>
+    <string name="list_package_error_order">“From” can\'t be greater than “to”.</string>
+
+    <!-- Paste dialog -->
+    <string name="list_paste_add_all">Add all</string>
+    <string name="list_paste_hint">Each line is one item. Write the amount next to the name, and the app picks the best-value product.</string>
+    <string name="list_paste_placeholder">milk\nbread\nćevapi 3kg\n2x beer</string>
+    <string name="list_paste_none">No items entered yet.</string>
+    <string name="list_paste_will_add">Will be added: %1$s</string>
+
+    <!-- Messages from the list, recommendation and matching view models -->
+    <string name="list_notice_added">Added: %1$s.</string>
+    <string name="list_error_server_unavailable">The server isn\'t available right now. You can still make your list.</string>
+    <string name="list_error_paste_failed">The list wasn\'t added.</string>
+    <string name="list_error_matching_needs_server">Checking products needs a connection to the server.</string>
+    <string name="list_error_change_not_saved">The change wasn\'t saved.</string>
+    <string name="list_error_sync_failed">Couldn\'t sync right now.</string>
+    <string name="list_error_replacement_not_saved">The replacement wasn\'t saved. Try again.</string>
+    <string name="list_error_replacement_saved_no_plan">The replacement is saved on this device, but the new plan wasn\'t calculated. Check your connection and calculate again.</string>
+    <string name="list_error_recommendations_unavailable">Recommendations aren\'t available right now.</string>
+
+    <!-- Checks on an item before it is saved -->
+    <string name="list_error_name_required">The item name is required.</string>
+    <string name="list_error_quantity_positive">Quantity must be greater than zero.</string>
+    <string name="list_error_target_quantity">The total amount must be positive and use the unit g, ml or piece.</string>
+    <string name="list_error_exact_no_family">An exact item can\'t have a product family.</string>
+    <string name="list_error_family_required">For the same product, choose a product family.</string>
+    <string name="list_error_family_no_barcode">A product family item can\'t have an exact barcode.</string>
+    <string name="list_error_flexible_no_product">A flexible item can\'t have a chosen product.</string>
+    <string name="list_error_flexible_category_required">Choose a category for a flexible item.</string>
+    <string name="list_error_package_min_over_max">The minimum pack size can\'t be larger than the maximum.</string>
+    <string name="list_error_package_min_positive">The minimum pack size must be greater than zero.</string>
+    <string name="list_error_package_max_positive">The maximum pack size must be greater than zero.</string>
+    <string name="list_error_package_unit_required">Choose a unit for the pack size: kg, g, l, ml or kom.</string>
+    <string name="list_error_unit_invalid">The unit must be g, ml or piece.</string>
+    <string name="list_error_item_not_in_list">The item isn\'t on the active list.</string>
+    <string name="list_error_item_deleted">The item was deleted.</string>
+    <string name="list_error_product_no_price">The chosen product has no current price.</string>
+    <string name="list_error_paste_empty">Enter at least one item that isn\'t empty.</string>
+    <string name="list_error_item_not_local">The item is no longer on the list on this device.</string>
+    <string name="list_error_server_rejected">The server didn\'t accept: %1$s. The other items were sent.</string>
+
+    <!-- Matching screen -->
+    <string name="match_title">Product check</string>
+    <string name="match_saving">Saving your choice…</string>
+    <string name="match_continue">Continue to location</string>
+    <plurals name="match_decide_more">
+        <item quantity="one">Decide on %d more item</item>
+        <item quantity="other">Decide on %d more items</item>
+    </plurals>
+    <string name="match_confirm_marked">Confirm marked items</string>
+    <string name="match_loading">Finding matching products…</string>
+    <string name="match_error_title">The check didn\'t work</string>
+    <string name="match_section_decide">Needs your decision</string>
+    <string name="match_section_settled">Recognized</string>
+    <string name="match_step">STEP 1 OF 3</string>
+    <string name="match_all_recognized">All items are recognized</string>
+    <plurals name="match_pending_title">
+        <item quantity="one">%d item needs your decision</item>
+        <item quantity="other">%d items need your decision</item>
+    </plurals>
+    <string name="match_summary_text">Confirm the unclear items so we can find the best prices nearby.</string>
+    <string name="match_recognized_of">Recognized %1$d of %2$d</string>
+    <string name="match_remaining">%1$d left</string>
+    <string name="match_from_list">From your list</string>
+    <string name="match_requested_name">“%1$s”</string>
+    <string name="match_flexible_title">Let the app pick the best value</string>
+    <string name="match_flexible_desc">When brand and pack size don\'t matter to you.</string>
+    <string name="match_none_leave_unmatched">None, leave unmatched</string>
+    <string name="match_choose">Choose</string>
+    <string name="match_status_pending">Awaiting check</string>
+    <string name="match_status_auto">Automatic</string>
+    <string name="match_status_needs_confirmation">Needs confirmation</string>
+    <string name="match_status_confirmed">Confirmed</string>
+    <string name="match_status_unmatched">Not found</string>
+    <string name="match_error_load_failed">The product check failed.</string>
+    <string name="match_error_confirm_not_saved">Your confirmation wasn\'t saved.</string>
+    <string name="match_error_flexible_failed">Couldn\'t switch the item to any product.</string>
+</resources>

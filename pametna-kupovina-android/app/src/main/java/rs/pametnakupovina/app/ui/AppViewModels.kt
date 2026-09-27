@@ -29,6 +29,7 @@ import rs.pametnakupovina.app.R
 import rs.pametnakupovina.app.text.UiText
 import rs.pametnakupovina.app.text.UserFacingException
 import rs.pametnakupovina.app.text.asUiText
+import rs.pametnakupovina.app.text.uiPlural
 import rs.pametnakupovina.app.text.uiText
 
 /** Rows the server refused when the shopper asked for a calculation. */
@@ -39,8 +40,8 @@ data class ShoppingListUiState(
     val isInitialLoading: Boolean = true,
     val isSyncing: Boolean = false,
     val isOffline: Boolean = false,
-    val errorMessage: String? = null,
-    val notice: String? = null,
+    val errorMessage: UiText? = null,
+    val notice: UiText? = null,
     val skippedItems: SkippedItems? = null
 )
 
@@ -90,9 +91,7 @@ class ShoppingListViewModel @Inject constructor(
                         isSyncing = false,
                         isOffline = error is IOException,
                         errorMessage = if (it.items.isEmpty() || error is ItemSyncValidationException) {
-                            error.toUserMessage(
-                                "Server trenutno nije dostupan. Možeš ipak napraviti spisak."
-                            )
+                            error.toUserMessage(R.string.list_error_server_unavailable)
                         } else {
                             null
                         }
@@ -124,12 +123,15 @@ class ShoppingListViewModel @Inject constructor(
                 val count = repository.pasteItems(text)
                 onSaved()
                 _uiState.update {
-                    it.copy(notice = "Dodato: ${items(count)}.", errorMessage = null)
+                    it.copy(
+                        notice = uiText(R.string.list_notice_added, uiPlural(R.plurals.count_items, count)),
+                        errorMessage = null
+                    )
                 }
                 synchronizeSilently()
             } catch (error: Exception) {
                 _uiState.update {
-                    it.copy(errorMessage = error.toUserMessage("Spisak nije dodat."))
+                    it.copy(errorMessage = error.toUserMessage(R.string.list_error_paste_failed))
                 }
             }
         }
@@ -169,7 +171,7 @@ class ShoppingListViewModel @Inject constructor(
                         isSyncing = false,
                         isOffline = error is IOException,
                         errorMessage = error.toUserMessage(
-                            "Za proveru proizvoda je potrebna veza sa serverom."
+                            R.string.list_error_matching_needs_server
                         )
                     )
                 }
@@ -240,7 +242,7 @@ class ShoppingListViewModel @Inject constructor(
                 synchronizeSilently()
             } catch (error: Exception) {
                 _uiState.update {
-                    it.copy(errorMessage = error.toUserMessage("Izmena nije sačuvana."))
+                    it.copy(errorMessage = error.toUserMessage(R.string.list_error_change_not_saved))
                 }
             }
         }
@@ -256,7 +258,7 @@ class ShoppingListViewModel @Inject constructor(
             _uiState.update { it.copy(
                 isOffline = error is IOException,
                 errorMessage = if (error is IOException) null
-                    else error.toUserMessage("Sinhronizacija trenutno nije uspela.")
+                    else error.toUserMessage(R.string.list_error_sync_failed)
             ) }
         }
     }
@@ -267,7 +269,7 @@ data class MatchingUiState(
     val isLoading: Boolean = true,
     val isResolving: Boolean = false,
     val result: ShoppingListMatchingDto? = null,
-    val errorMessage: String? = null
+    val errorMessage: UiText? = null
 )
 
 @HiltViewModel
@@ -298,7 +300,7 @@ class MatchingViewModel @Inject constructor(
                 MatchingUiState(
                     isLoading = false,
                     errorMessage = error.toUserMessage(
-                        "Provera proizvoda nije uspela."
+                        R.string.match_error_load_failed
                     )
                 )
             }
@@ -327,7 +329,7 @@ class MatchingViewModel @Inject constructor(
                     it.copy(
                         isResolving = false,
                         errorMessage = error.toUserMessage(
-                            "Potvrda nije sačuvana."
+                            R.string.match_error_confirm_not_saved
                         )
                     )
                 }
@@ -352,7 +354,7 @@ class MatchingViewModel @Inject constructor(
                     it.copy(
                         isResolving = false,
                         errorMessage = error.toUserMessage(
-                            "Stavka nije pretvorena u fleksibilnu."
+                            R.string.match_error_flexible_failed
                         )
                     )
                 }
@@ -364,7 +366,7 @@ class MatchingViewModel @Inject constructor(
 data class RecommendationUiState(
     val isLoading: Boolean = false,
     val result: ShoppingRecommendationDto? = null,
-    val errorMessage: String? = null
+    val errorMessage: UiText? = null
 )
 
 @HiltViewModel
@@ -398,7 +400,7 @@ class RecommendationViewModel @Inject constructor(
             } catch (error: kotlinx.coroutines.CancellationException) { throw error }
             catch (error: Exception) {
                 _uiState.value = RecommendationUiState(
-                    errorMessage = error.toUserMessage("Zamena nije sačuvana. Pokušaj ponovo.")
+                    errorMessage = error.toUserMessage(R.string.list_error_replacement_not_saved)
                 )
             }
         }
@@ -406,7 +408,7 @@ class RecommendationViewModel @Inject constructor(
 
     fun replaceAlternative(listId: Long,itemId: Long,
         product: rs.pametnakupovina.app.data.network.CanonicalProductSearchItemDto,
-        packages: Double,latitude: Double,longitude: Double,onDone: (String?) -> Unit) {
+        packages: Double,latitude: Double,longitude: Double,onDone: (UiText?) -> Unit) {
         viewModelScope.launch {
             var savedLocally = false
             try {
@@ -420,9 +422,9 @@ class RecommendationViewModel @Inject constructor(
             } catch(error: kotlinx.coroutines.CancellationException) { throw error }
             catch(error: Exception) {
                 val message = if (savedLocally) {
-                    "Zamena je sačuvana na ovom uređaju, ali novi plan nije izračunat. Proveri vezu i ponovi računanje."
+                    uiText(R.string.list_error_replacement_saved_no_plan)
                 } else {
-                    error.toUserMessage("Zamena nije sačuvana. Pokušaj ponovo.")
+                    error.toUserMessage(R.string.list_error_replacement_not_saved)
                 }
                 if (savedLocally) _uiState.value = RecommendationUiState(errorMessage = message)
                 onDone(message)
@@ -446,7 +448,7 @@ class RecommendationViewModel @Inject constructor(
                 RecommendationUiState(
                     isLoading = false,
                     errorMessage = error.toUserMessage(
-                        "Preporuke trenutno nisu dostupne."
+                        R.string.list_error_recommendations_unavailable
                     )
                 )
             }

@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- App shell (navigation, menu, shared components), About, Household and Location. -->
+<resources>
+    <!-- Navigation and menu -->
+    <string name="app_tab_home">Početna</string>
+    <string name="app_tab_list">Spisak</string>
+    <string name="app_tab_cards">Kartice</string>
+    <string name="app_tab_history">Istorija</string>
+    <string name="app_menu">Meni</string>
+    <string name="app_menu_scan_receipt">Skeniraj račun</string>
+    <string name="app_menu_household">Domaćinstvo</string>
+    <string name="app_menu_about">O aplikaciji</string>
+
+    <!-- Shared components -->
+    <string name="ui_back">Nazad</string>
+
+    <!-- About -->
+    <string name="about_title">O aplikaciji</string>
+    <string name="about_version">Pametna kupovina %1$s</string>
+    <string name="about_prices_disclaimer">Cene su iz zvaničnih cenovnika trgovaca. Merodavna je cena u prodavnici.</string>
+    <string name="about_signed_in">Prijavljen si preko Google-a, pa ćeš spiskove naći i na drugom telefonu.</string>
+    <string name="about_signed_out">Spiskovi su vezani za ovaj telefon. Prijavi se da ih nađeš i na drugom.</string>
+    <string name="about_sign_in">Prijavi se preko Google-a</string>
+    <string name="about_signing_in">Prijavljujem…</string>
+    <string name="about_signed_in_message">Prijavljen si. Spiskovi su sada vezani za nalog.</string>
+    <string name="about_no_google_account">Na telefonu nema nijednog Google naloga.</string>
+    <string name="about_sign_in_failed">Prijava nije uspela. Probaj ponovo kasnije.</string>
+    <string name="about_delete_data">Obriši moje podatke</string>
+    <string name="about_delete_data_household">Izađi iz domaćinstva i obriši podatke</string>
+    <string name="about_delete_title">Obrisati sve?</string>
+    <string name="about_delete_title_household">Izađi i obriši?</string>
+    <string name="about_delete_text">Brišu se spiskovi, skenirani računi, kartice i prijava, i na serveru i na telefonu. Ne može da se vrati. Aplikacija će se zatvoriti.</string>
+    <string name="about_delete_text_household">Ovaj telefon izlazi iz domaćinstva i briše sve sa sebe. Zajednički spisak, računi i kartice ostaju ukućanima.</string>
+    <string name="about_delete">Obriši</string>
+    <string name="about_deleting">Brišem…</string>
+    <string name="about_delete_failed">Brisanje nije uspelo. Proveri internet i probaj ponovo.</string>
+    <string name="about_device_number">Broj uređaja (za pitanja o podacima):</string>
+    <string name="about_privacy_policy">Politika privatnosti</string>
+    <string name="about_terms">Uslovi korišćenja</string>
+
+    <!-- Household -->
+    <string name="household_title">Domaćinstvo</string>
+    <string name="household_qr_description">QR kod za pridruživanje domaćinstvu</string>
+    <string name="household_code_validity">Važi 15 minuta</string>
+    <string name="household_join_instructions">Neka ukućanin u svojoj aplikaciji otvori Meni → Domaćinstvo → Pridruži se i skenira ovaj kod.</string>
+    <string name="household_intro">Ukućani dele isti spisak, račune i kartice. Kad se neko pridruži, sve što je imao na svom telefonu prelazi u zajedničko.</string>
+    <string name="household_invite">Pozovi ukućanina</string>
+    <string name="household_new_code">Novi kod</string>
+    <string name="household_join">Pridruži se (skeniraj kod)</string>
+    <string name="household_invite_failed">Kod nije napravljen. Proveri internet i probaj ponovo.</string>
+    <string name="household_join_failed">Pridruživanje nije uspelo. Probaj ponovo.</string>
+    <string name="household_joined">Sada delite spisak, račune i kartice.</string>
+    <string name="household_not_a_code">To nije kod za domaćinstvo.</string>
+
+    <!-- Location -->
+    <string name="location_title">Odakle krećeš</string>
+    <string name="location_starting_point_value">Polazna tačka: %1$s</string>
+    <string name="location_show_recommendations">Prikaži preporuke</string>
+    <string name="location_step">KORAK 2 OD 3</string>
+    <string name="location_starting_point">Polazna tačka</string>
+    <string name="location_step_text">Put računamo od polazne tačke do prodavnica u blizini.</string>
+    <string name="location_resolving">Tražim lokaciju…</string>
+    <string name="location_use_current">Koristi trenutnu lokaciju</string>
+    <string name="location_use_current_hint">Samo za ovo računanje</string>
+    <string name="location_address_label">Ili upiši adresu ili kraj</string>
+    <string name="location_address_placeholder">npr. Karaburma, Beograd</string>
+    <string name="location_find_address">Pronađi adresu</string>
+    <string name="location_open_location_settings">Otvori podešavanja lokacije</string>
+    <string name="location_open_app_permissions">Otvori dozvole aplikacije</string>
+    <string name="location_privacy_note">Lokacija služi za ovo računanje i za redosled pretrage. Aplikacija je ne prati u pozadini, a server je ne čuva.</string>
+    <string name="location_enter_manually">Unesi koordinate ručno</string>
+    <string name="location_latitude">Geografska širina</string>
+    <string name="location_latitude_placeholder">npr. 44.8170</string>
+    <string name="location_longitude">Geografska dužina</string>
+    <string name="location_longitude_placeholder">npr. 20.4930</string>
+    <string name="location_coordinates_hint">Koordinate dobijaš u Google mapama kad dugo pritisneš tačku na mapi.</string>
+    <string name="location_found_current">Lokacija je pronađena. Proveri je i pokreni računanje.</string>
+    <string name="location_found_address">Pronađeno: %1$s</string>
+    <string name="location_not_found_type_address">Lokacija nije pronađena. Upiši adresu.</string>
+    <string name="location_permission_denied">Dozvola nije odobrena. Možeš je uključiti u podešavanjima aplikacije ili upisati adresu.</string>
+    <string name="location_permission_missing">Dozvola za lokaciju nije odobrena.</string>
+    <string name="location_services_off">Lokacijske usluge su isključene. Uključi ih u podešavanjima pa pokušaj ponovo.</string>
+    <string name="location_not_found_enable_services">Lokacija nije pronađena. Uključi lokacijske usluge ili upiši adresu.</string>
+    <string name="location_geocoder_missing">Pretraga adrese ne radi na ovom telefonu. Unesi koordinate ručno.</string>
+    <string name="location_geocoder_unavailable">Pretraga adrese trenutno ne radi. Probaj ponovo za koji trenutak.</string>
+    <string name="location_address_not_found">Adresa nije pronađena. Dodaj grad, npr. „Karaburma, Beograd“.</string>
+</resources>

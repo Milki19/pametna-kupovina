@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Početna -->
+    <string name="dashboard_title">Početna</string>
+    <string name="dashboard_ok">U redu</string>
+    <string name="dashboard_tab_receipts">Računi</string>
+    <string name="dashboard_tab_shops">Prodavnice</string>
+    <string name="dashboard_tab_categories">Kategorije</string>
+    <string name="dashboard_tab_habits">Navike</string>
+    <string name="dashboard_no_receipts">Nema računa za ovaj mesec.</string>
+    <string name="dashboard_no_shops">Još nema podataka o prodavnicama.</string>
+    <string name="dashboard_no_habits">Navike se vide kad skeniraš račune sa stavkama.</string>
+    <plurals name="dashboard_receipt_count">
+        <item quantity="one">%d račun</item>
+        <item quantity="few">%d računa</item>
+        <item quantity="other">%d računa</item>
+    </plurals>
+    <plurals name="dashboard_times_count">
+        <item quantity="one">%d put</item>
+        <item quantity="few">%d puta</item>
+        <item quantity="other">%d puta</item>
+    </plurals>
+    <string name="dashboard_last_bought">poslednji put %1$s</string>
+    <string name="dashboard_previous_month">Prethodni mesec</string>
+    <string name="dashboard_next_month">Sledeći mesec</string>
+    <string name="dashboard_monthly_total">UKUPNA MESEČNA POTROŠNJA</string>
+    <!-- %1$s je znak (+ ili pravi minus), %2$d procenat, %3$s mesec pre izabranog -->
+    <string name="dashboard_change_vs_month">%1$s%2$d%% u odnosu na %3$s</string>
+    <string name="dashboard_stat_receipts">Računa</string>
+    <string name="dashboard_stat_shops">Prodavnica</string>
+    <string name="dashboard_stat_average">Prosečna korpa</string>
+    <string name="dashboard_active_list">AKTIVNA LISTA</string>
+    <string name="dashboard_my_list">Moj spisak</string>
+    <string name="dashboard_list_empty">Spisak je prazan</string>
+    <string name="dashboard_open_list">Otvori spisak (%1$s)</string>
+    <string name="dashboard_weekly_title">Nedeljni pregled potrošnje</string>
+    <string name="dashboard_busiest_week">Najveća nedelja: %1$s RSD • prosek %2$s RSD/ned</string>
+    <string name="dashboard_analytics_title">Analitika troškova</string>
+    <string name="dashboard_previous_view">Prethodni prikaz</string>
+    <string name="dashboard_next_view">Sledeći prikaz</string>
+
+    <!-- Skeniranje računa -->
+    <string name="receipt_scanning">Zavodim račun…</string>
+    <string name="receipt_saved">Zaveden račun: %1$s, %2$s.</string>
+    <string name="receipt_not_fiscal">To nije QR sa fiskalnog računa.</string>
+    <string name="receipt_scanner_downloading">Google skener se još preuzima na telefon. Sačekaj minut pa probaj ponovo.</string>
+    <string name="receipt_scan_failed">Skeniranje nije uspelo. Probaj ponovo.</string>
+    <string name="receipt_not_saved">Račun nije zaveden. Proveri internet i probaj ponovo.</string>
+
+    <!-- Lojalti kartice -->
+    <string name="loyalty_title">Lojalti kartice</string>
+    <string name="loyalty_cashier_hint">Ako kod ne prolazi, kasirka može da ukuca broj.</string>
+    <string name="loyalty_delete">Obriši karticu</string>
+    <string name="loyalty_new_card">Nova kartica</string>
+    <string name="loyalty_name">Naziv</string>
+    <string name="loyalty_number">Broj sa kartice</string>
+    <string name="loyalty_scanning">Skeniram…</string>
+    <string name="loyalty_scan">Skeniraj kod sa kartice</string>
+    <string name="loyalty_code_format">Oblik koda: %1$s</string>
+    <string name="loyalty_cancel">Odustani</string>
+    <string name="loyalty_subtitle">Barkodovi za kasu</string>
+    <string name="loyalty_add">Dodaj karticu</string>
+    <string name="loyalty_empty">Dodaj kartice koje nosiš u novčaniku pa ih na kasi otvori odavde. Kartice stoje uz nalog, pa prelaze i na nov telefon.</string>
+    <string name="loyalty_wallet">Tvoj novčanik</string>
+    <string name="loyalty_barcode">Barkod</string>
+    <string name="loyalty_tap_to_enlarge">Dodirni za veći kod</string>
+    <string name="loyalty_scan_failed_retry">Skeniranje nije uspelo. Probaj ponovo.</string>
+    <string name="loyalty_scan_failed">Skeniranje nije uspelo.</string>
+    <string name="loyalty_not_saved">Kartica nije sačuvana. Proveri broj pa probaj ponovo.</string>
+
+    <!-- Cenovni alarm (obaveštenja) -->
+    <string name="price_watch_channel">Pojeftinjenja</string>
+    <string name="price_watch_title">Pojeftinilo: %1$s</string>
+    <string name="price_watch_text">%1$s → %2$s (%3$s)</string>
+</resources>
