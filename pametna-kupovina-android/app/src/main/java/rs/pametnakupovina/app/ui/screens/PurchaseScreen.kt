@@ -72,7 +72,8 @@ import rs.pametnakupovina.app.ui.PurchaseViewModel
 import rs.pametnakupovina.app.ui.components.AppIcon
 import rs.pametnakupovina.app.ui.components.TonalActionButton
 import rs.pametnakupovina.app.ui.components.cardBorder
-import rs.pametnakupovina.app.ui.wholeDinars
+import rs.pametnakupovina.app.ui.currency
+import rs.pametnakupovina.app.ui.wholeAmount
 import rs.pametnakupovina.app.ui.components.AppSpacing
 import rs.pametnakupovina.app.ui.components.AppTopBar
 import rs.pametnakupovina.app.ui.components.LoadingState
@@ -670,7 +671,7 @@ private fun PurchaseProgressHeader(session: PurchaseSession, onOpenCards: () -> 
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        "${wholeDinars(scenario.basketCost)} RSD",
+                        "${wholeAmount(scenario.basketCost)} ${currency()}",
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -1045,7 +1046,7 @@ private fun PurchaseDetailsDialog(
                     OutlinedTextField(
                         value = price,
                         onValueChange = { price = it },
-                        label = { Text(stringResource(R.string.purchase_actual_total_field)) },
+                        label = { Text(stringResource(R.string.purchase_actual_total_field, currency())) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         singleLine = true
                     )

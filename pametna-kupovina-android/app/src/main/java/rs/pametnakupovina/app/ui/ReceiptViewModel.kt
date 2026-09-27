@@ -17,6 +17,7 @@ import rs.pametnakupovina.app.data.NotAFiscalReceipt
 import rs.pametnakupovina.app.data.ReceiptScanner
 import rs.pametnakupovina.app.data.ScanCancelled
 import rs.pametnakupovina.app.data.ShoppingRepository
+import rs.pametnakupovina.app.data.market.CurrentMarket
 import rs.pametnakupovina.app.data.network.CategorySpendingDto
 import rs.pametnakupovina.app.data.network.HabitDto
 import rs.pametnakupovina.app.data.network.MonthlySpendingDto
@@ -33,7 +34,7 @@ data class ReceiptUiState(
     val byWeek: List<WeeklySpendingDto> = emptyList(),
     val byCategory: List<CategorySpendingDto> = emptyList(),
     val habits: List<HabitDto> = emptyList(),
-    val selectedMonth: LocalDate = LocalDate.now().withDayOfMonth(1),
+    val selectedMonth: LocalDate = LocalDate.now(CurrentMarket.settings.zone).withDayOfMonth(1),
     val scanning: Boolean = false,
     val message: UiText? = null
 )
@@ -83,7 +84,7 @@ class ReceiptViewModel @Inject constructor(
     /** Meni sme da vrati unazad koliko ima podataka, ali nikad u budućnost. */
     fun changeMonth(monthsDelta: Int) {
         val next = _uiState.value.selectedMonth.plusMonths(monthsDelta.toLong())
-        if (next.isAfter(LocalDate.now().withDayOfMonth(1))) return
+        if (next.isAfter(LocalDate.now(CurrentMarket.settings.zone).withDayOfMonth(1))) return
         _uiState.update { it.copy(selectedMonth = next) }
         refresh()
     }

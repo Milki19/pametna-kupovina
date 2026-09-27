@@ -4,6 +4,7 @@ import android.content.res.Resources
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalResources
 import rs.pametnakupovina.app.R
+import rs.pametnakupovina.app.data.market.CurrentMarket
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.text.DecimalFormat
@@ -15,36 +16,41 @@ import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
 
 /*
- * Every number and date on screen goes through here, written the way a Serbian
- * shelf label writes it: 1.086,92 RSD and 13.09.2026. The symbols are fixed
- * rather than taken from the device, so a phone set to English still shows
- * the format printed next to the product. Words (month names, "u", counted
- * nouns) come from string resources; counts use `<plurals>`.
+ * Every number and date on screen goes through here, written the way a shelf
+ * label in the account's market writes it: in Serbia 1.086,92 RSD and
+ * 13.09.2026. The separators and currency are the market's rather than the
+ * device's, so a phone set to English still shows the format printed next to
+ * the product. Words (month names, "u", counted nouns) come from string
+ * resources; counts use `<plurals>`.
  */
 
-private fun serbianFormat(pattern: String): DecimalFormat {
-    val symbols = DecimalFormatSymbols().apply {
-        decimalSeparator = ','
-        groupingSeparator = '.'
-    }
+private fun marketFormat(pattern: String): DecimalFormat {
+    val symbols = DecimalFormatSymbols.getInstance(CurrentMarket.settings.formatLocale)
     return DecimalFormat(pattern, symbols).apply {
         roundingMode = RoundingMode.HALF_UP
     }
 }
 
-/** A price to the para: 1.086,92 RSD. */
-fun money(value: Double): String =
-    serbianFormat("#,##0.00").format(BigDecimal.valueOf(value)) + " RSD"
+/** The market's currency code, written after an amount: RSD. */
+fun currency(): String = CurrentMarket.settings.currency
 
-/** Whole dinars without the currency, for comparing totals side by side. */
-fun wholeDinars(value: Double): String =
-    serbianFormat("#,##0").format(BigDecimal.valueOf(value))
+/** A price to the smallest coin: 1.086,92 RSD. */
+fun money(value: Double): String {
+    val decimals = CurrentMarket.settings.currencyMinorUnits
+    val pattern = if (decimals > 0) "#,##0." + "0".repeat(decimals) else "#,##0"
+    return marketFormat(pattern).format(BigDecimal.valueOf(value)) + " " + currency()
+}
+
+/** Whole units without the currency, for comparing totals side by side. */
+fun wholeAmount(value: Double): String =
+    marketFormat("#,##0").format(BigDecimal.valueOf(value))
 
 /** A plain amount with at most [maxDecimals] decimals: 1,5 or 1.000. */
-fun decimal(value: Double, maxDecimals: Int = 2): String =
-    serbianFormat("#,##0." + "#".repeat(maxDecimals))
-        .format(BigDecimal.valueOf(value))
-        .removeSuffix(",")
+fun decimal(value: Double, maxDecimals: Int = 2): String {
+    val format = marketFormat("#,##0." + "#".repeat(maxDecimals))
+    return format.format(BigDecimal.valueOf(value))
+        .removeSuffix(format.decimalFormatSymbols.decimalSeparator.toString())
+}
 
 /** Metres below a kilometre, because "0,55 km" makes the reader do sums. */
 fun distance(kilometres: Double): String =

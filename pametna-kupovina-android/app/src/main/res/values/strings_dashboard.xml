@@ -34,7 +34,7 @@
     <string name="dashboard_list_empty">Spisak je prazan</string>
     <string name="dashboard_open_list">Otvori spisak (%1$s)</string>
     <string name="dashboard_weekly_title">Nedeljni pregled potrošnje</string>
-    <string name="dashboard_busiest_week">Najveća nedelja: %1$s RSD • prosek %2$s RSD/ned</string>
+    <string name="dashboard_busiest_week">Najveća nedelja: %1$s %3$s • prosek %2$s %3$s/ned</string>
     <string name="dashboard_analytics_title">Analitika troškova</string>
     <string name="dashboard_previous_view">Prethodni prikaz</string>
     <string name="dashboard_next_view">Sledeći prikaz</string>

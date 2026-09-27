@@ -32,7 +32,7 @@
     <string name="dashboard_list_empty">Your list is empty</string>
     <string name="dashboard_open_list">Open list (%1$s)</string>
     <string name="dashboard_weekly_title">Weekly spending</string>
-    <string name="dashboard_busiest_week">Busiest week: %1$s RSD • average %2$s RSD/wk</string>
+    <string name="dashboard_busiest_week">Busiest week: %1$s %3$s • average %2$s %3$s/wk</string>
     <string name="dashboard_analytics_title">Spending breakdown</string>
     <string name="dashboard_previous_view">Previous view</string>
     <string name="dashboard_next_view">Next view</string>

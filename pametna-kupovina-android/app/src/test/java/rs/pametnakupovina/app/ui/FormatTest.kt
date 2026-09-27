@@ -2,6 +2,8 @@ package rs.pametnakupovina.app.ui
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import rs.pametnakupovina.app.data.market.CurrentMarket
+import rs.pametnakupovina.app.data.market.MarketSettings
 
 class FormatTest {
 
@@ -10,8 +12,8 @@ class FormatTest {
         assertEquals("1.086,92 RSD", money(1086.92))
         assertEquals("38,10 RSD", money(38.1))
         assertEquals("0,00 RSD", money(0.0))
-        assertEquals("570", wholeDinars(569.74))
-        assertEquals("12.346", wholeDinars(12345.5))
+        assertEquals("570", wholeAmount(569.74))
+        assertEquals("12.346", wholeAmount(12345.5))
     }
 
     @Test

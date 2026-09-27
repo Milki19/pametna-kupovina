@@ -42,7 +42,7 @@ class PurchaseScreenInstrumentedTest {
             compose.onAllNodesWithText(text(R.string.purchase_details))[0].performClick()
             compose.onNodeWithText(text(R.string.purchase_note_field)).performTextInput("Uzmi hladan")
             compose.onNodeWithText(text(R.string.purchase_bought_field)).performTextReplacement("2")
-            compose.onNodeWithText(text(R.string.purchase_actual_total_field)).performTextInput("46,00")
+            compose.onNodeWithText(text(R.string.purchase_actual_total_field, "RSD")).performTextInput("46,00")
             compose.onNodeWithText(text(R.string.common_save)).performClick()
             compose.waitUntil(5000) { viewModel.session.value?.progress?.get(1)?.note == "Uzmi hladan" }
             val saved = runBlocking { repository.observe(id).first()!! }

@@ -31,7 +31,8 @@ class PriceAwarePickerInstrumentedTest {
                 as rs.pametnakupovina.app.data.network.ShoppingApiService
             val dao = database.draftItemDao()
             val repository = rs.pametnakupovina.app.data.ShoppingRepository(
-                api, dao, rs.pametnakupovina.app.data.preferences.ClientIdentityStore(context)
+                api, dao, rs.pametnakupovina.app.data.preferences.ClientIdentityStore(context),
+                rs.pametnakupovina.app.data.market.MarketStore(context, kotlinx.serialization.json.Json)
             )
             dao.insert(rs.pametnakupovina.app.data.local.DraftItemEntity(
                 remoteId=99, name="Staro mleko", rawInput="Pilos mleko", quantity=2.0,

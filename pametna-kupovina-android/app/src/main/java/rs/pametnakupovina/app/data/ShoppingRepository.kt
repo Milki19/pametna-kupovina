@@ -9,6 +9,7 @@ import retrofit2.HttpException
 import rs.pametnakupovina.app.data.local.DraftItemDao
 import rs.pametnakupovina.app.data.local.DraftItemEntity
 import rs.pametnakupovina.app.data.local.SyncState
+import rs.pametnakupovina.app.data.market.MarketStore
 import rs.pametnakupovina.app.data.network.AccountDeviceDto
 import rs.pametnakupovina.app.data.network.AccountStateDto
 import rs.pametnakupovina.app.data.network.AddLoyaltyCardRequestDto
@@ -143,7 +144,8 @@ data class DraftItemInput(
 class ShoppingRepository @Inject constructor(
     private val api: ShoppingApiService,
     private val dao: DraftItemDao,
-    private val clientIdentityStore: ClientIdentityStore
+    private val clientIdentityStore: ClientIdentityStore,
+    private val marketStore: MarketStore
 ) {
     private val syncMutex = Mutex()
 
@@ -171,7 +173,13 @@ class ShoppingRepository @Inject constructor(
 
     suspend fun spending(month: String): SpendingDto = api.getSpending(month)
 
-    suspend fun accountState(): AccountStateDto = api.getAccount()
+    suspend fun accountState(): AccountStateDto = api.getAccount().rememberingMarket()
+
+    /** Every answer about the account says which market it shops in. */
+    private suspend fun AccountStateDto.rememberingMarket(): AccountStateDto {
+        market?.let { marketStore.remember(it) }
+        return this
+    }
 
     suspend fun deleteAccount() = api.deleteAccount()
 
@@ -197,7 +205,7 @@ class ShoppingRepository @Inject constructor(
      */
     suspend fun joinHousehold(scanned: String) {
         val (code, listId) = parseHouseholdCode(scanned) ?: throw NotAHouseholdCode()
-        api.joinHousehold(JoinRequestDto(code))
+        api.joinHousehold(JoinRequestDto(code)).rememberingMarket()
         syncMutex.withLock {
             clientIdentityStore.setActiveListId(listId)
             dao.resetRemoteState()
@@ -206,7 +214,7 @@ class ShoppingRepository @Inject constructor(
     }
 
     suspend fun signInWithGoogle(idToken: String): AccountStateDto =
-        api.signInWithGoogle(GoogleSignInRequestDto(idToken))
+        api.signInWithGoogle(GoogleSignInRequestDto(idToken)).rememberingMarket()
 
     suspend fun searchProducts(
         query: String,
