@@ -87,7 +87,9 @@ fun PurchaseScreen(
     onBack: () -> Unit,
     onOpen: (String) -> Unit,
     onOpenCards: () -> Unit = {},
-    viewModel: PurchaseViewModel = hiltViewModel()
+    viewModel: PurchaseViewModel = hiltViewModel(),
+    // Zajednički sa početnim ekranom, pa skenirani račun odmah menja troškove.
+    receiptViewModel: ReceiptViewModel? = null
 ) {
     val sessions by viewModel.sessions.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
@@ -95,9 +97,9 @@ fun PurchaseScreen(
     LaunchedEffect(sessionId) { sessionId?.let(viewModel::load) }
 
     if (sessionId == null) {
-        PurchaseHistory(sessions, message, onOpen)
+        PurchaseHistory(sessions, message, onOpen, receiptViewModel ?: hiltViewModel())
     } else {
-        PurchaseInProgress(session, message, onBack, onOpenCards, viewModel)
+        PurchaseInProgress(session, message, onBack, onOpenCards, viewModel, receiptViewModel)
     }
 }
 
@@ -389,9 +391,11 @@ private fun PurchaseInProgress(
     message: String?,
     onBack: () -> Unit,
     onOpenCards: () -> Unit,
-    viewModel: PurchaseViewModel
+    viewModel: PurchaseViewModel,
+    receiptViewModel: ReceiptViewModel?
 ) {
     val context = LocalContext.current
+    val receipts = receiptViewModel?.uiState?.collectAsStateWithLifecycle()?.value
     var editingId by rememberSaveable(session?.id) { mutableStateOf<Long?>(null) }
     var confirmArchive by rememberSaveable(session?.id) { mutableStateOf(false) }
     val scenario = session?.snapshot?.scenario
@@ -463,13 +467,27 @@ private fun PurchaseInProgress(
         ) {
             item(key = "progress") { PurchaseProgressHeader(session, onOpenCards) }
 
+            if (receipts != null && receiptViewModel != null) {
+                val receiptNotice = if (receipts.scanning) "Zavodim račun…" else receipts.message
+                receiptNotice?.let { text ->
+                    item(key = "receipt-notice") {
+                        NoticeBanner(
+                            text = text,
+                            actionLabel = "U redu".takeUnless { receipts.scanning },
+                            onAction = receiptViewModel::dismissMessage.takeUnless { receipts.scanning }
+                        )
+                    }
+                }
+            }
+
             message?.let {
                 item(key = "message") { NoticeBanner(text = it, tone = StatusTone.ERROR) }
             }
             if (archived) {
                 item(key = "archived") {
                     NoticeBanner(
-                        text = "Ova kupovina je završena. Kućice su zaključane dok je ponovo ne otvoriš."
+                        text = "Ova kupovina je završena. Kućice su zaključane dok je ponovo ne otvoriš, " +
+                            "a račun možeš da skeniraš i sada."
                     )
                 }
             }
@@ -516,6 +534,20 @@ private fun PurchaseInProgress(
 
             item(key = "finish") {
                 Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)) {
+                    // Troškovi se pišu sa računa, ne iz čekiranja; zato se
+                    // račun skenira odavde, i pre i posle završetka.
+                    if (receipts != null && receiptViewModel != null) {
+                        TonalActionButton(
+                            text = if (receipts.scanning) "Zavodim račun…" else "Skeniraj račun",
+                            icon = R.drawable.ic_camera,
+                            primary = true,
+                            enabled = !receipts.scanning,
+                            onClick = { receiptViewModel.scan(context) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("purchase-scan-receipt")
+                        )
+                    }
                     TonalActionButton(
                         text = if (archived) "Ponovo otvori kupovinu" else "Završi kupovinu",
                         icon = R.drawable.ic_check_circle,
@@ -541,17 +573,32 @@ private fun PurchaseInProgress(
             text = {
                 Text(
                     "Kupljeno ${session.purchasedCount} od ${session.snapshot.scenario.items.size}. " +
-                        "Nekupljene stavke neće biti označene kao kupljene. Plan i napomene ostaju u istoriji."
+                        "Nekupljene stavke neće biti označene kao kupljene. Plan i napomene ostaju u istoriji.\n\n" +
+                        "U troškove ulazi skenirani račun, ne sama kupovina."
                 )
             },
             confirmButton = {
-                TextButton(onClick = {
-                    viewModel.archive(session.id, true)
-                    confirmArchive = false
-                }) { Text("Završi") }
+                if (receiptViewModel != null) {
+                    TextButton(
+                        onClick = {
+                            viewModel.archive(session.id, true)
+                            confirmArchive = false
+                            receiptViewModel.scan(context)
+                        },
+                        modifier = Modifier.testTag("finish-and-scan")
+                    ) { Text("Završi i skeniraj račun") }
+                } else {
+                    TextButton(onClick = {
+                        viewModel.archive(session.id, true)
+                        confirmArchive = false
+                    }) { Text("Završi") }
+                }
             },
             dismissButton = {
-                TextButton(onClick = { confirmArchive = false }) { Text("Nazad") }
+                TextButton(onClick = {
+                    if (receiptViewModel != null) viewModel.archive(session.id, true)
+                    confirmArchive = false
+                }) { Text(if (receiptViewModel != null) "Samo završi" else "Nazad") }
             }
         )
     }
