@@ -53,23 +53,20 @@ public class ReceiptService {
     }
 
     @Transactional
-    public Receipt scan(String clientToken, String verificationUrl) {
-        FiscalReceiptStamp stamp =
-                verificationUrlReader.read(verificationUrl);
+    public Receipt scan(String clientToken, String scannedUrl) {
+        String verificationUrl = FiscalVerificationUrlReader.canonical(scannedUrl);
+        FiscalReceiptStamp stamp = verificationUrlReader.read(verificationUrl);
         long accountId = accountFor(clientToken);
 
-        String shopName = stamp.shopName() == null || stamp.shopName().isBlank()
-                ? SHOP_UNKNOWN
-                : stamp.shopName();
-
+        // Ime prodavnice daje tek stranica Poreske uprave (readItems).
         long receiptId = receiptRepository.save(
                 accountId,
                 stamp,
-                verificationUrl.strip(),
-                shopName
+                verificationUrl,
+                SHOP_UNKNOWN
         );
 
-        readItems(receiptId, verificationUrl.strip());
+        readItems(receiptId, verificationUrl);
 
         return receiptRepository.findById(accountId, receiptId)
                 .orElseThrow(() -> new ResponseStatusException(

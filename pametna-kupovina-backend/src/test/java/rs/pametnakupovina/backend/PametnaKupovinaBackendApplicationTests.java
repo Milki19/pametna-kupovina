@@ -4680,7 +4680,9 @@ class PametnaKupovinaBackendApplicationTests {
         var receipt = receiptService.scan("telefon-racun", code);
 
         assertThat(receipt.invoiceNumber()).isEqualTo("LUEDV8LB-Dt1Ov1o0-308");
-        assertThat(receipt.shopName()).isEqualTo("Milojko 22");
+        // Ime prodavnice daje tek stranica Poreske uprave; oznaka kupca iz
+        // koda („Milojko 22") ne sme da postane prodavnica.
+        assertThat(receipt.shopName()).isEqualTo("Nepoznata prodavnica");
         assertThat(receipt.totalAmount())
                 .isEqualByComparingTo(new java.math.BigDecimal("3060.00"));
         assertThat(receipt.itemsRead()).isFalse();
@@ -4698,7 +4700,7 @@ class PametnaKupovinaBackendApplicationTests {
             assertThat(month.receipts()).isEqualTo(1);
         });
         assertThat(spending.byShop()).singleElement().satisfies(shop ->
-                assertThat(shop.shopName()).isEqualTo("Milojko 22"));
+                assertThat(shop.shopName()).isEqualTo("Nepoznata prodavnica"));
 
         // Tuđi telefon ne vidi ništa od toga.
         assertThat(receiptService.history("drugi-telefon", 50)).isEmpty();

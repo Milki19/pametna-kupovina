@@ -10,12 +10,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Pravi račun (12.10.2022, „Milojko 22"): na papiru piše
+ * Pravi račun (12.10.2022): na papiru piše
  * „ПФР број рачуна: LUEDV8LB-Dt1Ov1o0-308", „Укупан износ: 3.060,00" i
  * „ПФР време: 12.10.2022. 20:47:53". Sve to stoji u samom QR kodu, pa se
- * račun može zavesti pre nego što se Poreska uprava išta pita.
+ * račun može zavesti pre nego što se Poreska uprava išta pita. „Milojko 22"
+ * u tom kodu je oznaka kupca, ne prodavnica, i ne čita se.
  */
 class FiscalVerificationUrlReaderTest {
+
+    /** Račun iz restorana (03.01.2023), kodiran kako ga štampa kasa. */
+    private static final String REAL_PAYLOAD_ENCODED =
+            "A1ZCTUhYOVNYVzZVQlBaTzCyKwEA%2FmgAAMDh5AAAAAAAAAABhXchESoAAAAP3tYiO2%2BdI6Z5y2v4eC5wJTxirHDeiB1hqaKpgb%2FGvUy6yLkMNgZNqKxLqR40mK2cAfqZmKQ3%2BuCcTbec%2BQ3%2F9YY5EhTDP5HxDNhG%2FugU849FmvrVzP0sKecosSNL10dFtlH8Wgor2A2DDs8sHlmfmpokJnVcm24b%2BCz2bSCSl3HtzGRJ1w4Sw9hhdzsQ4WuPo%2FMEGMlmV8a%2Ffc7X05cWsDCHZoA5uPNWfN%2Bre8%2By5JETDJgRwNDFipYIdh0k62TMp5P0%2FzbCueIJJjas5IxAS9iIdpoTAIIl3eKwUZUWvEwtbGz5nkz52hw5%2Bmg50Uczx1SRifYq%2FEDt79xNkcceS0llpMyNdQ12TSYyL0UjMNymgGX4WPajSzPkQuFBcGLB%2BNLOn2AKLPJXa3B8b87eESXrcIbilNXS3zyr3eg4DIqcTVLXwHwcSh1WDmWKI2TFSu%2Bc6iORB11ln1kYbsEsuCoUegxRJR3RW4%2BkQz45%2Bbm4O5qWTCkDlZ73XHATWPn%2BpPfHP2Fh0Y0QK8gGxNiqrdbob3u0l8uaxKcEDaX%2F4HXnhMezvLEEwBNgWXDMn29uWYx9SWEvPrxV%2FLsIULQbE%2FlcvPeYIla63NhCyuEuGLIlwB2p%2B9O8x7sxD53fTMC7EKKRFUV13WBJS2N5%2BLUh33joYo8Qrc%2BNV2CqrtChYTftFukoKbQvCUKOYYIW0%2FA%3D";
 
     private static final String SAMPLE_PAYLOAD =
             "A0xVRURWOExCRHQxT3YxbzA0AQAANAEAAEDr0gEAAAAAAAABg82GSNIAAApNaWxvamtvIDIy";
@@ -34,7 +39,26 @@ class FiscalVerificationUrlReaderTest {
         assertThat(stamp.totalAmount()).isEqualByComparingTo(new BigDecimal("3060.00"));
         assertThat(stamp.issuedAt())
                 .isEqualTo(Instant.parse("2022-10-12T18:47:53.298Z"));
-        assertThat(stamp.shopName()).isEqualTo("Milojko 22");
+    }
+
+    /**
+     * Isti račun, jednom kodiran (%2B) i jednom sa sirovim „+", kako ga neke
+     * kase štampaju: „+" nije razmak, pa se oba čitaju isto.
+     */
+    @Test
+    void aPlusInTheCodeIsAPlusNotASpace() {
+        String raw = java.net.URLDecoder.decode(
+                REAL_PAYLOAD_ENCODED,
+                java.nio.charset.StandardCharsets.UTF_8
+        );
+        assertThat(raw).contains("+");
+
+        for (String payload : new String[]{REAL_PAYLOAD_ENCODED, raw}) {
+            FiscalReceiptStamp stamp = reader.read("https://suf.purs.gov.rs/v/?vl=" + payload);
+
+            assertThat(stamp.invoiceNumber()).isEqualTo("VBMHX9SX-W6UBPZO0-76722");
+            assertThat(stamp.totalAmount()).isEqualByComparingTo(new BigDecimal("1500.00"));
+        }
     }
 
     @Test
@@ -87,20 +111,27 @@ class FiscalVerificationUrlReaderTest {
                 .hasMessageContaining("Nepoznata verzija");
     }
 
+    /** Povraćaj, predračun, kopija i obuka kase nisu kupovina. */
     @Test
-    void aTruncatedShopNameIsLeftEmptyInsteadOfGuessed() {
+    void onlyAPurchaseCountsAsSpending() {
         byte[] payload = java.util.Base64.getDecoder().decode(
                 SAMPLE_PAYLOAD + "=".repeat((4 - SAMPLE_PAYLOAD.length() % 4) % 4)
         );
-        byte[] cut = java.util.Arrays.copyOf(payload, 45);
-        cut[43] = 100; // tvrdi da ime ima 100 znakova, a nema
 
-        FiscalReceiptStamp stamp = reader.read(
-                "https://suf.purs.gov.rs/v/?vl="
-                        + java.util.Base64.getEncoder().encodeToString(cut)
-        );
+        java.util.function.BiFunction<Integer, Integer, String> read = (invoiceType, transactionType) -> {
+            byte[] changed = payload.clone();
+            changed[41] = invoiceType.byteValue();
+            changed[42] = transactionType.byteValue();
+            return "https://suf.purs.gov.rs/v/?vl="
+                    + java.util.Base64.getEncoder().encodeToString(changed);
+        };
 
-        assertThat(stamp.shopName()).isNull();
-        assertThat(stamp.invoiceNumber()).isEqualTo("LUEDV8LB-Dt1Ov1o0-308");
+        assertThatThrownBy(() -> reader.read(read.apply(0, 1))).hasMessageContaining("povraćaj");
+        assertThatThrownBy(() -> reader.read(read.apply(1, 0))).hasMessageContaining("predračun");
+        assertThatThrownBy(() -> reader.read(read.apply(2, 0))).hasMessageContaining("kopija");
+        assertThatThrownBy(() -> reader.read(read.apply(3, 0))).hasMessageContaining("obuku");
+        // Avans je plaćen, pa ulazi.
+        assertThat(reader.read(read.apply(4, 0)).totalAmount())
+                .isEqualByComparingTo(new BigDecimal("3060.00"));
     }
 }
