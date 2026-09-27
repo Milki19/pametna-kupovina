@@ -1,7 +1,8 @@
 'use strict';
 // Web verzija za telefone bez Android aplikacije (iPhone). Isti server i isti
-// nalog po uređaju kao Android: pregledač pamti nasumičan ključ i šalje ga u
-// X-Client-Token. Napredak kupovine ostaje u pregledaču, kao u aplikaciji.
+// nalog po uređaju kao Android: pregledač pamti nasumičan ključ, jednom ga
+// menja za sesiju i dalje šalje samo kratak pristupni token. Napredak kupovine
+// ostaje u pregledaču, kao u aplikaciji.
 
 const VERSION = '1.8';
 const view = document.getElementById('view');
@@ -34,21 +35,86 @@ function clientToken() {
   return token;
 }
 
+// ---------- Sesija ----------
+
+// Jedna obnova u isto vreme: token za obnovu važi jednom, pa bi dve paralelne
+// serveru izgledale kao krađa.
+let renewing = null;
+
+async function sessionCall(path, body) {
+  const response = await fetch('/api/v1/' + path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!response.ok) {
+    const error = new Error('Sesija nije otvorena.');
+    error.status = response.status;
+    throw error;
+  }
+  const session = await response.json();
+  saved.set('session', {
+    access: session.accessToken,
+    expiresAt: Date.now() + session.accessExpiresInSeconds * 1000,
+    refresh: session.refreshToken,
+    deviceId: session.deviceId
+  });
+  return session.accessToken;
+}
+
+async function renewSession() {
+  const refresh = saved.get('session')?.refresh;
+  if (refresh) {
+    try {
+      return await sessionCall('sessions/refresh', { refreshToken: refresh });
+    } catch (error) {
+      if (error.status !== 401) throw error;
+    }
+  }
+  try {
+    return await sessionCall('sessions', { deviceToken: clientToken(), deviceName: 'Web' });
+  } catch (error) {
+    if (error.status !== 401) throw error;
+    // Ključ ovog pregledača više ne otvara nalog: počinje se kao nov uređaj.
+    saved.set('token', null);
+    saved.set('session', null);
+    saved.set('listId', null);
+    return sessionCall('sessions', { deviceToken: clientToken(), deviceName: 'Web' });
+  }
+}
+
+function accessToken() {
+  const session = saved.get('session');
+  if (session?.access && session.expiresAt - 30000 > Date.now()) {
+    return Promise.resolve(session.access);
+  }
+  if (!renewing) renewing = renewSession().finally(() => { renewing = null; });
+  return renewing;
+}
+
 // ---------- Server ----------
 
-async function api(method, path, body) {
+async function api(method, path, body, retried = false) {
   let response;
+  let token;
   try {
+    token = await accessToken();
     response = await fetch('/api/v1/' + path, {
       method,
       headers: {
-        'X-Client-Token': clientToken(),
+        'Authorization': 'Bearer ' + token,
         ...(body === undefined ? {} : { 'Content-Type': 'application/json' })
       },
       body: body === undefined ? undefined : JSON.stringify(body)
     });
   } catch {
     throw new Error('Nema veze sa serverom. Proveri internet i probaj ponovo.');
+  }
+  if (response.status === 401 && !retried
+      && (response.headers.get('WWW-Authenticate') || '').startsWith('Bearer')) {
+    const session = saved.get('session');
+    if (session?.access === token) saved.set('session', { ...session, expiresAt: 0 });
+    return api(method, path, body, true);
   }
   if (!response.ok) {
     let message = null;
@@ -888,7 +954,7 @@ function showMore() {
       </div>
       <div class="card">
         <div class="name">Broj uređaja (za pitanja o podacima)</div>
-        <p class="muted small" style="overflow-wrap:anywhere">${esc(clientToken())}</p>
+        <p class="muted small" style="overflow-wrap:anywhere">${esc(saved.get('session')?.deviceId ? 'PK-' + saved.get('session').deviceId : '…')}</p>
         <button class="btn danger" data-act="delete-account">Obriši moje podatke</button>
       </div>`
   });

@@ -9,7 +9,7 @@
 <body>
 <header>
   <h1>Politika privatnosti</h1>
-  <p>Aplikacija Pametna kupovina · poslednja izmena 24.09.2026. (web verzija)</p>
+  <p>Aplikacija Pametna kupovina · poslednja izmena 27.09.2026. (web verzija)</p>
 </header>
 <main>
 
@@ -44,7 +44,16 @@ u pregledaču briše se i broj uređaja.</p>
   zahtev, kako biste videli svoje spiskove, a ne tuđe. Uz spiskove se na
   serveru čuva samo njegov nepovratan otisak (SHA-256), ne i sam broj. Broj
   nije vezan ni za vaš Google nalog, ni za uređaj na način koji bi preživeo
-  brisanje aplikacije.</dd>
+  brisanje aplikacije. Aplikacija ga jednom zameni za sesiju: kratak pristupni
+  token koji važi nekoliko minuta i token za obnovu koji se menja pri svakoj
+  upotrebi. I od njih server čuva samo otiske. Sesija se briše pri odjavi, kad
+  telefon uklonite sa naloga ili kad se aplikacija ne koristi duže od šest
+  meseci.</dd>
+
+  <dt>Model telefona</dt>
+  <dd>Proizvođač i model (na primer „Samsung SM-A546B“), da biste na spisku
+  telefona svog naloga znali koji je koji i uklonili izgubljen telefon. Ne
+  čuva se ime vlasnika ni broj telefona.</dd>
 
   <dt>Spiskovi za kupovinu</dt>
   <dd>Nazivi stavki koje ukucate, količine i barkodovi, kao i naziv spiska.
@@ -166,14 +175,15 @@ prijave grešaka koje ste poslali ostaju, ali više nisu vezane za vaš uređaj.
 <p>Pojedinačno: spisak brišete na samom spisku, a karticu na ekranu „Kartice".</p>
 <p><strong>Bez aplikacije:</strong> pošaljite zahtev na
 <strong>pametnakupovina19@gmail.com</strong> sa brojem uređaja iz aplikacije
-(meni → <em>O aplikaciji</em>). Zahtev se izvršava najkasnije u roku od
+(meni → <em>O aplikaciji</em>; počinje sa „PK-“). Zahtev se izvršava najkasnije u roku od
 30 dana. Brisanjem aplikacije sa telefona briše se i broj uređaja, posle čega
 podaci više ne mogu da se pronađu ni da se obrišu na zahtev.</p>
 
 <h2>Bezbednost</h2>
 <p>Saobraćaj između aplikacije i servera ide preko HTTPS veze. Pristup serveru
-ima samo vlasnik aplikacije. Broj uređaja se uz spiskove čuva kao nepovratan
-otisak, pa ni onaj ko bi video bazu ne bi mogao da se predstavi kao vaš uređaj.</p>
+ima samo vlasnik aplikacije. Broj uređaja i tokeni sesije čuvaju se samo kao
+nepovratni otisci, pa ni onaj ko bi video bazu ne bi mogao da se predstavi kao
+vaš uređaj.</p>
 
 <h2>Deca</h2>
 <p>Aplikacija nije namenjena deci i ne prikuplja podatke za koje se zna da
