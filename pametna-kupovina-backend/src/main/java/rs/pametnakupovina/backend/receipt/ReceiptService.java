@@ -26,41 +26,38 @@ public class ReceiptService {
 
     private final ReceiptRepository receiptRepository;
     private final MarketRepository marketRepository;
-    private final FiscalVerificationUrlReader verificationUrlReader;
-    private final FiscalReceiptClient receiptClient;
-    private final FiscalReceiptJournalParser journalParser;
+    private final ReceiptReaders receiptReaders;
     private final ReceiptItemMatcher itemMatcher;
 
     public ReceiptService(
             ReceiptRepository receiptRepository,
             MarketRepository marketRepository,
-            FiscalVerificationUrlReader verificationUrlReader,
-            FiscalReceiptClient receiptClient,
-            FiscalReceiptJournalParser journalParser,
+            ReceiptReaders receiptReaders,
             ReceiptItemMatcher itemMatcher
     ) {
         this.receiptRepository = receiptRepository;
         this.marketRepository = marketRepository;
-        this.verificationUrlReader = verificationUrlReader;
-        this.receiptClient = receiptClient;
-        this.journalParser = journalParser;
+        this.receiptReaders = receiptReaders;
         this.itemMatcher = itemMatcher;
     }
 
     @Transactional
     public Receipt scan(long accountId, String scannedUrl) {
-        String verificationUrl = FiscalVerificationUrlReader.canonical(scannedUrl);
-        FiscalReceiptStamp stamp = verificationUrlReader.read(verificationUrl);
+        // A receipt is read the way the shopper's market prints them.
+        ReceiptReader reader = receiptReaders.forMarket(
+                marketRepository.forAccount(accountId)
+        );
+        ReceiptReader.ScannedReceipt scanned = reader.read(scannedUrl);
 
         // Ime prodavnice daje tek stranica Poreske uprave (readItems).
         long receiptId = receiptRepository.save(
                 accountId,
-                stamp,
-                verificationUrl,
+                scanned.stamp(),
+                scanned.address(),
                 SHOP_UNKNOWN
         );
 
-        readItems(receiptId, verificationUrl);
+        readItems(reader, receiptId, scanned.address());
 
         return receiptRepository.findById(accountId, receiptId)
                 .orElseThrow(() -> new ResponseStatusException(
@@ -104,17 +101,15 @@ public class ReceiptService {
      * odgovori, račun ostaje zaveden sa onim što je bilo u QR kodu — gde,
      * kada i koliko — a stavke mogu da stignu kasnije.
      */
-    private void readItems(long receiptId, String verificationUrl) {
+    private void readItems(ReceiptReader reader, long receiptId, String address) {
         if (receiptRepository.itemsAlreadyRead(receiptId)) {
             return;
         }
 
-        receiptClient.fetch(verificationUrl).ifPresent(fetched -> {
-            var parsed = journalParser.parse(fetched.journal());
-
+        reader.lines(address).ifPresent(lines -> {
             receiptRepository.saveItems(
                     receiptId,
-                    parsed.items().stream()
+                    lines.items().stream()
                             .map(item -> item.withProductFamily(
                                     itemMatcher
                                             .productFamilyFor(item.name())
@@ -123,19 +118,11 @@ public class ReceiptService {
                             .toList()
             );
 
-            // Pola računa u QR kodu uopšte ne nosi prodavnicu; Poreska uprava
-            // je uvek zna, pa se ime dopunjuje čim stigne.
-            String shopName = fetched.shopName() != null
-                    ? fetched.shopName()
-                    : parsed.shopName();
-
-            if (shopName != null && !shopName.isBlank()) {
+            if (lines.shopName() != null && !lines.shopName().isBlank()) {
                 receiptRepository.nameShop(
                         receiptId,
-                        shopName,
-                        fetched.taxIdentificationNumber() != null
-                                ? fetched.taxIdentificationNumber()
-                                : parsed.taxIdentificationNumber()
+                        lines.shopName(),
+                        lines.taxIdentificationNumber()
                 );
             }
         });

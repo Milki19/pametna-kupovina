@@ -1,6 +1,7 @@
-package rs.pametnakupovina.backend.receipt;
+package rs.pametnakupovina.backend.receipt.serbia;
 
 import org.junit.jupiter.api.Test;
+import rs.pametnakupovina.backend.receipt.Receipt;
 
 import java.io.IOException;
 import java.math.BigDecimal;

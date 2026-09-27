@@ -1,4 +1,4 @@
-package rs.pametnakupovina.backend.receipt;
+package rs.pametnakupovina.backend.receipt.serbia;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
