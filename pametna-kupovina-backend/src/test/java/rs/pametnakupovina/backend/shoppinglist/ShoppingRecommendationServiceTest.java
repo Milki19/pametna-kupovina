@@ -375,6 +375,55 @@ class ShoppingRecommendationServiceTest {
                 .savingsComparedWithSingleStore()).isNull();
     }
 
+    /**
+     * Tata je izabrao Perutninu, a nijedna radnja u krugu je ne prodaje: plan
+     * je onda traži dalje, u najbližoj radnji lanca koji je ima, umesto da
+     * kaže da je nema nigde.
+     */
+    @Test
+    void aProductNoNearbyShopSellsIsLookedForFartherAway() {
+        ShoppingListRepository listRepository = mock(ShoppingListRepository.class);
+        NearbyStoreRepository nearbyRepository = mock(NearbyStoreRepository.class);
+        StoreShoppingOfferRepository offerRepository = mock(StoreShoppingOfferRepository.class);
+        RouteMatrixProvider routeProvider = mock(RouteMatrixProvider.class);
+        ShoppingRecommendationService service = new ShoppingRecommendationService(
+                listRepository, nearbyRepository, offerRepository, routeProvider,
+                new ShoppingOptimizationProperties());
+
+        ShoppingListItemResponse milk = item(1L, "Mleko", 101L);
+        ShoppingListItemResponse breast = new ShoppingListItemResponse(
+                2L, "Pileća prsa", "Pileća prsa", null, BigDecimal.ONE,
+                ShoppingItemRule.PRODUCT_FAMILY, ShoppingItemMatchingStatus.CONFIRMED,
+                null, 555L, null, null, null, null,
+                OffsetDateTime.now(), OffsetDateTime.now());
+        when(listRepository.findById(10L)).thenReturn(Optional.of(new ShoppingListResponse(
+                10L, "Test korpa", OffsetDateTime.now(), OffsetDateTime.now(),
+                List.of(milk, breast))));
+
+        NearbyStore near = store(1L, "A");
+        NearbyStore far = store(3L, "C");
+        when(nearbyRepository.findPricingEligibleNearby(44.0, 19.0, 15_000, 20))
+                .thenReturn(List.of(near));
+        when(nearbyRepository.findNearestCarrying(44.0, 19.0, List.of(555L), List.of(), 40_000, 3))
+                .thenReturn(List.of(far));
+        when(offerRepository.findOffers(eq(10L), anyList(), eq(DATE), eq(true)))
+                .thenAnswer(call -> offersFor(call.getArgument(1), List.of(
+                        offer(near, milk, 100, 1001L),
+                        offer(far, breast, 300, 3002L))));
+        when(routeProvider.calculate(anyList())).thenReturn(routeMatrix(List.of(1L, 3L)));
+
+        ShoppingRecommendationResponse response = service.recommend(10L, 44.0, 19.0, DATE);
+
+        assertThat(response.recommendedBalance().stores())
+                .extracting(store -> store.storeId())
+                .contains(3L);
+        assertThat(response.recommendedBalance().items())
+                .filteredOn(line -> line.itemId() == 2L)
+                .singleElement()
+                .satisfies(line -> assertThat(line.resultStatus())
+                        .isEqualTo(RecommendationItemStatus.AVAILABLE));
+    }
+
     private ShoppingListItemResponse item(
             Long itemId,
             String name,
@@ -493,7 +542,12 @@ class ShoppingRecommendationServiceTest {
     }
 
     private RouteMatrix routeMatrix() {
-        List<String> ids = List.of("USER", "STORE:1", "STORE:2");
+        return routeMatrix(List.of(1L, 2L));
+    }
+
+    private RouteMatrix routeMatrix(List<Long> storeIds) {
+        List<String> ids = new ArrayList<>(List.of("USER"));
+        storeIds.forEach(id -> ids.add("STORE:" + id));
         List<RouteMatrixEntry> entries = new ArrayList<>();
 
         for (String origin : ids) {

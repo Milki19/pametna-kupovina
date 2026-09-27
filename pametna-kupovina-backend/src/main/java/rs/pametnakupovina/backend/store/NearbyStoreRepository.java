@@ -61,12 +61,47 @@ public class NearbyStoreRepository {
         );
     }
 
+    /**
+     * Najbliže radnje lanaca koji imaju bar jedan od ovih proizvoda u
+     * aktuelnom cenovniku, po jedna po lancu i formatu. Proizvod je dat kao
+     * porodica („Proizvod") ili kao tačan proizvod („Barkod").
+     */
+    public List<NearbyStore> findNearestCarrying(
+            double latitude,
+            double longitude,
+            List<Long> productFamilyIds,
+            List<Long> canonicalProductIds,
+            int radiusMeters,
+            int limit
+    ) {
+        return findNearby(latitude, longitude, radiusMeters, limit, true,
+                new Carrying(joined(productFamilyIds), joined(canonicalProductIds)));
+    }
+
+    private record Carrying(String familyIds, String canonicalIds) {
+    }
+
+    private static String joined(List<Long> ids) {
+        return ids.stream().map(String::valueOf).collect(java.util.stream.Collectors.joining(","));
+    }
+
     private List<NearbyStore> findNearby(
             double latitude,
             double longitude,
             int radiusMeters,
             int limit,
             boolean pricingEligibleOnly
+    ) {
+        return findNearby(latitude, longitude, radiusMeters, limit, pricingEligibleOnly, null);
+    }
+
+    private List<NearbyStore> findNearby(
+            double latitude,
+            double longitude,
+            int radiusMeters,
+            int limit,
+            boolean pricingEligibleOnly,
+            Carrying carrying
     ) {
         return jdbcClient.sql("""
                         WITH user_position AS (
@@ -110,6 +145,19 @@ public class NearbyStoreRepository {
                                   'MANUALLY_VERIFIED'
                               )
                               AND (NOT ? OR store.pricing_eligible = TRUE)
+                              AND (NOT ? OR store.retailer_id IN (
+                                  SELECT presence.retailer_id
+                                  FROM app.product_retailer_presence AS presence
+                                  WHERE presence.current_offer_count > 0
+                                    AND presence.product_family_id IN (
+                                        SELECT UNNEST(STRING_TO_ARRAY(?, ',')::BIGINT[])
+                                        UNION
+                                        SELECT member.family_id
+                                        FROM app.product_family_member AS member
+                                        WHERE member.canonical_product_id
+                                                  = ANY(STRING_TO_ARRAY(?, ',')::BIGINT[])
+                                    )
+                              ))
                               AND ST_DWithin(
                                   store.location,
                                   user_position.location,
@@ -152,8 +200,11 @@ public class NearbyStoreRepository {
                 .param(1, longitude)
                 .param(2, latitude)
                 .param(3, pricingEligibleOnly)
-                .param(4, radiusMeters)
-                .param(5, limit)
+                .param(4, carrying != null)
+                .param(5, carrying == null ? "" : carrying.familyIds())
+                .param(6, carrying == null ? "" : carrying.canonicalIds())
+                .param(7, radiusMeters)
+                .param(8, limit)
                 .query(ROW_MAPPER)
                 .list();
     }
