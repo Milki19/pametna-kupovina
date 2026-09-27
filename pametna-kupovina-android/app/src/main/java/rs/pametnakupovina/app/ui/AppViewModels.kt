@@ -380,6 +380,24 @@ class RecommendationViewModel @Inject constructor(
 
     suspend fun alternativeQuery(itemId: Long) = repository.alternativeQuery(itemId)
 
+    /** „Uzmi slično": stavka postaje „bilo koji brend" i plan se računa ponovo. */
+    fun useSimilar(listId: Long, itemId: Long, latitude: Double, longitude: Double) {
+        viewModelScope.launch {
+            try {
+                repository.replaceWithSimilar(itemId)
+                _uiState.value = RecommendationUiState(isLoading = true)
+                _uiState.value = RecommendationUiState(
+                    result = repository.getRecommendations(listId, latitude, longitude)
+                )
+            } catch (error: kotlinx.coroutines.CancellationException) { throw error }
+            catch (error: Exception) {
+                _uiState.value = RecommendationUiState(
+                    errorMessage = error.toUserMessage("Zamena nije sačuvana. Pokušaj ponovo.")
+                )
+            }
+        }
+    }
+
     fun replaceAlternative(listId: Long,itemId: Long,
         product: rs.pametnakupovina.app.data.network.CanonicalProductSearchItemDto,
         packages: Double,latitude: Double,longitude: Double,onDone: (String?) -> Unit) {

@@ -52,6 +52,11 @@ import rs.pametnakupovina.app.ui.components.AppSpacing
 import rs.pametnakupovina.app.ui.components.FullScreenDialog
 import rs.pametnakupovina.app.ui.components.canonicalProductPicker
 import rs.pametnakupovina.app.ui.items
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
+import androidx.compose.material3.Checkbox
+import rs.pametnakupovina.app.data.similarItem
+import androidx.compose.ui.platform.testTag
 
 /** The unit a person writes an amount in, mapped onto the one the server stores. */
 internal enum class AmountUnit(
@@ -167,6 +172,8 @@ internal fun ItemEditorDialog(
         mutableStateOf<CanonicalProductSearchItemDto?>(null)
     }
     var selectedProductRawInput by remember(key) { mutableStateOf<String?>(null) }
+    // „Može i drugi brend": čuva se kao „Bilo koji" iste vrste i količine.
+    var anyBrand by remember(key) { mutableStateOf(false) }
 
     val isFlexible = rule == ShoppingItemRuleDto.FLEXIBLE_CATEGORY
     val chosenUnit = unit
@@ -216,6 +223,18 @@ internal fun ItemEditorDialog(
         confirmEnabled = valid,
         onDismiss = onDismiss,
         onConfirm = {
+            val product = selectedProduct
+            if (anyBrand && product != null && !isFlexible) {
+                onSave(
+                    similarItem(
+                        product.name,
+                        product.brand,
+                        requireNotNull(parsedQuantity),
+                        selectedProductRawInput
+                    )
+                )
+                return@FullScreenDialog
+            }
             onSave(
                 DraftItemInput(
                     name = name,
@@ -287,6 +306,30 @@ internal fun ItemEditorDialog(
                     onLoadMore = onLoadMoreProducts,
                     onScan = { scope.launch { onScanBarcode()?.let(::search) } }
                 )
+                selectedProduct?.let { product ->
+                    item(key = "any-brand") {
+                        val similar = similarItem(product.name, product.brand, 1.0)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .toggleable(value = anyBrand, role = Role.Checkbox) { anyBrand = it }
+                                .testTag("any-brand")
+                        ) {
+                            Checkbox(checked = anyBrand, onCheckedChange = null)
+                            Column(modifier = Modifier.padding(start = AppSpacing.sm)) {
+                                Text("Može i drugi brend", style = MaterialTheme.typography.titleSmall)
+                                Text(
+                                    "Uzima se najjeftinije „${similar.category}" +
+                                        (similar.targetQuantity?.let { ", " + amountLabel(it, similar.requiredBaseUnit) } ?: "") +
+                                        "“ u prodavnicama iz plana.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
                 item(key = "quantity") {
                     QuantityStepper(
                         label = "Broj pakovanja",

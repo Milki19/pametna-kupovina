@@ -54,3 +54,36 @@ fun amountLabel(value: Double, unit: String?, packageCount: Int = 1): String {
     }
     return "$number $label"
 }
+
+/**
+ * „Može i drugi brend": od proizvoda ostaju vrsta i količina, a bira se
+ * najjeftinije slično. „PERUTNINA PTUJ pileća prsa 250 g" postaje „pileća
+ * prsa", 250 g. Katalog piše brend velikim slovima na početku naziva, pa se
+ * skida i kad brend ne znamo; oznake kao „f52" i procenti prekidaju naziv.
+ */
+fun similarItem(name: String, brand: String?, packages: Double, rawInput: String? = null): DraftItemInput {
+    val amount = parseShoppingAmount(name)
+    val brandWords = brand.orEmpty().lowercase().split(Regex("[^\\p{L}]+")).filter { it.length > 1 }.toSet()
+    val kind = (amount?.name ?: name)
+        .split(Regex("[\\s,;]+"))
+        .filter(String::isNotBlank)
+        .dropWhile { word ->
+            word.lowercase() in brandWords ||
+                (word.length > 1 && word.any(Char::isLetter) && word.none(Char::isLowerCase))
+        }
+        .filterNot { it.lowercase() in brandWords }
+        .takeWhile { word -> word.all(Char::isLetter) }
+        .take(2)
+        .joinToString(" ")
+        .lowercase()
+        .ifBlank { name.trim() }
+    return DraftItemInput(
+        name = kind,
+        rawInput = rawInput,
+        quantity = packages,
+        matchingRule = rs.pametnakupovina.app.data.network.ShoppingItemRuleDto.FLEXIBLE_CATEGORY,
+        category = kind,
+        targetQuantity = amount?.amount?.value,
+        requiredBaseUnit = amount?.amount?.unit
+    )
+}

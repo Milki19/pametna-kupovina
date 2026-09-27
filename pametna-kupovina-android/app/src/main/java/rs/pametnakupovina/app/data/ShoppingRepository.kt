@@ -242,6 +242,13 @@ class ShoppingRepository @Inject constructor(
         return item.rawInput?.takeIf { it.isNotBlank() } ?: item.name
     }
 
+    /** Stavka koje nema u planu postaje „slično, bilo koji brend" (vidi [similarItem]). */
+    suspend fun replaceWithSimilar(itemId: Long) {
+        val item = requireNotNull(dao.findByRemoteId(itemId)) { "Stavka nije u aktivnom spisku." }
+        require(item.syncState != SyncState.PENDING_DELETE.name) { "Stavka je obrisana." }
+        updateItem(item, similarItem(item.name, null, item.quantity, item.rawInput))
+    }
+
     suspend fun replaceWithAlternative(itemId: Long, product: rs.pametnakupovina.app.data.network.CanonicalProductSearchItemDto, packages: Double) {
         val item = requireNotNull(dao.findByRemoteId(itemId)) { "Stavka nije u aktivnom spisku." }
         require(item.syncState != SyncState.PENDING_DELETE.name) { "Stavka je obrisana." }
