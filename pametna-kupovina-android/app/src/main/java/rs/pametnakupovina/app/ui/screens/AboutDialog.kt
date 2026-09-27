@@ -10,6 +10,7 @@ import rs.pametnakupovina.app.data.ShoppingRepository
 import rs.pametnakupovina.app.data.SignInCancelled
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -24,6 +25,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -37,6 +39,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import rs.pametnakupovina.app.BuildConfig
 import rs.pametnakupovina.app.R
+import rs.pametnakupovina.app.data.network.AccountDeviceDto
 import rs.pametnakupovina.app.data.preferences.ClientIdentityStore
 import rs.pametnakupovina.app.text.UiText
 import rs.pametnakupovina.app.text.asString
@@ -44,7 +47,9 @@ import rs.pametnakupovina.app.text.uiText
 import rs.pametnakupovina.app.ui.components.AppSpacing
 
 data class AboutUiState(
-    val deviceToken: String? = null,
+    val deviceId: Long? = null,
+    val devices: List<AccountDeviceDto> = emptyList(),
+    val signingOut: Boolean = false,
     val signedIn: Boolean = false,
     val household: Boolean = false,
     val signingIn: Boolean = false,
@@ -64,11 +69,11 @@ class AboutViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            _uiState.update {
-                it.copy(deviceToken = clientIdentityStore.getOrCreateToken())
+            clientIdentityStore.deviceId.collect { deviceId ->
+                _uiState.update { it.copy(deviceId = deviceId) }
             }
-            refreshAccount()
         }
+        viewModelScope.launch { refreshAccount() }
     }
 
     /**
@@ -80,6 +85,49 @@ class AboutViewModel @Inject constructor(
             .onSuccess { state ->
                 _uiState.update { it.copy(signedIn = state.signedIn, household = state.household) }
             }
+        if (_uiState.value.signedIn || _uiState.value.household) {
+            runCatching { repository.accountDevices() }
+                .onSuccess { devices -> _uiState.update { it.copy(devices = devices) } }
+        }
+    }
+
+    /** Izgubljen ili tuđ telefon prestaje da vidi nalog čim se ukloni. */
+    fun removeDevice(deviceId: Long) {
+        viewModelScope.launch {
+            try {
+                repository.removeAccountDevice(deviceId)
+                _uiState.update { state ->
+                    state.copy(devices = state.devices.filterNot { it.id == deviceId })
+                }
+            } catch (error: kotlinx.coroutines.CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                _uiState.update { it.copy(message = uiText(R.string.about_remove_device_failed)) }
+            }
+        }
+    }
+
+    /**
+     * Odjava je samo za prijavljene: nalog ostaje na serveru i vraća se
+     * ponovnom prijavom. Telefon briše ono što je držao za taj nalog i
+     * zatvara aplikaciju, pa sledeći put kreće kao nov.
+     */
+    fun signOut(context: Context) {
+        if (_uiState.value.signingOut) return
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(signingOut = true, message = null) }
+            try {
+                repository.signOut()
+                context.getSystemService(ActivityManager::class.java).clearApplicationUserData()
+            } catch (error: kotlinx.coroutines.CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                _uiState.update {
+                    it.copy(signingOut = false, message = uiText(R.string.about_sign_out_failed))
+                }
+            }
+        }
     }
 
     /**
@@ -116,6 +164,7 @@ class AboutViewModel @Inject constructor(
                     googleSignInClient.idToken(activityContext)
                 )
                 _uiState.update { it.copy(signedIn = state.signedIn) }
+                refreshAccount()
                 if (state.signedIn) uiText(R.string.about_signed_in_message) else null
             } catch (cancelled: SignInCancelled) {
                 null
@@ -200,6 +249,18 @@ fun AboutDialog(
                         stringResource(R.string.about_signed_in),
                         style = MaterialTheme.typography.bodyMedium
                     )
+                    TextButton(
+                        onClick = { viewModel.signOut(context) },
+                        enabled = !state.signingOut,
+                        modifier = Modifier.testTag("about-sign-out")
+                    ) {
+                        Text(
+                            stringResource(
+                                if (state.signingOut) R.string.about_signing_out
+                                else R.string.about_sign_out
+                            )
+                        )
+                    }
                 } else {
                     Text(
                         stringResource(R.string.about_signed_out),
@@ -216,6 +277,34 @@ fun AboutDialog(
                                 else R.string.about_sign_in
                             )
                         )
+                    }
+                }
+
+                if (state.devices.size > 1) {
+                    Text(
+                        stringResource(R.string.about_devices),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    state.devices.forEach { device ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.testTag("about-device-${device.id}")
+                        ) {
+                            val name = device.name
+                                ?: stringResource(R.string.about_device_unnamed, device.id)
+                            Text(
+                                if (device.current) stringResource(R.string.about_device_current, name) else name,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (!device.current) {
+                                TextButton(
+                                    onClick = { viewModel.removeDevice(device.id) },
+                                    modifier = Modifier.testTag("about-remove-device-${device.id}")
+                                ) { Text(stringResource(R.string.about_remove_device)) }
+                            }
+                        }
                     }
                 }
 
@@ -246,10 +335,10 @@ fun AboutDialog(
                 )
                 SelectionContainer {
                     Text(
-                        state.deviceToken ?: "…",
+                        state.deviceId?.let { stringResource(R.string.about_device_id, it) } ?: "…",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.testTag("about-device-token")
+                        modifier = Modifier.testTag("about-device-id")
                     )
                 }
             }

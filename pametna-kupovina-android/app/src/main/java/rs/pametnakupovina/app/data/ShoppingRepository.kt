@@ -9,6 +9,7 @@ import retrofit2.HttpException
 import rs.pametnakupovina.app.data.local.DraftItemDao
 import rs.pametnakupovina.app.data.local.DraftItemEntity
 import rs.pametnakupovina.app.data.local.SyncState
+import rs.pametnakupovina.app.data.network.AccountDeviceDto
 import rs.pametnakupovina.app.data.network.AccountStateDto
 import rs.pametnakupovina.app.data.network.AddLoyaltyCardRequestDto
 import rs.pametnakupovina.app.data.network.HabitDto
@@ -173,6 +174,15 @@ class ShoppingRepository @Inject constructor(
     suspend fun accountState(): AccountStateDto = api.getAccount()
 
     suspend fun deleteAccount() = api.deleteAccount()
+
+    /** Telefoni na ovom nalogu; ovaj je označen sa `current`. */
+    suspend fun accountDevices(): List<AccountDeviceDto> = api.getAccountDevices()
+
+    /** Drugi telefon gubi pristup odmah; sledeći put počinje kao nov. */
+    suspend fun removeAccountDevice(deviceId: Long) = api.removeAccountDevice(deviceId)
+
+    /** Server gasi sesiju ovog telefona i odvaja ga od naloga. */
+    suspend fun signOut() = api.signOut()
 
     /** Sadržaj QR koda za drugi telefon: jednokratni kod i spisak koji se deli. */
     suspend fun householdInvite(): String {

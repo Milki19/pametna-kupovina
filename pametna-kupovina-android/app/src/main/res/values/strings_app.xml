@@ -35,6 +35,15 @@
     <string name="about_deleting">Brišem…</string>
     <string name="about_delete_failed">Brisanje nije uspelo. Proveri internet i probaj ponovo.</string>
     <string name="about_device_number">Broj uređaja (za pitanja o podacima):</string>
+    <string name="about_device_id" translatable="false">PK-%1$d</string>
+    <string name="about_sign_out">Odjavi se</string>
+    <string name="about_signing_out">Odjavljujem…</string>
+    <string name="about_sign_out_failed">Odjava nije uspela. Proveri internet i probaj ponovo.</string>
+    <string name="about_devices">Telefoni na nalogu:</string>
+    <string name="about_device_unnamed">Telefon %1$d</string>
+    <string name="about_device_current">%1$s (ovaj)</string>
+    <string name="about_remove_device">Ukloni</string>
+    <string name="about_remove_device_failed">Telefon nije uklonjen. Proveri internet i probaj ponovo.</string>
     <string name="about_privacy_policy">Politika privatnosti</string>
     <string name="about_terms">Uslovi korišćenja</string>
 

@@ -35,6 +35,14 @@
     <string name="about_deleting">Deleting…</string>
     <string name="about_delete_failed">Deleting failed. Check your internet connection and try again.</string>
     <string name="about_device_number">Device number (for questions about your data):</string>
+    <string name="about_sign_out">Sign out</string>
+    <string name="about_signing_out">Signing out…</string>
+    <string name="about_sign_out_failed">Signing out failed. Check your connection and try again.</string>
+    <string name="about_devices">Phones on this account:</string>
+    <string name="about_device_unnamed">Phone %1$d</string>
+    <string name="about_device_current">%1$s (this one)</string>
+    <string name="about_remove_device">Remove</string>
+    <string name="about_remove_device_failed">The phone was not removed. Check your connection and try again.</string>
     <string name="about_privacy_policy">Privacy policy</string>
     <string name="about_terms">Terms of use</string>
 

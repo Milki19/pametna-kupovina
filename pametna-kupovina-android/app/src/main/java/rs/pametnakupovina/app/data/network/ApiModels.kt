@@ -246,6 +246,34 @@ data class AccountStateDto(
 )
 
 @Serializable
+data class CreateSessionRequestDto(
+    val deviceToken: String,
+    val deviceName: String? = null
+)
+
+@Serializable
+data class RefreshSessionRequestDto(
+    val refreshToken: String
+)
+
+@Serializable
+data class SessionDto(
+    val accessToken: String,
+    val accessExpiresInSeconds: Long,
+    val refreshToken: String,
+    val deviceId: Long
+)
+
+@Serializable
+data class AccountDeviceDto(
+    val id: Long,
+    val name: String? = null,
+    val firstSeenAt: String,
+    val lastSeenAt: String,
+    val current: Boolean = false
+)
+
+@Serializable
 data class CrashReportDto(
     val appVersion: String,
     val androidVersion: String,
