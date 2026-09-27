@@ -386,8 +386,15 @@ public class DataQualityService {
                                  OR COALESCE(discounted_price, 0) > 0
                              )) AS invalid_current_price_offers,
                             (SELECT COUNT(*)
-                             FROM app.current_price_offer
-                             WHERE last_seen_date < CURRENT_DATE - :staleDays)
+                             FROM app.current_price_offer AS offer
+                             JOIN app.retailer_product AS product
+                               ON product.id = offer.retailer_product_id
+                             JOIN app.retailer AS chain
+                               ON chain.id = product.retailer_id
+                             JOIN app.market AS market
+                               ON market.id = chain.market_id
+                             WHERE offer.last_seen_date
+                                   < (NOW() AT TIME ZONE market.time_zone)::DATE - :staleDays)
                                 AS stale_current_price_offers
                         """)
                 .param("staleDays", stalePriceDays)

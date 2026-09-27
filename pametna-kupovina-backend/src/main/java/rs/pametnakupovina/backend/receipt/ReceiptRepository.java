@@ -6,6 +6,7 @@ import org.springframework.stereotype.Repository;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 
@@ -139,7 +140,7 @@ public class ReceiptRepository {
     public List<Receipt> findAll(long accountId, int limit) {
         return jdbcClient.sql("""
                         SELECT id, verification_key, shop_name, issued_at,
-                               total_amount, items_read_at
+                               total_amount, currency_code, items_read_at
                         FROM app.receipt
                         WHERE account_id = :accountId
                         ORDER BY issued_at DESC, id DESC
@@ -154,6 +155,7 @@ public class ReceiptRepository {
                         resultSet.getObject("issued_at", java.time.OffsetDateTime.class)
                                 .toInstant(),
                         resultSet.getBigDecimal("total_amount"),
+                        resultSet.getString("currency_code"),
                         resultSet.getObject("items_read_at") != null,
                         List.of()
                 ))
@@ -163,7 +165,7 @@ public class ReceiptRepository {
     public Optional<Receipt> findById(long accountId, long receiptId) {
         Optional<Receipt> receipt = jdbcClient.sql("""
                         SELECT id, verification_key, shop_name, issued_at,
-                               total_amount, items_read_at
+                               total_amount, currency_code, items_read_at
                         FROM app.receipt
                         WHERE account_id = :accountId AND id = :receiptId
                         """)
@@ -176,6 +178,7 @@ public class ReceiptRepository {
                         resultSet.getObject("issued_at", java.time.OffsetDateTime.class)
                                 .toInstant(),
                         resultSet.getBigDecimal("total_amount"),
+                        resultSet.getString("currency_code"),
                         resultSet.getObject("items_read_at") != null,
                         List.of()
                 ))
@@ -187,6 +190,7 @@ public class ReceiptRepository {
                 found.shopName(),
                 found.issuedAt(),
                 found.totalAmount(),
+                found.currency(),
                 found.itemsRead(),
                 itemsOf(found.id())
         ));
@@ -251,11 +255,11 @@ public class ReceiptRepository {
     }
 
     /** Koliko je otišlo po mesecu, najskorije prvo. */
-    public List<MonthlySpending> spendingByMonth(long accountId, int months) {
+    public List<MonthlySpending> spendingByMonth(long accountId, int months, ZoneId zone) {
         return jdbcClient.sql("""
                         SELECT DATE_TRUNC(
                                    'month',
-                                   issued_at AT TIME ZONE 'Europe/Belgrade'
+                                   issued_at AT TIME ZONE :zone
                                )::date AS month,
                                SUM(total_amount) AS spent,
                                COUNT(*) AS receipts
@@ -267,6 +271,7 @@ public class ReceiptRepository {
                         """)
                 .param("accountId", accountId)
                 .param("months", months)
+                .param("zone", zone.getId())
                 .query((resultSet, rowNumber) -> new MonthlySpending(
                         resultSet.getObject("month", LocalDate.class),
                         resultSet.getBigDecimal("spent"),
@@ -280,19 +285,19 @@ public class ReceiptRepository {
      * mani.rs. Bucket se računa iz dana u mesecu, pa poslednja nedelja ima
      * 2-3 dana i to je normalno.
      */
-    public List<WeeklySpending> spendingByWeek(long accountId, LocalDate monthStart) {
+    public List<WeeklySpending> spendingByWeek(long accountId, LocalDate monthStart, ZoneId zone) {
         return jdbcClient.sql("""
                         SELECT bucket, SUM(total_amount) AS spent
                         FROM (
                             SELECT total_amount,
                                    (EXTRACT(
-                                       DAY FROM (issued_at AT TIME ZONE 'Europe/Belgrade')
+                                       DAY FROM (issued_at AT TIME ZONE :zone)
                                    )::int - 1) / 7 AS bucket
                             FROM app.receipt
                             WHERE account_id = :accountId
-                              AND (issued_at AT TIME ZONE 'Europe/Belgrade')::date
+                              AND (issued_at AT TIME ZONE :zone)::date
                                   >= :monthStart
-                              AND (issued_at AT TIME ZONE 'Europe/Belgrade')::date
+                              AND (issued_at AT TIME ZONE :zone)::date
                                   < (:monthStart + INTERVAL '1 month')::date
                         ) AS bucketed
                         GROUP BY bucket
@@ -300,6 +305,7 @@ public class ReceiptRepository {
                         """)
                 .param("accountId", accountId)
                 .param("monthStart", monthStart)
+                .param("zone", zone.getId())
                 .query((resultSet, rowNumber) -> new WeeklySpending(
                         resultSet.getInt("bucket"),
                         resultSet.getBigDecimal("spent")
@@ -337,15 +343,15 @@ public class ReceiptRepository {
      * proizvode). Stavka bez prepoznatog proizvoda i račun čije stavke još
      * nisu stigle od Poreske uprave idu u „Ostalo", da zbir ostane zbir meseca.
      */
-    public List<CategorySpending> spendingByCategory(long accountId, LocalDate monthStart) {
+    public List<CategorySpending> spendingByCategory(long accountId, LocalDate monthStart, ZoneId zone) {
         return jdbcClient.sql("""
                         WITH month_receipt AS (
                             SELECT id, total_amount
                             FROM app.receipt
                             WHERE account_id = :accountId
-                              AND (issued_at AT TIME ZONE 'Europe/Belgrade')::date
+                              AND (issued_at AT TIME ZONE :zone)::date
                                   >= :monthStart
-                              AND (issued_at AT TIME ZONE 'Europe/Belgrade')::date
+                              AND (issued_at AT TIME ZONE :zone)::date
                                   < (:monthStart + INTERVAL '1 month')::date
                         )
                         SELECT category, SUM(spent) AS spent
@@ -374,6 +380,7 @@ public class ReceiptRepository {
                         """)
                 .param("accountId", accountId)
                 .param("monthStart", monthStart)
+                .param("zone", zone.getId())
                 .query((resultSet, rowNumber) -> new CategorySpending(
                         resultSet.getString("category"),
                         resultSet.getBigDecimal("spent")

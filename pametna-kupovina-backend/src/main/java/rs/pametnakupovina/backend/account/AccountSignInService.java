@@ -110,8 +110,29 @@ public class AccountSignInService {
      *                  deliberately no name or address here, because the
      *                  server keeps neither
      * @param household whether other phones share the account
+     * @param market    how the app writes amounts and dates for this account
      */
-    public record AccountState(boolean signedIn, boolean household) {
+    public record AccountState(
+            boolean signedIn,
+            boolean household,
+            MarketSettings market
+    ) {
+    }
+
+    /**
+     * @param currency   ISO 4217
+     * @param locale     BCP 47, for amounts and dates
+     * @param language   BCP 47, the catalogue's language
+     * @param timeZone   IANA zone the market's "today" follows
+     */
+    public record MarketSettings(
+            String code,
+            String currency,
+            int currencyMinorUnits,
+            String locale,
+            String language,
+            String timeZone
+    ) {
     }
 
     /** @param validMinutes aplikacija 1.4 ga čita; ostaje dok je 1.4 kod ljudi */

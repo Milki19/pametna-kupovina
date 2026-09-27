@@ -53,7 +53,9 @@ class VerifiedLocationImportSchedulerTest {
                         lidlService,
                         maxiService,
                         ideaRodaService,
-                        univerexportService
+                        univerexportService,
+                        mock(rs.pametnakupovina.backend.market.MarketRepository.class),
+                        "0 0 2 * * SUN"
                 );
 
         scheduler.importVerifiedLocations();

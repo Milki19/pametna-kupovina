@@ -979,7 +979,9 @@ public class ProductCatalogMaintenanceService {
                           product.retailer_id,
                           offer.scope_key,
                           offer.price_date,
-                          CURRENT_DATE
+                          (SELECT app.market_today(chain.market_id)
+                           FROM app.retailer AS chain
+                           WHERE chain.id = product.retailer_id)
                       )
                       -- A case sharing a bottle's barcode is not the
                       -- chain's price for the bottle (V77).

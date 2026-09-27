@@ -1,36 +1,36 @@
 package rs.pametnakupovina.backend.priceimport.maxi;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import rs.pametnakupovina.backend.market.MarketRepository;
 import rs.pametnakupovina.backend.priceimport.ImportResult;
 import rs.pametnakupovina.backend.priceimport.PriceImportService;
 
-import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 
 @Service
 public class MaxiPriceImportCoordinator {
 
+    public static final String RETAILER_CODE = "MAXI";
+
     private final MaxiPriceFeedClient feedClient;
     private final PriceImportService priceImportService;
-    private final ZoneId zoneId;
+    private final MarketRepository marketRepository;
 
     public MaxiPriceImportCoordinator(
             MaxiPriceFeedClient feedClient,
             PriceImportService priceImportService,
-            @Value("${maxi.price-import.zone:Europe/Belgrade}")
-            String zone
+            MarketRepository marketRepository
     ) {
         this.feedClient = feedClient;
         this.priceImportService = priceImportService;
-        this.zoneId = ZoneId.of(zone);
+        this.marketRepository = marketRepository;
     }
 
     public MaxiLatestImportResult importLatest() {
+        // Maxi names its files by the day in its own market.
         List<MaxiPriceFile> files = feedClient.findLatestFiles(
-                LocalDate.now(zoneId)
+                marketRepository.forRetailerCode(RETAILER_CODE).today()
         );
         List<MaxiStoreImportResult> storeResults = new ArrayList<>();
         int storesImported = 0;
@@ -39,7 +39,7 @@ public class MaxiPriceImportCoordinator {
             try {
                 ImportResult importResult =
                         priceImportService.importStorePrices(
-                                "MAXI",
+                                RETAILER_CODE,
                                 file.storeExternalCode(),
                                 file.url(),
                                 file.snapshotDate()

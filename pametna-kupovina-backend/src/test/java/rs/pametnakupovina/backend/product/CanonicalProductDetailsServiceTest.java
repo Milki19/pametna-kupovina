@@ -18,7 +18,10 @@ class CanonicalProductDetailsServiceTest {
     private final CanonicalProductDetailsRepository repository =
             mock(CanonicalProductDetailsRepository.class);
     private final CanonicalProductDetailsService service =
-            new CanonicalProductDetailsService(repository);
+            new CanonicalProductDetailsService(
+                    repository,
+                    mock(rs.pametnakupovina.backend.market.MarketRepository.class)
+            );
 
     @Test
     void combinesProductLatestOffersAndHistory() {

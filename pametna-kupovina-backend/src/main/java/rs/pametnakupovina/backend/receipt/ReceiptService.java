@@ -4,9 +4,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import rs.pametnakupovina.backend.market.Market;
+import rs.pametnakupovina.backend.market.MarketRepository;
 
 import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.List;
 
 /**
@@ -22,9 +23,9 @@ public class ReceiptService {
     private static final int MOST_SHOPS = 20;
     private static final int MOST_HABITS = 50;
     private static final String SHOP_UNKNOWN = "Nepoznata prodavnica";
-    private static final ZoneId BELGRADE = ZoneId.of("Europe/Belgrade");
 
     private final ReceiptRepository receiptRepository;
+    private final MarketRepository marketRepository;
     private final FiscalVerificationUrlReader verificationUrlReader;
     private final FiscalReceiptClient receiptClient;
     private final FiscalReceiptJournalParser journalParser;
@@ -32,12 +33,14 @@ public class ReceiptService {
 
     public ReceiptService(
             ReceiptRepository receiptRepository,
+            MarketRepository marketRepository,
             FiscalVerificationUrlReader verificationUrlReader,
             FiscalReceiptClient receiptClient,
             FiscalReceiptJournalParser journalParser,
             ReceiptItemMatcher itemMatcher
     ) {
         this.receiptRepository = receiptRepository;
+        this.marketRepository = marketRepository;
         this.verificationUrlReader = verificationUrlReader;
         this.receiptClient = receiptClient;
         this.journalParser = journalParser;
@@ -82,14 +85,17 @@ public class ReceiptService {
     }
 
     public Spending spending(long accountId, LocalDate month) {
-        LocalDate weekMonth = (month != null ? month : LocalDate.now(BELGRADE))
+        // A month is the market's month: a receipt from 23:30 on the last day
+        // counts where the shopper paid it, not where the server is.
+        Market market = marketRepository.forAccount(accountId);
+        LocalDate weekMonth = (month != null ? month : market.today())
                 .withDayOfMonth(1);
 
         return new Spending(
-                receiptRepository.spendingByMonth(accountId, MOST_MONTHS),
+                receiptRepository.spendingByMonth(accountId, MOST_MONTHS, market.timeZone()),
                 receiptRepository.spendingByShop(accountId, MOST_SHOPS),
-                receiptRepository.spendingByWeek(accountId, weekMonth),
-                receiptRepository.spendingByCategory(accountId, weekMonth)
+                receiptRepository.spendingByWeek(accountId, weekMonth, market.timeZone()),
+                receiptRepository.spendingByCategory(accountId, weekMonth, market.timeZone())
         );
     }
 

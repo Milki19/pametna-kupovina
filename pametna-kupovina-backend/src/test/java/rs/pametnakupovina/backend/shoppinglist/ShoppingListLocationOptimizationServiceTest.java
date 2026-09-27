@@ -1,6 +1,8 @@
 package rs.pametnakupovina.backend.shoppinglist;
 
 import org.junit.jupiter.api.Test;
+import rs.pametnakupovina.backend.market.MarketRepository;
+import rs.pametnakupovina.backend.market.TestMarkets;
 import rs.pametnakupovina.backend.retailerlocation.RetailerLocationRepository;
 import rs.pametnakupovina.backend.retailerlocation.RetailerLocationResponse;
 import rs.pametnakupovina.backend.routing.RouteMatrix;
@@ -12,6 +14,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -130,7 +133,8 @@ class ShoppingListLocationOptimizationServiceTest {
                 new ShoppingListLocationOptimizationService(
                         priceService,
                         locationRepository,
-                        routeMatrixProvider
+                        routeMatrixProvider,
+                        markets()
                 );
 
         LocationOptimizationResponse result = service.optimize(
@@ -150,5 +154,11 @@ class ShoppingListLocationOptimizationServiceTest {
                 .isEqualByComparingTo("40.00");
         assertThat(result.recommendedStrategy().finalTotal())
                 .isEqualByComparingTo("140.00");
+    }
+
+    private static MarketRepository markets() {
+        MarketRepository markets = mock(MarketRepository.class);
+        when(markets.forShoppingList(anyLong())).thenReturn(TestMarkets.serbia());
+        return markets;
     }
 }

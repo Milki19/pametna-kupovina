@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.util.List;
 
 /**
+ * @param currency  ISO 4217 code the receipt was paid in
  * @param itemsRead false dok stavke nisu pročitane sa stranice Poreske
  *                  uprave; račun je i tada pun račun — zna se gde, kada i
  *                  koliko
@@ -15,6 +16,7 @@ public record Receipt(
         String shopName,
         Instant issuedAt,
         BigDecimal totalAmount,
+        String currency,
         boolean itemsRead,
         List<ReceiptItem> items
 ) {

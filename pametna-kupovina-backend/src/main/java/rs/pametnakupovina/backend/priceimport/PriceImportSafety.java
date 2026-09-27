@@ -6,7 +6,6 @@ import org.springframework.stereotype.Component;
 import java.math.BigDecimal;
 import java.sql.Types;
 import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -23,6 +22,14 @@ public class PriceImportSafety {
         this.jdbc = jdbc;
     }
 
+    private LocalDate marketToday(long retailerId) {
+        return jdbc.sql("""
+                SELECT app.market_today(market_id) FROM app.retailer WHERE id = ?
+                """).param(retailerId)
+                .query(LocalDate.class)
+                .single();
+    }
+
     public ValidationOutcome validate(long retailerId, Long sourceId, Long storeId,
                          LocalDate date, int selected, int errors, int distinctFormatCount) {
         if (selected <= 0) throw new IllegalStateException("EMPTY_SNAPSHOT: cenovnik nema upotrebljive redove.");
@@ -30,7 +37,8 @@ public class PriceImportSafety {
         // exceed one third of the valid + malformed rows (errors > selected/2).
         if ((long) errors * 2 > selected) throw new IllegalStateException("INVALID_ROWS: " + errors
                 + " neispravnih redova; postojeće cene su sačuvane.");
-        if (date == null || date.isAfter(LocalDate.now(ZoneId.of("Europe/Belgrade")))) {
+        // A chain dates its list by its own market's calendar.
+        if (date == null || date.isAfter(marketToday(retailerId))) {
             throw new IllegalStateException("FUTURE_SNAPSHOT: datum cenovnika nije prihvatljiv.");
         }
         LocalDate latestActive = jdbc.sql("""

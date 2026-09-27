@@ -31,6 +31,7 @@ public class NearbyStoreRepository {
         this.jdbcClient = jdbcClient;
     }
 
+    /** Every shop around, in whatever market it is: a map knows no borders. */
     public List<NearbyStore> findNearby(
             double latitude,
             double longitude,
@@ -38,26 +39,35 @@ public class NearbyStoreRepository {
             int limit
     ) {
         return findNearby(
+                null,
                 latitude,
                 longitude,
                 radiusMeters,
                 limit,
-                false
+                false,
+                null
         );
     }
 
+    /**
+     * Shops a plan can price: only the market's, because a basket is summed
+     * in one currency.
+     */
     public List<NearbyStore> findPricingEligibleNearby(
+            int marketId,
             double latitude,
             double longitude,
             int radiusMeters,
             int limit
     ) {
         return findNearby(
+                marketId,
                 latitude,
                 longitude,
                 radiusMeters,
                 limit,
-                true
+                true,
+                null
         );
     }
 
@@ -67,6 +77,7 @@ public class NearbyStoreRepository {
      * porodica („Proizvod") ili kao tačan proizvod („Barkod").
      */
     public List<NearbyStore> findNearestCarrying(
+            int marketId,
             double latitude,
             double longitude,
             List<Long> productFamilyIds,
@@ -74,7 +85,7 @@ public class NearbyStoreRepository {
             int radiusMeters,
             int limit
     ) {
-        return findNearby(latitude, longitude, radiusMeters, limit, true,
+        return findNearby(marketId, latitude, longitude, radiusMeters, limit, true,
                 new Carrying(joined(productFamilyIds), joined(canonicalProductIds)));
     }
 
@@ -86,16 +97,7 @@ public class NearbyStoreRepository {
     }
 
     private List<NearbyStore> findNearby(
-            double latitude,
-            double longitude,
-            int radiusMeters,
-            int limit,
-            boolean pricingEligibleOnly
-    ) {
-        return findNearby(latitude, longitude, radiusMeters, limit, pricingEligibleOnly, null);
-    }
-
-    private List<NearbyStore> findNearby(
+            Integer marketId,
             double latitude,
             double longitude,
             int radiusMeters,
@@ -139,6 +141,7 @@ public class NearbyStoreRepository {
                             CROSS JOIN user_position
                             WHERE store.active = TRUE
                               AND format.active = TRUE
+                              AND (?::SMALLINT IS NULL OR retailer.market_id = ?::SMALLINT)
                               AND store.location IS NOT NULL
                               AND store.geocoding_status IN (
                                   'AUTO_VERIFIED',
@@ -199,12 +202,14 @@ public class NearbyStoreRepository {
                         """)
                 .param(1, longitude)
                 .param(2, latitude)
-                .param(3, pricingEligibleOnly)
-                .param(4, carrying != null)
-                .param(5, carrying == null ? "" : carrying.familyIds())
-                .param(6, carrying == null ? "" : carrying.canonicalIds())
-                .param(7, radiusMeters)
-                .param(8, limit)
+                .param(3, marketId, java.sql.Types.SMALLINT)
+                .param(4, marketId, java.sql.Types.SMALLINT)
+                .param(5, pricingEligibleOnly)
+                .param(6, carrying != null)
+                .param(7, carrying == null ? "" : carrying.familyIds())
+                .param(8, carrying == null ? "" : carrying.canonicalIds())
+                .param(9, radiusMeters)
+                .param(10, limit)
                 .query(ROW_MAPPER)
                 .list();
     }

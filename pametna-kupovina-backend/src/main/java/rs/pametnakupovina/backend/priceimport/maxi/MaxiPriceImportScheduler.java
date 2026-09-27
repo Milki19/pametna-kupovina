@@ -2,10 +2,15 @@ package rs.pametnakupovina.backend.priceimport.maxi;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.scheduling.annotation.SchedulingConfigurer;
+import org.springframework.scheduling.config.ScheduledTaskRegistrar;
 import org.springframework.stereotype.Component;
+import rs.pametnakupovina.backend.market.MarketRepository;
+import rs.pametnakupovina.backend.market.MarketSchedule;
 
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 @Component
@@ -13,24 +18,38 @@ import java.util.concurrent.atomic.AtomicBoolean;
         name = "maxi.price-import.schedule.enabled",
         havingValue = "true"
 )
-public class MaxiPriceImportScheduler {
+public class MaxiPriceImportScheduler implements SchedulingConfigurer {
 
     private static final Logger log =
             LoggerFactory.getLogger(MaxiPriceImportScheduler.class);
 
     private final MaxiPriceImportCoordinator coordinator;
+    private final MarketRepository marketRepository;
+    private final String cron;
     private final AtomicBoolean running = new AtomicBoolean(false);
 
     public MaxiPriceImportScheduler(
-            MaxiPriceImportCoordinator coordinator
+            MaxiPriceImportCoordinator coordinator,
+            MarketRepository marketRepository,
+            @Value("${maxi.price-import.schedule.cron:0 0 4 * * *}")
+            String cron
     ) {
         this.coordinator = coordinator;
+        this.marketRepository = marketRepository;
+        this.cron = cron;
     }
 
-    @Scheduled(
-            cron = "${maxi.price-import.schedule.cron:0 0 4 * * *}",
-            zone = "${maxi.price-import.zone:Europe/Belgrade}"
-    )
+    @Override
+    public void configureTasks(ScheduledTaskRegistrar registrar) {
+        MarketSchedule.addCronTasks(
+                registrar,
+                marketRepository,
+                cron,
+                List.of(MaxiPriceImportCoordinator.RETAILER_CODE),
+                codes -> importLatest()
+        );
+    }
+
     public void importLatest() {
         if (!running.compareAndSet(false, true)) {
             log.warn("Maxi import je preskočen jer prethodni još traje.");
