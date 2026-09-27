@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Na serveru iz cron-a, na svakih 5 minuta: da li server odgovara preko
 # HTTPS-a, da li su svi kontejneri živi i zdravi, da li ima mesta na disku i
-# slobodne memorije i da li je poslednji backup svež. Poruka na ALERT_URL ide
+# slobodne memorije, da li je poslednji backup svež i da li su stigli novi
+# izveštaji o padu aplikacije. Poruka na ALERT_URL ide
 # samo kad se spisak problema promeni (i kad sve ponovo bude u redu), a ne na
 # svakih 5 minuta. Uz HEALTH_PING_URL javlja se i spoljnom servisu, koji
 # obaveštava kad se server potpuno ugasi.
@@ -71,6 +72,21 @@ fi
 
 if [ "$report" != "$previous" ] && [ -n "$alert_url" ]; then
     curl --fail --silent --show-error --max-time 20 --data "$message" "$alert_url" >/dev/null
+fi
+
+# Novi izveštaji o padu Android aplikacije (šalje ih sama aplikacija, bez
+# tuđeg alata): jedna poruka kad stignu, detalji su na /admin.
+if [ -n "$alert_url" ]; then
+    newest_crash="$(compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At -c "SELECT COALESCE(MAX(id), 0) FROM app.crash_report"' 2>/dev/null || true)"
+    seen_crash="$(cat backups/.crash-seen 2>/dev/null || true)"
+    if [ -n "$newest_crash" ]; then
+        printf '%s' "$newest_crash" > backups/.crash-seen
+        if [ -n "$seen_crash" ] && [ "$newest_crash" -gt "$seen_crash" ]; then
+            curl --fail --silent --show-error --max-time 20 \
+                --data "Pametna kupovina: stiglo je $(( newest_crash - seen_crash )) novih izveštaja o padu aplikacije (vidi /admin)." \
+                "$alert_url" >/dev/null || true
+        fi
+    fi
 fi
 
 # Spolja (healthchecks.io): ping znači samo „server je živ i cron radi".

@@ -133,7 +133,8 @@ pri pokretanju.
 - `check-import.sh`: da li server odgovara i da li je današnji uvoz uspeo
   (uvoz kreće posle 08:00 i ponavlja se do tri puta).
 - `check-health.sh`: da li server odgovara, da li su kontejneri zdravi, da li
-  ima mesta na disku i memorije i da li je backup mlađi od 36 sati. Poruka
+  ima mesta na disku i memorije, da li je backup mlađi od 36 sati i da li su
+  stigli novi izveštaji o padu aplikacije. Poruka
   ide samo kad se stanje promeni, i još jednom kad je sve ponovo u redu.
 
 Provera spolja (preporučeno): nalog na healthchecks.io → Add Check, period
