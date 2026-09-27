@@ -3592,8 +3592,8 @@ class PametnaKupovinaBackendApplicationTests {
                 callers.account(ownerToken)
         );
 
-        // A request without a phone never reaches the service: ApiAccessFilter
-        // turns it away (see ApiAccessTest).
+        // A request without a phone never reaches the service: the security chain
+        // turns it away (see ApiSecurityTest).
 
         assertThatThrownBy(() -> shoppingListService.findById(
                 shoppingList.id(),
