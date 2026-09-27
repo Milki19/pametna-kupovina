@@ -38,6 +38,7 @@ import rs.pametnakupovina.app.ui.ProductSearchUiState
 import rs.pametnakupovina.app.ui.counted
 import rs.pametnakupovina.app.ui.money
 import rs.pametnakupovina.app.ui.shortDate
+import rs.pametnakupovina.app.ui.distance
 
 internal fun LazyListScope.canonicalProductPicker(
     query: String,
@@ -172,6 +173,7 @@ internal fun LazyListScope.canonicalProductPicker(
     ) { product ->
         ProductSearchResultCard(
             product = product,
+            locationKnown = searchState.locationKnown,
             onChoose = { onSelectProduct(product) }
         )
     }
@@ -200,6 +202,7 @@ internal fun LazyListScope.canonicalProductPicker(
 @Composable
 private fun ProductSearchResultCard(
     product: CanonicalProductSearchItemDto,
+    locationKnown: Boolean,
     onChoose: () -> Unit
 ) {
     var detailsExpanded by remember(product.resultId()) { mutableStateOf(false) }
@@ -257,6 +260,20 @@ private fun ProductSearchResultCard(
                 )
             }
             ProductPriceSummary(product, showAll = detailsExpanded)
+            // Pre izbora, ne posle računanja: tata je izabrao proizvod koji
+            // nijedna radnja blizu njega ne prodaje, pa je plan rekao „nema".
+            if (locationKnown && product.hasUsablePrice) {
+                val meters = product.nearestStoreMeters
+                if (meters == null) {
+                    StatusPill("Nema ga u radnjama blizu tebe", StatusTone.WARNING)
+                } else {
+                    Text(
+                        "Najbliža radnja koja ga ima: ${distance(meters / 1000)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
             if (detailsExpanded) {
                 listOfNotNull(
                     product.barcode?.let { "Barkod: $it" },

@@ -18,7 +18,10 @@ public record CanonicalProductSearchItem(
         BigDecimal score,
         boolean hasUsablePrice,
         List<String> knownRetailers,
-        int packageCount
+        int packageCount,
+        // Metri do najbliže radnje lanca koji ga prodaje, u krugu od 20 km;
+        // null kad lokacija nije poslata ili takve radnje nema.
+        Double nearestStoreMeters
 ) {
 
     public CanonicalProductSearchItem(
@@ -45,7 +48,8 @@ public record CanonicalProductSearchItem(
                 score,
                 false,
                 List.of(),
-                1
+                1,
+                null
         );
     }
 }

@@ -139,7 +139,9 @@ data class CanonicalProductSearchItemDto(
     val score: Double,
     val hasUsablePrice: Boolean = false,
     val knownRetailers: List<String> = emptyList(),
-    val packageCount: Int = 1
+    val packageCount: Int = 1,
+    // Do najbliže radnje lanca koji ga prodaje (do 20 km); null = nema ili bez lokacije.
+    val nearestStoreMeters: Double? = null
 )
 
 @Serializable
@@ -276,7 +278,9 @@ data class CanonicalProductSearchPageDto(
     val hasNext: Boolean,
     val items: List<CanonicalProductSearchItemDto> = emptyList(),
     // Šta je zapravo traženo kad je reč bila pogrešno ukucana; null inače.
-    val correctedQuery: String? = null
+    val correctedQuery: String? = null,
+    // Server je znao gde je kupac; stariji server ovo ne šalje.
+    val nearbyChecked: Boolean = false
 )
 
 @Serializable

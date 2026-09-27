@@ -108,6 +108,14 @@ public class CanonicalProductSearchService {
                                 )
                         ));
 
+        // Da kupac pre izbora vidi da li se proizvod prodaje u blizini.
+        Map<Long, Double> nearestMeters = near == null
+                ? Map.of()
+                : searchRepository.nearestStoreMeters(
+                        pageRows.stream().map(row -> row.source().productFamilyId()).toList(),
+                        near.latitude(),
+                        near.longitude());
+
         List<CanonicalProductSearchItem> items = pageRows.stream()
                 .map(row -> toItem(
                         row,
@@ -115,7 +123,8 @@ public class CanonicalProductSearchService {
                                 row.source().productFamilyId(),
                                 List.of()
                         ),
-                        knownRetailers.getOrDefault(row.source().productFamilyId(),List.of())
+                        knownRetailers.getOrDefault(row.source().productFamilyId(),List.of()),
+                        nearestMeters.get(row.source().productFamilyId())
                 ))
                 .toList();
 
@@ -133,7 +142,8 @@ public class CanonicalProductSearchService {
                 totalElements,
                 totalPages,
                 (long) page + 1 < totalPages,
-                items
+                items,
+                near != null
         );
     }
 
@@ -360,7 +370,8 @@ public class CanonicalProductSearchService {
     private CanonicalProductSearchItem toItem(
             ScoredRow scoredRow,
             List<ProductRetailerAvailability> availability,
-            List<String> knownRetailers
+            List<String> knownRetailers,
+            Double nearestStoreMeters
     ) {
         CanonicalProductSearchRow row = scoredRow.source();
 
@@ -379,7 +390,8 @@ public class CanonicalProductSearchService {
                 scoredRow.score(),
                 row.hasUsablePrice(),
                 knownRetailers,
-                row.packageCount()
+                row.packageCount(),
+                nearestStoreMeters
         );
     }
 

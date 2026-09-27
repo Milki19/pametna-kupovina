@@ -3,7 +3,7 @@
 // nalog po uređaju kao Android: pregledač pamti nasumičan ključ i šalje ga u
 // X-Client-Token. Napredak kupovine ostaje u pregledaču, kao u aplikaciji.
 
-const VERSION = '1.7';
+const VERSION = '1.8';
 const view = document.getElementById('view');
 const actionBar = document.getElementById('action');
 
@@ -691,6 +691,9 @@ function renderSearch(loading = false) {
         <div class="card">
           <div class="name">${esc(p.name)}</div>
           <div class="muted small">${esc([p.brand, p.quantityValue && p.baseUnit ? amountLabel(p.quantityValue, p.baseUnit, p.packageCount) : null].filter(Boolean).join(' · '))}</div>
+          ${page.nearbyChecked && p.hasUsablePrice ? (p.nearestStoreMeters == null
+            ? pill('Nema ga u radnjama blizu tebe', 'warn')
+            : `<div class="muted small">Najbliža radnja koja ga ima: ${distance(p.nearestStoreMeters / 1000)}</div>`) : ''}
           ${(p.availability || []).slice(0, 3).map(a => `<div class="row small"><span class="grow">${esc(a.retailerName)}</span>
             <span class="muted">${shortDate(a.latestPriceDate)}</span>
             <b>${a.minimumEffectivePrice != null ? 'od ' + money(a.minimumEffectivePrice) : 'bez cene'}</b></div>`).join('')}
