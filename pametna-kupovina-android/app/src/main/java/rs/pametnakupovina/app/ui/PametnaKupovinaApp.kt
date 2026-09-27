@@ -191,13 +191,15 @@ fun PametnaKupovinaApp() {
             composable(Route.HISTORY) {
                 PurchaseScreen(onBack = navController::popBackStack,
                     onOpen = { navController.navigate("purchase/$it") },
-                    onOpenCards = { navController.navigate(Route.CARDS) })
+                    onOpenCards = { navController.navigate(Route.CARDS) },
+                    receiptViewModel = receiptViewModel)
             }
             composable("purchase/{sessionId}", arguments = listOf(navArgument("sessionId") { type = NavType.StringType })) { entry ->
                 PurchaseScreen(sessionId = entry.arguments?.getString("sessionId"),
                     onBack = navController::popBackStack,
                     onOpen = { navController.navigate("purchase/$it") },
-                    onOpenCards = { navController.navigate(Route.CARDS) })
+                    onOpenCards = { navController.navigate(Route.CARDS) },
+                    receiptViewModel = receiptViewModel)
             }
             composable(Route.LIST) {
                 ShoppingListScreen(
