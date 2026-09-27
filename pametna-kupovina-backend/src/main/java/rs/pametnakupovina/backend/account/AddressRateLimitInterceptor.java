@@ -24,8 +24,11 @@ public class AddressRateLimitInterceptor implements HandlerInterceptor {
 
     static final int REQUESTS_PER_MINUTE = 600;
 
-    private final FixedWindowLimiter<String> perAddress =
-            new FixedWindowLimiter<>(REQUESTS_PER_MINUTE, Duration.ofMinutes(1));
+    private final RequestCounter counter;
+
+    public AddressRateLimitInterceptor(RequestCounter counter) {
+        this.counter = counter;
+    }
 
     @Override
     public boolean preHandle(
@@ -33,7 +36,8 @@ public class AddressRateLimitInterceptor implements HandlerInterceptor {
             HttpServletResponse response,
             Object handler
     ) {
-        if (!perAddress.allow(request.getRemoteAddr())) {
+        if (counter.countAndGet("address:" + request.getRemoteAddr(), Duration.ofMinutes(1))
+                > REQUESTS_PER_MINUTE) {
             throw new ResponseStatusException(
                     HttpStatus.TOO_MANY_REQUESTS,
                     "Previše zahteva sa ove mreže. Sačekaj minut pa probaj ponovo."

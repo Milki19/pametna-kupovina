@@ -26,7 +26,7 @@ class WriteRateLimitInterceptorTest {
 
     @BeforeEach
     void twoPhonesOnTwoAccounts() {
-        interceptor = new WriteRateLimitInterceptor(ALLOWED);
+        interceptor = new WriteRateLimitInterceptor(new InMemoryRequestCounter(), ALLOWED);
     }
 
     @Test
@@ -97,7 +97,7 @@ class WriteRateLimitInterceptorTest {
 
     @Test
     void oneAddressIsCappedWhateverTokensItMakesUp() throws Exception {
-        var perAddress = new AddressRateLimitInterceptor();
+        var perAddress = new AddressRateLimitInterceptor(new InMemoryRequestCounter());
         MockHttpServletRequest script = new MockHttpServletRequest("GET", "/api/v1/products/search");
         script.setRemoteAddr("203.0.113.7");
         MockHttpServletRequest shopper = new MockHttpServletRequest("GET", "/api/v1/products/search");

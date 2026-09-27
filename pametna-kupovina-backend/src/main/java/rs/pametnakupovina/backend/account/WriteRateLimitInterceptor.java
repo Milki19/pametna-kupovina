@@ -19,12 +19,18 @@ import java.time.Duration;
 @Component
 public class WriteRateLimitInterceptor implements HandlerInterceptor {
 
-    private final FixedWindowLimiter<Long> perAccount;
+    private final RequestCounter counter;
+    private final int writesPerMinute;
 
     public WriteRateLimitInterceptor(
+            RequestCounter counter,
             @Value("${account.writes-per-minute:120}") int writesPerMinute
     ) {
-        this.perAccount = new FixedWindowLimiter<>(writesPerMinute, Duration.ofMinutes(1));
+        if (writesPerMinute < 1) {
+            throw new IllegalArgumentException("Dozvoljeni broj mora biti bar 1.");
+        }
+        this.counter = counter;
+        this.writesPerMinute = writesPerMinute;
     }
 
     @Override
@@ -46,7 +52,8 @@ public class WriteRateLimitInterceptor implements HandlerInterceptor {
             return true;
         }
 
-        if (!perAccount.allow(caller.accountId())) {
+        if (counter.countAndGet("account:" + caller.accountId(), Duration.ofMinutes(1))
+                > writesPerMinute) {
             throw new ResponseStatusException(
                     HttpStatus.TOO_MANY_REQUESTS,
                     "Previše izmena u kratkom roku. Sačekaj minut pa probaj ponovo."
