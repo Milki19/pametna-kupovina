@@ -34,7 +34,8 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 import rs.pametnakupovina.app.ui.components.StatusPill
 import rs.pametnakupovina.app.ui.components.StatusTone
-import rs.pametnakupovina.app.ui.wholeDinars
+import rs.pametnakupovina.app.ui.currency
+import rs.pametnakupovina.app.ui.wholeAmount
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
@@ -58,10 +59,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
-import java.time.ZoneId
 import rs.pametnakupovina.app.R
 import rs.pametnakupovina.app.data.network.MonthlySpendingDto
 import rs.pametnakupovina.app.data.network.WeeklySpendingDto
+import rs.pametnakupovina.app.data.market.CurrentMarket
 import rs.pametnakupovina.app.ui.DashboardViewModel
 import rs.pametnakupovina.app.ui.ReceiptViewModel
 import rs.pametnakupovina.app.ui.components.AppIcon
@@ -77,8 +78,6 @@ import rs.pametnakupovina.app.ui.dateTime
 import rs.pametnakupovina.app.ui.money
 import rs.pametnakupovina.app.ui.monthName
 import rs.pametnakupovina.app.ui.monthWord
-
-private val BELGRADE = ZoneId.of("Europe/Belgrade")
 
 private enum class DashboardTab(@param:StringRes val label: Int, val tag: String) {
     RECEIPTS(R.string.dashboard_tab_receipts, "tab-receipts"),
@@ -107,7 +106,9 @@ fun DashboardScreen(
     val monthReceipts = remember(receiptState.receipts, receiptState.selectedMonth) {
         receiptState.receipts.filter { isInMonth(it.issuedAt, receiptState.selectedMonth) }
     }
-    val canGoForward = receiptState.selectedMonth.isBefore(LocalDate.now().withDayOfMonth(1))
+    val canGoForward = receiptState.selectedMonth.isBefore(
+        LocalDate.now(CurrentMarket.settings.zone).withDayOfMonth(1)
+    )
 
     Scaffold(topBar = { AppTopBar(title = stringResource(R.string.dashboard_title)) }) { padding ->
         LazyColumn(
@@ -160,7 +161,7 @@ fun DashboardScreen(
                         DashboardRow(
                             it.shopName,
                             resources.getQuantityString(R.plurals.dashboard_receipt_count, it.receipts, it.receipts),
-                            "${wholeDinars(it.spent)} RSD",
+                            "${wholeAmount(it.spent)} ${currency()}",
                             share = share(it.spent, total)
                         )
                     } to resources.getString(R.string.dashboard_no_shops)
@@ -169,7 +170,7 @@ fun DashboardScreen(
                 DashboardTab.CATEGORIES -> {
                     val total = receiptState.byCategory.sumOf { it.spent }
                     receiptState.byCategory.map {
-                        DashboardRow(it.category, trailing = "${wholeDinars(it.spent)} RSD", share = share(it.spent, total))
+                        DashboardRow(it.category, trailing = "${wholeAmount(it.spent)} ${currency()}", share = share(it.spent, total))
                     } to resources.getString(R.string.dashboard_no_receipts)
                 }
 
@@ -180,7 +181,7 @@ fun DashboardScreen(
                         habit.name,
                         listOfNotNull(
                             resources.getQuantityString(R.plurals.dashboard_times_count, habit.times, habit.times),
-                            belgradeDay(habit.lastBought)?.let {
+                            marketDay(habit.lastBought)?.let {
                                 resources.getString(R.string.dashboard_last_bought, date(it.toString()))
                             }
                         ).joinToString(" • ")
@@ -281,7 +282,7 @@ private fun MonthSpendingCard(
                 MonthStat(stringResource(R.string.dashboard_stat_shops), shops.toString(), Modifier.weight(1f))
                 MonthStat(
                     stringResource(R.string.dashboard_stat_average),
-                    if (receipts > 0) wholeDinars(spent / receipts) else "–",
+                    if (receipts > 0) wholeAmount(spent / receipts) else "–",
                     Modifier.weight(1f)
                 )
             }
@@ -306,11 +307,11 @@ private fun MonthStat(label: String, value: String, modifier: Modifier) {
     }
 }
 
-/** Iznos u celim dinarima, sa „RSD" sitnije, kao na nacrtu. */
+/** Iznos u celim jedinicama, sa valutom („RSD") sitnije, kao na nacrtu. */
 @Composable
 private fun dinars(value: Double) = buildAnnotatedString {
-    append(wholeDinars(value))
-    withStyle(MaterialTheme.typography.titleMedium.toSpanStyle()) { append(" RSD") }
+    append(wholeAmount(value))
+    withStyle(MaterialTheme.typography.titleMedium.toSpanStyle()) { append(" " + currency()) }
 }
 
 @Composable
@@ -416,7 +417,7 @@ private fun WeeklyBarChart(weeks: List<WeekBar>, modifier: Modifier = Modifier) 
                         Spacer(Modifier.weight((1f - fraction).coerceAtLeast(0.01f)))
                         if (week.spent > 0) {
                             Text(
-                                wholeDinars(week.spent),
+                                wholeAmount(week.spent),
                                 style = MaterialTheme.typography.labelSmall,
                                 maxLines = 1
                             )
@@ -460,8 +461,9 @@ private fun WeeklyBarChart(weeks: List<WeekBar>, modifier: Modifier = Modifier) 
                 Text(
                     stringResource(
                         R.string.dashboard_busiest_week,
-                        wholeDinars(it.spent),
-                        wholeDinars(weeks.sumOf { w -> w.spent } / weeks.size)
+                        wholeAmount(it.spent),
+                        wholeAmount(weeks.sumOf { w -> w.spent } / weeks.size),
+                        currency()
                     ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -634,14 +636,15 @@ private fun PillTabs(selected: DashboardTab, onSelect: (DashboardTab) -> Unit) {
 private fun monthTitle(month: LocalDate): String =
     monthName(month).replaceFirstChar(Char::uppercase)
 
-private fun belgradeDay(instantIso: String): LocalDate? = try {
-    Instant.parse(instantIso).atZone(BELGRADE).toLocalDate()
+private fun marketDay(instantIso: String): LocalDate? = try {
+    // The receipt's day where the market is, as the server counts months.
+    Instant.parse(instantIso).atZone(CurrentMarket.settings.zone).toLocalDate()
 } catch (_: Exception) {
     null
 }
 
 private fun isInMonth(issuedAtIso: String, month: LocalDate): Boolean =
-    belgradeDay(issuedAtIso)?.let { it.year == month.year && it.month == month.month } ?: false
+    marketDay(issuedAtIso)?.let { it.year == month.year && it.month == month.month } ?: false
 
 private fun receiptTimestamp(issuedAtIso: String, resources: Resources): String = try {
     dateTime(Instant.parse(issuedAtIso).toEpochMilli(), resources)

@@ -70,7 +70,7 @@
     </plurals>
     <string name="purchase_planned_packages_fraction">Planned: %1$s packages</string>
     <string name="purchase_bought_field">Bought (partial is fine)</string>
-    <string name="purchase_actual_total_field">Actual total, RSD (optional)</string>
+    <string name="purchase_actual_total_field">Actual total, %1$s (optional)</string>
     <string name="purchase_note_field">Note</string>
 
     <!-- Errors -->

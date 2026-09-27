@@ -1,6 +1,7 @@
 package rs.pametnakupovina.app.data.network
 
 import kotlinx.serialization.Serializable
+import rs.pametnakupovina.app.data.market.MarketSettings
 
 @Serializable
 enum class ShoppingItemRuleDto {
@@ -185,6 +186,7 @@ data class ReceiptDto(
     val shopName: String,
     val issuedAt: String,
     val totalAmount: Double,
+    val currency: String? = null,
     val itemsRead: Boolean = false,
     val items: List<ReceiptItemDto> = emptyList()
 )
@@ -242,7 +244,9 @@ data class SpendingDto(
 @Serializable
 data class AccountStateDto(
     val signedIn: Boolean = false,
-    val household: Boolean = false
+    val household: Boolean = false,
+    /** Servers before markets do not send it. */
+    val market: MarketSettings? = null
 )
 
 @Serializable

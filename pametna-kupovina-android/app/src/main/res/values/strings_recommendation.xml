@@ -48,7 +48,7 @@
     <string name="rec_no_price">nema cene</string>
     <string name="rec_total_caption">ukupno</string>
     <string name="rec_basket_short">korpa %1$s</string>
-    <string name="rec_savings">Ušteda %1$s RSD</string>
+    <string name="rec_savings">Ušteda %1$s %2$s</string>
     <string name="rec_basket_plus_travel">korpa %1$s + put i vreme %2$s</string>
     <string name="rec_stat_stores">Prodavnice</string>
     <string name="rec_stat_distance">Razdaljina</string>

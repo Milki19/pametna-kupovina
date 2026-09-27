@@ -47,7 +47,7 @@
     <string name="rec_no_price">no price</string>
     <string name="rec_total_caption">total</string>
     <string name="rec_basket_short">basket %1$s</string>
-    <string name="rec_savings">You save %1$s RSD</string>
+    <string name="rec_savings">You save %1$s %2$s</string>
     <string name="rec_basket_plus_travel">basket %1$s + travel and time %2$s</string>
     <string name="rec_stat_stores">Stores</string>
     <string name="rec_stat_distance">Distance</string>

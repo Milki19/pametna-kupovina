@@ -48,7 +48,10 @@ class ProductSearchTypingInstrumentedTest {
             CanonicalProductSearchPageDto(query, page, 10, 20, 2, page == 0)
         } as ShoppingApiService
         val viewModel = ProductSearchViewModel(
-            ShoppingRepository(api, database.draftItemDao(), ClientIdentityStore(context)),
+            ShoppingRepository(
+                api, database.draftItemDao(), ClientIdentityStore(context),
+                rs.pametnakupovina.app.data.market.MarketStore(context, kotlinx.serialization.json.Json)
+            ),
             BarcodeScanner(),
             FusedLocationProvider(context, LocationServices.getFusedLocationProviderClient(context))
         )

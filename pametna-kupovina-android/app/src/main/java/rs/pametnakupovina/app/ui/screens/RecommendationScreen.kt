@@ -94,7 +94,8 @@ import rs.pametnakupovina.app.ui.decimal
 import rs.pametnakupovina.app.ui.distance
 import rs.pametnakupovina.app.ui.duration
 import rs.pametnakupovina.app.ui.money
-import rs.pametnakupovina.app.ui.wholeDinars
+import rs.pametnakupovina.app.ui.currency
+import rs.pametnakupovina.app.ui.wholeAmount
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
@@ -571,7 +572,7 @@ private fun ScenarioChooser(
                         )
                     )
                     BasicText(
-                        scenario.totalCost?.takeIf { scenario.available }?.let(::wholeDinars)
+                        scenario.totalCost?.takeIf { scenario.available }?.let(::wholeAmount)
                             ?: stringResource(R.string.rec_no_price_short),
                         style = MaterialTheme.typography.titleLarge.copy(
                             color = MaterialTheme.colorScheme.onSurface
@@ -591,7 +592,7 @@ private fun ScenarioChooser(
                     )
                     if (scenario.available) {
                         Text(
-                            stringResource(R.string.rec_basket_short, wholeDinars(scenario.basketCost)),
+                            stringResource(R.string.rec_basket_short, wholeAmount(scenario.basketCost)),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -671,7 +672,7 @@ private fun ScenarioHeroCard(scenario: OptimizationScenarioDto) {
                     StatusPill(stringResource(scenarioBadge(scenario.type)), StatusTone.POSITIVE)
                     if (scenario.available) {
                         scenario.savingsComparedWithSingleStore?.takeIf { it > 0.0 }?.let { savings ->
-                            StatusPill(stringResource(R.string.rec_savings, wholeDinars(savings)), StatusTone.POSITIVE)
+                            StatusPill(stringResource(R.string.rec_savings, wholeAmount(savings), currency()), StatusTone.POSITIVE)
                         }
                     }
                 }
@@ -1142,7 +1143,7 @@ private fun basketRange(option: UnlocatedPriceOptionDto): String =
     if (abs(option.highestBasketCost - option.lowestBasketCost) < 0.005) {
         money(option.lowestBasketCost)
     } else {
-        money(option.lowestBasketCost).removeSuffix(" RSD") + " – " + money(option.highestBasketCost)
+        money(option.lowestBasketCost).removeSuffix(" " + currency()) + " – " + money(option.highestBasketCost)
     }
 
 private fun priceSourceNames(scenario: OptimizationScenarioDto, none: String): String =

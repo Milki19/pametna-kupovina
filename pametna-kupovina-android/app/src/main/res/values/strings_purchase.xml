@@ -74,7 +74,7 @@
     </plurals>
     <string name="purchase_planned_packages_fraction">Planirano: %1$s pakovanja</string>
     <string name="purchase_bought_field">Kupljeno (može delimično)</string>
-    <string name="purchase_actual_total_field">Stvarni ukupan iznos, RSD (opciono)</string>
+    <string name="purchase_actual_total_field">Stvarni ukupan iznos, %1$s (opciono)</string>
     <string name="purchase_note_field">Napomena</string>
 
     <!-- Errors -->
