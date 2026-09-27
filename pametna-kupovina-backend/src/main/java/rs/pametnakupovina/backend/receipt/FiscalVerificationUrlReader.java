@@ -37,14 +37,19 @@ public class FiscalVerificationUrlReader {
     private static final int TOTAL_COUNTER_AT = 17;
     private static final int TOTAL_AMOUNT_AT = 25;
     private static final int ISSUED_AT = 33;
-    private static final int TEXT_FIELDS_AT = 41;
+    // Posle vremena: vrsta računa, vrsta transakcije, pa dužina i oznaka
+    // kupca (PIB ili JMBG kad kupac to traži) — ta oznaka se nikad ne čita.
+    private static final int INVOICE_TYPE_AT = 41;
+    private static final int TRANSACTION_TYPE_AT = 42;
+    private static final int NORMAL = 0;
+    private static final int ADVANCE = 4;
+    private static final int SALE = 0;
 
     /** The amount is written in ten-thousandths of a dinar. */
     private static final BigDecimal AMOUNT_SCALE = new BigDecimal("10000");
 
-    private static final int SHORTEST_PAYLOAD = TEXT_FIELDS_AT;
+    private static final int SHORTEST_PAYLOAD = TRANSACTION_TYPE_AT + 1;
     private static final int LONGEST_PAYLOAD = 8192;
-    private static final int MOST_TEXT_FIELDS = 3;
 
     private final Set<String> allowedHosts;
 
@@ -60,8 +65,17 @@ public class FiscalVerificationUrlReader {
         );
     }
 
+    /**
+     * U base64 zapisu „+" je znak, a čitač adresa ga pretvara u razmak. Kase
+     * štampaju QR i kodiran (%2B) i sirov (+), pa se ovde svede na kodiran —
+     * i za čitanje i za poziv Poreskoj upravi.
+     */
+    public static String canonical(String verificationUrl) {
+        return verificationUrl.strip().replace("+", "%2B");
+    }
+
     public FiscalReceiptStamp read(String verificationUrl) {
-        byte[] payload = payloadOf(verificationUrl);
+        byte[] payload = payloadOf(canonical(verificationUrl));
 
         if (payload.length < SHORTEST_PAYLOAD) {
             throw badReceipt("Kod na računu je prekratak.");
@@ -73,6 +87,8 @@ public class FiscalVerificationUrlReader {
                             + Byte.toUnsignedInt(payload[0])
             );
         }
+
+        rejectAnythingButAPurchase(payload);
 
         ByteBuffer little = ByteBuffer.wrap(payload)
                 .order(ByteOrder.LITTLE_ENDIAN);
@@ -98,9 +114,29 @@ public class FiscalVerificationUrlReader {
                         .divide(AMOUNT_SCALE)
                         .stripTrailingZeros()
                         .setScale(2, java.math.RoundingMode.UNNECESSARY),
-                issuedAt,
-                shopName(payload)
+                issuedAt
         );
+    }
+
+    /**
+     * U troškove ide samo ono što je plaćeno: račun ili avans za prodaju.
+     * Povraćaj, predračun, kopija i obuka kase nisu kupovina.
+     */
+    private static void rejectAnythingButAPurchase(byte[] payload) {
+        int invoiceType = Byte.toUnsignedInt(payload[INVOICE_TYPE_AT]);
+        int transactionType = Byte.toUnsignedInt(payload[TRANSACTION_TYPE_AT]);
+
+        if (transactionType != SALE) {
+            throw badReceipt("Ovo je račun za povraćaj novca, pa se ne upisuje u troškove.");
+        }
+        if (invoiceType != NORMAL && invoiceType != ADVANCE) {
+            throw badReceipt(switch (invoiceType) {
+                case 1 -> "Ovo je predračun, a ne račun o kupovini.";
+                case 2 -> "Ovo je kopija računa. Skeniraj original.";
+                case 3 -> "Ovo je račun za obuku kase, ne prava kupovina.";
+                default -> "Nepoznata vrsta računa: " + invoiceType;
+            });
+        }
     }
 
     private byte[] payloadOf(String verificationUrl) {
@@ -161,42 +197,6 @@ public class FiscalVerificationUrlReader {
 
     private static String text(byte[] payload, int at, int length) {
         return new String(payload, at, length, StandardCharsets.UTF_8).strip();
-    }
-
-    /**
-     * Posle vremena stoje kratka polja sa dužinom ispred; prodavnica je
-     * poslednje popunjeno među njima. Ako išta ne štima, radije se vraća
-     * prazno nego pogrešno — isto ime stiže i sa stranice Poreske uprave.
-     */
-    private static String shopName(byte[] payload) {
-        int at = TEXT_FIELDS_AT;
-        String last = null;
-
-        for (int field = 0; field < MOST_TEXT_FIELDS; field++) {
-            if (at >= payload.length) {
-                break;
-            }
-
-            int length = Byte.toUnsignedInt(payload[at]);
-            at++;
-
-            if (length == 0) {
-                continue;
-            }
-
-            if (at + length > payload.length) {
-                break;
-            }
-
-            String value = text(payload, at, length);
-            at += length;
-
-            if (!value.isBlank()) {
-                last = value;
-            }
-        }
-
-        return last;
     }
 
     private static ResponseStatusException badReceipt(String reason) {

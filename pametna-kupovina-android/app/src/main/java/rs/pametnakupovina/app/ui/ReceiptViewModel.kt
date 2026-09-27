@@ -104,9 +104,15 @@ class ReceiptViewModel @Inject constructor(
             } catch (scanFailed: MlKitException) {
                 // Kamera nije uspela da pročita kod. Račun nije ni pokušan da
                 // se zavede, pa ne sme da piše da nije zaveden.
-                "Skeniranje nije uspelo. Probaj ponovo."
+                if (scanFailed.errorCode == MlKitException.UNAVAILABLE) {
+                    "Google skener se još preuzima na telefon. Sačekaj minut pa probaj ponovo."
+                } else {
+                    "Skeniranje nije uspelo. Probaj ponovo."
+                }
             } catch (failure: Exception) {
-                "Račun nije zaveden. Probaj ponovo kasnije."
+                // Server kaže zašto (predračun, povraćaj, nečitljiv kod);
+                // „nije zaveden" bez razloga ostavlja kupca da nagađa.
+                failure.toUserMessage("Račun nije zaveden. Proveri internet i probaj ponovo.")
             }
 
             _uiState.update { it.copy(scanning = false, message = message) }
