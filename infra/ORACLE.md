@@ -125,12 +125,21 @@ pri pokretanju.
 ```cron
 30 4 * * * $HOME/pametna-kupovina/ops/backup.sh >> $HOME/pametna-kupovina/backups/backup.log 2>&1
 0 13,19 * * * $HOME/pametna-kupovina/ops/check-import.sh >> $HOME/pametna-kupovina/backups/check.log 2>&1
+*/5 * * * * $HOME/pametna-kupovina/ops/check-health.sh >> $HOME/pametna-kupovina/backups/health.log 2>&1
 ```
 
 - `backup.sh`: proveren dump baze, čuva se 14 dana; originalni cenovnici
   30 dana.
 - `check-import.sh`: da li server odgovara i da li je današnji uvoz uspeo
   (uvoz kreće posle 08:00 i ponavlja se do tri puta).
+- `check-health.sh`: da li server odgovara, da li su kontejneri zdravi, da li
+  ima mesta na disku i memorije i da li je backup mlađi od 36 sati. Poruka
+  ide samo kad se stanje promeni, i još jednom kad je sve ponovo u redu.
+
+Provera spolja (preporučeno): nalog na healthchecks.io → Add Check, period
+5 minuta, grace 10 minuta, u Integrations dodati ntfy ili e-mail. Ping URL
+(`https://hc-ping.com/…`) upisati u `HEALTH_PING_URL`. Ako server potpuno
+padne i pingovi prestanu, poruku šalje healthchecks.io.
 
 Backup van servera (preporučeno): Storage → Buckets → Create Bucket (npr.
 `pametna-kupovina-backup`) → Pre-Authenticated Requests → Create: target

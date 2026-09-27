@@ -35,6 +35,7 @@ Skripte:
 | `ops/deploy.sh ubuntu@IP` | Mac | Šalje postavku i jar; ako na serveru postoji `.env.production`, pokreće novu verziju. |
 | `ops/start.sh` | server | Gradi sliku i pokreće sve servise, čeka da budu zdravi. |
 | `ops/backup.sh` | server (cron) | Dump baze, slanje van servera (`BACKUP_UPLOAD_URL`), brisanje starih dump-ova i cenovnika. |
+| `ops/check-health.sh` | server (cron, 5 min) | Server, kontejneri, disk, memorija i starost backup-a; poruka na `ALERT_URL` samo kad se stanje promeni, ping na `HEALTH_PING_URL`. |
 | `ops/check-import.sh` | server (cron) | Da li server odgovara i da li je današnji uvoz uspeo; poruka na `ALERT_URL`. |
 | `ops/restore.sh backups/<dump>` | server | Briše bazu i vraća je iz dump-a (traži da se upiše DA). |
 | `ops/register-chain.sh "naziv"` | Mac | Probno čita cenovnik lanca sa portala i uključuje ga u dnevni uvoz (traži admin ključ). |
