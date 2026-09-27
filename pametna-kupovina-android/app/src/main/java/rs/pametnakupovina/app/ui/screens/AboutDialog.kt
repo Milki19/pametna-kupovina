@@ -10,6 +10,8 @@ import rs.pametnakupovina.app.data.ShoppingRepository
 import rs.pametnakupovina.app.data.SignInCancelled
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
@@ -179,7 +181,11 @@ fun AboutDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.about_title)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)) {
+            // Krupna slova: bez skrolovanja broj uređaja ispada iz dijaloga.
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)
+            ) {
                 Text(
                     stringResource(R.string.about_version, BuildConfig.VERSION_NAME),
                     style = MaterialTheme.typography.bodyMedium
