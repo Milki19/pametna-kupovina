@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="common_cancel">Cancel</string>
+    <string name="common_close">Close</string>
+    <string name="common_save">Save</string>
+    <string name="common_retry">Try again</string>
+    <string name="common_loading">Loading…</string>
+
+    <string name="error_check_input">Check what you entered and try again.</string>
+    <string name="error_list_not_available">This list is no longer available on the server.</string>
+    <string name="error_list_or_item_gone">The list or item no longer exists.</string>
+    <string name="error_server_problem">The server is having a problem. Try again.</string>
+
+    <string name="format_date_at_time">%1$s at %2$s</string>
+    <string-array name="month_names">
+        <item>January</item>
+        <item>February</item>
+        <item>March</item>
+        <item>April</item>
+        <item>May</item>
+        <item>June</item>
+        <item>July</item>
+        <item>August</item>
+        <item>September</item>
+        <item>October</item>
+        <item>November</item>
+        <item>December</item>
+    </string-array>
+    <string name="format_month_year">%1$s %2$d</string>
+    <plurals name="count_items">
+        <item quantity="one">%d item</item>
+        <item quantity="other">%d items</item>
+    </plurals>
+</resources>
