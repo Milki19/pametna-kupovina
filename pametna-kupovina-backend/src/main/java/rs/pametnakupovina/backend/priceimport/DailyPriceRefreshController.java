@@ -10,6 +10,12 @@ import java.util.Map;
 public class DailyPriceRefreshController {
     private final DailyPriceRefreshService service;
     public DailyPriceRefreshController(DailyPriceRefreshService service) { this.service = service; }
-    @GetMapping public Map<String, Object> status() { return service.status(); }
-    @PostMapping public Map<String, Object> refresh() { return service.refresh(true); }
+    /** @param market ISO code; the default market when left out */
+    @GetMapping public Map<String, Object> status(@RequestParam(name="market", required=false) String market) {
+        return market == null ? service.status() : service.status(market);
+    }
+    /** @param market ISO code; every market with price sources when left out */
+    @PostMapping public Map<String, Object> refresh(@RequestParam(name="market", required=false) String market) {
+        return market == null ? service.refresh(true) : service.refresh(market, true);
+    }
 }
