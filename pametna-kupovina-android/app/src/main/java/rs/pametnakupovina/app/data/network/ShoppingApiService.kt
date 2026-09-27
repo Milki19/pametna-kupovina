@@ -68,6 +68,15 @@ interface ShoppingApiService {
     @DELETE("api/v1/accounts/me")
     suspend fun deleteAccount()
 
+    @GET("api/v1/accounts/devices")
+    suspend fun getAccountDevices(): List<AccountDeviceDto>
+
+    @DELETE("api/v1/accounts/devices/{deviceId}")
+    suspend fun removeAccountDevice(@Path("deviceId") deviceId: Long)
+
+    @DELETE("api/v1/sessions/current")
+    suspend fun signOut()
+
     @POST("api/v1/crash-reports")
     suspend fun reportCrash(@Body report: CrashReportDto)
 

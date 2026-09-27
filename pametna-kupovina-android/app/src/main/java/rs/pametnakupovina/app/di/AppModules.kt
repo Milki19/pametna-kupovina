@@ -11,8 +11,6 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -25,8 +23,11 @@ import rs.pametnakupovina.app.data.local.MIGRATION_2_3
 import rs.pametnakupovina.app.data.local.MIGRATION_3_4
 import rs.pametnakupovina.app.data.local.MIGRATION_4_5
 import rs.pametnakupovina.app.data.local.PametnaKupovinaDatabase
+import rs.pametnakupovina.app.data.network.SessionApiService
+import rs.pametnakupovina.app.data.network.SessionAuthenticator
+import rs.pametnakupovina.app.data.network.SessionInterceptor
+import rs.pametnakupovina.app.data.network.SessionManager
 import rs.pametnakupovina.app.data.network.ShoppingApiService
-import rs.pametnakupovina.app.data.preferences.ClientIdentityStore
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -40,22 +41,32 @@ object NetworkModule {
         coerceInputValues = true
     }
 
+    /** Klijent bez sesije: samo za otvaranje i obnovu sesije. */
+    @Provides
+    @Singleton
+    fun provideSessionApiService(json: Json): SessionApiService = Retrofit.Builder()
+        .baseUrl(BuildConfig.BACKEND_BASE_URL)
+        .client(
+            OkHttpClient.Builder()
+                .connectTimeout(15, TimeUnit.SECONDS)
+                .readTimeout(30, TimeUnit.SECONDS)
+                .build()
+        )
+        .addConverterFactory(
+            json.asConverterFactory("application/json".toMediaType())
+        )
+        .build()
+        .create(SessionApiService::class.java)
+
     @Provides
     @Singleton
     fun provideOkHttpClient(
-        clientIdentityStore: ClientIdentityStore
+        sessionManager: SessionManager
     ): OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
-        .addInterceptor { chain ->
-            val token = runBlocking(Dispatchers.IO) {
-                clientIdentityStore.getOrCreateToken()
-            }
-            val request = chain.request().newBuilder()
-                .header("X-Client-Token", token)
-                .build()
-            chain.proceed(request)
-        }
+        .addInterceptor(SessionInterceptor(sessionManager))
+        .authenticator(SessionAuthenticator(sessionManager))
         .build()
 
     @Provides
