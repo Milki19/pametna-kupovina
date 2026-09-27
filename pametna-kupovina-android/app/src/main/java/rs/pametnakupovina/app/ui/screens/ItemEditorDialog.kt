@@ -56,6 +56,7 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.ui.semantics.Role
 import androidx.compose.material3.Checkbox
 import rs.pametnakupovina.app.data.similarItem
+import rs.pametnakupovina.app.data.similarKind
 import androidx.compose.ui.platform.testTag
 
 /** The unit a person writes an amount in, mapped onto the one the server stores. */
@@ -174,6 +175,7 @@ internal fun ItemEditorDialog(
     var selectedProductRawInput by remember(key) { mutableStateOf<String?>(null) }
     // „Može i drugi brend": čuva se kao „Bilo koji" iste vrste i količine.
     var anyBrand by remember(key) { mutableStateOf(false) }
+    var similarKindText by remember(key) { mutableStateOf("") }
 
     val isFlexible = rule == ShoppingItemRuleDto.FLEXIBLE_CATEGORY
     val chosenUnit = unit
@@ -228,9 +230,9 @@ internal fun ItemEditorDialog(
                 onSave(
                     similarItem(
                         product.name,
-                        product.brand,
                         requireNotNull(parsedQuantity),
-                        selectedProductRawInput
+                        selectedProductRawInput,
+                        similarKindText
                     )
                 )
                 return@FullScreenDialog
@@ -308,23 +310,42 @@ internal fun ItemEditorDialog(
                 )
                 selectedProduct?.let { product ->
                     item(key = "any-brand") {
-                        val similar = similarItem(product.name, product.brand, 1.0)
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .toggleable(value = anyBrand, role = Role.Checkbox) { anyBrand = it }
-                                .testTag("any-brand")
-                        ) {
-                            Checkbox(checked = anyBrand, onCheckedChange = null)
-                            Column(modifier = Modifier.padding(start = AppSpacing.sm)) {
-                                Text("Može i drugi brend", style = MaterialTheme.typography.titleSmall)
-                                Text(
-                                    "Uzima se najjeftinije „${similar.category}" +
-                                        (similar.targetQuantity?.let { ", " + amountLabel(it, similar.requiredBaseUnit) } ?: "") +
-                                        "“ u prodavnicama iz plana.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                        val similar = similarItem(product.name, 1.0, kind = similarKindText)
+                        Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.xs)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .toggleable(value = anyBrand, role = Role.Checkbox) { checked ->
+                                        anyBrand = checked
+                                        if (checked && similarKindText.isBlank()) {
+                                            similarKindText = similarKind(product.name, product.brand)
+                                        }
+                                    }
+                                    .testTag("any-brand")
+                            ) {
+                                Checkbox(checked = anyBrand, onCheckedChange = null)
+                                Column(modifier = Modifier.padding(start = AppSpacing.sm)) {
+                                    Text("Može i drugi brend", style = MaterialTheme.typography.titleSmall)
+                                    Text(
+                                        "Uzima se najjeftinije slično u prodavnicama iz plana.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            if (anyBrand) {
+                                OutlinedTextField(
+                                    value = similarKindText,
+                                    onValueChange = { similarKindText = it },
+                                    label = { Text("Vrsta (bilo koji brend)") },
+                                    supportingText = similar.targetQuantity?.let {
+                                        { Text("Količina: " + amountLabel(it, similar.requiredBaseUnit)) }
+                                    },
+                                    singleLine = true,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("similar-kind")
                                 )
                             }
                         }

@@ -243,10 +243,10 @@ class ShoppingRepository @Inject constructor(
     }
 
     /** Stavka koje nema u planu postaje „slično, bilo koji brend" (vidi [similarItem]). */
-    suspend fun replaceWithSimilar(itemId: Long) {
+    suspend fun replaceWithSimilar(itemId: Long, kind: String) {
         val item = requireNotNull(dao.findByRemoteId(itemId)) { "Stavka nije u aktivnom spisku." }
         require(item.syncState != SyncState.PENDING_DELETE.name) { "Stavka je obrisana." }
-        updateItem(item, similarItem(item.name, null, item.quantity, item.rawInput))
+        updateItem(item, similarItem(item.name, item.quantity, item.rawInput, kind))
     }
 
     suspend fun replaceWithAlternative(itemId: Long, product: rs.pametnakupovina.app.data.network.CanonicalProductSearchItemDto, packages: Double) {
