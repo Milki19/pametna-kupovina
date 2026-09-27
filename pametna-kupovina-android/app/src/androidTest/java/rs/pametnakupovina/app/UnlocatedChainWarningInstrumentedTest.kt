@@ -1,5 +1,6 @@
 package rs.pametnakupovina.app
 
+import androidx.test.platform.app.InstrumentationRegistry
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -42,9 +43,9 @@ class UnlocatedChainWarningInstrumentedTest {
             }
         }
 
-        composeRule.onNodeWithText("Ne znamo u kojoj prodavnici važi ova cena")
+        composeRule.onNodeWithText(text(R.string.rec_unlocated_notice_title))
             .assertIsDisplayed()
-        composeRule.onNodeWithText("Nepotvrđena prodavnica").assertIsDisplayed()
+        composeRule.onNodeWithText(text(R.string.rec_unconfirmed_store)).assertIsDisplayed()
         composeRule.onNodeWithText("Univerexport").assertIsDisplayed()
     }
 
@@ -61,3 +62,7 @@ class UnlocatedChainWarningInstrumentedTest {
             """
         )
 }
+
+/** A text as the app shows it on this device, so the test runs in any language. */
+private fun text(id: Int, vararg args: Any): String =
+    InstrumentationRegistry.getInstrumentation().targetContext.getString(id, *args)

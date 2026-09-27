@@ -1,5 +1,6 @@
 package rs.pametnakupovina.app
 
+import androidx.test.platform.app.InstrumentationRegistry
 import androidx.room.Room
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.*
@@ -38,11 +39,11 @@ class PurchaseScreenInstrumentedTest {
             compose.waitUntil(5000) { viewModel.session.value?.purchasedCount == 0 }
             compose.onNodeWithTag("purchase-list").performScrollToNode(hasTestTag("item-menu-1"))
             compose.onNodeWithTag("item-menu-1").performClick()
-            compose.onAllNodesWithText("Detalji")[0].performClick()
-            compose.onNodeWithText("Napomena").performTextInput("Uzmi hladan")
-            compose.onNodeWithText("Kupljeno (može delimično)").performTextReplacement("2")
-            compose.onNodeWithText("Stvarni ukupan iznos, RSD (opciono)").performTextInput("46,00")
-            compose.onNodeWithText("Sačuvaj").performClick()
+            compose.onAllNodesWithText(text(R.string.purchase_details))[0].performClick()
+            compose.onNodeWithText(text(R.string.purchase_note_field)).performTextInput("Uzmi hladan")
+            compose.onNodeWithText(text(R.string.purchase_bought_field)).performTextReplacement("2")
+            compose.onNodeWithText(text(R.string.purchase_actual_total_field)).performTextInput("46,00")
+            compose.onNodeWithText(text(R.string.common_save)).performClick()
             compose.waitUntil(5000) { viewModel.session.value?.progress?.get(1)?.note == "Uzmi hladan" }
             val saved = runBlocking { repository.observe(id).first()!! }
             assertEquals(2.0, saved.progress[1]!!.boughtPackages,0.0)
@@ -51,3 +52,7 @@ class PurchaseScreenInstrumentedTest {
         } finally { database.close() }
     }
 }
+
+/** A text as the app shows it on this device, so the test runs in any language. */
+private fun text(id: Int, vararg args: Any): String =
+    InstrumentationRegistry.getInstrumentation().targetContext.getString(id, *args)

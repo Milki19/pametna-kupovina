@@ -1,5 +1,6 @@
 package rs.pametnakupovina.app
 
+import androidx.test.platform.app.InstrumentationRegistry
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -29,7 +30,10 @@ class RecommendationNavigationInstrumentedTest {
             }
         }
 
-        composeRule.onNodeWithText("Pregled rute kroz 2 prodavnice")
+        composeRule.onNodeWithText(
+            InstrumentationRegistry.getInstrumentation().targetContext.resources
+                .getQuantityString(R.plurals.rec_route_stores, 2, 2)
+        )
             .assertIsDisplayed()
         composeRule.onNodeWithTag("open-google-maps")
             .assertIsDisplayed()
