@@ -22,6 +22,7 @@ import tools.jackson.databind.ObjectMapper;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -59,9 +60,6 @@ class DeviceSessionTest {
     private WebApplicationContext context;
 
     @Autowired
-    private ApiAccessFilter accessFilter;
-
-    @Autowired
     private JdbcClient jdbcClient;
 
     private MockMvc mvc;
@@ -69,7 +67,7 @@ class DeviceSessionTest {
     @BeforeEach
     void throughTheSameFilterAsProduction() {
         mvc = MockMvcBuilders.webAppContextSetup(context)
-                .addFilters(accessFilter)
+                .apply(springSecurity())
                 .build();
     }
 
@@ -167,7 +165,7 @@ class DeviceSessionTest {
         String oldNumber = newDeviceToken();
 
         MvcResult created = mvc.perform(post("/api/v1/shopping-lists")
-                        .header(ApiAccessFilter.LEGACY_TOKEN_HEADER, oldNumber)
+                        .header(CredentialsFilter.LEGACY_TOKEN_HEADER, oldNumber)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"Iz verzije 1.8\"}"))
                 .andReturn();
@@ -179,7 +177,7 @@ class DeviceSessionTest {
 
         // The number no longer works as a header ...
         MvcResult legacy = mvc.perform(get("/api/v1/shopping-lists")
-                        .header(ApiAccessFilter.LEGACY_TOKEN_HEADER, oldNumber))
+                        .header(CredentialsFilter.LEGACY_TOKEN_HEADER, oldNumber))
                 .andReturn();
         assertThat(legacy.getResponse().getStatus()).isEqualTo(401);
         assertThat(legacy.getResponse().getContentAsString()).contains("Ažuriraj aplikaciju");
@@ -254,7 +252,7 @@ class DeviceSessionTest {
                 .getResponse().getStatus()).isEqualTo(401);
         assertThat(status(get("/api/v1/imports/quality/crashes"), access(phone))).isEqualTo(401);
         assertThat(mvc.perform(get("/api/v1/imports/quality/crashes")
-                        .header(ApiAccessFilter.ADMIN_KEY_HEADER, ADMIN_KEY))
+                        .header(CredentialsFilter.ADMIN_KEY_HEADER, ADMIN_KEY))
                 .andReturn().getResponse().getStatus()).isEqualTo(200);
     }
 

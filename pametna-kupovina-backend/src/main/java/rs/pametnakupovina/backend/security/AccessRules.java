@@ -1,7 +1,12 @@
 package rs.pametnakupovina.backend.security;
 
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpMethod;
-import org.springframework.util.AntPathMatcher;
+import org.springframework.http.server.PathContainer;
+import org.springframework.security.config.annotation.web.configurers.AuthorizeHttpRequestsConfigurer;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
+import org.springframework.web.util.pattern.PathPattern;
+import org.springframework.web.util.pattern.PathPatternParser;
 
 import java.util.List;
 
@@ -11,6 +16,10 @@ import java.util.List;
  * it is for. Pages outside /api (the web app, /admin's own HTML, the legal
  * pages) are public — the admin page reads its data through /api, which is
  * where the key is asked for.
+ *
+ * <p>Spring Security enforces the list ({@link SecurityConfiguration}); the
+ * same patterns tell {@link CredentialsFilter} which credential a request
+ * needs checked, so a public request never costs a session lookup.
  */
 public final class AccessRules {
 
@@ -27,7 +36,7 @@ public final class AccessRules {
         DENIED
     }
 
-    private static final AntPathMatcher MATCHER = new AntPathMatcher();
+    private static final PathPatternParser PARSER = PathPatternParser.defaultInstance;
 
     private static final List<Rule> RULES = List.of(
             // Sesija: otvaranje i obnova su baš način da se dobije token.
@@ -64,8 +73,19 @@ public final class AccessRules {
     private AccessRules() {
     }
 
+    public static Access of(HttpServletRequest request) {
+        String path = request.getRequestURI();
+        String contextPath = request.getContextPath();
+
+        if (contextPath != null && !contextPath.isEmpty() && path.startsWith(contextPath)) {
+            path = path.substring(contextPath.length());
+        }
+
+        return of(request.getMethod(), path.isEmpty() ? "/" : path);
+    }
+
     public static Access of(String method, String path) {
-        if (!path.equals("/api") && !path.startsWith("/api/")) {
+        if (!isApi(path)) {
             return Access.PUBLIC;
         }
 
@@ -73,9 +93,11 @@ public final class AccessRules {
             return Access.PUBLIC;
         }
 
+        PathContainer container = PathContainer.parsePath(path);
+
         for (Rule rule : RULES) {
             if ((rule.method() == null || rule.method().matches(method))
-                    && MATCHER.match(rule.pattern(), path)) {
+                    && rule.pattern().matches(container)) {
                 return rule.access();
             }
         }
@@ -83,6 +105,41 @@ public final class AccessRules {
         return Access.DENIED;
     }
 
-    private record Rule(HttpMethod method, String pattern, Access access) {
+    /**
+     * Hands the list to Spring Security in the same order, so the first rule
+     * that matches decides there too; everything else under /api is denied.
+     */
+    static void applyTo(
+            AuthorizeHttpRequestsConfigurer<?>.AuthorizationManagerRequestMatcherRegistry registry
+    ) {
+        PathPatternRequestMatcher.Builder paths = PathPatternRequestMatcher.withDefaults();
+
+        registry.requestMatchers(HttpMethod.OPTIONS, "/api/**").permitAll();
+
+        for (Rule rule : RULES) {
+            var matched = registry.requestMatchers(paths.matcher(rule.method(), rule.pattern().getPatternString()));
+
+            switch (rule.access()) {
+                case PUBLIC, DEVICE_OPTIONAL -> matched.permitAll();
+                case DEVICE -> matched.hasRole(SecurityConfiguration.DEVICE_ROLE);
+                case ADMIN -> matched.hasRole(SecurityConfiguration.ADMIN_ROLE);
+                case DENIED -> matched.denyAll();
+            }
+        }
+
+        registry.requestMatchers(paths.matcher("/api")).denyAll();
+        registry.requestMatchers(paths.matcher("/api/**")).denyAll();
+        registry.anyRequest().permitAll();
+    }
+
+    private static boolean isApi(String path) {
+        return path.equals("/api") || path.startsWith("/api/");
+    }
+
+    private record Rule(HttpMethod method, PathPattern pattern, Access access) {
+
+        Rule(HttpMethod method, String pattern, Access access) {
+            this(method, PARSER.parse(pattern), access);
+        }
     }
 }
