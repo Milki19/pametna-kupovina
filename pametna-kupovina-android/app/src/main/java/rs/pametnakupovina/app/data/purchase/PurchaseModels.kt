@@ -1,7 +1,10 @@
 package rs.pametnakupovina.app.data.purchase
 
 import kotlinx.serialization.Serializable
+import rs.pametnakupovina.app.R
 import rs.pametnakupovina.app.data.network.OptimizationScenarioDto
+import rs.pametnakupovina.app.text.requireUser
+import rs.pametnakupovina.app.text.uiText
 
 @Serializable
 data class PurchaseSnapshot(
@@ -40,16 +43,16 @@ data class PurchaseSession(
 }
 
 fun validatePurchaseProgress(progress: PurchaseItemProgress, plannedPackages: Double): PurchaseItemProgress {
-    require(plannedPackages.isFinite() && plannedPackages > 0) { "Neispravna planirana količina." }
-    require(progress.boughtPackages.isFinite() && progress.boughtPackages in 0.0..plannedPackages) {
-        "Kupljena količina mora biti između 0 i planirane količine."
+    requireUser(plannedPackages.isFinite() && plannedPackages > 0) { uiText(R.string.purchase_error_invalid_planned) }
+    requireUser(progress.boughtPackages.isFinite() && progress.boughtPackages in 0.0..plannedPackages) {
+        uiText(R.string.purchase_error_bought_range)
     }
-    require(progress.note.length <= 1000) { "Napomena može imati najviše 1000 znakova." }
+    requireUser(progress.note.length <= 1000) { uiText(R.string.purchase_error_note_length, 1000) }
     val price = progress.actualLineTotal?.trim()?.takeIf { it.isNotEmpty() }?.replace(',', '.')
     val decimal = price?.toBigDecimalOrNull()
-    require(price == null || (decimal != null && decimal.signum() >= 0 &&
+    requireUser(price == null || (decimal != null && decimal.signum() >= 0 &&
         decimal.scale() <= 2 && decimal <= "99999999.99".toBigDecimal())) {
-        "Unesi nenegativan ukupan iznos, sa najviše dve decimale."
+        uiText(R.string.purchase_error_price)
     }
     val bought = if (progress.status == PurchaseStatus.PURCHASED) plannedPackages else progress.boughtPackages
     return progress.copy(

@@ -1,5 +1,6 @@
 package rs.pametnakupovina.app.ui.screens
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -23,6 +24,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -33,6 +36,7 @@ import rs.pametnakupovina.app.data.network.ShoppingItemMatchResultDto
 import rs.pametnakupovina.app.data.network.ShoppingItemMatchingStatusDto
 import rs.pametnakupovina.app.data.network.ShoppingItemRuleDto
 import rs.pametnakupovina.app.data.network.ShoppingListMatchingDto
+import rs.pametnakupovina.app.text.asString
 import rs.pametnakupovina.app.ui.MatchingViewModel
 import rs.pametnakupovina.app.ui.components.AppIcon
 import rs.pametnakupovina.app.ui.components.cardBorder
@@ -47,8 +51,6 @@ import rs.pametnakupovina.app.ui.components.SectionHeader
 import rs.pametnakupovina.app.ui.components.StatusPill
 import rs.pametnakupovina.app.ui.components.StepCard
 import rs.pametnakupovina.app.ui.components.StatusTone
-import rs.pametnakupovina.app.ui.counted
-import rs.pametnakupovina.app.ui.plural
 
 @Composable
 fun MatchingScreen(
@@ -58,20 +60,20 @@ fun MatchingScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val result = state.result
+    val errorMessage = state.errorMessage?.asString()
 
     Scaffold(
-        topBar = { AppTopBar(title = "Provera proizvoda", onBack = onBack) },
+        topBar = { AppTopBar(title = stringResource(R.string.match_title), onBack = onBack) },
         bottomBar = {
             if (result != null) {
                 val pending = pendingDecisions(result)
                 BottomActionBar {
                     PrimaryActionButton(
                         text = when {
-                            state.isResolving -> "Čuvam odluku…"
-                            result.readyForOptimization -> "Nastavi na lokaciju"
-                            pending > 0 -> "Odluči još za " +
-                                counted(pending, "stavku", "stavke", "stavki")
-                            else -> "Potvrdi označene stavke"
+                            state.isResolving -> stringResource(R.string.match_saving)
+                            result.readyForOptimization -> stringResource(R.string.match_continue)
+                            pending > 0 -> pluralStringResource(R.plurals.match_decide_more, pending, pending)
+                            else -> stringResource(R.string.match_confirm_marked)
                         },
                         enabled = result.readyForOptimization && !state.isResolving,
                         onClick = { onContinue(result.listId) }
@@ -86,15 +88,15 @@ fun MatchingScreen(
                 .padding(padding)
         ) {
             when {
-                state.isLoading -> LoadingState("Tražim odgovarajuće proizvode…")
-                state.errorMessage != null && result == null -> ErrorState(
-                    title = "Provera nije uspela",
-                    message = requireNotNull(state.errorMessage),
+                state.isLoading -> LoadingState(stringResource(R.string.match_loading))
+                errorMessage != null && result == null -> ErrorState(
+                    title = stringResource(R.string.match_error_title),
+                    message = errorMessage,
                     onRetry = viewModel::load
                 )
                 result != null -> MatchingContent(
                     result = result,
-                    errorMessage = state.errorMessage,
+                    errorMessage = errorMessage,
                     enabled = !state.isResolving,
                     onChoose = viewModel::confirm,
                     onUseAsFlexible = viewModel::useAsFlexible
@@ -136,7 +138,7 @@ private fun MatchingContent(
 
         if (needsDecision.isNotEmpty()) {
             item(key = "decide-header") {
-                SectionHeader("Treba tvoja odluka", trailing = needsDecision.size.toString())
+                SectionHeader(stringResource(R.string.match_section_decide), trailing = needsDecision.size.toString())
             }
             itemsIndexed(needsDecision, key = { _, item -> item.itemId }) { index, item ->
                 DecisionCard(
@@ -154,7 +156,7 @@ private fun MatchingContent(
 
         if (settled.isNotEmpty()) {
             item(key = "settled-header") {
-                SectionHeader("Prepoznato", trailing = settled.size.toString())
+                SectionHeader(stringResource(R.string.match_section_settled), trailing = settled.size.toString())
             }
             item(key = "settled") {
                 SettledList(settled)
@@ -168,24 +170,24 @@ private fun MatchingContent(
 private fun MatchingSummary(result: ShoppingListMatchingDto, pending: Int) {
     val connected = connectedItems(result)
     StepCard(
-        step = "KORAK 1 OD 3",
+        step = stringResource(R.string.match_step),
         title = if (pending == 0) {
-            "Sve stavke su prepoznate"
+            stringResource(R.string.match_all_recognized)
         } else {
-            "$pending ${plural(pending, "stavka traži", "stavke traže", "stavki traži")} tvoju odluku"
+            pluralStringResource(R.plurals.match_pending_title, pending, pending)
         },
-        text = "Potvrdi nejasne stavke da bismo našli najpovoljnije cene u blizini."
+        text = stringResource(R.string.match_summary_text)
     ) {
         Row {
             Text(
-                "Prepoznato $connected od ${result.totalItems}",
+                stringResource(R.string.match_recognized_of, connected, result.totalItems),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.weight(1f)
             )
             if (pending > 0) {
                 Text(
-                    "još $pending",
+                    stringResource(R.string.match_remaining, pending),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -224,13 +226,13 @@ private fun DecisionCard(
             Row(verticalAlignment = Alignment.Top) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        "Sa spiska",
+                        stringResource(R.string.match_from_list),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Text("„${item.requestedName}“", style = MaterialTheme.typography.titleLarge)
+                    Text(stringResource(R.string.match_requested_name, item.requestedName), style = MaterialTheme.typography.titleLarge)
                 }
-                StatusPill(statusText(item.matchingStatus), statusTone(item.matchingStatus))
+                StatusPill(stringResource(statusText(item.matchingStatus)), statusTone(item.matchingStatus))
             }
             if (showExplanation) {
                 Text(
@@ -263,12 +265,12 @@ private fun DecisionCard(
                         verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
                         Text(
-                            "Neka aplikacija izabere najpovoljnije",
+                            stringResource(R.string.match_flexible_title),
                             style = MaterialTheme.typography.titleSmall,
                             color = MaterialTheme.colorScheme.primary
                         )
                         Text(
-                            "Kad ti nije važan brend ni pakovanje.",
+                            stringResource(R.string.match_flexible_desc),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -282,7 +284,7 @@ private fun DecisionCard(
                     onClick = { onChoose(null) },
                     modifier = Modifier.align(Alignment.CenterHorizontally)
                 ) {
-                    Text("Nijedan, ostavi neupareno", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.match_none_leave_unmatched), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -331,7 +333,7 @@ private fun CandidateRow(
                 }
             }
             Text(
-                "Izaberi",
+                stringResource(R.string.match_choose),
                 style = MaterialTheme.typography.labelLarge,
                 color = if (enabled) {
                     MaterialTheme.colorScheme.primary
@@ -397,12 +399,13 @@ private fun pendingDecisions(result: ShoppingListMatchingDto): Int =
     result.blockingItemIds.size.takeIf { it > 0 }
         ?: (result.itemsNeedingConfirmation + result.unmatchedItems)
 
-private fun statusText(status: ShoppingItemMatchingStatusDto): String = when (status) {
-    ShoppingItemMatchingStatusDto.PENDING -> "Čeka proveru"
-    ShoppingItemMatchingStatusDto.AUTO_MATCHED -> "Automatski"
-    ShoppingItemMatchingStatusDto.NEEDS_CONFIRMATION -> "Treba potvrda"
-    ShoppingItemMatchingStatusDto.CONFIRMED -> "Potvrđeno"
-    ShoppingItemMatchingStatusDto.UNMATCHED -> "Nije pronađeno"
+@StringRes
+private fun statusText(status: ShoppingItemMatchingStatusDto): Int = when (status) {
+    ShoppingItemMatchingStatusDto.PENDING -> R.string.match_status_pending
+    ShoppingItemMatchingStatusDto.AUTO_MATCHED -> R.string.match_status_auto
+    ShoppingItemMatchingStatusDto.NEEDS_CONFIRMATION -> R.string.match_status_needs_confirmation
+    ShoppingItemMatchingStatusDto.CONFIRMED -> R.string.match_status_confirmed
+    ShoppingItemMatchingStatusDto.UNMATCHED -> R.string.match_status_unmatched
 }
 
 private fun statusTone(status: ShoppingItemMatchingStatusDto): StatusTone =

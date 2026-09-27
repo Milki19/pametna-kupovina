@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Istorija kupovina, kupovina u toku i poruke o sačuvanim kupovinama. -->
+<resources>
+    <!-- History -->
+    <string name="purchase_history_title">Istorija</string>
+    <string name="purchase_ok">U redu</string>
+    <string name="purchase_receipts_header">Računi</string>
+    <string name="purchase_active_header">U toku</string>
+    <string name="purchase_finished_header">Završene</string>
+    <string name="purchase_storage_note">Planovi i napredak su na ovom telefonu i rade bez mreže; brisanje podataka aplikacije briše i njih. Skenirani računi stoje uz nalog, pa ostaju i kad promeniš telefon.</string>
+    <string name="purchase_spending_title">Potrošnja</string>
+    <string name="purchase_spending_empty">Skeniraj račun posle kupovine pa ćeš ovde videti koliko je otišlo i gde.</string>
+    <plurals name="purchase_receipt_count">
+        <item quantity="one">%d račun</item>
+        <item quantity="few">%d računa</item>
+        <item quantity="other">%d računa</item>
+    </plurals>
+    <string name="purchase_scanning">Skeniram…</string>
+    <string name="purchase_scan_receipt">Skeniraj račun</string>
+    <string name="purchase_empty_title">Još nema sačuvanih kupovina</string>
+    <string name="purchase_empty_hint">Izračunaj plan i izaberi „Započni kupovinu po ovom planu“.</string>
+    <string name="purchase_session_progress">%1$s · kupljeno %2$d od %3$d</string>
+
+    <!-- Shopping in progress -->
+    <string name="purchase_in_progress_title">U kupovini</string>
+    <string name="purchase_plan_subtitle">Plan od %1$s · %2$s</string>
+    <string name="purchase_route_overview">Pregled rute u Google Maps</string>
+    <string name="purchase_loading_session">Učitavam sačuvanu kupovinu…</string>
+    <string name="purchase_logging_receipt">Zavodim račun…</string>
+    <string name="purchase_archived_notice">Ova kupovina je završena. Kućice su zaključane dok je ponovo ne otvoriš, a račun možeš da skeniraš i sada.</string>
+    <string name="purchase_incomplete_notice">Plan nije potpun. Stavke bez ponude su na dnu.</string>
+    <string name="purchase_no_store_header">Bez prodavnice</string>
+    <string name="purchase_reopen">Ponovo otvori kupovinu</string>
+    <string name="purchase_finish">Završi kupovinu</string>
+    <string name="purchase_footer_note">Originalni spisak ostaje nepromenjen. Mape traže mrežu ili unapred preuzetu mapu.</string>
+    <string name="purchase_finish_confirm_title">Završi kupovinu?</string>
+    <string name="purchase_finish_confirm_text">Kupljeno %1$d od %2$d. Nekupljene stavke neće biti označene kao kupljene. Plan i napomene ostaju u istoriji.\n\nU troškove ulazi skenirani račun, ne sama kupovina.</string>
+    <string name="purchase_finish_and_scan">Završi i skeniraj račun</string>
+    <string name="purchase_finish_short">Završi</string>
+    <string name="purchase_just_finish">Samo završi</string>
+    <string name="purchase_back">Nazad</string>
+
+    <!-- Progress header -->
+    <string name="purchase_progress_label">NAPREDAK KUPOVINE</string>
+    <string name="purchase_bought_of">Kupljeno %1$d od %2$d</string>
+    <string name="purchase_planned_label">planirano</string>
+    <string name="purchase_remaining">Još %1$d za odluku. Cene u sačuvanom planu se ne osvežavaju.</string>
+    <plurals name="purchase_paid_for_items">
+        <item quantity="one">Upisano plaćeno: %2$s za %1$d stavku</item>
+        <item quantity="few">Upisano plaćeno: %2$s za %1$d stavke</item>
+        <item quantity="other">Upisano plaćeno: %2$s za %1$d stavki</item>
+    </plurals>
+    <string name="purchase_loyalty_cards_link">Lojalti kartice za kasu — prikaži barkod</string>
+
+    <!-- Store sections and item rows -->
+    <string name="purchase_route_to_store">Put do prodavnice %1$s</string>
+    <string name="purchase_more_for_item">Još za %1$s</string>
+    <string name="purchase_not_in_store">Nema u prodavnici</string>
+    <string name="purchase_skip">Preskoči</string>
+    <string name="purchase_details">Detalji</string>
+    <string name="purchase_back_to_list">Vrati na spisak</string>
+    <string name="purchase_note_value">Napomena: %1$s</string>
+    <string name="purchase_paid_value">Plaćeno %1$s</string>
+    <string name="purchase_status_not_found_partial">Nema u prodavnici, kupljeno %1$s od %2$s</string>
+    <string name="purchase_status_skipped">Preskočeno</string>
+    <string name="purchase_status_skipped_partial">Preskočeno, kupljeno %1$s od %2$s</string>
+    <string name="purchase_status_partial">Delimično, kupljeno %1$s od %2$s</string>
+
+    <!-- Item details dialog -->
+    <plurals name="purchase_planned_packages">
+        <item quantity="one">Planirano: %1$s pakovanje</item>
+        <item quantity="few">Planirano: %1$s pakovanja</item>
+        <item quantity="other">Planirano: %1$s pakovanja</item>
+    </plurals>
+    <string name="purchase_planned_packages_fraction">Planirano: %1$s pakovanja</string>
+    <string name="purchase_bought_field">Kupljeno (može delimično)</string>
+    <string name="purchase_actual_total_field">Stvarni ukupan iznos, RSD (opciono)</string>
+    <string name="purchase_note_field">Napomena</string>
+
+    <!-- Errors -->
+    <string name="purchase_error_active_unavailable">Započeta kupovina nije dostupna.</string>
+    <string name="purchase_error_sessions_unavailable">Sačuvane kupovine nisu dostupne.</string>
+    <string name="purchase_error_session_unavailable">Kupovina nije dostupna.</string>
+    <string name="purchase_error_save_failed">Čuvanje nije uspelo. Pokušaj ponovo.</string>
+    <string name="purchase_error_plan_unavailable">Plan još nije dostupan.</string>
+    <string name="purchase_error_plan_mismatch">Plan ne pripada ovom računanju.</string>
+    <string name="purchase_error_not_found">Kupovina nije pronađena.</string>
+    <string name="purchase_error_archived">Prvo ponovo otvori arhiviranu kupovinu.</string>
+    <string name="purchase_error_newer_app">Za ovaj plan je potrebna novija verzija aplikacije.</string>
+    <string name="purchase_error_invalid_planned">Neispravna planirana količina.</string>
+    <string name="purchase_error_bought_range">Kupljena količina mora biti između 0 i planirane količine.</string>
+    <string name="purchase_error_note_length">Napomena može imati najviše %1$d znakova.</string>
+    <string name="purchase_error_price">Unesi nenegativan ukupan iznos, sa najviše dve decimale.</string>
+</resources>

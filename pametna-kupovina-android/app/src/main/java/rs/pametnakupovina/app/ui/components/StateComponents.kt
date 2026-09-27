@@ -24,9 +24,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import rs.pametnakupovina.app.R
 
 /** Large enough to hit reliably with an unsteady hand or in a coat pocket. */
 val MinimumTouchTarget = 52.dp
@@ -37,12 +39,13 @@ val MinimumTouchTarget = 52.dp
  * arriving content does not jump under a finger already reaching for it.
  */
 @Composable
-fun LoadingState(message: String = "Učitavanje…") {
+fun LoadingState(message: String? = null) {
+    val description = message ?: stringResource(R.string.common_loading)
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(AppSpacing.lg)
-            .semantics { contentDescription = message },
+            .semantics { contentDescription = description },
         verticalArrangement = Arrangement.spacedBy(AppSpacing.md)
     ) {
         repeat(5) { index ->
@@ -107,7 +110,7 @@ fun ErrorState(
             onClick = onRetry,
             modifier = Modifier.heightIn(min = MinimumTouchTarget)
         ) {
-            Text("Pokušaj ponovo")
+            Text(stringResource(R.string.common_retry))
         }
     }
 }

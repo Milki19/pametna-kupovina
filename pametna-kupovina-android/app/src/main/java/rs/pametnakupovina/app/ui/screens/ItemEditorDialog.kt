@@ -1,5 +1,6 @@
 package rs.pametnakupovina.app.ui.screens
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -36,6 +37,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import java.math.BigDecimal
 import kotlinx.coroutines.launch
@@ -51,7 +54,6 @@ import rs.pametnakupovina.app.ui.components.AppIcon
 import rs.pametnakupovina.app.ui.components.AppSpacing
 import rs.pametnakupovina.app.ui.components.FullScreenDialog
 import rs.pametnakupovina.app.ui.components.canonicalProductPicker
-import rs.pametnakupovina.app.ui.items
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.ui.semantics.Role
 import androidx.compose.material3.Checkbox
@@ -84,25 +86,25 @@ internal enum class AmountUnit(
 
 private data class RuleOption(
     val rule: ShoppingItemRuleDto,
-    val label: String,
-    val description: String
+    @param:StringRes val label: Int,
+    @param:StringRes val description: Int
 )
 
 private val RuleOptions = listOf(
     RuleOption(
         ShoppingItemRuleDto.FLEXIBLE_CATEGORY,
-        "Bilo koji",
-        "Upišeš „mleko“, a aplikacija bira najpovoljniji proizvod i pakovanje."
+        R.string.list_rule_option_any,
+        R.string.list_rule_option_any_desc
     ),
     RuleOption(
         ShoppingItemRuleDto.PRODUCT_FAMILY,
-        "Proizvod",
-        "Biraš proizvod iz pretrage. Važe sve njegove barkod varijante."
+        R.string.list_rule_option_product,
+        R.string.list_rule_option_product_desc
     ),
     RuleOption(
         ShoppingItemRuleDto.EXACT_PRODUCT,
-        "Barkod",
-        "Samo izabrana varijanta, bez zamene."
+        R.string.list_rule_option_barcode,
+        R.string.list_rule_option_barcode_desc
     )
 )
 
@@ -220,8 +222,10 @@ internal fun ItemEditorDialog(
     }
 
     FullScreenDialog(
-        title = if (item == null) "Nova stavka" else "Izmeni stavku",
-        confirmLabel = "Sačuvaj",
+        title = stringResource(
+            if (item == null) R.string.list_editor_title_new else R.string.list_editor_title_edit
+        ),
+        confirmLabel = stringResource(R.string.common_save),
         confirmEnabled = valid,
         onDismiss = onDismiss,
         onConfirm = {
@@ -326,9 +330,9 @@ internal fun ItemEditorDialog(
                             ) {
                                 Checkbox(checked = anyBrand, onCheckedChange = null)
                                 Column(modifier = Modifier.padding(start = AppSpacing.sm)) {
-                                    Text("Može i drugi brend", style = MaterialTheme.typography.titleSmall)
+                                    Text(stringResource(R.string.list_editor_any_brand), style = MaterialTheme.typography.titleSmall)
                                     Text(
-                                        "Uzima se najjeftinije slično u prodavnicama iz plana.",
+                                        stringResource(R.string.list_editor_any_brand_desc),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -338,9 +342,16 @@ internal fun ItemEditorDialog(
                                 OutlinedTextField(
                                     value = similarKindText,
                                     onValueChange = { similarKindText = it },
-                                    label = { Text("Vrsta (bilo koji brend)") },
+                                    label = { Text(stringResource(R.string.list_editor_similar_kind)) },
                                     supportingText = similar.targetQuantity?.let {
-                                        { Text("Količina: " + amountLabel(it, similar.requiredBaseUnit)) }
+                                        {
+                                            Text(
+                                                stringResource(
+                                                    R.string.list_editor_amount_value,
+                                                    amountLabel(it, similar.requiredBaseUnit)
+                                                )
+                                            )
+                                        }
                                     },
                                     singleLine = true,
                                     modifier = Modifier
@@ -353,7 +364,7 @@ internal fun ItemEditorDialog(
                 }
                 item(key = "quantity") {
                     QuantityStepper(
-                        label = "Broj pakovanja",
+                        label = stringResource(R.string.list_editor_package_count),
                         value = quantity,
                         onValueChange = { quantity = it }
                     )
@@ -368,8 +379,8 @@ internal fun ItemEditorDialog(
                             }
                             name = value
                         },
-                        label = { Text("Šta kupuješ") },
-                        placeholder = { Text("npr. mleko") },
+                        label = { Text(stringResource(R.string.list_editor_what_label)) },
+                        placeholder = { Text(stringResource(R.string.list_editor_what_placeholder)) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -377,11 +388,11 @@ internal fun ItemEditorDialog(
 
                 item(key = "amount") {
                     Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)) {
-                        Text("Koliko ti ukupno treba", style = MaterialTheme.typography.titleMedium)
+                        Text(stringResource(R.string.list_editor_amount_title), style = MaterialTheme.typography.titleMedium)
                         OutlinedTextField(
                             value = amount,
                             onValueChange = { amount = it },
-                            label = { Text("Količina (opciono)") },
+                            label = { Text(stringResource(R.string.list_editor_amount_label)) },
                             isError = amount.isNotBlank() &&
                                 (parsedAmount == null || parsedAmount <= 0 || chosenUnit == null),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
@@ -407,27 +418,39 @@ internal fun ItemEditorDialog(
                                     amount = inputNumber(suggestion.value / (suggestedUnit?.factor ?: 1.0))
                                     quantity = "1"
                                 }) {
-                                    Text("Predlog: " + amountLabel(suggestion.value, suggestion.unit))
+                                    Text(
+                                        stringResource(
+                                            R.string.list_editor_suggestion,
+                                            amountLabel(suggestion.value, suggestion.unit)
+                                        )
+                                    )
                                 }
                             }
                         }
                         Text(
-                            if (isAmountMode) {
-                                "Biramo cela pakovanja, sa najviše 25% viška."
-                            } else {
-                                "Bez količine kupuješ onoliko pakovanja koliko upišeš ispod."
-                            },
+                            stringResource(
+                                if (isAmountMode) {
+                                    R.string.list_editor_amount_mode_hint
+                                } else {
+                                    R.string.list_editor_count_mode_hint
+                                }
+                            ),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         QuantityStepper(
-                            label = if (isAmountMode) "Puta" else "Broj pakovanja",
+                            label = stringResource(
+                                if (isAmountMode) R.string.list_editor_times else R.string.list_editor_package_count
+                            ),
                             value = quantity,
                             onValueChange = { quantity = it }
                         )
                         if (isAmountMode && parsedTarget != null && parsedQuantity != null && parsedQuantity != 1.0) {
                             Text(
-                                "Ukupno: " + amountLabel(parsedTarget * parsedQuantity, chosenUnit?.baseUnit),
+                                stringResource(
+                                    R.string.list_editor_total,
+                                    amountLabel(parsedTarget * parsedQuantity, chosenUnit?.baseUnit)
+                                ),
                                 style = MaterialTheme.typography.bodyMedium
                             )
                         }
@@ -438,7 +461,7 @@ internal fun ItemEditorDialog(
                     val expanded = showAdvanced || category.isBlank() || packageError != null
                     Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)) {
                         TextButton(onClick = { showAdvanced = !showAdvanced }) {
-                            Text("Napredno: kategorija, brend, pakovanje")
+                            Text(stringResource(R.string.list_editor_advanced))
                             AppIcon(
                                 if (expanded) R.drawable.ic_expand_less else R.drawable.ic_expand_more,
                                 contentDescription = null
@@ -449,8 +472,8 @@ internal fun ItemEditorDialog(
                             OutlinedTextField(
                                 value = category,
                                 onValueChange = { category = it },
-                                label = { Text("Kategorija") },
-                                supportingText = { Text("Obično isto što i naziv.") },
+                                label = { Text(stringResource(R.string.list_editor_category)) },
+                                supportingText = { Text(stringResource(R.string.list_editor_category_hint)) },
                                 isError = category.isBlank(),
                                 singleLine = true,
                                 modifier = Modifier.fillMaxWidth()
@@ -458,7 +481,7 @@ internal fun ItemEditorDialog(
                             OutlinedTextField(
                                 value = brand,
                                 onValueChange = { brand = it },
-                                label = { Text("Samo ovaj brend (opciono)") },
+                                label = { Text(stringResource(R.string.list_editor_brand)) },
                                 singleLine = true,
                                 modifier = Modifier.fillMaxWidth()
                             )
@@ -466,7 +489,7 @@ internal fun ItemEditorDialog(
                                 OutlinedTextField(
                                     value = minPackage,
                                     onValueChange = { minPackage = it },
-                                    label = { Text("Pakovanje od") },
+                                    label = { Text(stringResource(R.string.list_editor_package_from)) },
                                     suffix = { Text(unitLabel) },
                                     isError = packageError != null && minPackage.isNotBlank(),
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
@@ -476,7 +499,7 @@ internal fun ItemEditorDialog(
                                 OutlinedTextField(
                                     value = maxPackage,
                                     onValueChange = { maxPackage = it },
-                                    label = { Text("do") },
+                                    label = { Text(stringResource(R.string.list_editor_package_to)) },
                                     suffix = { Text(unitLabel) },
                                     isError = packageError != null && maxPackage.isNotBlank(),
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
@@ -486,7 +509,7 @@ internal fun ItemEditorDialog(
                             }
                             packageError?.let { message ->
                                 Text(
-                                    message,
+                                    stringResource(message),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.error
                                 )
@@ -515,7 +538,7 @@ private fun RuleChooser(
                     // Sa krupnim slovima tekst se smanji da stane, umesto „Proizvo".
                     label = {
                         BasicText(
-                            option.label,
+                            stringResource(option.label),
                             maxLines = 1,
                             style = LocalTextStyle.current.copy(color = LocalContentColor.current),
                             autoSize = TextAutoSize.StepBased(maxFontSize = LocalTextStyle.current.fontSize)
@@ -525,7 +548,7 @@ private fun RuleChooser(
             }
         }
         Text(
-            RuleOptions.first { it.rule == selected }.description,
+            stringResource(RuleOptions.first { it.rule == selected }.description),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -553,7 +576,7 @@ private fun QuantityStepper(
                 current?.let { onValueChange(inputNumber((it - 1).coerceAtLeast(1.0))) }
             }
         ) {
-            AppIcon(R.drawable.ic_remove, contentDescription = "Manje")
+            AppIcon(R.drawable.ic_remove, contentDescription = stringResource(R.string.list_cd_less))
         }
         OutlinedTextField(
             value = value,
@@ -567,7 +590,7 @@ private fun QuantityStepper(
         FilledTonalIconButton(
             onClick = { onValueChange(inputNumber((current ?: 0.0) + 1)) }
         ) {
-            AppIcon(R.drawable.ic_add, contentDescription = "Više")
+            AppIcon(R.drawable.ic_add, contentDescription = stringResource(R.string.list_cd_more))
         }
     }
 }
@@ -583,8 +606,8 @@ internal fun PasteItemsDialog(
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
 
     FullScreenDialog(
-        title = "Nalepi spisak",
-        confirmLabel = "Dodaj sve",
+        title = stringResource(R.string.list_paste_list),
+        confirmLabel = stringResource(R.string.list_paste_add_all),
         confirmEnabled = lineCount > 0,
         onConfirm = { onSave(text) },
         onDismiss = onDismiss
@@ -599,15 +622,14 @@ internal fun PasteItemsDialog(
             verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)
         ) {
             Text(
-                "Svaki red je jedna stavka. Količinu dopiši uz naziv, " +
-                    "a aplikacija bira najpovoljniji proizvod.",
+                stringResource(R.string.list_paste_hint),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             OutlinedTextField(
                 value = text,
                 onValueChange = { text = it },
-                placeholder = { Text("mleko\nhleb\nćevapi 3kg\n2x pivo") },
+                placeholder = { Text(stringResource(R.string.list_paste_placeholder)) },
                 textStyle = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -615,7 +637,14 @@ internal fun PasteItemsDialog(
                     .focusRequester(focusRequester)
             )
             Text(
-                if (lineCount == 0) "Nijedna stavka još nije upisana." else "Biće dodato: ${items(lineCount)}",
+                if (lineCount == 0) {
+                    stringResource(R.string.list_paste_none)
+                } else {
+                    stringResource(
+                        R.string.list_paste_will_add,
+                        pluralStringResource(R.plurals.count_items, lineCount, lineCount)
+                    )
+                },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(bottom = AppSpacing.md)
@@ -628,15 +657,16 @@ internal fun PasteItemsDialog(
  * Why a pack size cannot be saved, or null. A size needs its unit: "Pakovanje
  * od 6" alone was read as 6 ml or 6 g, never six pieces.
  */
-internal fun packageSizeError(min: String, max: String, unit: AmountUnit?): String? {
+@StringRes
+internal fun packageSizeError(min: String, max: String, unit: AmountUnit?): Int? {
     if (min.isBlank() && max.isBlank()) return null
     val low = min.toDecimalOrNull()
     val high = max.toDecimalOrNull()
     return when {
         (min.isNotBlank() && (low == null || low <= 0)) ||
-            (max.isNotBlank() && (high == null || high <= 0)) -> "Upiši broj veći od nule."
-        unit == null -> "Izaberi jedinicu iznad: kg, g, l, ml ili kom."
-        low != null && high != null && low > high -> "„Od“ ne može biti veće od „do“."
+            (max.isNotBlank() && (high == null || high <= 0)) -> R.string.list_package_error_positive
+        unit == null -> R.string.list_package_error_unit
+        low != null && high != null && low > high -> R.string.list_package_error_order
         else -> null
     }
 }

@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Home -->
+    <string name="dashboard_title">Home</string>
+    <string name="dashboard_ok">OK</string>
+    <string name="dashboard_tab_receipts">Receipts</string>
+    <string name="dashboard_tab_shops">Stores</string>
+    <string name="dashboard_tab_categories">Categories</string>
+    <string name="dashboard_tab_habits">Habits</string>
+    <string name="dashboard_no_receipts">No receipts for this month.</string>
+    <string name="dashboard_no_shops">No store data yet.</string>
+    <string name="dashboard_no_habits">Habits show up once you scan receipts with line items.</string>
+    <plurals name="dashboard_receipt_count">
+        <item quantity="one">%d receipt</item>
+        <item quantity="other">%d receipts</item>
+    </plurals>
+    <plurals name="dashboard_times_count">
+        <item quantity="one">%d time</item>
+        <item quantity="other">%d times</item>
+    </plurals>
+    <string name="dashboard_last_bought">last bought %1$s</string>
+    <string name="dashboard_previous_month">Previous month</string>
+    <string name="dashboard_next_month">Next month</string>
+    <string name="dashboard_monthly_total">TOTAL MONTHLY SPENDING</string>
+    <!-- %1$s is the sign (+ or a true minus), %2$d the percentage, %3$s the month before -->
+    <string name="dashboard_change_vs_month">%1$s%2$d%% vs. %3$s</string>
+    <string name="dashboard_stat_receipts">Receipts</string>
+    <string name="dashboard_stat_shops">Stores</string>
+    <string name="dashboard_stat_average">Average basket</string>
+    <string name="dashboard_active_list">ACTIVE LIST</string>
+    <string name="dashboard_my_list">My list</string>
+    <string name="dashboard_list_empty">Your list is empty</string>
+    <string name="dashboard_open_list">Open list (%1$s)</string>
+    <string name="dashboard_weekly_title">Weekly spending</string>
+    <string name="dashboard_busiest_week">Busiest week: %1$s RSD • average %2$s RSD/wk</string>
+    <string name="dashboard_analytics_title">Spending breakdown</string>
+    <string name="dashboard_previous_view">Previous view</string>
+    <string name="dashboard_next_view">Next view</string>
+
+    <!-- Receipt scanning -->
+    <string name="receipt_scanning">Saving receipt…</string>
+    <string name="receipt_saved">Receipt saved: %1$s, %2$s.</string>
+    <string name="receipt_not_fiscal">That isn\'t a QR code from a fiscal receipt.</string>
+    <string name="receipt_scanner_downloading">The Google scanner is still downloading to your phone. Wait a minute and try again.</string>
+    <string name="receipt_scan_failed">Scanning failed. Try again.</string>
+    <string name="receipt_not_saved">Receipt not saved. Check your internet connection and try again.</string>
+
+    <!-- Loyalty cards -->
+    <string name="loyalty_title">Loyalty cards</string>
+    <string name="loyalty_cashier_hint">If the code won\'t scan, the cashier can type in the number.</string>
+    <string name="loyalty_delete">Delete card</string>
+    <string name="loyalty_new_card">New card</string>
+    <string name="loyalty_name">Name</string>
+    <string name="loyalty_number">Card number</string>
+    <string name="loyalty_scanning">Scanning…</string>
+    <string name="loyalty_scan">Scan the code on the card</string>
+    <string name="loyalty_code_format">Code type: %1$s</string>
+    <string name="loyalty_cancel">Cancel</string>
+    <string name="loyalty_subtitle">Barcodes for the checkout</string>
+    <string name="loyalty_add">Add card</string>
+    <string name="loyalty_empty">Add the cards you carry in your wallet and open them from here at the checkout. Cards are saved to your account, so they move to a new phone too.</string>
+    <string name="loyalty_wallet">Your wallet</string>
+    <string name="loyalty_barcode">Barcode</string>
+    <string name="loyalty_tap_to_enlarge">Tap for a bigger code</string>
+    <string name="loyalty_scan_failed_retry">Scanning failed. Try again.</string>
+    <string name="loyalty_scan_failed">Scanning failed.</string>
+    <string name="loyalty_not_saved">Card not saved. Check the number and try again.</string>
+
+    <!-- Price alerts (notifications) -->
+    <string name="price_watch_channel">Price drops</string>
+    <string name="price_watch_title">Price drop: %1$s</string>
+    <string name="price_watch_text">%1$s → %2$s (%3$s)</string>
+</resources>

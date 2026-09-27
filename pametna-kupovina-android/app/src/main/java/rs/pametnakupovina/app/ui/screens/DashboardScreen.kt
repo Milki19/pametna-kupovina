@@ -1,5 +1,7 @@
 package rs.pametnakupovina.app.ui.screens
 
+import android.content.res.Resources
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,6 +24,9 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.withStyle
@@ -65,20 +70,21 @@ import rs.pametnakupovina.app.ui.components.heroColors
 import rs.pametnakupovina.app.ui.components.AppSpacing
 import rs.pametnakupovina.app.ui.components.AppTopBar
 import rs.pametnakupovina.app.ui.components.NoticeBanner
-import rs.pametnakupovina.app.ui.counted
+import rs.pametnakupovina.app.text.asString
+import rs.pametnakupovina.app.text.uiText
 import rs.pametnakupovina.app.ui.date
 import rs.pametnakupovina.app.ui.dateTime
-import rs.pametnakupovina.app.ui.items
 import rs.pametnakupovina.app.ui.money
 import rs.pametnakupovina.app.ui.monthName
+import rs.pametnakupovina.app.ui.monthWord
 
 private val BELGRADE = ZoneId.of("Europe/Belgrade")
 
-private enum class DashboardTab(val label: String, val tag: String) {
-    RECEIPTS("Računi", "tab-receipts"),
-    SHOPS("Prodavnice", "tab-shops"),
-    CATEGORIES("Kategorije", "tab-categories"),
-    HABITS("Navike", "tab-habits")
+private enum class DashboardTab(@param:StringRes val label: Int, val tag: String) {
+    RECEIPTS(R.string.dashboard_tab_receipts, "tab-receipts"),
+    SHOPS(R.string.dashboard_tab_shops, "tab-shops"),
+    CATEGORIES(R.string.dashboard_tab_categories, "tab-categories"),
+    HABITS(R.string.dashboard_tab_habits, "tab-habits")
 }
 
 /**
@@ -95,13 +101,15 @@ fun DashboardScreen(
     val listItemCount by dashboardViewModel.listItemCount.collectAsStateWithLifecycle()
     val receiptState by receiptViewModel.uiState.collectAsStateWithLifecycle()
     var tab by rememberSaveable { mutableStateOf(DashboardTab.RECEIPTS) }
+    // Redovi se slažu van kompozicije (u LazyColumn bloku), pa tekst čitaju odavde.
+    val resources = LocalResources.current
 
     val monthReceipts = remember(receiptState.receipts, receiptState.selectedMonth) {
         receiptState.receipts.filter { isInMonth(it.issuedAt, receiptState.selectedMonth) }
     }
     val canGoForward = receiptState.selectedMonth.isBefore(LocalDate.now().withDayOfMonth(1))
 
-    Scaffold(topBar = { AppTopBar(title = "Početna") }) { padding ->
+    Scaffold(topBar = { AppTopBar(title = stringResource(R.string.dashboard_title)) }) { padding ->
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -115,12 +123,12 @@ fun DashboardScreen(
         ) {
             // Skeniranje iz menija javlja ishod ovde; bez ovoga su i uspeh i
             // greška prolazili ćutke.
-            val receiptNotice = if (receiptState.scanning) "Zavodim račun…" else receiptState.message
+            val receiptNotice = if (receiptState.scanning) uiText(R.string.receipt_scanning) else receiptState.message
             receiptNotice?.let { text ->
                 item(key = "receipt-notice") {
                     NoticeBanner(
-                        text = text,
-                        actionLabel = "U redu".takeUnless { receiptState.scanning },
+                        text = text.asString(),
+                        actionLabel = stringResource(R.string.dashboard_ok).takeUnless { receiptState.scanning },
                         onAction = receiptViewModel::dismissMessage.takeUnless { receiptState.scanning },
                         modifier = Modifier.testTag("receipt-notice")
                     )
@@ -143,26 +151,26 @@ fun DashboardScreen(
             }
             val (rows, emptyText) = when (tab) {
                 DashboardTab.RECEIPTS -> monthReceipts.map {
-                    DashboardRow(it.shopName, receiptTimestamp(it.issuedAt), money(it.totalAmount))
-                } to "Nema računa za ovaj mesec."
+                    DashboardRow(it.shopName, receiptTimestamp(it.issuedAt, resources), money(it.totalAmount))
+                } to resources.getString(R.string.dashboard_no_receipts)
 
                 DashboardTab.SHOPS -> {
                     val total = receiptState.byShop.sumOf { it.spent }
                     receiptState.byShop.map {
                         DashboardRow(
                             it.shopName,
-                            counted(it.receipts, "račun", "računa", "računa"),
+                            resources.getQuantityString(R.plurals.dashboard_receipt_count, it.receipts, it.receipts),
                             "${wholeDinars(it.spent)} RSD",
                             share = share(it.spent, total)
                         )
-                    } to "Još nema podataka o prodavnicama."
+                    } to resources.getString(R.string.dashboard_no_shops)
                 }
 
                 DashboardTab.CATEGORIES -> {
                     val total = receiptState.byCategory.sumOf { it.spent }
                     receiptState.byCategory.map {
                         DashboardRow(it.category, trailing = "${wholeDinars(it.spent)} RSD", share = share(it.spent, total))
-                    } to "Nema računa za ovaj mesec."
+                    } to resources.getString(R.string.dashboard_no_receipts)
                 }
 
                 // Navike su za sve vreme, ne za izabrani mesec: to je ono što
@@ -171,11 +179,13 @@ fun DashboardScreen(
                     DashboardRow(
                         habit.name,
                         listOfNotNull(
-                            counted(habit.times, "put", "puta", "puta"),
-                            belgradeDay(habit.lastBought)?.let { "poslednji put ${date(it.toString())}" }
+                            resources.getQuantityString(R.plurals.dashboard_times_count, habit.times, habit.times),
+                            belgradeDay(habit.lastBought)?.let {
+                                resources.getString(R.string.dashboard_last_bought, date(it.toString()))
+                            }
                         ).joinToString(" • ")
                     )
-                } to "Navike se vide kad skeniraš račune sa stavkama."
+                } to resources.getString(R.string.dashboard_no_habits)
             }
             item(key = "analytics") {
                 AnalyticsCard(tab, onSelect = { tab = it }, rows, emptyText)
@@ -216,7 +226,7 @@ private fun MonthSpendingCard(
                 ) {
                     AppIcon(
                         R.drawable.ic_chevron_right,
-                        contentDescription = "Prethodni mesec",
+                        contentDescription = stringResource(R.string.dashboard_previous_month),
                         modifier = Modifier.rotate(180f)
                     )
                 }
@@ -231,11 +241,11 @@ private fun MonthSpendingCard(
                     enabled = canGoForward,
                     modifier = Modifier.testTag("next-month")
                 ) {
-                    AppIcon(R.drawable.ic_chevron_right, contentDescription = "Sledeći mesec")
+                    AppIcon(R.drawable.ic_chevron_right, contentDescription = stringResource(R.string.dashboard_next_month))
                 }
             }
             Text(
-                "UKUPNA MESEČNA POTROŠNJA",
+                stringResource(R.string.dashboard_monthly_total),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -246,7 +256,12 @@ private fun MonthSpendingCard(
                 val change = ((spent - previous) / previous * 100).roundToInt()
                 StatusPill(
                     // Pravi minus: crtica se kod cifara iste širine razmakne.
-                    "${if (change > 0) "+" else "−"}${abs(change)}% u odnosu na ${monthName(previousMonth).substringBefore(' ')}",
+                    stringResource(
+                        R.string.dashboard_change_vs_month,
+                        if (change > 0) "+" else "−",
+                        abs(change),
+                        monthWord(previousMonth)
+                    ),
                     if (change > 0) StatusTone.WARNING else StatusTone.POSITIVE
                 )
             }
@@ -262,10 +277,10 @@ private fun MonthSpendingCard(
                     )
                     .padding(vertical = AppSpacing.md)
             ) {
-                MonthStat("Računa", receipts.toString(), Modifier.weight(1f))
-                MonthStat("Prodavnica", shops.toString(), Modifier.weight(1f))
+                MonthStat(stringResource(R.string.dashboard_stat_receipts), receipts.toString(), Modifier.weight(1f))
+                MonthStat(stringResource(R.string.dashboard_stat_shops), shops.toString(), Modifier.weight(1f))
                 MonthStat(
-                    "Prosečna korpa",
+                    stringResource(R.string.dashboard_stat_average),
                     if (receipts > 0) wholeDinars(spent / receipts) else "–",
                     Modifier.weight(1f)
                 )
@@ -311,8 +326,8 @@ private fun ActiveListCard(itemCount: Int, onOpenList: () -> Unit) {
             modifier = Modifier.padding(AppSpacing.lg),
             verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)
         ) {
-            Text("AKTIVNA LISTA", style = MaterialTheme.typography.labelMedium)
-            Text("Moj spisak", style = MaterialTheme.typography.headlineSmall)
+            Text(stringResource(R.string.dashboard_active_list), style = MaterialTheme.typography.labelMedium)
+            Text(stringResource(R.string.dashboard_my_list), style = MaterialTheme.typography.headlineSmall)
             Surface(
                 onClick = onOpenList,
                 shape = RoundedCornerShape(14.dp),
@@ -330,7 +345,14 @@ private fun ActiveListCard(itemCount: Int, onOpenList: () -> Unit) {
                     AppIcon(R.drawable.ic_content_paste, contentDescription = null)
                     Spacer(Modifier.width(AppSpacing.md))
                     Text(
-                        if (itemCount == 0) "Spisak je prazan" else "Otvori spisak (${items(itemCount)})",
+                        if (itemCount == 0) {
+                            stringResource(R.string.dashboard_list_empty)
+                        } else {
+                            stringResource(
+                                R.string.dashboard_open_list,
+                                pluralStringResource(R.plurals.count_items, itemCount, itemCount)
+                            )
+                        },
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.weight(1f)
                     )
@@ -376,7 +398,7 @@ private fun WeeklyBarChart(weeks: List<WeekBar>, modifier: Modifier = Modifier) 
             modifier = Modifier.padding(AppSpacing.lg),
             verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)
         ) {
-            Text("Nedeljni pregled potrošnje", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.dashboard_weekly_title), style = MaterialTheme.typography.titleMedium)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -436,9 +458,11 @@ private fun WeeklyBarChart(weeks: List<WeekBar>, modifier: Modifier = Modifier) 
             }
             busiest?.let {
                 Text(
-                    "Najveća nedelja: ${wholeDinars(it.spent)} RSD • prosek ${
+                    stringResource(
+                        R.string.dashboard_busiest_week,
+                        wholeDinars(it.spent),
                         wholeDinars(weeks.sumOf { w -> w.spent } / weeks.size)
-                    } RSD/ned",
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -472,7 +496,7 @@ private fun AnalyticsCard(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(AppSpacing.lg)) {
-            Text("Analitika troškova", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.dashboard_analytics_title), style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(AppSpacing.md))
             PillTabs(selected, onSelect)
             if (rows.isEmpty()) {
@@ -540,6 +564,7 @@ private fun PillTabs(selected: DashboardTab, onSelect: (DashboardTab) -> Unit) {
     val style = MaterialTheme.typography.labelLarge
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
+    val labels = tabs.map { stringResource(it.label) }
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
@@ -547,7 +572,7 @@ private fun PillTabs(selected: DashboardTab, onSelect: (DashboardTab) -> Unit) {
             .padding(AppSpacing.xs)
     ) {
         val labelRoom = with(density) { (maxWidth / tabs.size - AppSpacing.xs).roundToPx() }
-        val fits = tabs.all { measurer.measure(it.label, style).size.width <= labelRoom }
+        val fits = labels.all { measurer.measure(it, style).size.width <= labelRoom }
         if (fits) {
             Row {
                 tabs.forEach { tab ->
@@ -568,7 +593,7 @@ private fun PillTabs(selected: DashboardTab, onSelect: (DashboardTab) -> Unit) {
                             .testTag(tab.tag)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
-                            Text(tab.label, style = style, maxLines = 1)
+                            Text(labels[tab.ordinal], style = style, maxLines = 1)
                         }
                     }
                 }
@@ -581,12 +606,12 @@ private fun PillTabs(selected: DashboardTab, onSelect: (DashboardTab) -> Unit) {
                 ) {
                     AppIcon(
                         R.drawable.ic_chevron_right,
-                        contentDescription = "Prethodni prikaz",
+                        contentDescription = stringResource(R.string.dashboard_previous_view),
                         modifier = Modifier.rotate(180f)
                     )
                 }
                 Text(
-                    selected.label,
+                    labels[selected.ordinal],
                     style = style,
                     color = MaterialTheme.colorScheme.primary,
                     textAlign = TextAlign.Center,
@@ -598,13 +623,14 @@ private fun PillTabs(selected: DashboardTab, onSelect: (DashboardTab) -> Unit) {
                     onClick = { onSelect(tabs[selected.ordinal + 1]) },
                     enabled = selected.ordinal < tabs.lastIndex
                 ) {
-                    AppIcon(R.drawable.ic_chevron_right, contentDescription = "Sledeći prikaz")
+                    AppIcon(R.drawable.ic_chevron_right, contentDescription = stringResource(R.string.dashboard_next_view))
                 }
             }
         }
     }
 }
 
+@Composable
 private fun monthTitle(month: LocalDate): String =
     monthName(month).replaceFirstChar(Char::uppercase)
 
@@ -617,8 +643,8 @@ private fun belgradeDay(instantIso: String): LocalDate? = try {
 private fun isInMonth(issuedAtIso: String, month: LocalDate): Boolean =
     belgradeDay(issuedAtIso)?.let { it.year == month.year && it.month == month.month } ?: false
 
-private fun receiptTimestamp(issuedAtIso: String): String = try {
-    dateTime(Instant.parse(issuedAtIso).toEpochMilli())
+private fun receiptTimestamp(issuedAtIso: String, resources: Resources): String = try {
+    dateTime(Instant.parse(issuedAtIso).toEpochMilli(), resources)
 } catch (_: Exception) {
     issuedAtIso
 }

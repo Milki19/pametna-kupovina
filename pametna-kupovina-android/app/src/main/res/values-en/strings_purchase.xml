@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- History -->
+    <string name="purchase_history_title">History</string>
+    <string name="purchase_ok">OK</string>
+    <string name="purchase_receipts_header">Receipts</string>
+    <string name="purchase_active_header">In progress</string>
+    <string name="purchase_finished_header">Finished</string>
+    <string name="purchase_storage_note">Plans and progress are kept on this phone and work offline; clearing the app\'s data deletes them too. Scanned receipts are saved to your account, so they stay even when you switch phones.</string>
+    <string name="purchase_spending_title">Spending</string>
+    <string name="purchase_spending_empty">Scan a receipt after shopping and you\'ll see here how much you spent and where.</string>
+    <plurals name="purchase_receipt_count">
+        <item quantity="one">%d receipt</item>
+        <item quantity="other">%d receipts</item>
+    </plurals>
+    <string name="purchase_scanning">Scanning…</string>
+    <string name="purchase_scan_receipt">Scan receipt</string>
+    <string name="purchase_empty_title">No saved shopping trips yet</string>
+    <string name="purchase_empty_hint">Calculate a plan and choose to start shopping with it.</string>
+    <string name="purchase_session_progress">%1$s · %2$d of %3$d bought</string>
+
+    <!-- Shopping in progress -->
+    <string name="purchase_in_progress_title">Shopping</string>
+    <string name="purchase_plan_subtitle">Plan from %1$s · %2$s</string>
+    <string name="purchase_route_overview">Route overview in Google Maps</string>
+    <string name="purchase_loading_session">Loading saved shopping trip…</string>
+    <string name="purchase_logging_receipt">Saving receipt…</string>
+    <string name="purchase_archived_notice">This shopping trip is finished. The checkboxes stay locked until you reopen it, and you can still scan the receipt.</string>
+    <string name="purchase_incomplete_notice">The plan is incomplete. Items without an offer are at the bottom.</string>
+    <string name="purchase_no_store_header">No store</string>
+    <string name="purchase_reopen">Reopen shopping trip</string>
+    <string name="purchase_finish">Finish shopping</string>
+    <string name="purchase_footer_note">The original list stays unchanged. Maps need a connection or a map downloaded in advance.</string>
+    <string name="purchase_finish_confirm_title">Finish shopping?</string>
+    <string name="purchase_finish_confirm_text">Bought %1$d of %2$d. Items you didn\'t buy won\'t be marked as bought. The plan and notes stay in your history.\n\nSpending counts the scanned receipt, not the shopping trip itself.</string>
+    <string name="purchase_finish_and_scan">Finish and scan receipt</string>
+    <string name="purchase_finish_short">Finish</string>
+    <string name="purchase_just_finish">Just finish</string>
+    <string name="purchase_back">Back</string>
+
+    <!-- Progress header -->
+    <string name="purchase_progress_label">SHOPPING PROGRESS</string>
+    <string name="purchase_bought_of">Bought %1$d of %2$d</string>
+    <string name="purchase_planned_label">planned</string>
+    <string name="purchase_remaining">%1$d left to decide. Prices in a saved plan don\'t refresh.</string>
+    <plurals name="purchase_paid_for_items">
+        <item quantity="one">Recorded as paid: %2$s for %1$d item</item>
+        <item quantity="other">Recorded as paid: %2$s for %1$d items</item>
+    </plurals>
+    <string name="purchase_loyalty_cards_link">Loyalty cards for checkout — show barcode</string>
+
+    <!-- Store sections and item rows -->
+    <string name="purchase_route_to_store">Directions to %1$s</string>
+    <string name="purchase_more_for_item">More for %1$s</string>
+    <string name="purchase_not_in_store">Not in store</string>
+    <string name="purchase_skip">Skip</string>
+    <string name="purchase_details">Details</string>
+    <string name="purchase_back_to_list">Put back on list</string>
+    <string name="purchase_note_value">Note: %1$s</string>
+    <string name="purchase_paid_value">Paid %1$s</string>
+    <string name="purchase_status_not_found_partial">Not in store, bought %1$s of %2$s</string>
+    <string name="purchase_status_skipped">Skipped</string>
+    <string name="purchase_status_skipped_partial">Skipped, bought %1$s of %2$s</string>
+    <string name="purchase_status_partial">Partly bought, %1$s of %2$s</string>
+
+    <!-- Item details dialog -->
+    <plurals name="purchase_planned_packages">
+        <item quantity="one">Planned: %1$s package</item>
+        <item quantity="other">Planned: %1$s packages</item>
+    </plurals>
+    <string name="purchase_planned_packages_fraction">Planned: %1$s packages</string>
+    <string name="purchase_bought_field">Bought (partial is fine)</string>
+    <string name="purchase_actual_total_field">Actual total, RSD (optional)</string>
+    <string name="purchase_note_field">Note</string>
+
+    <!-- Errors -->
+    <string name="purchase_error_active_unavailable">The started shopping trip isn\'t available.</string>
+    <string name="purchase_error_sessions_unavailable">Saved shopping trips aren\'t available.</string>
+    <string name="purchase_error_session_unavailable">This shopping trip isn\'t available.</string>
+    <string name="purchase_error_save_failed">Couldn\'t save. Try again.</string>
+    <string name="purchase_error_plan_unavailable">The plan isn\'t available yet.</string>
+    <string name="purchase_error_plan_mismatch">This plan doesn\'t belong to this calculation.</string>
+    <string name="purchase_error_not_found">Shopping trip not found.</string>
+    <string name="purchase_error_archived">Reopen the finished shopping trip first.</string>
+    <string name="purchase_error_newer_app">This plan needs a newer version of the app.</string>
+    <string name="purchase_error_invalid_planned">Invalid planned quantity.</string>
+    <string name="purchase_error_bought_range">The bought quantity must be between 0 and the planned quantity.</string>
+    <string name="purchase_error_note_length">A note can have at most %1$d characters.</string>
+    <string name="purchase_error_price">Enter a non-negative total with at most two decimal places.</string>
+</resources>

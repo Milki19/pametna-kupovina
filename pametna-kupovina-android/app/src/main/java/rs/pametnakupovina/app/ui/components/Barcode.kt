@@ -8,10 +8,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.core.graphics.createBitmap
 import androidx.core.graphics.set
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
+import rs.pametnakupovina.app.R
 
 /**
  * Kod mora da proradi iz prve, pred redom ljudi na kasi, pa se crta u crno na
@@ -23,7 +25,7 @@ fun Barcode(
     value: String,
     format: String,
     modifier: Modifier = Modifier,
-    contentDescription: String = "Crtični kod: $value"
+    contentDescription: String = stringResource(R.string.barcode_content_description, value)
 ) {
     val bitmap = remember(value, format) { renderBarcode(value, format) } ?: return
 

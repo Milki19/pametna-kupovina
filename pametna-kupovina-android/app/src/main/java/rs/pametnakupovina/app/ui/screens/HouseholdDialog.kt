@@ -14,6 +14,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -40,6 +41,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Surface
 import androidx.compose.ui.graphics.Color
 import rs.pametnakupovina.app.R
+import rs.pametnakupovina.app.text.UiText
+import rs.pametnakupovina.app.text.asString
+import rs.pametnakupovina.app.text.asUiText
+import rs.pametnakupovina.app.text.uiText
 import rs.pametnakupovina.app.ui.components.StatusPill
 import rs.pametnakupovina.app.ui.components.StatusTone
 import rs.pametnakupovina.app.ui.components.TonalActionButton
@@ -49,7 +54,7 @@ data class HouseholdUiState(
     val inviteQr: String? = null,
     val busy: Boolean = false,
     val joined: Boolean = false,
-    val message: String? = null
+    val message: UiText? = null
 )
 
 @HiltViewModel
@@ -61,19 +66,19 @@ class HouseholdViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(HouseholdUiState())
     val uiState: StateFlow<HouseholdUiState> = _uiState.asStateFlow()
 
-    fun invite() = run("Kod nije napravljen. Proveri internet i probaj ponovo.") {
+    fun invite() = run(uiText(R.string.household_invite_failed)) {
         val qr = repository.householdInvite()
         _uiState.update { it.copy(inviteQr = qr) }
         null
     }
 
-    fun join(activityContext: Context) = run("Pridruživanje nije uspelo. Probaj ponovo.") {
+    fun join(activityContext: Context) = run(uiText(R.string.household_join_failed)) {
         repository.joinHousehold(scanner.anyBarcode(activityContext).value)
         _uiState.update { it.copy(joined = true) }
-        "Sada delite spisak, račune i kartice."
+        uiText(R.string.household_joined)
     }
 
-    private fun run(failure: String, action: suspend () -> String?) {
+    private fun run(failure: UiText, action: suspend () -> UiText?) {
         if (_uiState.value.busy) return
         viewModelScope.launch {
             _uiState.update { it.copy(busy = true, message = null) }
@@ -84,9 +89,9 @@ class HouseholdViewModel @Inject constructor(
             } catch (_: ScanCancelled) {
                 null
             } catch (_: NotAHouseholdCode) {
-                "To nije kod za domaćinstvo."
+                uiText(R.string.household_not_a_code)
             } catch (error: HttpException) {
-                error.serverMessage() ?: failure
+                error.serverMessage()?.asUiText() ?: failure
             } catch (_: Exception) {
                 failure
             }
@@ -115,7 +120,7 @@ fun HouseholdDialog(
     }
     AlertDialog(
         onDismissRequest = close,
-        title = { Text("Domaćinstvo") },
+        title = { Text(stringResource(R.string.household_title)) },
         text = {
             Column(
                 verticalArrangement = Arrangement.spacedBy(AppSpacing.md),
@@ -138,33 +143,33 @@ fun HouseholdDialog(
                                 "QR_CODE",
                                 modifier = Modifier.size(200.dp).testTag("household-qr"),
                                 // Kod je ključ naloga; čitač ekrana ne treba da ga izgovara.
-                                contentDescription = "QR kod za pridruživanje domaćinstvu"
+                                contentDescription = stringResource(R.string.household_qr_description)
                             )
-                            StatusPill("Važi 15 minuta", StatusTone.WARNING)
+                            StatusPill(stringResource(R.string.household_code_validity), StatusTone.WARNING)
                         }
                     }
                     Text(
-                        "Neka ukućanin u svojoj aplikaciji otvori Meni → Domaćinstvo → " +
-                            "Pridruži se i skenira ovaj kod.",
+                        stringResource(R.string.household_join_instructions),
                         style = MaterialTheme.typography.bodyMedium
                     )
                 } else {
                     Text(
-                        "Ukućani dele isti spisak, račune i kartice. Kad se neko " +
-                            "pridruži, sve što je imao na svom telefonu prelazi u zajedničko.",
+                        stringResource(R.string.household_intro),
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
                 state.message?.let {
                     Text(
-                        it,
+                        it.asString(),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.testTag("household-message")
                     )
                 }
                 TonalActionButton(
-                    text = if (state.inviteQr == null) "Pozovi ukućanina" else "Novi kod",
+                    text = stringResource(
+                        if (state.inviteQr == null) R.string.household_invite else R.string.household_new_code
+                    ),
                     icon = R.drawable.ic_add,
                     primary = true,
                     enabled = !state.busy,
@@ -174,7 +179,7 @@ fun HouseholdDialog(
                         .testTag("household-invite")
                 )
                 TonalActionButton(
-                    text = "Pridruži se (skeniraj kod)",
+                    text = stringResource(R.string.household_join),
                     icon = R.drawable.ic_camera,
                     enabled = !state.busy && !state.joined,
                     onClick = { viewModel.join(context) },
@@ -185,7 +190,7 @@ fun HouseholdDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = close) { Text("Zatvori") }
+            TextButton(onClick = close) { Text(stringResource(R.string.common_close)) }
         }
     )
 }

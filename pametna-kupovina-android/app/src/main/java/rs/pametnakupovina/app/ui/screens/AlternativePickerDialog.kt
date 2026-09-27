@@ -19,7 +19,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
+import rs.pametnakupovina.app.R
 import rs.pametnakupovina.app.data.network.CanonicalProductSearchItemDto
 import rs.pametnakupovina.app.ui.ProductSearchUiState
 import rs.pametnakupovina.app.ui.components.AppSpacing
@@ -48,8 +50,12 @@ internal fun AlternativePickerDialog(
         amount != null && amount.isFinite() && amount > 0
 
     FullScreenDialog(
-        title = "Zamena za: $name",
-        confirmLabel = if (saving) "Računam…" else "Zameni",
+        title = stringResource(R.string.rec_alternative_title, name),
+        confirmLabel = if (saving) {
+            stringResource(R.string.rec_alternative_calculating)
+        } else {
+            stringResource(R.string.rec_replace)
+        },
         confirmEnabled = canSave,
         confirmModifier = Modifier.testTag("confirm-alternative"),
         onConfirm = { onSave(requireNotNull(selected), requireNotNull(amount)) },
@@ -72,8 +78,7 @@ internal fun AlternativePickerDialog(
         ) {
             item(key = "alternative-help") {
                 Text(
-                    "Proveri vrstu, masnoću i pakovanje, zamena nikad nije automatska. " +
-                        "Menja aktivni spisak i ponovo računa plan; sačuvane kupovine ostaju iste.",
+                    stringResource(R.string.rec_alternative_help),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -97,7 +102,7 @@ internal fun AlternativePickerDialog(
                     value = packages,
                     onValueChange = { packages = it },
                     enabled = !saving,
-                    label = { Text("Broj pakovanja novog proizvoda") },
+                    label = { Text(stringResource(R.string.rec_alternative_packages)) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()

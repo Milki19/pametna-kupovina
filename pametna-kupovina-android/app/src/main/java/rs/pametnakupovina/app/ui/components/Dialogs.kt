@@ -15,6 +15,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -67,7 +68,7 @@ fun FullScreenDialog(
                     },
                     navigationIcon = {
                         IconButton(onClick = onDismiss) {
-                            AppIcon(R.drawable.ic_close, contentDescription = "Zatvori")
+                            AppIcon(R.drawable.ic_close, contentDescription = stringResource(R.string.common_close))
                         }
                     },
                     actions = {

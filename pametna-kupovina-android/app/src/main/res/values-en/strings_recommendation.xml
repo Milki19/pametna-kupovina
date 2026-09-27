@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Recommendation screen: the three plans, the route and the replacements. -->
+<resources>
+    <string name="rec_title">Recommendations</string>
+    <string name="rec_loading">Calculating three scenarios…</string>
+    <string name="rec_location_missing_title">Location is no longer available</string>
+    <string name="rec_location_missing_message">Go back and choose a starting point again.</string>
+    <string name="rec_error_title">Result not available</string>
+
+    <!-- Similar product and replacements -->
+    <string name="rec_use_similar">Take similar</string>
+    <string name="rec_similar_explanation">Instead of “%1$s”, the plan takes the cheapest of this kind, any brand.</string>
+    <string name="rec_similar_kind_label">Kind</string>
+    <string name="rec_replace">Replace</string>
+    <string name="rec_view_alternatives">See replacements</string>
+    <string name="rec_alternative_title">Replacement for: %1$s</string>
+    <string name="rec_alternative_calculating">Calculating…</string>
+    <string name="rec_alternative_help">Check the kind, fat content and package, a replacement is never automatic. It changes the active list and recalculates the plan; saved purchases stay the same.</string>
+    <string name="rec_alternative_packages">Number of packages of the new product</string>
+
+    <!-- Starting and resuming a purchase -->
+    <string name="rec_new_purchase_title">Start a new purchase?</string>
+    <string name="rec_new_purchase_message">The new plan starts with empty checkboxes. The previous purchase and its checked items stay in “Purchases”.</string>
+    <string name="rec_new_purchase_confirm">Start a new purchase</string>
+    <string name="rec_saving_plan">Saving the plan…</string>
+    <string name="rec_checking_purchases">Checking saved purchases…</string>
+    <string name="rec_start_purchase">Start shopping with this plan</string>
+    <string name="rec_previous_title">You already have a purchase in progress</string>
+    <string name="rec_previous_progress">Plan from %1$s · %2$d of %3$d bought</string>
+    <string name="rec_resume_previous">Continue the previous purchase</string>
+
+    <!-- Route -->
+    <string name="rec_route_single">View the route to the store</string>
+    <plurals name="rec_route_stores">
+        <item quantity="one">View the route through %d store</item>
+        <item quantity="other">View the route through %d stores</item>
+    </plurals>
+    <string name="rec_route_hint">Google Maps shows the route first, and you start the navigation.</string>
+    <string name="rec_maps_not_installed">Install Google Maps or a browser to open the route.</string>
+
+    <!-- Origin -->
+    <string name="rec_origin_label">STARTING POINT</string>
+    <string name="rec_change_origin">Change</string>
+
+    <!-- Scenarios -->
+    <string name="rec_no_price_short">none</string>
+    <string name="rec_no_price">no price</string>
+    <string name="rec_total_caption">total</string>
+    <string name="rec_basket_short">basket %1$s</string>
+    <string name="rec_savings">You save %1$s RSD</string>
+    <string name="rec_basket_plus_travel">basket %1$s + travel and time %2$s</string>
+    <string name="rec_stat_stores">Stores</string>
+    <string name="rec_stat_distance">Distance</string>
+    <string name="rec_stat_time">Time</string>
+    <string name="rec_coverage">Basket coverage</string>
+    <plurals name="rec_covered_of">
+        <item quantity="one">%1$d of %2$d item</item>
+        <item quantity="other">%1$d of %2$d items</item>
+    </plurals>
+    <string name="rec_badge_single_store">Fastest and easiest</string>
+    <string name="rec_badge_balance">Recommended</string>
+    <string name="rec_badge_lowest_price">Lowest basket price</string>
+    <string name="rec_scenario_single_store">One store</string>
+    <string name="rec_scenario_balance">Recommended balance</string>
+    <string name="rec_scenario_lowest_price">Lowest price</string>
+    <string name="rec_short_single_store">One stop</string>
+    <string name="rec_short_balance">Best overall</string>
+    <string name="rec_short_lowest_price">Cheapest basket</string>
+
+    <!-- Stores and items -->
+    <string name="rec_store_leg">%1$s · about %2$s</string>
+    <string name="rec_store_no_items">No items assigned.</string>
+    <string name="rec_many_small_packs">Many small packages</string>
+    <string name="rec_surplus">you get %1$s, %2$s extra</string>
+    <string name="rec_unresolved_header">No offer</string>
+    <string name="rec_status_needs_confirmation">Needs confirmation</string>
+    <string name="rec_status_unmatched">Not found</string>
+    <string name="rec_status_no_price">No price</string>
+    <string name="rec_status_available">Available</string>
+
+    <!-- Chains without known addresses -->
+    <string name="rec_unlocated_header">Chains without a known address</string>
+    <string name="rec_unlocated_notice_title">We don\'t know which store this price applies to</string>
+    <string name="rec_unlocated_notice_text">These chains publish prices but not store addresses. That\'s why they aren\'t in the plan, and we can\'t confirm that a store near you has this product at this price.</string>
+    <string name="rec_unlocated_selected_basket">Basket in the selected plan: %1$s.</string>
+    <string name="rec_unconfirmed_store">Unconfirmed store</string>
+    <string name="rec_cheaper_basket">Cheaper basket</string>
+
+    <!-- How it was calculated -->
+    <string name="rec_calc_title">How it was calculated</string>
+    <string name="rec_calc_data_as_of">Prices come from the price list of %1$s; a price list doesn\'t say whether the item is on the shelf.</string>
+    <string name="rec_calc_no_prices">There are no valid prices for this scenario.</string>
+    <string name="rec_calc_costs">Basket %1$s, travel %2$s, time %3$s, stops %4$s.</string>
+    <string name="rec_calc_rates">We count travel at %1$s per kilometer, time at %2$s per hour and %3$s per stop.</string>
+    <string name="rec_calc_approximate">Distances are straight-line estimates; the actual route is usually longer.</string>
+    <plurals name="rec_calc_candidates">
+        <item quantity="one">Considered %1$d store within %2$s km.</item>
+        <item quantity="other">Considered %1$d stores within %2$s km.</item>
+    </plurals>
+    <plurals name="rec_calc_max_age">
+        <item quantity="one">Prices no older than %d day get priority.</item>
+        <item quantity="other">Prices no older than %d days get priority.</item>
+    </plurals>
+    <string name="rec_calc_sources">Price sources: %1$s.</string>
+    <string name="rec_calc_sources_none">not listed</string>
+
+    <!-- Warnings on the plan -->
+    <plurals name="rec_warning_unrecognised">
+        <item quantity="one">We don\'t recognize %d item, so it isn\'t in the total.</item>
+        <item quantity="other">We don\'t recognize %d items, so they aren\'t in the total.</item>
+    </plurals>
+    <plurals name="rec_warning_unpriced">
+        <item quantity="one">The plan is incomplete: %d item has no offer in these stores.</item>
+        <item quantity="other">The plan is incomplete: %d items have no offer in these stores.</item>
+    </plurals>
+    <string name="rec_warning_small_packs">Made of many small packages: %1$s. Check whether that suits you or choose a bigger package.</string>
+    <string name="rec_warning_old_prices">Prices come from the price list of %1$s, not today\'s. Check them before shopping.</string>
+</resources>

@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Spisak za kupovinu, unos stavke, nalepljen spisak i provera proizvoda. -->
+<resources>
+    <!-- Shopping list screen -->
+    <string name="list_title">Moj spisak</string>
+    <string name="list_subtitle_offline">Bez mreže, izmene čekaju slanje</string>
+    <string name="list_action_sending">Šaljem spisak…</string>
+    <string name="list_action_calculate">Izračunaj</string>
+    <string name="list_loading">Učitavanje spiska…</string>
+    <string name="list_add_item">Dodaj stavku</string>
+    <string name="list_paste_list">Nalepi spisak</string>
+    <string name="list_items_header">Stavke na spisku</string>
+    <string name="list_snackbar_ok">U redu</string>
+    <string name="list_snackbar_deleted">Obrisano: %1$s</string>
+    <string name="list_snackbar_undo">Vrati</string>
+    <string name="list_empty_title">Spisak je prazan</string>
+    <string name="list_empty_text">Nalepi spisak iz poruke ili beleške, ili dodaj stavku po stavku.</string>
+    <string name="list_skipped_title">Neke stavke nisu poslate</string>
+    <plurals name="list_skipped_text">
+        <item quantity="one">Server nije prihvatio: %1$s. Razlog piše ispod stavke. Možeš da računaš bez nje ili da prvo izmeniš stavku.</item>
+        <item quantity="few">Server nije prihvatio: %1$s. Razlog piše ispod stavke. Možeš da računaš bez njih ili da prvo izmeniš stavke.</item>
+        <item quantity="other">Server nije prihvatio: %1$s. Razlog piše ispod stavke. Možeš da računaš bez njih ili da prvo izmeniš stavke.</item>
+    </plurals>
+    <plurals name="list_skipped_calculate_without">
+        <item quantity="one">Računaj bez nje</item>
+        <item quantity="few">Računaj bez njih</item>
+        <item quantity="other">Računaj bez njih</item>
+    </plurals>
+    <string name="list_skipped_edit">Izmeni</string>
+
+    <!-- One row of the list -->
+    <string name="list_status_not_sent">Nije poslato</string>
+    <string name="list_status_needs_confirmation">Treba tvoja potvrda</string>
+    <string name="list_status_not_found">Nije pronađeno</string>
+    <string name="list_sync_error_rejected">Server nije prihvatio ovu stavku.</string>
+    <string name="list_cd_prices_for">Cene za %1$s</string>
+    <string name="list_cd_delete">Obriši %1$s</string>
+    <string name="list_rule_exact_barcode">Tačan barkod</string>
+    <string name="list_rule_same_product">Isti proizvod, sve varijante</string>
+    <string name="list_rule_category">Kategorija %1$s</string>
+    <string name="list_rule_brand">Brend %1$s</string>
+    <string name="list_rule_category_brand">Kategorija %1$s, brend %2$s</string>
+
+    <!-- Item editor -->
+    <string name="list_editor_title_new">Nova stavka</string>
+    <string name="list_editor_title_edit">Izmeni stavku</string>
+    <string name="list_rule_option_any">Bilo koji</string>
+    <string name="list_rule_option_any_desc">Upišeš „mleko“, a aplikacija bira najpovoljniji proizvod i pakovanje.</string>
+    <string name="list_rule_option_product">Proizvod</string>
+    <string name="list_rule_option_product_desc">Biraš proizvod iz pretrage. Važe sve njegove barkod varijante.</string>
+    <string name="list_rule_option_barcode">Barkod</string>
+    <string name="list_rule_option_barcode_desc">Samo izabrana varijanta, bez zamene.</string>
+    <string name="list_editor_any_brand">Može i drugi brend</string>
+    <string name="list_editor_any_brand_desc">Uzima se najjeftinije slično u prodavnicama iz plana.</string>
+    <string name="list_editor_similar_kind">Vrsta (bilo koji brend)</string>
+    <string name="list_editor_amount_value">Količina: %1$s</string>
+    <string name="list_editor_package_count">Broj pakovanja</string>
+    <string name="list_editor_what_label">Šta kupuješ</string>
+    <string name="list_editor_what_placeholder">npr. mleko</string>
+    <string name="list_editor_amount_title">Koliko ti ukupno treba</string>
+    <string name="list_editor_amount_label">Količina (opciono)</string>
+    <string name="list_editor_suggestion">Predlog: %1$s</string>
+    <string name="list_editor_amount_mode_hint" formatted="false">Biramo cela pakovanja, sa najviše 25% viška.</string>
+    <string name="list_editor_count_mode_hint">Bez količine kupuješ onoliko pakovanja koliko upišeš ispod.</string>
+    <string name="list_editor_times">Puta</string>
+    <string name="list_editor_total">Ukupno: %1$s</string>
+    <string name="list_editor_advanced">Napredno: kategorija, brend, pakovanje</string>
+    <string name="list_editor_category">Kategorija</string>
+    <string name="list_editor_category_hint">Obično isto što i naziv.</string>
+    <string name="list_editor_brand">Samo ovaj brend (opciono)</string>
+    <string name="list_editor_package_from">Pakovanje od</string>
+    <string name="list_editor_package_to">do</string>
+    <string name="list_cd_less">Manje</string>
+    <string name="list_cd_more">Više</string>
+    <string name="list_package_error_positive">Upiši broj veći od nule.</string>
+    <string name="list_package_error_unit">Izaberi jedinicu iznad: kg, g, l, ml ili kom.</string>
+    <string name="list_package_error_order">„Od“ ne može biti veće od „do“.</string>
+
+    <!-- Paste dialog -->
+    <string name="list_paste_add_all">Dodaj sve</string>
+    <string name="list_paste_hint">Svaki red je jedna stavka. Količinu dopiši uz naziv, a aplikacija bira najpovoljniji proizvod.</string>
+    <string name="list_paste_placeholder">mleko\nhleb\nćevapi 3kg\n2x pivo</string>
+    <string name="list_paste_none">Nijedna stavka još nije upisana.</string>
+    <string name="list_paste_will_add">Biće dodato: %1$s</string>
+
+    <!-- Messages from the list, recommendation and matching view models -->
+    <string name="list_notice_added">Dodato: %1$s.</string>
+    <string name="list_error_server_unavailable">Server trenutno nije dostupan. Možeš ipak napraviti spisak.</string>
+    <string name="list_error_paste_failed">Spisak nije dodat.</string>
+    <string name="list_error_matching_needs_server">Za proveru proizvoda je potrebna veza sa serverom.</string>
+    <string name="list_error_change_not_saved">Izmena nije sačuvana.</string>
+    <string name="list_error_sync_failed">Sinhronizacija trenutno nije uspela.</string>
+    <string name="list_error_replacement_not_saved">Zamena nije sačuvana. Pokušaj ponovo.</string>
+    <string name="list_error_replacement_saved_no_plan">Zamena je sačuvana na ovom uređaju, ali novi plan nije izračunat. Proveri vezu i ponovi računanje.</string>
+    <string name="list_error_recommendations_unavailable">Preporuke trenutno nisu dostupne.</string>
+
+    <!-- Checks on an item before it is saved -->
+    <string name="list_error_name_required">Naziv stavke je obavezan.</string>
+    <string name="list_error_quantity_positive">Količina mora biti veća od nule.</string>
+    <string name="list_error_target_quantity">Ukupna količina mora biti pozitivna i imati jedinicu g, ml ili piece.</string>
+    <string name="list_error_exact_no_family">Tačna stavka ne može imati porodicu proizvoda.</string>
+    <string name="list_error_family_required">Za isti proizvod izaberi porodicu proizvoda.</string>
+    <string name="list_error_family_no_barcode">Porodična stavka ne može imati tačan barkod.</string>
+    <string name="list_error_flexible_no_product">Fleksibilna stavka ne može imati izabran proizvod.</string>
+    <string name="list_error_flexible_category_required">Za fleksibilnu stavku izaberi kategoriju.</string>
+    <string name="list_error_package_min_over_max">Minimalno pakovanje ne može biti veće od maksimalnog.</string>
+    <string name="list_error_package_min_positive">Minimalno pakovanje mora biti veće od nule.</string>
+    <string name="list_error_package_max_positive">Maksimalno pakovanje mora biti veće od nule.</string>
+    <string name="list_error_package_unit_required">Za veličinu pakovanja izaberi jedinicu: kg, g, l, ml ili kom.</string>
+    <string name="list_error_unit_invalid">Jedinica mora biti g, ml ili piece.</string>
+    <string name="list_error_item_not_in_list">Stavka nije u aktivnom spisku.</string>
+    <string name="list_error_item_deleted">Stavka je obrisana.</string>
+    <string name="list_error_product_no_price">Izabrani proizvod nema aktuelnu cenu.</string>
+    <string name="list_error_paste_empty">Unesi bar jednu nepraznu stavku.</string>
+    <string name="list_error_item_not_local">Stavka više nije dostupna na lokalnom spisku.</string>
+    <string name="list_error_server_rejected">Server nije prihvatio: %1$s. Ostale stavke su poslate.</string>
+
+    <!-- Matching screen -->
+    <string name="match_title">Provera proizvoda</string>
+    <string name="match_saving">Čuvam odluku…</string>
+    <string name="match_continue">Nastavi na lokaciju</string>
+    <plurals name="match_decide_more">
+        <item quantity="one">Odluči još za %d stavku</item>
+        <item quantity="few">Odluči još za %d stavke</item>
+        <item quantity="other">Odluči još za %d stavki</item>
+    </plurals>
+    <string name="match_confirm_marked">Potvrdi označene stavke</string>
+    <string name="match_loading">Tražim odgovarajuće proizvode…</string>
+    <string name="match_error_title">Provera nije uspela</string>
+    <string name="match_section_decide">Treba tvoja odluka</string>
+    <string name="match_section_settled">Prepoznato</string>
+    <string name="match_step">KORAK 1 OD 3</string>
+    <string name="match_all_recognized">Sve stavke su prepoznate</string>
+    <plurals name="match_pending_title">
+        <item quantity="one">%d stavka traži tvoju odluku</item>
+        <item quantity="few">%d stavke traže tvoju odluku</item>
+        <item quantity="other">%d stavki traži tvoju odluku</item>
+    </plurals>
+    <string name="match_summary_text">Potvrdi nejasne stavke da bismo našli najpovoljnije cene u blizini.</string>
+    <string name="match_recognized_of">Prepoznato %1$d od %2$d</string>
+    <string name="match_remaining">još %1$d</string>
+    <string name="match_from_list">Sa spiska</string>
+    <string name="match_requested_name">„%1$s“</string>
+    <string name="match_flexible_title">Neka aplikacija izabere najpovoljnije</string>
+    <string name="match_flexible_desc">Kad ti nije važan brend ni pakovanje.</string>
+    <string name="match_none_leave_unmatched">Nijedan, ostavi neupareno</string>
+    <string name="match_choose">Izaberi</string>
+    <string name="match_status_pending">Čeka proveru</string>
+    <string name="match_status_auto">Automatski</string>
+    <string name="match_status_needs_confirmation">Treba potvrda</string>
+    <string name="match_status_confirmed">Potvrđeno</string>
+    <string name="match_status_unmatched">Nije pronađeno</string>
+    <string name="match_error_load_failed">Provera proizvoda nije uspela.</string>
+    <string name="match_error_confirm_not_saved">Potvrda nije sačuvana.</string>
+    <string name="match_error_flexible_failed">Stavka nije pretvorena u fleksibilnu.</string>
+</resources>

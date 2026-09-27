@@ -35,10 +35,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import rs.pametnakupovina.app.R
 import rs.pametnakupovina.app.data.amountLabel
 import rs.pametnakupovina.app.data.network.CanonicalProductDetailsDto
 import rs.pametnakupovina.app.data.network.CanonicalProductOfferDto
@@ -64,7 +68,10 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.itemsIndexed
 import rs.pametnakupovina.app.ui.components.LetterTile
-import rs.pametnakupovina.app.ui.counted
+import rs.pametnakupovina.app.text.UiText
+import rs.pametnakupovina.app.text.asString
+import rs.pametnakupovina.app.text.asUiText
+import rs.pametnakupovina.app.text.uiText
 
 @Composable
 fun ProductDetailsScreen(
@@ -86,10 +93,11 @@ fun ProductDetailsScreen(
     }
     var showReport by rememberSaveable { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
+    val resources = LocalResources.current
 
     LaunchedEffect(state.reportMessage) {
         state.reportMessage?.let {
-            snackbar.showSnackbar(it)
+            snackbar.showSnackbar(it.resolve(resources))
             viewModel.clearReportMessage()
         }
     }
@@ -97,11 +105,11 @@ fun ProductDetailsScreen(
     Scaffold(
         topBar = {
             AppTopBar(
-                title = "Cene proizvoda",
+                title = stringResource(R.string.product_title),
                 onBack = onBack,
                 actions = {
                     if (state.product != null) {
-                        TextButton(onClick = { showReport = true }) { Text("Prijavi grešku") }
+                        TextButton(onClick = { showReport = true }) { Text(stringResource(R.string.product_report_error)) }
                     }
                 }
             )
@@ -114,10 +122,10 @@ fun ProductDetailsScreen(
                 .padding(padding)
         ) {
             when {
-                state.isLoading -> LoadingState("Učitavam ponude…")
+                state.isLoading -> LoadingState(stringResource(R.string.product_loading_offers))
                 state.errorMessage != null -> ErrorState(
-                    title = "Cene nisu dostupne",
-                    message = requireNotNull(state.errorMessage),
+                    title = stringResource(R.string.product_prices_unavailable),
+                    message = requireNotNull(state.errorMessage).asString(),
                     onRetry = viewModel::load
                 )
                 state.product != null -> ProductDetailsContent(
@@ -139,9 +147,9 @@ fun ProductDetailsScreen(
 }
 
 private val ReportReasons = listOf(
-    ProductReportReasonDto.WRONG_PRICE to "Cena nije tačna",
-    ProductReportReasonDto.NOT_SAME_PRODUCT to "Ovo nisu isti proizvodi",
-    ProductReportReasonDto.OTHER to "Nešto drugo"
+    ProductReportReasonDto.WRONG_PRICE to R.string.product_report_reason_wrong_price,
+    ProductReportReasonDto.NOT_SAME_PRODUCT to R.string.product_report_reason_not_same,
+    ProductReportReasonDto.OTHER to R.string.product_report_reason_other
 )
 
 /** What is wrong, in one tap, and a note only if the reader wants to add one. */
@@ -155,7 +163,7 @@ private fun ReportDialog(
     var note by rememberSaveable { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Prijavi grešku") },
+        title = { Text(stringResource(R.string.product_report_error)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.xs)) {
                 ReportReasons.forEach { (value, label) ->
@@ -166,13 +174,13 @@ private fun ReportDialog(
                             .selectable(selected = reason == value, onClick = { reason = value })
                     ) {
                         RadioButton(selected = reason == value, onClick = { reason = value })
-                        Text(label, style = MaterialTheme.typography.bodyLarge)
+                        Text(stringResource(label), style = MaterialTheme.typography.bodyLarge)
                     }
                 }
                 OutlinedTextField(
                     value = note,
                     onValueChange = { if (it.length <= 500) note = it },
-                    label = { Text("Napomena (opciono)") },
+                    label = { Text(stringResource(R.string.product_report_note)) },
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -181,9 +189,15 @@ private fun ReportDialog(
             TextButton(
                 enabled = reason != null && !sending,
                 onClick = { reason?.let { onSend(it, note) } }
-            ) { Text(if (sending) "Šaljem…" else "Pošalji") }
+            ) {
+                Text(
+                    stringResource(
+                        if (sending) R.string.product_report_sending else R.string.product_report_send
+                    )
+                )
+            }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Otkaži") } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) } }
     )
 }
 
@@ -216,11 +230,11 @@ private fun ProductDetailsContent(
         }
 
         item(key = "offers-header") {
-            SectionHeader("Aktuelne ponude", trailing = offers.size.toString())
+            SectionHeader(stringResource(R.string.product_current_offers), trailing = offers.size.toString())
         }
         if (offers.isEmpty()) {
             item(key = "no-offers") {
-                NoticeBanner(text = "Za ovaj proizvod još nema važećih cena.")
+                NoticeBanner(text = stringResource(R.string.product_no_offers))
             }
         } else {
             itemsIndexed(offers) { index, offer ->
@@ -243,7 +257,7 @@ private fun ProductDetailsContent(
         }
 
         if (product.priceHistory.isNotEmpty()) {
-            item(key = "history-header") { SectionHeader("Poslednje promene cena") }
+            item(key = "history-header") { SectionHeader(stringResource(R.string.product_price_history)) }
             item(key = "history") {
                 GroupedRows(product.priceHistory) { _, point -> PriceHistoryRow(point) }
             }
@@ -291,7 +305,7 @@ private fun OfferRow(
         ) {
             Text(offer.retailerName, style = MaterialTheme.typography.titleMedium)
             Text(
-                "${offerScope(offer)} · cene od ${shortDate(offer.priceDate)}",
+                stringResource(R.string.product_offer_scope_and_date, offerScope(offer), shortDate(offer.priceDate)),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -301,29 +315,32 @@ private fun OfferRow(
                 offer.discountedPrice < offer.regularPrice
             ) {
                 Text(
-                    "Akcija, redovno ${money(offer.regularPrice)}",
+                    stringResource(R.string.product_offer_sale, money(offer.regularPrice)),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.tertiary
                 )
             }
             caseOf?.let { single ->
                 Text(
-                    "Pakovanje od ${offer.packageCount / single} kom · " +
-                        "${money(offer.effectivePrice * single / offer.packageCount)} po komadu",
+                    stringResource(
+                        R.string.product_offer_case,
+                        offer.packageCount / single,
+                        money(offer.effectivePrice * single / offer.packageCount)
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.tertiary
                 )
             }
             if (offer.priceNeedsCheck) {
                 Text(
-                    "Manje od pola uobičajene cene u drugim lancima",
+                    stringResource(R.string.product_offer_suspicious),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                StatusPill("Proveri cenu", StatusTone.WARNING)
+                StatusPill(stringResource(R.string.product_check_price), StatusTone.WARNING)
             }
             if (cheapest) {
-                StatusPill("Najbolja cena", StatusTone.POSITIVE)
+                StatusPill(stringResource(R.string.product_best_price), StatusTone.POSITIVE)
             }
         }
         Column(horizontalAlignment = Alignment.End) {
@@ -334,7 +351,7 @@ private fun OfferRow(
             )
             offerUnitPriceLabel(offer, product)?.let {
                 Text(
-                    it,
+                    it.asString(),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -402,7 +419,7 @@ private fun ProductHeader(
                 )
             }
             Text(
-                "Cene za ${date(product.requestedDate)}",
+                stringResource(R.string.product_prices_for_date, date(product.requestedDate)),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -416,15 +433,15 @@ private fun ProductHeader(
                         .background(MaterialTheme.colorScheme.surfaceContainerLow, MaterialTheme.shapes.small)
                         .padding(AppSpacing.xs)
                 ) {
-                    PriceStat("Najniža", lowest.effectivePrice, lowest.retailerName, highlighted = true, Modifier.weight(1f))
+                    PriceStat(stringResource(R.string.product_stat_lowest), lowest.effectivePrice, lowest.retailerName, highlighted = true, Modifier.weight(1f))
                     PriceStat(
-                        "Prosečna",
+                        stringResource(R.string.product_stat_average),
                         comparable.map { it.effectivePrice }.average(),
-                        counted(chains, "lanac", "lanca", "lanaca"),
+                        pluralStringResource(R.plurals.product_chain_count, chains, chains),
                         highlighted = false,
                         Modifier.weight(1f)
                     )
-                    PriceStat("Najviša", highest.effectivePrice, highest.retailerName, highlighted = false, Modifier.weight(1f))
+                    PriceStat(stringResource(R.string.product_stat_highest), highest.effectivePrice, highest.retailerName, highlighted = false, Modifier.weight(1f))
                 }
             }
             if (bestPrice(product) != null || watching) {
@@ -436,9 +453,9 @@ private fun ProductHeader(
                         .padding(horizontal = AppSpacing.md, vertical = AppSpacing.xs)
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Javi mi kad pojeftini", style = MaterialTheme.typography.titleSmall)
+                        Text(stringResource(R.string.product_watch_title), style = MaterialTheme.typography.titleSmall)
                         Text(
-                            "Proveravam jednom dnevno",
+                            stringResource(R.string.product_watch_subtitle),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -495,18 +512,18 @@ private fun PriceStat(
  * piece ("jed. 85,99" for a half-litre bottle) and is shown only when the size
  * is unknown.
  */
-internal fun offerUnitPriceLabel(offer: CanonicalProductOfferDto, product: CanonicalProductDetailsDto): String? {
+internal fun offerUnitPriceLabel(offer: CanonicalProductOfferDto, product: CanonicalProductDetailsDto): UiText? {
     val quantity = product.quantityValue?.takeIf { it > 0 }
     val unit = product.baseUnit
     if (quantity == null || unit == null) {
-        return offer.unitPrice?.let { "jed. ${money(it)}" }
+        return offer.unitPrice?.let { uiText(R.string.product_unit_price_chain, money(it)) }
     }
     val amount = quantity / product.packageCount.coerceAtLeast(1) * offer.packageCount.coerceAtLeast(1)
     return when (unit) {
-        "g" -> "${money(offer.effectivePrice * 1000 / amount)}/kg"
-        "ml" -> "${money(offer.effectivePrice * 1000 / amount)}/l"
-        "piece" -> if (amount > 1) "${money(offer.effectivePrice / amount)}/kom" else null
-        else -> offer.unitPrice?.let { "jed. ${money(it)}" }
+        "g" -> "${money(offer.effectivePrice * 1000 / amount)}/kg".asUiText()
+        "ml" -> "${money(offer.effectivePrice * 1000 / amount)}/l".asUiText()
+        "piece" -> if (amount > 1) "${money(offer.effectivePrice / amount)}/kom".asUiText() else null
+        else -> offer.unitPrice?.let { uiText(R.string.product_unit_price_chain, money(it)) }
     }
 }
 
@@ -514,17 +531,22 @@ internal fun offerUnitPriceLabel(offer: CanonicalProductOfferDto, product: Canon
 internal fun isCaseOf(offer: CanonicalProductOfferDto, product: CanonicalProductDetailsDto): Boolean =
     offer.packageCount > product.packageCount
 
+@Composable
 private fun productMetadata(product: CanonicalProductDetailsDto): String =
     listOfNotNull(
         product.brand,
         product.quantityValue?.let { quantity ->
             product.baseUnit?.let { amountLabel(quantity, it, product.packageCount) }
         },
-        product.barcode?.let { "barkod $it" }
+        product.barcode?.let { stringResource(R.string.product_barcode_meta, it) }
     ).joinToString(" · ")
 
+@Composable
 private fun offerScope(offer: CanonicalProductOfferDto): String = when (offer.priceScope) {
-    "STORE" -> offer.storeName ?: "Jedan objekat"
-    "STORE_FORMAT" -> "Format ${offer.storeFormatName ?: "nepoznat"}"
-    else -> "Svi objekti lanca"
+    "STORE" -> offer.storeName ?: stringResource(R.string.product_scope_one_store)
+    "STORE_FORMAT" -> stringResource(
+        R.string.product_scope_format,
+        offer.storeFormatName ?: stringResource(R.string.product_scope_format_unknown)
+    )
+    else -> stringResource(R.string.product_scope_all_stores)
 }

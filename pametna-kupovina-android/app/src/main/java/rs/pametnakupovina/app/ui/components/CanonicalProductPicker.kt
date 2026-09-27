@@ -30,12 +30,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import rs.pametnakupovina.app.R
 import rs.pametnakupovina.app.data.amountLabel
 import rs.pametnakupovina.app.data.network.CanonicalProductSearchItemDto
+import rs.pametnakupovina.app.text.asString
 import rs.pametnakupovina.app.ui.ProductSearchUiState
-import rs.pametnakupovina.app.ui.counted
 import rs.pametnakupovina.app.ui.money
 import rs.pametnakupovina.app.ui.shortDate
 import rs.pametnakupovina.app.ui.distance
@@ -57,21 +59,21 @@ internal fun LazyListScope.canonicalProductPicker(
         OutlinedTextField(
             value = query,
             onValueChange = onQueryChange,
-            label = { Text("Naziv ili barkod") },
+            label = { Text(stringResource(R.string.picker_query_label)) },
             leadingIcon = { AppIcon(R.drawable.ic_search, contentDescription = null) },
             trailingIcon = when {
                 selectedProduct != null -> null
                 query.isNotEmpty() -> {
                     {
                         IconButton(onClick = { onQueryChange("") }) {
-                            AppIcon(R.drawable.ic_close, contentDescription = "Obriši pretragu")
+                            AppIcon(R.drawable.ic_close, contentDescription = stringResource(R.string.picker_clear_search))
                         }
                     }
                 }
                 onScan != null -> {
                     {
                         IconButton(onClick = onScan, modifier = Modifier.testTag("scan-barcode")) {
-                            AppIcon(R.drawable.ic_camera, contentDescription = "Skeniraj barkod")
+                            AppIcon(R.drawable.ic_camera, contentDescription = stringResource(R.string.picker_scan_barcode))
                         }
                     }
                 }
@@ -97,7 +99,7 @@ internal fun LazyListScope.canonicalProductPicker(
     item(key = "search-help") {
         Column {
             Text(
-                "Cena u cenovniku nije potvrda da proizvoda ima na stanju.",
+                stringResource(R.string.picker_price_not_stock),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -109,7 +111,7 @@ internal fun LazyListScope.canonicalProductPicker(
                         modifier = Modifier.testTag("include-without-price")
                     )
                     Text(
-                        "Prikaži i proizvode bez cene",
+                        stringResource(R.string.picker_include_without_price),
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
@@ -128,15 +130,15 @@ internal fun LazyListScope.canonicalProductPicker(
                     strokeWidth = 2.dp,
                     modifier = Modifier.size(22.dp)
                 )
-                Text("Pretražujem proizvode…", style = MaterialTheme.typography.bodyMedium)
+                Text(stringResource(R.string.picker_searching), style = MaterialTheme.typography.bodyMedium)
             }
         }
 
         searchState.errorMessage != null -> item(key = "search-error") {
             NoticeBanner(
-                text = searchState.errorMessage,
+                text = searchState.errorMessage.asString(),
                 tone = StatusTone.ERROR,
-                actionLabel = "Pokušaj ponovo",
+                actionLabel = stringResource(R.string.common_retry),
                 onAction = onRetry
             )
         }
@@ -145,9 +147,9 @@ internal fun LazyListScope.canonicalProductPicker(
             item(key = "search-empty") {
                 Text(
                     if (searchState.includeWithoutPrice) {
-                        "Nema pronađenih proizvoda."
+                        stringResource(R.string.picker_no_results)
                     } else {
-                        "Nema rezultata sa aktuelnom cenom. Promeni upit ili uključi proizvode bez cene."
+                        stringResource(R.string.picker_no_results_with_price)
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -158,8 +160,7 @@ internal fun LazyListScope.canonicalProductPicker(
     searchState.correctedQuery?.let { corrected ->
         item(key = "search-corrected") {
             Text(
-                "Nema rezultata za \u201E${searchState.query.trim()}\u201C. " +
-                    "Prikazani su rezultati za \u201E$corrected\u201C.",
+                stringResource(R.string.picker_corrected_query, searchState.query.trim(), corrected),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.testTag("search-corrected")
@@ -189,9 +190,13 @@ internal fun LazyListScope.canonicalProductPicker(
             ) {
                 Text(
                     if (searchState.isLoadingMore) {
-                        "Učitavam…"
+                        stringResource(R.string.picker_loading_more)
                     } else {
-                        "Prikaži još (${searchState.results.size} od ${searchState.totalElements})"
+                        stringResource(
+                            R.string.picker_show_more,
+                            searchState.results.size,
+                            searchState.totalElements
+                        )
                     }
                 )
             }
@@ -210,12 +215,9 @@ private fun ProductSearchResultCard(
     if (confirmWithoutPrice) {
         AlertDialog(
             onDismissRequest = { confirmWithoutPrice = false },
-            title = { Text("Dodaj proizvod bez cene?") },
+            title = { Text(stringResource(R.string.picker_add_without_price_title)) },
             text = {
-                Text(
-                    "Proizvod poznajemo, ali nemamo aktuelnu cenu. Ne možemo ga " +
-                        "uračunati u cenu korpe dok ne pronađemo ponudu."
-                )
+                Text(stringResource(R.string.picker_add_without_price_text))
             },
             confirmButton = {
                 TextButton(
@@ -224,11 +226,11 @@ private fun ProductSearchResultCard(
                         confirmWithoutPrice = false
                         onChoose()
                     }
-                ) { Text("Dodaj ipak") }
+                ) { Text(stringResource(R.string.picker_add_anyway)) }
             },
             dismissButton = {
                 TextButton(onClick = { confirmWithoutPrice = false }) {
-                    Text("Nazad na rezultate")
+                    Text(stringResource(R.string.picker_back_to_results))
                 }
             }
         )
@@ -265,10 +267,10 @@ private fun ProductSearchResultCard(
             if (locationKnown && product.hasUsablePrice) {
                 val meters = product.nearestStoreMeters
                 if (meters == null) {
-                    StatusPill("Nema ga u radnjama blizu tebe", StatusTone.WARNING)
+                    StatusPill(stringResource(R.string.picker_not_nearby), StatusTone.WARNING)
                 } else {
                     Text(
-                        "Najbliža radnja koja ga ima: ${distance(meters / 1000)}",
+                        stringResource(R.string.picker_nearest_store, distance(meters / 1000)),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -276,9 +278,11 @@ private fun ProductSearchResultCard(
             }
             if (detailsExpanded) {
                 listOfNotNull(
-                    product.barcode?.let { "Barkod: $it" },
-                    product.categoryName?.let { "Kategorija: $it" },
-                    product.variantCount.takeIf { it > 1 }?.let { "$it barkod varijante" }
+                    product.barcode?.let { stringResource(R.string.picker_barcode_line, it) },
+                    product.categoryName?.let { stringResource(R.string.picker_category_line, it) },
+                    product.variantCount.takeIf { it > 1 }?.let {
+                        stringResource(R.string.picker_barcode_variants, it)
+                    }
                 ).forEach { line ->
                     Text(
                         line,
@@ -299,7 +303,7 @@ private fun ProductSearchResultCard(
                     modifier = Modifier.weight(1f, fill = false)
                 ) {
                     Text(
-                        if (detailsExpanded) "Manje" else "Više o proizvodu",
+                        stringResource(if (detailsExpanded) R.string.picker_less else R.string.picker_more_about),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -310,7 +314,7 @@ private fun ProductSearchResultCard(
                     },
                     modifier = Modifier.testTag("product-choose-${product.resultId()}")
                 ) {
-                    Text("Izaberi", maxLines = 1, softWrap = false)
+                    Text(stringResource(R.string.picker_choose), maxLines = 1, softWrap = false)
                 }
             }
         }
@@ -346,17 +350,17 @@ private fun SelectedProductCard(
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(20.dp)
                 )
-                Text("Izabran proizvod", style = MaterialTheme.typography.labelLarge)
+                Text(stringResource(R.string.picker_selected), style = MaterialTheme.typography.labelLarge)
             }
             Text(product.name, style = MaterialTheme.typography.titleMedium)
             listOfNotNull(
                 productDetails(product).takeIf(String::isNotBlank),
-                product.barcode?.let { "Barkod: $it" }
+                product.barcode?.let { stringResource(R.string.picker_barcode_line, it) }
             ).forEach { line ->
                 Text(line, style = MaterialTheme.typography.bodyMedium)
             }
             ProductPriceSummary(product, showAll = true)
-            TextButton(onClick = onChange) { Text("Promeni izbor") }
+            TextButton(onClick = onChange) { Text(stringResource(R.string.picker_change_selection)) }
         }
     }
 }
@@ -374,13 +378,13 @@ private fun ProductPriceSummary(
     if (!product.hasUsablePrice) {
         if (product.knownRetailers.isNotEmpty()) {
             Text(
-                "Zabeležen kod: ${product.knownRetailers.joinToString()}",
+                stringResource(R.string.picker_recorded_at, product.knownRetailers.joinToString()),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
         Text(
-            "Nemamo aktuelnu cenu",
+            stringResource(R.string.picker_no_current_price),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.error
         )
@@ -408,7 +412,11 @@ private fun ProductPriceSummary(
                     )
                     if (roomForDate || offer.priceNeedsCheck) {
                         Text(
-                            if (offer.priceNeedsCheck) "proveri cenu" else shortDate(offer.latestPriceDate),
+                            if (offer.priceNeedsCheck) {
+                                stringResource(R.string.picker_check_price)
+                            } else {
+                                shortDate(offer.latestPriceDate)
+                            },
                             style = MaterialTheme.typography.bodySmall,
                             color = if (offer.priceNeedsCheck) {
                                 MaterialTheme.colorScheme.tertiary
@@ -420,7 +428,7 @@ private fun ProductPriceSummary(
                     }
                     offer.minimumEffectivePrice?.let {
                         Text(
-                            "od ${money(it)}",
+                            stringResource(R.string.picker_price_from, money(it)),
                             style = MaterialTheme.typography.labelLarge,
                             modifier = Modifier.padding(start = AppSpacing.sm)
                         )
@@ -429,7 +437,11 @@ private fun ProductPriceSummary(
             }
             if (offers.size > shown.size) {
                 Text(
-                    "i u još " + counted(offers.size - shown.size, "lancu", "lanca", "lanaca"),
+                    pluralStringResource(
+                        R.plurals.picker_more_chains,
+                        offers.size - shown.size,
+                        offers.size - shown.size
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

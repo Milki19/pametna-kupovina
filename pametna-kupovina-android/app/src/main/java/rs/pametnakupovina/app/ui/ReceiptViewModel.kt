@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import rs.pametnakupovina.app.R
 import rs.pametnakupovina.app.data.NotAFiscalReceipt
 import rs.pametnakupovina.app.data.ReceiptScanner
 import rs.pametnakupovina.app.data.ScanCancelled
@@ -22,6 +23,8 @@ import rs.pametnakupovina.app.data.network.MonthlySpendingDto
 import rs.pametnakupovina.app.data.network.ReceiptDto
 import rs.pametnakupovina.app.data.network.ShopSpendingDto
 import rs.pametnakupovina.app.data.network.WeeklySpendingDto
+import rs.pametnakupovina.app.text.UiText
+import rs.pametnakupovina.app.text.uiText
 
 data class ReceiptUiState(
     val receipts: List<ReceiptDto> = emptyList(),
@@ -32,7 +35,7 @@ data class ReceiptUiState(
     val habits: List<HabitDto> = emptyList(),
     val selectedMonth: LocalDate = LocalDate.now().withDayOfMonth(1),
     val scanning: Boolean = false,
-    val message: String? = null
+    val message: UiText? = null
 )
 
 @HiltViewModel
@@ -91,28 +94,28 @@ class ReceiptViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(scanning = true, message = null) }
 
-            val message = try {
+            val message: UiText? = try {
                 val receipt = repository.scanReceipt(
                     scanner.verificationUrl(activityContext)
                 )
                 refresh()
-                "Zaveden račun: ${receipt.shopName}, ${money(receipt.totalAmount)}."
+                uiText(R.string.receipt_saved, receipt.shopName, money(receipt.totalAmount))
             } catch (cancelled: ScanCancelled) {
                 null
             } catch (notReceipt: NotAFiscalReceipt) {
-                "To nije QR sa fiskalnog računa."
+                uiText(R.string.receipt_not_fiscal)
             } catch (scanFailed: MlKitException) {
                 // Kamera nije uspela da pročita kod. Račun nije ni pokušan da
                 // se zavede, pa ne sme da piše da nije zaveden.
                 if (scanFailed.errorCode == MlKitException.UNAVAILABLE) {
-                    "Google skener se još preuzima na telefon. Sačekaj minut pa probaj ponovo."
+                    uiText(R.string.receipt_scanner_downloading)
                 } else {
-                    "Skeniranje nije uspelo. Probaj ponovo."
+                    uiText(R.string.receipt_scan_failed)
                 }
             } catch (failure: Exception) {
                 // Server kaže zašto (predračun, povraćaj, nečitljiv kod);
                 // „nije zaveden" bez razloga ostavlja kupca da nagađa.
-                failure.toUserMessage("Račun nije zaveden. Proveri internet i probaj ponovo.")
+                failure.toUserMessage(R.string.receipt_not_saved)
             }
 
             _uiState.update { it.copy(scanning = false, message = message) }
