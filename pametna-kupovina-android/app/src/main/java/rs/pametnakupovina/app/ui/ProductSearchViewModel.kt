@@ -28,7 +28,9 @@ data class ProductSearchUiState(
     val totalElements: Long = 0,
     val hasNext: Boolean = false,
     val errorMessage: String? = null,
-    val includeWithoutPrice: Boolean = false
+    val includeWithoutPrice: Boolean = false,
+    // Pretraga je znala gde je kupac, pa „nema u blizini" nešto znači.
+    val locationKnown: Boolean = false
 )
 
 @HiltViewModel
@@ -170,7 +172,8 @@ class ProductSearchViewModel @Inject constructor(
                     response.items
                 },
                 totalElements = response.totalElements,
-                hasNext = response.hasNext
+                hasNext = response.hasNext,
+                locationKnown = response.nearbyChecked
             )
         } catch (error: CancellationException) {
             throw error
