@@ -1,5 +1,6 @@
 package rs.pametnakupovina.app.ui
 
+import androidx.annotation.StringRes
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -24,6 +25,11 @@ import rs.pametnakupovina.app.data.network.ShoppingListMatchingDto
 import rs.pametnakupovina.app.data.network.ShoppingRecommendationDto
 import rs.pametnakupovina.app.data.network.serverMessage
 import rs.pametnakupovina.app.sync.SyncScheduler
+import rs.pametnakupovina.app.R
+import rs.pametnakupovina.app.text.UiText
+import rs.pametnakupovina.app.text.UserFacingException
+import rs.pametnakupovina.app.text.asUiText
+import rs.pametnakupovina.app.text.uiText
 
 /** Rows the server refused when the shopper asked for a calculation. */
 data class SkippedItems(val listId: Long, val names: List<String>)
@@ -448,15 +454,21 @@ class RecommendationViewModel @Inject constructor(
     }
 }
 
-internal fun Throwable.toUserMessage(fallback: String): String = when (this) {
-    is IOException -> fallback
-    is HttpException -> serverMessage()?.takeIf { code() == 400 || code() == 422 } ?: when (code()) {
-        400 -> "Proveri unesene podatke i pokušaj ponovo."
-        401, 403 -> "Ovaj spisak više nije dostupan na serveru."
-        404 -> "Traženi spisak ili stavka više ne postoji."
-        in 500..599 -> "Server trenutno ima problem. Pokušaj ponovo."
-        else -> fallback
+/**
+ * What went wrong, for the shopper. The server's own reason is shown as it is
+ * written; everything else comes from string resources, with [fallback] when
+ * nothing more specific is known.
+ */
+internal fun Throwable.toUserMessage(@StringRes fallback: Int): UiText = when (this) {
+    is IOException -> uiText(fallback)
+    is UserFacingException -> text
+    is HttpException -> serverMessage()?.takeIf { code() == 400 || code() == 422 }?.asUiText() ?: when (code()) {
+        400 -> uiText(R.string.error_check_input)
+        401, 403 -> uiText(R.string.error_list_not_available)
+        404 -> uiText(R.string.error_list_or_item_gone)
+        in 500..599 -> uiText(R.string.error_server_problem)
+        else -> uiText(fallback)
     }
-    is IllegalArgumentException -> message ?: fallback
-    else -> fallback
+    is IllegalArgumentException -> message?.asUiText() ?: uiText(fallback)
+    else -> uiText(fallback)
 }

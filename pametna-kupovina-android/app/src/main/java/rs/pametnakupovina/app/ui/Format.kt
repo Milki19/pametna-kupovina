@@ -1,5 +1,9 @@
 package rs.pametnakupovina.app.ui
 
+import android.content.res.Resources
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalResources
+import rs.pametnakupovina.app.R
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.text.DecimalFormat
@@ -14,7 +18,8 @@ import java.time.format.DateTimeParseException
  * Every number and date on screen goes through here, written the way a Serbian
  * shelf label writes it: 1.086,92 RSD and 13.09.2026. The symbols are fixed
  * rather than taken from the device, so a phone set to English still shows
- * the format printed next to the product.
+ * the format printed next to the product. Words (month names, "u", counted
+ * nouns) come from string resources; counts use `<plurals>`.
  */
 
 private fun serbianFormat(pattern: String): DecimalFormat {
@@ -66,14 +71,19 @@ fun date(iso: String): String = try {
     iso
 }
 
-private val MonthNames = listOf(
-    "januar", "februar", "mart", "april", "maj", "jun",
-    "jul", "avgust", "septembar", "oktobar", "novembar", "decembar"
-)
+/** Any date in September 2026 becomes "septembar 2026." (or "September 2026"). */
+fun monthName(month: LocalDate, resources: Resources): String =
+    resources.getString(R.string.format_month_year, monthWord(month, resources), month.year)
 
-/** "2026-09-01" or any date in September 2026 becomes "septembar 2026.". */
-fun monthName(month: LocalDate): String =
-    "${MonthNames[month.monthValue - 1]} ${month.year}."
+@Composable
+fun monthName(month: LocalDate): String = monthName(month, LocalResources.current)
+
+/** The month alone, lower case in Serbian: "septembar". */
+fun monthWord(month: LocalDate, resources: Resources): String =
+    resources.getStringArray(R.array.month_names)[month.monthValue - 1]
+
+@Composable
+fun monthWord(month: LocalDate): String = monthWord(month, LocalResources.current)
 
 private val ShortDateFormat = DateTimeFormatter.ofPattern("dd.MM.")
 
@@ -86,26 +96,16 @@ fun shortDate(iso: String): String = try {
 
 fun dateTime(
     epochMillis: Long,
+    resources: Resources,
     zone: ZoneId = ZoneId.systemDefault()
 ): String {
     val moment = Instant.ofEpochMilli(epochMillis).atZone(zone)
-    return "${moment.format(DateFormat)} u ${moment.format(TimeFormat)}"
+    return resources.getString(
+        R.string.format_date_at_time,
+        moment.format(DateFormat),
+        moment.format(TimeFormat)
+    )
 }
 
-/**
- * Serbian nouns take one of three forms after a number: 1 stavka, 2 stavke,
- * 5 stavki. The teens always take the last form.
- */
-fun plural(count: Int, one: String, few: String, many: String): String {
-    val lastTwo = count % 100
-    return when {
-        count % 10 == 1 && lastTwo != 11 -> one
-        count % 10 in 2..4 && lastTwo !in 12..14 -> few
-        else -> many
-    }
-}
-
-fun counted(count: Int, one: String, few: String, many: String): String =
-    "$count ${plural(count, one, few, many)}"
-
-fun items(count: Int): String = counted(count, "stavka", "stavke", "stavki")
+@Composable
+fun dateTime(epochMillis: Long): String = dateTime(epochMillis, LocalResources.current)

@@ -1,3 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Default texts are Serbian (Latin script), so a phone in any language without
+  its own translation shows what the app always showed. Each screen keeps its
+  texts in its own strings_<area>.xml; English lives under values-en.
+-->
 <resources>
-    <string name="app_name">Pametna Kupovina</string>
+    <string name="app_name" translatable="false">Pametna Kupovina</string>
+
+    <!-- Shared actions -->
+    <string name="common_cancel">Otkaži</string>
+    <string name="common_close">Zatvori</string>
+    <string name="common_save">Sačuvaj</string>
+    <string name="common_retry">Pokušaj ponovo</string>
+    <string name="common_loading">Učitavanje…</string>
+
+    <!-- Errors shared by every screen -->
+    <string name="error_check_input">Proveri unesene podatke i pokušaj ponovo.</string>
+    <string name="error_list_not_available">Ovaj spisak više nije dostupan na serveru.</string>
+    <string name="error_list_or_item_gone">Traženi spisak ili stavka više ne postoji.</string>
+    <string name="error_server_problem">Server trenutno ima problem. Pokušaj ponovo.</string>
+
+    <!-- Numbers, dates and counts -->
+    <string name="format_date_at_time">%1$s u %2$s</string>
+    <string-array name="month_names">
+        <item>januar</item>
+        <item>februar</item>
+        <item>mart</item>
+        <item>april</item>
+        <item>maj</item>
+        <item>jun</item>
+        <item>jul</item>
+        <item>avgust</item>
+        <item>septembar</item>
+        <item>oktobar</item>
+        <item>novembar</item>
+        <item>decembar</item>
+    </string-array>
+    <string name="format_month_year">%1$s %2$d.</string>
+    <plurals name="count_items">
+        <item quantity="one">%d stavka</item>
+        <item quantity="few">%d stavke</item>
+        <item quantity="other">%d stavki</item>
+    </plurals>
 </resources>

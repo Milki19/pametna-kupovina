@@ -1,6 +1,5 @@
 package rs.pametnakupovina.app.ui
 
-import java.time.ZoneOffset
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -34,20 +33,6 @@ class FormatTest {
         assertEquals("13.09.2026.", date("2026-09-13"))
         assertEquals("nije datum", date("nije datum"))
         assertEquals("13.09.", shortDate("2026-09-13"))
-        assertEquals(
-            "11.09.2026. u 10:55",
-            dateTime(1_789_124_100_000, ZoneOffset.UTC)
-        )
     }
 
-    @Test
-    fun `mnozina prati srpska pravila`() {
-        assertEquals("1 stavka", items(1))
-        assertEquals("3 stavke", items(3))
-        assertEquals("5 stavki", items(5))
-        assertEquals("11 stavki", items(11))
-        assertEquals("12 stavki", items(12))
-        assertEquals("21 stavka", items(21))
-        assertEquals("22 stavke", items(22))
-    }
 }
