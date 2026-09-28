@@ -12,27 +12,72 @@
 -- other does not. With those read the same, each name says nothing the other
 -- does not, and the pair is decided as V99 decides one.
 --
--- A pair where one name still says something the other does not stays on
--- the list: "MEN" deodorant is not the plain one, herring "u paradajz sosu"
--- is not plain herring.
+-- Numbers other than the size and marks of one or two letters must still be
+-- the same: "SPF0" is not "SPF6", "+33%" is not "+20%", "M" deodorant is not
+-- "W". A pair where one name still says something the other does not stays
+-- on the list: "MEN" deodorant is not the plain one, herring "u paradajz
+-- sosu" is not plain herring.
 
--- Words that only say what kind of product it is, per catalogue language.
--- One name having such a word where the other has none tells nothing apart.
-CREATE TABLE app.product_kind_word (
+-- Words of a catalogue language the rules below read specially:
+-- KIND only says what kind of product it is ("čips", "deo"); one name having
+-- it where the other has none tells nothing apart. FILLER is a short word
+-- that says nothing ("u", "sa").
+CREATE TABLE app.product_name_word (
     language_code VARCHAR(35) NOT NULL,
     word VARCHAR(50) NOT NULL,
+    role VARCHAR(20) NOT NULL,
     PRIMARY KEY (language_code, word),
-    CONSTRAINT chk_product_kind_word CHECK (word ~ '^[a-z]{3,}$')
+    CONSTRAINT chk_product_name_word CHECK (word ~ '^[a-z]+$'),
+    CONSTRAINT chk_product_name_word_role CHECK (role IN ('KIND', 'FILLER'))
 );
 
-INSERT INTO app.product_kind_word (language_code, word)
-SELECT app.default_language(), word
+INSERT INTO app.product_name_word (language_code, word, role)
+SELECT app.default_language(), word, role
 FROM (
     VALUES
-        ('cips'), ('cokolada'), ('cokoladica'), ('krekeri'), ('kreker'),
-        ('pasteta'), ('deo'), ('dezodorans'), ('keks'), ('biskvit'),
-        ('bombone'), ('bombona')
-) AS kind(word);
+        ('cips', 'KIND'), ('cokolada', 'KIND'), ('cokoladica', 'KIND'),
+        ('krekeri', 'KIND'), ('kreker', 'KIND'), ('pasteta', 'KIND'),
+        ('deo', 'KIND'), ('dezodorans', 'KIND'), ('keks', 'KIND'),
+        ('biskvit', 'KIND'), ('bombone', 'KIND'), ('bombona', 'KIND'),
+        ('u', 'FILLER'), ('i', 'FILLER'), ('s', 'FILLER'), ('sa', 'FILLER'),
+        ('za', 'FILLER'), ('od', 'FILLER'), ('na', 'FILLER'), ('po', 'FILLER'),
+        ('do', 'FILLER'), ('uz', 'FILLER')
+) AS name_word(word, role);
+
+-- What the words leave out and still tells two products apart: a number
+-- that is not the size ("SPF0" and "SPF6", "+33%" and "+20%") and a single
+-- letter ("M" and "W" deodorant). A chain's stock code ("#12") and a case
+-- count ("1/24") are not part of the product, and "}" or "|" is a letter some
+-- chains' files lost ("pile}a" is "pileća"). Both names must carry the same
+-- ones.
+CREATE OR REPLACE FUNCTION app.product_name_marks(product_name TEXT, filler_words TEXT[])
+RETURNS TEXT[]
+LANGUAGE sql
+IMMUTABLE
+PARALLEL SAFE
+AS $$
+    WITH cleaned AS (
+        SELECT REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(
+                   REGEXP_REPLACE(
+                       REGEXP_REPLACE(LOWER(COALESCE(product_name, '')), '[][{}|~`@^\\]', 'q', 'g'),
+                       '([0-9]),([0-9])', '\1.\2', 'g'),
+                   '[0-9]+(\.[0-9]+)?\s*(ml|l|lit|g|gr|kg|cl|dl)(?![[:alpha:]])', ' ', 'g'),
+                   '#\s*[0-9]+', ' ', 'g'),
+                   '[0-9]+\s*/\s*[0-9]+', ' ', 'g'),
+                   '[0-9]+\s*x(?![[:alpha:]])|(?<![[:alpha:]])x\s*[0-9]+', ' ', 'g') AS text
+    )
+    SELECT COALESCE(ARRAY_AGG(DISTINCT mark ORDER BY mark), '{}')
+    FROM (
+        SELECT TRIM_SCALE(number[1]::NUMERIC)::TEXT AS mark
+        FROM cleaned, REGEXP_MATCHES(cleaned.text, '([0-9]+(\.[0-9]+)?)', 'g') AS number
+        UNION ALL
+        SELECT word
+        FROM cleaned, REGEXP_SPLIT_TO_TABLE(app.fold_match_text(cleaned.text), '[^a-z0-9]+') AS word
+        WHERE word ~ '^[a-z]$'
+          AND word NOT IN ('g', 'l', 'x')
+          AND word <> ALL (filler_words)
+    ) AS marks
+$$;
 
 -- A word of one name is found in the other: the same word, one cut short
 -- from the other (at least four letters, so "men" is not "mentol"), or two
@@ -151,14 +196,29 @@ BEGIN
            app.family_base_package_count(family.id) AS package_count,
            (SELECT COUNT(*) FROM app.product_retailer_presence AS presence
             WHERE presence.product_family_id = family.id) AS chain_count,
-           (SELECT MIN(market.default_language)
-            FROM app.product_retailer_presence AS presence
-            JOIN app.retailer AS retailer ON retailer.id = presence.retailer_id
-            JOIN app.market AS market ON market.id = retailer.market_id
-            WHERE presence.product_family_id = family.id) AS language_code
+           language.code AS language_code,
+           ARRAY(
+               SELECT name_word.word FROM app.product_name_word AS name_word
+               WHERE name_word.language_code = language.code AND name_word.role = 'KIND'
+           ) AS kind_words,
+           app.product_name_marks(
+               family.display_name,
+               ARRAY(
+                   SELECT name_word.word FROM app.product_name_word AS name_word
+                   WHERE name_word.language_code = language.code AND name_word.role = 'FILLER'
+               )
+           ) AS marks
     FROM app.product_family AS family
     JOIN app.brand AS brand
       ON brand.id = family.brand_id
+    -- The language of the chains that sell it.
+    CROSS JOIN LATERAL (
+        SELECT MIN(market.default_language) AS code
+        FROM app.product_retailer_presence AS presence
+        JOIN app.retailer AS retailer ON retailer.id = presence.retailer_id
+        JOIN app.market AS market ON market.id = retailer.market_id
+        WHERE presence.product_family_id = family.id
+    ) AS language
     WHERE family.family_key LIKE 'MK:%'
       AND family.quantity_value IS NOT NULL
       AND EXISTS (
@@ -180,20 +240,19 @@ BEGIN
            right_family.chain_count AS right_chain_count,
            left_family.normalized_name AS left_name,
            right_family.normalized_name AS right_name,
-           left_family.words = right_family.words
+           left_family.marks = right_family.marks
+           AND (
+               left_family.words = right_family.words
                OR (
                    left_family.language_code = right_family.language_code
                    AND app.names_are_one_product(
                        left_family.words,
                        right_family.words,
                        left_family.brand_name,
-                       ARRAY(
-                           SELECT kind.word
-                           FROM app.product_kind_word AS kind
-                           WHERE kind.language_code = left_family.language_code
-                       )
+                       left_family.kind_words
                    )
-               ) AS exact_match
+               )
+           ) AS exact_match
     FROM merge_family AS left_family
     JOIN merge_family AS right_family
       ON right_family.brand_id = left_family.brand_id
