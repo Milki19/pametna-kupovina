@@ -196,18 +196,8 @@ BEGIN
            app.family_base_package_count(family.id) AS package_count,
            (SELECT COUNT(*) FROM app.product_retailer_presence AS presence
             WHERE presence.product_family_id = family.id) AS chain_count,
-           language.code AS language_code,
-           ARRAY(
-               SELECT name_word.word FROM app.product_name_word AS name_word
-               WHERE name_word.language_code = language.code AND name_word.role = 'KIND'
-           ) AS kind_words,
-           app.product_name_marks(
-               family.display_name,
-               ARRAY(
-                   SELECT name_word.word FROM app.product_name_word AS name_word
-                   WHERE name_word.language_code = language.code AND name_word.role = 'FILLER'
-               )
-           ) AS marks
+           family.display_name,
+           language.code AS language_code
     FROM app.product_family AS family
     JOIN app.brand AS brand
       ON brand.id = family.brand_id
@@ -240,7 +230,10 @@ BEGIN
            right_family.chain_count AS right_chain_count,
            left_family.normalized_name AS left_name,
            right_family.normalized_name AS right_name,
-           left_family.marks = right_family.marks
+           -- Read only for pairs that got this far: marks are slow to read
+           -- for every product.
+           app.product_name_marks(left_family.display_name, filler.words)
+               = app.product_name_marks(right_family.display_name, filler.words)
            AND (
                left_family.words = right_family.words
                OR (
@@ -249,7 +242,11 @@ BEGIN
                        left_family.words,
                        right_family.words,
                        left_family.brand_name,
-                       left_family.kind_words
+                       ARRAY(
+                           SELECT name_word.word FROM app.product_name_word AS name_word
+                           WHERE name_word.language_code = left_family.language_code
+                             AND name_word.role = 'KIND'
+                       )
                    )
                )
            ) AS exact_match
@@ -261,6 +258,13 @@ BEGIN
      AND right_family.package_count = left_family.package_count
      AND right_family.id > left_family.id
      AND right_family.product_type_id IS NOT DISTINCT FROM left_family.product_type_id
+    CROSS JOIN LATERAL (
+        SELECT ARRAY(
+                   SELECT name_word.word FROM app.product_name_word AS name_word
+                   WHERE name_word.language_code = left_family.language_code
+                     AND name_word.role = 'FILLER'
+               ) AS words
+    ) AS filler
     WHERE (
               left_family.material IS NULL
               OR right_family.material IS NULL
