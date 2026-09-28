@@ -194,28 +194,26 @@ BEGIN
            app.product_distinguishing_words(family.display_name, brand.display_name) AS words,
            app.product_package_material(family.display_name) AS material,
            app.family_base_package_count(family.id) AS package_count,
-           (SELECT COUNT(*) FROM app.product_retailer_presence AS presence
-            WHERE presence.product_family_id = family.id) AS chain_count,
+           CARDINALITY(presence.retailer_ids) AS chain_count,
+           presence.retailer_ids,
            family.display_name,
-           language.code AS language_code
+           presence.language_code
     FROM app.product_family AS family
     JOIN app.brand AS brand
       ON brand.id = family.brand_id
-    -- The language of the chains that sell it.
-    CROSS JOIN LATERAL (
-        SELECT MIN(market.default_language) AS code
+    -- The chains that sell it, read once, and the language they sell in.
+    JOIN (
+        SELECT presence.product_family_id,
+               ARRAY_AGG(presence.retailer_id ORDER BY presence.retailer_id) AS retailer_ids,
+               MIN(market.default_language) AS language_code
         FROM app.product_retailer_presence AS presence
         JOIN app.retailer AS retailer ON retailer.id = presence.retailer_id
         JOIN app.market AS market ON market.id = retailer.market_id
-        WHERE presence.product_family_id = family.id
-    ) AS language
+        GROUP BY presence.product_family_id
+    ) AS presence
+      ON presence.product_family_id = family.id
     WHERE family.family_key LIKE 'MK:%'
-      AND family.quantity_value IS NOT NULL
-      AND EXISTS (
-          SELECT 1
-          FROM app.product_retailer_presence AS presence
-          WHERE presence.product_family_id = family.id
-      );
+      AND family.quantity_value IS NOT NULL;
 
     CREATE INDEX ON merge_family (brand_id, quantity_value, base_unit);
     ANALYZE merge_family;
@@ -272,14 +270,7 @@ BEGIN
           )
       AND app.names_say_the_same(left_family.words, right_family.words)
       -- A chain that sells both sells two products.
-      AND NOT EXISTS (
-          SELECT 1
-          FROM app.product_retailer_presence AS left_presence
-          JOIN app.product_retailer_presence AS right_presence
-            ON right_presence.retailer_id = left_presence.retailer_id
-           AND right_presence.product_family_id = right_family.id
-          WHERE left_presence.product_family_id = left_family.id
-      )
+      AND NOT left_family.retailer_ids && right_family.retailer_ids
       AND NOT EXISTS (
           SELECT 1
           FROM app.product_merge_decision AS decision
