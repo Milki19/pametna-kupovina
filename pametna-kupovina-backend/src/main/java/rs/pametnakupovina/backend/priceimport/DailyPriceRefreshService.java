@@ -89,14 +89,15 @@ public class DailyPriceRefreshService {
                         """, market.id());
                 recovery.recover();
                 LocalDate today = market.today();
-                if (!manual && !due(market, today)) return Map.of("status", "NOT_DUE");
+                List<ChainPriceSource> chains = marketSources.chains();
+                if (!manual && !due(market, today, requiredCodes(chains))) return Map.of("status", "NOT_DUE");
                 long id = jdbc.queryForObject("""
                         INSERT INTO app.price_refresh_cycle(market_id,cycle_date,status) VALUES (?,?,'RUNNING') RETURNING id
                         """, Long.class, market.id(), today);
                 boolean failed = false;
                 boolean warning = false;
                 try {
-                    for (ChainPriceSource chain : marketSources.chains()) {
+                    for (ChainPriceSource chain : chains) {
                         String code = chain.code();
                         ChainRefreshOutcome outcome;
                         try {
@@ -135,14 +136,34 @@ public class DailyPriceRefreshService {
     }
 
     /** From eight in the morning where the market is, at most three tries a day, two hours apart. */
-    private boolean due(Market market, LocalDate today) {
+    private boolean due(Market market, LocalDate today, List<String> requiredCodes) {
         if (ZonedDateTime.now(market.timeZone()).getHour() < 8) return false;
+        return retryWanted(market, today, requiredCodes);
+    }
+
+    /**
+     * Another try helps only while a required chain is short of clean: a
+     * retry can pick up the list a chain publishes late. A day that warns
+     * only because of a chain that may not fail it (a stale chain-wide list,
+     * one bad row in a portal chain's file) comes out the same on every try,
+     * so it counts as done.
+     */
+    public boolean retryWanted(Market market, LocalDate today, List<String> requiredCodes) {
         return Boolean.TRUE.equals(jdbc.queryForObject("""
                 SELECT COUNT(*) < 3
-                  AND COUNT(*) FILTER (WHERE status='SUCCEEDED')=0
-                  AND COALESCE(MAX(started_at) < now()-interval '2 hours',true)
-                FROM app.price_refresh_cycle WHERE market_id=? AND cycle_date=?
-                """, Boolean.class, market.id(), today));
+                  AND COUNT(*) FILTER (WHERE cycle.status='SUCCEEDED'
+                      OR (cycle.status='WARNING' AND NOT EXISTS (
+                          SELECT 1 FROM app.price_refresh_result AS result
+                           WHERE result.cycle_id=cycle.id
+                             AND result.retailer_code = ANY(string_to_array(?, ','))
+                             AND result.status<>'SUCCEEDED')))=0
+                  AND COALESCE(MAX(cycle.started_at) < now()-interval '2 hours',true)
+                FROM app.price_refresh_cycle AS cycle WHERE cycle.market_id=? AND cycle.cycle_date=?
+                """, Boolean.class, String.join(",", requiredCodes), market.id(), today));
+    }
+
+    private static List<String> requiredCodes(List<ChainPriceSource> chains) {
+        return chains.stream().filter(ChainPriceSource::required).map(ChainPriceSource::code).toList();
     }
 
     static int consecutiveDays(Set<LocalDate> successfulDays, LocalDate today) {

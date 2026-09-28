@@ -307,6 +307,45 @@ class PametnaKupovinaBackendApplicationTests {
     }
 
     @Test
+    void dailyRefreshRetriesOnlyWhileARequiredChainIsShortOfClean() {
+        var importer = org.mockito.Mockito.mock(PriceImportService.class);
+        var maxi = org.mockito.Mockito.mock(rs.pametnakupovina.backend.priceimport.maxi.MaxiPriceImportCoordinator.class);
+        var serbia = new rs.pametnakupovina.backend.market.MarketRepository(jdbcClient).defaultMarket();
+        var today = serbia.today();
+        var fresh = new ImportResult(1L,today,2,2,2,0,"SUCCEEDED");
+        org.mockito.Mockito.when(importer.importPrices(org.mockito.ArgumentMatchers.anyString())).thenReturn(fresh);
+        var stores = java.util.stream.IntStream.range(0,6).mapToObj(i ->
+                new rs.pametnakupovina.backend.priceimport.maxi.MaxiStoreImportResult("store"+i,"test",fresh,null)).toList();
+        org.mockito.Mockito.when(maxi.importLatest()).thenReturn(
+                new rs.pametnakupovina.backend.priceimport.maxi.MaxiLatestImportResult(today,6,6,"SUCCEEDED",stores));
+        var sources = new rs.pametnakupovina.backend.priceimport.serbia.SerbianPriceSources(importer,maxi,jdbcClient);
+        var service = new rs.pametnakupovina.backend.priceimport.DailyPriceRefreshService(
+                new org.springframework.jdbc.core.JdbcTemplate(testDataSource),testDataSource,java.util.List.of(sources),
+                new rs.pametnakupovina.backend.priceimport.ImportRunRecovery(jdbcClient),
+                new rs.pametnakupovina.backend.market.MarketRepository(jdbcClient));
+        var required = sources.chains().stream()
+                .filter(rs.pametnakupovina.backend.priceimport.ChainPriceSource::required)
+                .map(rs.pametnakupovina.backend.priceimport.ChainPriceSource::code).toList();
+        Runnable twoHoursLater = () -> jdbcClient.sql(
+                "UPDATE app.price_refresh_cycle SET started_at = started_at - interval '3 hours'").update();
+
+        // Only METRO, which may not fail the day, warns: another try changes nothing.
+        org.mockito.Mockito.when(importer.importPrices("METRO")).thenThrow(new IllegalStateException("Test failure"));
+        assertThat(service.refresh(true).get("status")).isEqualTo("WARNING");
+        twoHoursLater.run();
+        assertThat(service.retryWanted(serbia, today, required)).isFalse();
+
+        // LIDL's list is from last week: a later try may find today's.
+        jdbcClient.sql("DELETE FROM app.price_refresh_result").update();
+        jdbcClient.sql("DELETE FROM app.price_refresh_cycle").update();
+        org.mockito.Mockito.when(importer.importPrices("LIDL")).thenReturn(
+                new ImportResult(1L,today.minusDays(7),2,2,2,0,"SUCCEEDED"));
+        assertThat(service.refresh(true).get("status")).isEqualTo("WARNING");
+        twoHoursLater.run();
+        assertThat(service.retryWanted(serbia, today, required)).isTrue();
+    }
+
+    @Test
     void dailyRefreshRefusesOverlapAndRecoversInterruptedCycle() throws Exception {
         var importer = org.mockito.Mockito.mock(PriceImportService.class);
         var maxi = org.mockito.Mockito.mock(rs.pametnakupovina.backend.priceimport.maxi.MaxiPriceImportCoordinator.class);
