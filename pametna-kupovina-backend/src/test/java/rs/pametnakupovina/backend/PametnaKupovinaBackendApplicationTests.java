@@ -5205,7 +5205,9 @@ class PametnaKupovinaBackendApplicationTests {
      * V111: skraćena reč („straw", „PAST."), dve reči spojene u jednu
      * („KOKOKREM") i reč za vrstu proizvoda koju samo jedan lanac piše
      * („CIPS", „COKOLADA") ne razdvajaju proizvod — parovi sa admin stranice
-     * se spajaju sami. „MEN" dezodorans i dalje ostaje pitanje za vlasnika.
+     * se spajaju sami. „MEN" dezodorans i dalje ostaje pitanje za vlasnika,
+     * a broj ili oznaka koja se ne poklapa („SPF0"/„SPF6", „M"/„W") nikad se
+     * ne spaja sama.
      */
     @Test
     void lookAlikesThatDifferOnlyByShorteningOrKindJoinButMenStaysAsked() {
@@ -5247,11 +5249,23 @@ class PametnaKupovinaBackendApplicationTests {
         long plainB = insertMergeCandidate(retailerB, "DEO SPREJ PROTECT&CARE NIVEA 150ML", "Nivea", 150, "ml", normalizer);
         offerCurrentPrice(plainB, runB, 299.99);
 
+        long spfA = insertMergeCandidate(retailerA, "CAR ULJE ZA SUNCANJE SPF0 200ML", "Car", 200, "ml", normalizer);
+        offerCurrentPrice(spfA, runA, 499.99);
+        long spfB = insertMergeCandidate(retailerB, "Car ulje za suncanje SPF6 200ml", "Car", 200, "ml", normalizer);
+        offerCurrentPrice(spfB, runB, 529.99);
+
+        long womenA = insertMergeCandidate(retailerA, "NIVEA ROLL ON DRY W 50ML", "Nivea", 50, "ml", normalizer);
+        offerCurrentPrice(womenA, runA, 219.99);
+        long manB = insertMergeCandidate(retailerB, "NIVEA ROLLON DRY M 50ml", "Nivea", 50, "ml", normalizer);
+        offerCurrentPrice(manB, runB, 229.99);
+
         productCatalogMaintenanceService.refreshRetailer(retailerA);
         productCatalogMaintenanceService.refreshRetailer(retailerB);
         productCatalogMaintenanceService.refreshRetailer(retailerA);
         productCatalogMaintenanceService.refreshRetailer(retailerB);
 
+        assertThat(familyOf(spfA)).isNotEqualTo(familyOf(spfB));
+        assertThat(familyOf(womenA)).isNotEqualTo(familyOf(manB));
         assertThat(familyOf(chipsA)).isEqualTo(familyOf(chipsB));
         assertThat(familyOf(chocolateA)).isEqualTo(familyOf(chocolateB));
         assertThat(familyOf(pateA)).isEqualTo(familyOf(pateB));
