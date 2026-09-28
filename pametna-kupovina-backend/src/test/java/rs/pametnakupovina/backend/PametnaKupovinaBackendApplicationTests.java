@@ -5201,6 +5201,70 @@ class PametnaKupovinaBackendApplicationTests {
         assertThat(familyOf(variantA)).isNotEqualTo(familyOf(sameA));
     }
 
+    /**
+     * V111: skraćena reč („straw", „PAST."), dve reči spojene u jednu
+     * („KOKOKREM") i reč za vrstu proizvoda koju samo jedan lanac piše
+     * („CIPS", „COKOLADA") ne razdvajaju proizvod — parovi sa admin stranice
+     * se spajaju sami. „MEN" dezodorans i dalje ostaje pitanje za vlasnika.
+     */
+    @Test
+    void lookAlikesThatDifferOnlyByShorteningOrKindJoinButMenStaysAsked() {
+        var normalizer = new rs.pametnakupovina.backend.matching.ProductNameNormalizer();
+
+        long retailerA = jdbcClient.sql("INSERT INTO app.retailer(code,name) VALUES('KINDA','Kind A test') RETURNING id")
+                .query(Long.class).single();
+        long formatA = jdbcClient.sql("INSERT INTO app.store_format(retailer_id,code,name) VALUES(?,'TEST','Test') RETURNING id")
+                .param(retailerA).query(Long.class).single();
+        insertVerifiedStore(retailerA, formatA, "KINDA-SHOP", "Test", 44.27, 19.88, true);
+        long runA = jdbcClient.sql("INSERT INTO app.import_run(retailer_id,source_url,status) VALUES(?,'https://example.test/kinda','SUCCEEDED') RETURNING id")
+                .param(retailerA).query(Long.class).single();
+
+        long retailerB = jdbcClient.sql("INSERT INTO app.retailer(code,name) VALUES('KINDB','Kind B test') RETURNING id")
+                .query(Long.class).single();
+        long formatB = jdbcClient.sql("INSERT INTO app.store_format(retailer_id,code,name) VALUES(?,'TEST','Test') RETURNING id")
+                .param(retailerB).query(Long.class).single();
+        insertVerifiedStore(retailerB, formatB, "KINDB-SHOP", "Test", 44.27, 19.88, true);
+        long runB = jdbcClient.sql("INSERT INTO app.import_run(retailer_id,source_url,status) VALUES(?,'https://example.test/kindb','SUCCEEDED') RETURNING id")
+                .param(retailerB).query(Long.class).single();
+
+        long chipsA = insertMergeCandidate(retailerA, "Pringles Hot&Spicy 165g", "Pringles", 165, "g", normalizer);
+        offerCurrentPrice(chipsA, runA, 224.99);
+        long chipsB = insertMergeCandidate(retailerB, "CIPS HOT SPICY PRINGLES 165G", "Pringles", 165, "g", normalizer);
+        offerCurrentPrice(chipsB, runB, 249.99);
+
+        long chocolateA = insertMergeCandidate(retailerA, "Milka straw cheesecake 300g #12", "Milka", 300, "g", normalizer);
+        offerCurrentPrice(chocolateA, runA, 369.90);
+        long chocolateB = insertMergeCandidate(retailerB, "COKOLADA MILKA STRAWBERRY CHEESECAKE 300G", "Milka", 300, "g", normalizer);
+        offerCurrentPrice(chocolateB, runB, 399.99);
+
+        long pateA = insertMergeCandidate(retailerA, "PAST.ARGETA JUNIOR KOKOKREM 95g", "Argeta", 95, "g", normalizer);
+        offerCurrentPrice(pateA, runA, 109.99);
+        long pateB = insertMergeCandidate(retailerB, "PAŠTETA ARGETA JUNIOR 95G KOKO KREM", "Argeta", 95, "g", normalizer);
+        offerCurrentPrice(pateB, runB, 114.99);
+
+        long menA = insertMergeCandidate(retailerA, "NIV.DEO SPREJ 150ML PROTECT&CARE MEN", "Nivea", 150, "ml", normalizer);
+        offerCurrentPrice(menA, runA, 369.90);
+        long plainB = insertMergeCandidate(retailerB, "DEO SPREJ PROTECT&CARE NIVEA 150ML", "Nivea", 150, "ml", normalizer);
+        offerCurrentPrice(plainB, runB, 299.99);
+
+        productCatalogMaintenanceService.refreshRetailer(retailerA);
+        productCatalogMaintenanceService.refreshRetailer(retailerB);
+        productCatalogMaintenanceService.refreshRetailer(retailerA);
+        productCatalogMaintenanceService.refreshRetailer(retailerB);
+
+        assertThat(familyOf(chipsA)).isEqualTo(familyOf(chipsB));
+        assertThat(familyOf(chocolateA)).isEqualTo(familyOf(chocolateB));
+        assertThat(familyOf(pateA)).isEqualTo(familyOf(pateB));
+        assertThat(familyOf(menA)).isNotEqualTo(familyOf(plainB));
+        assertThat(jdbcClient.sql("""
+                        SELECT COUNT(*) FROM app.product_merge_suggestion
+                        WHERE (left_family_id, right_family_id) IN ((?, ?), (?, ?))
+                        """)
+                .params(familyOf(menA), familyOf(plainB), familyOf(plainB), familyOf(menA))
+                .query(Integer.class).single())
+                .isEqualTo(1);
+    }
+
     private long insertMergeCandidate(
             long retailerId, String name, String brand, int quantity, String unit,
             rs.pametnakupovina.backend.matching.ProductNameNormalizer normalizer
