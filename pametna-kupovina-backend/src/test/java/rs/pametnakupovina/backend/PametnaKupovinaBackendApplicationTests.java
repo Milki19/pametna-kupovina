@@ -5207,7 +5207,9 @@ class PametnaKupovinaBackendApplicationTests {
      * („CIPS", „COKOLADA") ne razdvajaju proizvod — parovi sa admin stranice
      * se spajaju sami. „MEN" dezodorans i dalje ostaje pitanje za vlasnika,
      * a broj ili oznaka koja se ne poklapa („SPF0"/„SPF6", „M"/„W") nikad se
-     * ne spaja sama.
+     * ne spaja sama. V112: skraćenice od tri slova („COK.") se čitaju kao cela
+     * reč, a kozmetika („GEL ZA TUŠIRANJE" prema samo „CREME SOFT") se ne
+     * spaja kad samo jedno ime kaže šta je.
      */
     @Test
     void lookAlikesThatDifferOnlyByShorteningOrKindJoinButMenStaysAsked() {
@@ -5259,11 +5261,23 @@ class PametnaKupovinaBackendApplicationTests {
         long manB = insertMergeCandidate(retailerB, "NIVEA ROLLON DRY M 50ml", "Nivea", 50, "ml", normalizer);
         offerCurrentPrice(manB, runB, 229.99);
 
+        long oreoA = insertMergeCandidate(retailerA, "COK.MILKA OREO 100g", "Milka", 100, "g", normalizer);
+        offerCurrentPrice(oreoA, runA, 159.99);
+        long oreoB = insertMergeCandidate(retailerB, "COKOLADA MILKA OREO 100gr", "Milka", 100, "g", normalizer);
+        offerCurrentPrice(oreoB, runB, 169.99);
+
+        long showerA = insertMergeCandidate(retailerA, "GEL ZA TUSIRANJE CREME SOFT NIVEA 250ML", "Nivea", 250, "ml", normalizer);
+        offerCurrentPrice(showerA, runA, 299.99);
+        long bareB = insertMergeCandidate(retailerB, "NIVEA CREME SOFT 250ML", "Nivea", 250, "ml", normalizer);
+        offerCurrentPrice(bareB, runB, 309.99);
+
         productCatalogMaintenanceService.refreshRetailer(retailerA);
         productCatalogMaintenanceService.refreshRetailer(retailerB);
         productCatalogMaintenanceService.refreshRetailer(retailerA);
         productCatalogMaintenanceService.refreshRetailer(retailerB);
 
+        assertThat(familyOf(oreoA)).isEqualTo(familyOf(oreoB));
+        assertThat(familyOf(showerA)).isNotEqualTo(familyOf(bareB));
         assertThat(familyOf(spfA)).isNotEqualTo(familyOf(spfB));
         assertThat(familyOf(womenA)).isNotEqualTo(familyOf(manB));
         assertThat(familyOf(chipsA)).isEqualTo(familyOf(chipsB));
