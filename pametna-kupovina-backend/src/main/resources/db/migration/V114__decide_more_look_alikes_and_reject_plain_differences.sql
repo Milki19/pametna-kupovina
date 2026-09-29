@@ -460,9 +460,9 @@ BEGIN
                    SELECT 1
                    FROM (VALUES (candidate.left_read, candidate.right_read),
                                 (candidate.right_read, candidate.left_read)) AS side(own, other)
-                   CROSS JOIN UNNEST(side.own) AS word
-                   JOIN merge_brand_word AS brand_word ON brand_word.word = word
-                   WHERE NOT app.name_word_found(word, side.own, side.other)
+                   CROSS JOIN UNNEST(side.own) AS own_word(word)
+                   JOIN merge_brand_word AS brand_word ON brand_word.word = own_word.word
+                   WHERE NOT app.name_word_found(own_word.word, side.own, side.other)
                )
            ) AS two_products
     FROM merge_candidate AS candidate;
