@@ -5293,6 +5293,106 @@ class PametnaKupovinaBackendApplicationTests {
                 .isEqualTo(1);
     }
 
+    /**
+     * V114: skraćenica od tri slova („nap."), ime distributera („delta dmd")
+     * i šifra artikla („601696") ne razdvajaju proizvod. Različit procenat
+     * („11%"/„13%") i tuđi brend u imenu („Dove" roll-on koji je u stvari
+     * NIVEA) se sami odbacuju i nestaju sa liste. Ime koje ne kaže ukus
+     * („Fruštuk kobasica mini" prema „... LJUTA") i dalje pita vlasnika.
+     */
+    @Test
+    void plainDifferencesAreRejectedAndNoiseWordsJoinButAMissingFlavourStaysAsked() {
+        var normalizer = new rs.pametnakupovina.backend.matching.ProductNameNormalizer();
+
+        long retailerA = jdbcClient.sql("INSERT INTO app.retailer(code,name) VALUES('RULEA','Rule A test') RETURNING id")
+                .query(Long.class).single();
+        long formatA = jdbcClient.sql("INSERT INTO app.store_format(retailer_id,code,name) VALUES(?,'TEST','Test') RETURNING id")
+                .param(retailerA).query(Long.class).single();
+        insertVerifiedStore(retailerA, formatA, "RULEA-SHOP", "Test", 44.27, 19.88, true);
+        long runA = jdbcClient.sql("INSERT INTO app.import_run(retailer_id,source_url,status) VALUES(?,'https://example.test/rulea','SUCCEEDED') RETURNING id")
+                .param(retailerA).query(Long.class).single();
+
+        long retailerB = jdbcClient.sql("INSERT INTO app.retailer(code,name) VALUES('RULEB','Rule B test') RETURNING id")
+                .query(Long.class).single();
+        long formatB = jdbcClient.sql("INSERT INTO app.store_format(retailer_id,code,name) VALUES(?,'TEST','Test') RETURNING id")
+                .param(retailerB).query(Long.class).single();
+        insertVerifiedStore(retailerB, formatB, "RULEB-SHOP", "Test", 44.27, 19.88, true);
+        long runB = jdbcClient.sql("INSERT INTO app.import_run(retailer_id,source_url,status) VALUES(?,'https://example.test/ruleb','SUCCEEDED') RETURNING id")
+                .param(retailerB).query(Long.class).single();
+
+        long drinkA = insertMergeCandidate(retailerA, "Energ.nap.Red Bull lubenica 0,25l", "Red Bull", 250, "ml", normalizer);
+        offerCurrentPrice(drinkA, runA, 169.99);
+        long drinkB = insertMergeCandidate(retailerB, "ENERGETSKI NAPITAK RED BULL LUBENICA 0.25L", "Red Bull", 250, "ml", normalizer);
+        offerCurrentPrice(drinkB, runB, 179.99);
+
+        long creamA = insertMergeCandidate(retailerA, "Krema Soft Nivea 200ml", "Nivea", 200, "ml", normalizer);
+        offerCurrentPrice(creamA, runA, 399.99);
+        long creamB = insertMergeCandidate(retailerB, "krema nivea soft 200 ml delta dmd", "Nivea", 200, "ml", normalizer);
+        offerCurrentPrice(creamB, runB, 389.99);
+
+        long sausageA = insertMergeCandidate(retailerA, "Mini Pileća Posebna YUHOR 350 g", "Yuhor", 350, "g", normalizer);
+        offerCurrentPrice(sausageA, runA, 299.99);
+        long sausageB = insertMergeCandidate(retailerB, "PILEĆA POSEBNA MINI YUHOR 350G 601696", "Yuhor", 350, "g", normalizer);
+        offerCurrentPrice(sausageB, runB, 309.99);
+
+        long wineA = insertMergeCandidate(retailerA, "Vino belo Chardonnay 11% 0,75l", "Rubin", 750, "ml", normalizer);
+        offerCurrentPrice(wineA, runA, 599.99);
+        long wineB = insertMergeCandidate(retailerB, "VINO CHARDONNAY 13% 0.75L RUBIN", "Rubin", 750, "ml", normalizer);
+        offerCurrentPrice(wineB, runB, 649.99);
+
+        long doveA = insertMergeCandidate(retailerA, "Dove Roll On Original 50 ml", "Dove", 50, "ml", normalizer);
+        offerCurrentPrice(doveA, runA, 299.99);
+        long niveaB = insertMergeCandidate(retailerB, "DEZODORANS NIVEA ROLL ON W ORIGINAL 50ML", "Dove", 50, "ml", normalizer);
+        offerCurrentPrice(niveaB, runB, 289.99);
+
+        long plainA = insertMergeCandidate(retailerA, "Fruštuk kobasica mini 230g", "Neoplanta", 230, "g", normalizer);
+        offerCurrentPrice(plainA, runA, 249.99);
+        long hotB = insertMergeCandidate(retailerB, "KOB FRUSTUK MINI LJUTA 230G NEOPLANTA", "Neoplanta", 230, "g", normalizer);
+        offerCurrentPrice(hotB, runB, 259.99);
+
+        productCatalogMaintenanceService.refreshRetailer(retailerA);
+        productCatalogMaintenanceService.refreshRetailer(retailerB);
+        productCatalogMaintenanceService.refreshRetailer(retailerA);
+        productCatalogMaintenanceService.refreshRetailer(retailerB);
+
+        assertThat(familyOf(drinkA)).isEqualTo(familyOf(drinkB));
+        assertThat(familyOf(creamA)).isEqualTo(familyOf(creamB));
+        assertThat(familyOf(sausageA)).isEqualTo(familyOf(sausageB));
+        assertThat(familyOf(wineA)).isNotEqualTo(familyOf(wineB));
+        assertThat(familyOf(doveA)).isNotEqualTo(familyOf(niveaB));
+        assertThat(familyOf(plainA)).isNotEqualTo(familyOf(hotB));
+
+        String suggestionsOf = """
+                SELECT COUNT(*) FROM app.product_merge_suggestion
+                WHERE (left_family_id, right_family_id) IN ((?, ?), (?, ?))
+                """;
+        assertThat(jdbcClient.sql(suggestionsOf)
+                .params(familyOf(wineA), familyOf(wineB), familyOf(wineB), familyOf(wineA))
+                .query(Integer.class).single())
+                .isZero();
+        assertThat(jdbcClient.sql(suggestionsOf)
+                .params(familyOf(doveA), familyOf(niveaB), familyOf(niveaB), familyOf(doveA))
+                .query(Integer.class).single())
+                .isZero();
+        assertThat(jdbcClient.sql(suggestionsOf)
+                .params(familyOf(plainA), familyOf(hotB), familyOf(hotB), familyOf(plainA))
+                .query(Integer.class).single())
+                .isEqualTo(1);
+        assertThat(jdbcClient.sql("""
+                        SELECT COUNT(*) FROM app.product_merge_decision
+                        WHERE decision = 'DIFFERENT'
+                          AND (left_key, right_key) IN (
+                              SELECT LEAST(SUBSTRING(l.family_key FROM 4), SUBSTRING(r.family_key FROM 4)),
+                                     GREATEST(SUBSTRING(l.family_key FROM 4), SUBSTRING(r.family_key FROM 4))
+                              FROM app.product_family AS l, app.product_family AS r
+                              WHERE (l.id, r.id) IN ((?, ?), (?, ?))
+                          )
+                        """)
+                .params(familyOf(wineA), familyOf(wineB), familyOf(doveA), familyOf(niveaB))
+                .query(Integer.class).single())
+                .isEqualTo(2);
+    }
+
     private long insertMergeCandidate(
             long retailerId, String name, String brand, int quantity, String unit,
             rs.pametnakupovina.backend.matching.ProductNameNormalizer normalizer
