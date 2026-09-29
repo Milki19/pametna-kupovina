@@ -5296,9 +5296,10 @@ class PametnaKupovinaBackendApplicationTests {
     /**
      * V114: skraćenica od tri slova („nap."), ime distributera („delta dmd")
      * i šifra artikla („601696") ne razdvajaju proizvod. Različit procenat
-     * („11%"/„13%") i tuđi brend u imenu („Dove" roll-on koji je u stvari
-     * NIVEA) se sami odbacuju i nestaju sa liste. Ime koje ne kaže ukus
-     * („Fruštuk kobasica mini" prema „... LJUTA") i dalje pita vlasnika.
+     * („11%"/„13%") se sam odbacuje i nestaje sa liste. Različite količine
+     * u imenu (paket „500ML+250ML" prema jednoj bočici od 250 ml) se ne
+     * spajaju, kao ni ime koje ne kaže ukus („Fruštuk kobasica mini" prema
+     * „... LJUTA"): oba i dalje pitaju vlasnika.
      */
     @Test
     void plainDifferencesAreRejectedAndNoiseWordsJoinButAMissingFlavourStaysAsked() {
@@ -5340,10 +5341,10 @@ class PametnaKupovinaBackendApplicationTests {
         long wineB = insertMergeCandidate(retailerB, "VINO CHARDONNAY 13% 0.75L RUBIN", "Rubin", 750, "ml", normalizer);
         offerCurrentPrice(wineB, runB, 649.99);
 
-        long doveA = insertMergeCandidate(retailerA, "Dove Roll On Original 50 ml", "Dove", 50, "ml", normalizer);
-        offerCurrentPrice(doveA, runA, 299.99);
-        long niveaB = insertMergeCandidate(retailerB, "DEZODORANS NIVEA ROLL ON W ORIGINAL 50ML", "Dove", 50, "ml", normalizer);
-        offerCurrentPrice(niveaB, runB, 289.99);
+        long gelA = insertMergeCandidate(retailerA, "GEL ZA TUŠIRANJE MEN PROTECT&CARE NIVEA 250ML", "Nivea", 250, "ml", normalizer);
+        offerCurrentPrice(gelA, runA, 299.99);
+        long packB = insertMergeCandidate(retailerB, "GEL TUŠ MEN NIV PRO&CARE500ML+250ML", "Nivea", 250, "ml", normalizer);
+        offerCurrentPrice(packB, runB, 589.99);
 
         long plainA = insertMergeCandidate(retailerA, "Fruštuk kobasica mini 230g", "Neoplanta", 230, "g", normalizer);
         offerCurrentPrice(plainA, runA, 249.99);
@@ -5359,7 +5360,7 @@ class PametnaKupovinaBackendApplicationTests {
         assertThat(familyOf(creamA)).isEqualTo(familyOf(creamB));
         assertThat(familyOf(sausageA)).isEqualTo(familyOf(sausageB));
         assertThat(familyOf(wineA)).isNotEqualTo(familyOf(wineB));
-        assertThat(familyOf(doveA)).isNotEqualTo(familyOf(niveaB));
+        assertThat(familyOf(gelA)).isNotEqualTo(familyOf(packB));
         assertThat(familyOf(plainA)).isNotEqualTo(familyOf(hotB));
 
         String suggestionsOf = """
@@ -5371,9 +5372,9 @@ class PametnaKupovinaBackendApplicationTests {
                 .query(Integer.class).single())
                 .isZero();
         assertThat(jdbcClient.sql(suggestionsOf)
-                .params(familyOf(doveA), familyOf(niveaB), familyOf(niveaB), familyOf(doveA))
+                .params(familyOf(gelA), familyOf(packB), familyOf(packB), familyOf(gelA))
                 .query(Integer.class).single())
-                .isZero();
+                .isEqualTo(1);
         assertThat(jdbcClient.sql(suggestionsOf)
                 .params(familyOf(plainA), familyOf(hotB), familyOf(hotB), familyOf(plainA))
                 .query(Integer.class).single())
@@ -5388,9 +5389,9 @@ class PametnaKupovinaBackendApplicationTests {
                               WHERE (l.id, r.id) IN ((?, ?), (?, ?))
                           )
                         """)
-                .params(familyOf(wineA), familyOf(wineB), familyOf(doveA), familyOf(niveaB))
+                .params(familyOf(wineA), familyOf(wineB), familyOf(gelA), familyOf(packB))
                 .query(Integer.class).single())
-                .isEqualTo(2);
+                .isEqualTo(1);
     }
 
     private long insertMergeCandidate(
