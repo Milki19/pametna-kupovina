@@ -17,11 +17,14 @@
 -- Two products, plainly:
 --   "Vino belo Chardonnay 11% 0,75l"      / "VINO CHARDONNAY 13% 0.75L RUBIN"
 --   "NIVEA ROLLON M PROTECT CARE 50ml"    / "DEZODORANS NIVEA ROLL ON W PROTECT & CARE 50ML"
---   "Dove Roll On Original 50 ml"         / "DEZODORANS NIVEA ROLL ON W ORIGINAL 50ML"
--- Each name carries a number the other does not, the two names say
--- different things of one kind (men and women, white and red), or one name
--- is another brand's product filed under this brand. Those pairs are
--- decided DIFFERENT and leave the list.
+-- Each name carries a number the other does not, or the two names say
+-- different things of one kind (men and women, white and red). Those pairs
+-- are decided DIFFERENT and leave the list. A word that is some brand's
+-- name is not enough: makers and product lines ("Palmira", "Lastar") are
+-- brand names too.
+--
+-- Names that state different amounts ("43g" and "39G", a "500ML+250ML"
+-- pack and one bottle) are never joined; they stay for the owner.
 --
 -- What stays for the owner is a pair where one name says something the
 -- other leaves out ("Palmolive tečni sapun 300ml" and "... ALMOND MILK").
@@ -144,6 +147,30 @@ AS $$
 $$;
 
 DROP FUNCTION app.product_name_marks(TEXT, TEXT[]);
+
+-- Every amount a name states, in ml or g ("1,5L" and "1500 ml" read the
+-- same). A pack sold as "500ML+250ML" states two.
+CREATE OR REPLACE FUNCTION app.product_name_amounts(product_name TEXT)
+RETURNS TEXT[]
+LANGUAGE sql
+IMMUTABLE
+PARALLEL SAFE
+AS $$
+    SELECT COALESCE(ARRAY_AGG(DISTINCT TRIM_SCALE(amount)::TEXT), '{}')
+    FROM (
+        SELECT found[1]::NUMERIC * CASE found[3]
+                                       WHEN 'l' THEN 1000
+                                       WHEN 'lit' THEN 1000
+                                       WHEN 'kg' THEN 1000
+                                       WHEN 'dl' THEN 100
+                                       WHEN 'cl' THEN 10
+                                       ELSE 1
+                                   END AS amount
+        FROM REGEXP_MATCHES(
+                 REGEXP_REPLACE(LOWER(COALESCE(product_name, '')), '([0-9]),([0-9])', '\1.\2', 'g'),
+                 '([0-9]+(\.[0-9]+)?)\s*(ml|lit|l|kg|g|gr|cl|dl)(?![[:alpha:]])', 'g') AS found
+    ) AS amounts
+$$;
 
 -- A name's words as the rules read them: shortenings spelled out, the brand
 -- (also cut short) and words that say nothing set aside.
@@ -295,7 +322,7 @@ $$;
 
 -- refresh
 -- As V112, with the rules above, and a pair that plainly names two products,
--- or one that is another brand's product under this brand, decided DIFFERENT.
+-- decided DIFFERENT.
 CREATE OR REPLACE FUNCTION app.refresh_product_merge_suggestions()
 RETURNS void
 LANGUAGE plpgsql
@@ -304,7 +331,6 @@ BEGIN
     DROP TABLE IF EXISTS pg_temp.merge_family;
     DROP TABLE IF EXISTS pg_temp.merge_candidate;
     DROP TABLE IF EXISTS pg_temp.merge_pair;
-    DROP TABLE IF EXISTS pg_temp.merge_brand_word;
 
     CREATE TEMP TABLE merge_family ON COMMIT DROP AS
     SELECT family.id,
@@ -361,6 +387,8 @@ BEGIN
                                   name_words.shorts, name_words.means) AS left_marks,
            app.product_name_marks(right_family.display_name, name_words.fillers,
                                   name_words.shorts, name_words.means) AS right_marks,
+           app.product_name_amounts(left_family.display_name) AS left_amounts,
+           app.product_name_amounts(right_family.display_name) AS right_amounts,
            app.product_name_read_words(left_family.words, left_family.brand_name,
                                        name_words.noise, name_words.shorts,
                                        name_words.means) AS left_read,
@@ -408,31 +436,17 @@ BEGIN
             AND decision.right_key = GREATEST(left_family.match_key, right_family.match_key)
       );
 
-    -- One-word brand names, to catch a product of one brand filed under
-    -- another ("Dove" roll-on named "NIVEA ROLL ON"). A brand name that is
-    -- also a common word in other brands' names ("fresh") tells nothing.
-    CREATE TEMP TABLE merge_brand_word ON COMMIT DROP AS
-    SELECT brand_name.word
-    FROM (
-        SELECT DISTINCT app.fold_match_text(display_name) AS word FROM app.brand
-    ) AS brand_name
-    LEFT JOIN (
-        SELECT word, COUNT(*) AS families
-        FROM merge_family, UNNEST(merge_family.words) AS word
-        GROUP BY word
-    ) AS used ON used.word = brand_name.word
-    WHERE brand_name.word ~ '^[a-z]{4,}$'
-      AND COALESCE(used.families, 0) <= 10
-      AND NOT EXISTS (
-          SELECT 1 FROM app.product_name_word AS name_word
-          WHERE name_word.word = brand_name.word
-      );
-
-    CREATE UNIQUE INDEX ON merge_brand_word (word);
-
     CREATE TEMP TABLE merge_pair ON COMMIT DROP AS
     SELECT candidate.*,
            candidate.left_marks = candidate.right_marks
+           -- Two amounts that differ ("43g" and "39G") are two packs; a name
+           -- that states none says nothing.
+           AND (
+               CARDINALITY(candidate.left_amounts) = 0
+               OR CARDINALITY(candidate.right_amounts) = 0
+               OR candidate.left_amounts @> candidate.right_amounts
+                  AND candidate.left_amounts <@ candidate.right_amounts
+           )
            AND (
                candidate.left_words = candidate.right_words
                OR candidate.left_read = candidate.right_read
@@ -447,23 +461,13 @@ BEGIN
                )
            ) AS exact_match,
            candidate.one_language
-           AND (
-               app.names_say_two_products(
-                   candidate.left_marks,
-                   candidate.right_marks,
-                   candidate.left_read,
-                   candidate.right_read,
-                   candidate.variants,
-                   candidate.variant_groups
-               )
-               OR EXISTS (
-                   SELECT 1
-                   FROM (VALUES (candidate.left_read, candidate.right_read),
-                                (candidate.right_read, candidate.left_read)) AS side(own, other)
-                   CROSS JOIN UNNEST(side.own) AS own_word(word)
-                   JOIN merge_brand_word AS brand_word ON brand_word.word = own_word.word
-                   WHERE NOT app.name_word_found(own_word.word, side.own, side.other)
-               )
+           AND app.names_say_two_products(
+               candidate.left_marks,
+               candidate.right_marks,
+               candidate.left_read,
+               candidate.right_read,
+               candidate.variants,
+               candidate.variant_groups
            ) AS two_products
     FROM merge_candidate AS candidate;
 
