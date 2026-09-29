@@ -122,6 +122,25 @@
     .row .actions { justify-content: flex-start; }
   }
   pre { white-space: pre-wrap; word-break: break-word; font-size: 12px; margin: 8px 0 0; }
+  .select-bar {
+    position: sticky;
+    bottom: 12px;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 10px 14px;
+    margin: 12px 0;
+    box-shadow: 0 4px 16px rgba(23, 32, 28, .08);
+  }
+  .select-bar .grow { flex: 1; }
+  .select-bar label, .card-head label { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+  input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--primary); }
+  .card.selected { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
 </style>
 </head>
 <body>
@@ -145,8 +164,16 @@
   <div id="error" class="banner error" hidden></div>
 
   <section id="tab-duplicates">
-    <p class="intro">Dva proizvoda istog brenda i veličine koja izgledaju kao jedan. „Isti proizvod“ ih spaja pri sledećem osvežavanju kataloga, „Različiti“ se više ne pitaju.</p>
+    <p class="intro">Dva proizvoda istog brenda i veličine koja izgledaju kao jedan. „Isti proizvod“ ih spaja pri sledećem osvežavanju kataloga, „Različiti“ se više ne pitaju. Označi više parova da odlučiš za sve odjednom.</p>
+    <p class="meta" id="duplicates-total"></p>
     <div id="duplicates"></div>
+    <div class="select-bar" id="duplicates-bar" hidden>
+      <label><input type="checkbox" id="duplicates-all"> Izaberi sve na strani</label>
+      <span class="meta" id="duplicates-selected">Ništa nije izabrano</span>
+      <span class="grow"></span>
+      <button class="secondary" id="duplicates-different" disabled>Različiti</button>
+      <button class="primary" id="duplicates-same" disabled>Isti proizvod</button>
+    </div>
     <div class="actions"><button class="secondary" id="duplicates-more">Učitaj sledeće</button></div>
   </section>
 
@@ -264,23 +291,90 @@
   }
 
   // Isti proizvodi?
+  const DUPLICATES_PAGE = 50;
+  const selectedPairs = new Map();
+
+  function pairsWord(count) {
+    const lastTwo = count % 100;
+    const last = count % 10;
+    if (last === 1 && lastTwo !== 11) return 'par';
+    if (last >= 2 && last <= 4 && (lastTwo < 12 || lastTwo > 14)) return 'para';
+    return 'parova';
+  }
+
+  async function loadDuplicateCount() {
+    try {
+      const { total } = await api('/duplicates/count');
+      const shown = document.querySelectorAll('#duplicates .card').length;
+      document.getElementById('count-duplicates').textContent = total ? '(' + total + ')' : '';
+      document.getElementById('duplicates-total').textContent = total
+        ? 'Ukupno ' + total + ' ' + pairsWord(total) + ' čeka odluku, ovde je prikazano ' + shown + '.'
+        : '';
+    } catch (error) { /* the list shows the error */ }
+  }
+
+  function updateSelection() {
+    const count = selectedPairs.size;
+    const cards = document.querySelectorAll('#duplicates .card');
+    document.getElementById('duplicates-bar').hidden = cards.length === 0;
+    document.getElementById('duplicates-selected').textContent = count
+      ? 'Izabrano: ' + count + ' ' + pairsWord(count)
+      : 'Ništa nije izabrano';
+    const same = document.getElementById('duplicates-same');
+    const different = document.getElementById('duplicates-different');
+    same.disabled = count === 0;
+    different.disabled = count === 0;
+    same.textContent = count ? 'Svi isti proizvod (' + count + ')' : 'Isti proizvod';
+    different.textContent = count ? 'Svi različiti (' + count + ')' : 'Različiti';
+    const all = document.getElementById('duplicates-all');
+    all.checked = cards.length > 0 && count === cards.length;
+    all.indeterminate = count > 0 && count < cards.length;
+  }
+
   async function loadDuplicates() {
     const container = document.getElementById('duplicates');
     container.textContent = 'Učitavam…';
+    selectedPairs.clear();
     try {
-      const pairs = await api('/duplicates?limit=30');
+      const pairs = await api('/duplicates?limit=' + DUPLICATES_PAGE);
       showError(null);
       container.textContent = '';
-      document.getElementById('count-duplicates').textContent = pairs.length ? '(' + pairs.length + (pairs.length === 30 ? '+' : '') + ')' : '';
       if (!pairs.length) {
         container.append(el('p', { class: 'empty' }, 'Nema parova za pregled.'));
-        return;
       }
       for (const pair of pairs) container.append(duplicateCard(pair));
     } catch (error) {
       container.textContent = '';
       showError(error);
     }
+    updateSelection();
+    loadDuplicateCount();
+  }
+
+  async function decideSelected(same, button) {
+    const ids = [...selectedPairs.keys()];
+    if (!ids.length) return;
+    const bar = document.getElementById('duplicates-bar');
+    bar.querySelectorAll('button, input').forEach(control => { control.disabled = true; });
+    try {
+      const result = await api('/duplicates/decisions', {
+        method: 'POST',
+        body: JSON.stringify({ suggestionIds: ids, same })
+      });
+      showError(null);
+      for (const card of selectedPairs.values()) card.remove();
+      selectedPairs.clear();
+      toast(result.message);
+    } catch (error) {
+      showError(error);
+    }
+    bar.querySelectorAll('input').forEach(control => { control.disabled = false; });
+    if (!document.querySelector('#duplicates .card')) {
+      loadDuplicates();
+      return;
+    }
+    updateSelection();
+    loadDuplicateCount();
   }
 
   function side(item) {
@@ -292,16 +386,29 @@
 
   function duplicateCard(pair) {
     const card = el('div', { class: 'card' });
+    const checkbox = el('input', { type: 'checkbox', 'aria-label': 'Izaberi ovaj par' });
+    checkbox.addEventListener('change', () => {
+      if (checkbox.checked) selectedPairs.set(pair.id, card);
+      else selectedPairs.delete(pair.id);
+      card.classList.toggle('selected', checkbox.checked);
+      updateSelection();
+    });
     const decide = same => button => act(button,
       () => api('/duplicates/' + pair.id, { method: 'POST', body: JSON.stringify({ same }) }),
-      result => { card.remove(); toast(result.message); });
+      result => {
+        selectedPairs.delete(pair.id);
+        card.remove();
+        toast(result.message);
+        updateSelection();
+        loadDuplicateCount();
+      });
     const sameButton = el('button', { class: 'primary' }, 'Isti proizvod');
     const differentButton = el('button', { class: 'secondary' }, 'Različiti');
     sameButton.addEventListener('click', () => decide(true)(sameButton));
     differentButton.addEventListener('click', () => decide(false)(differentButton));
     card.append(
       el('div', { class: 'card-head' },
-        el('span', {}, [pair.brand, amount(pair.quantityValue, pair.baseUnit)].filter(Boolean).join(' · ')),
+        el('label', {}, checkbox, [pair.brand, amount(pair.quantityValue, pair.baseUnit)].filter(Boolean).join(' · ')),
         el('span', {}, 'sličnost naziva ' + Number(pair.score).toLocaleString('sr-RS', { maximumFractionDigits: 2 }))),
       el('div', { class: 'pair' }, side(pair.left), side(pair.right)),
       el('div', { class: 'actions' }, differentButton, sameButton));
@@ -467,6 +574,19 @@
 
   document.querySelectorAll('nav button').forEach(button => button.addEventListener('click', () => openTab(button.dataset.tab)));
   document.getElementById('duplicates-more').addEventListener('click', loadDuplicates);
+  document.getElementById('duplicates-all').addEventListener('change', () => {
+    const boxes = document.querySelectorAll('#duplicates .card input[type="checkbox"]');
+    const selectAll = selectedPairs.size < boxes.length;
+    boxes.forEach(checkbox => {
+      if (checkbox.checked !== selectAll) {
+        checkbox.checked = selectAll;
+        checkbox.dispatchEvent(new Event('change'));
+      }
+    });
+    updateSelection();
+  });
+  document.getElementById('duplicates-same').addEventListener('click', event => decideSelected(true, event.target));
+  document.getElementById('duplicates-different').addEventListener('click', event => decideSelected(false, event.target));
   document.querySelectorAll('#report-status .chip').forEach(chip => chip.addEventListener('click', () => {
     document.querySelectorAll('#report-status .chip').forEach(other => other.setAttribute('aria-pressed', String(other === chip)));
     state.reportStatus = chip.dataset.status;

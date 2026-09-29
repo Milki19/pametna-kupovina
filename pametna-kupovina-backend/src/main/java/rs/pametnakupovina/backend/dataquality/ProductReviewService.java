@@ -7,14 +7,17 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.OffsetDateTime;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.Set;
 
 @Service
 public class ProductReviewService {
 
     private static final Set<String> REPORT_STATUSES = Set.of("NEW", "CONFIRMED", "REJECTED");
+    private static final int MAX_BATCH = 500;
 
     private final JdbcClient jdbcClient;
 
@@ -98,6 +101,12 @@ public class ProductReviewService {
                 .list();
     }
 
+    public ProductMergeSuggestionCount countMergeSuggestions() {
+        return new ProductMergeSuggestionCount(jdbcClient.sql("SELECT COUNT(*) FROM app.product_merge_suggestion")
+                .query(Long.class)
+                .single());
+    }
+
     /**
      * Kept by family key, so the decision outlives the rebuild that applies
      * it. The two become the product more chains sell.
@@ -107,8 +116,63 @@ public class ProductReviewService {
         if (request == null || request.same() == null) {
             throw badRequest("Reci da li su to isti proizvod.");
         }
+        MergePair pair = findMergePair(suggestionId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Taj predlog više ne postoji."
+                ));
+        boolean same = request.same();
+        recordMerge(suggestionId, pair, same);
+        return same
+                ? new ProductMergeDecisionResult(suggestionId, "SAME",
+                        "Zapisano. Postaju jedan proizvod pri sledećem osvežavanju kataloga.")
+                : new ProductMergeDecisionResult(suggestionId, "DIFFERENT",
+                        "Zapisano. Ovaj par se više neće predlagati.");
+    }
 
-        MergePair pair = jdbcClient.sql("""
+    /** One answer for many pairs; a pair already decided meanwhile is skipped. */
+    @Transactional
+    public ProductMergeBatchResult decideMerges(ProductMergeBatchRequest request) {
+        if (request == null || request.same() == null) {
+            throw badRequest("Reci da li su to isti proizvodi.");
+        }
+        if (request.suggestionIds() == null || request.suggestionIds().isEmpty()) {
+            throw badRequest("Izaberi bar jedan par.");
+        }
+        if (request.suggestionIds().size() > MAX_BATCH) {
+            throw badRequest("Najviše " + MAX_BATCH + " parova odjednom.");
+        }
+        boolean same = request.same();
+        int decided = 0;
+        for (Long suggestionId : new LinkedHashSet<>(request.suggestionIds())) {
+            if (suggestionId == null) {
+                continue;
+            }
+            Optional<MergePair> pair = findMergePair(suggestionId);
+            if (pair.isPresent()) {
+                recordMerge(suggestionId, pair.get(), same);
+                decided++;
+            }
+        }
+        String message = (same ? "Zapisano kao isti proizvodi: " : "Zapisano kao različiti: ")
+                + decided + " " + pairsWord(decided) + ".";
+        return new ProductMergeBatchResult(decided, same ? "SAME" : "DIFFERENT", message);
+    }
+
+    private static String pairsWord(int count) {
+        int lastTwo = count % 100;
+        int last = count % 10;
+        if (last == 1 && lastTwo != 11) {
+            return "par";
+        }
+        if (last >= 2 && last <= 4 && (lastTwo < 12 || lastTwo > 14)) {
+            return "para";
+        }
+        return "parova";
+    }
+
+    private Optional<MergePair> findMergePair(long suggestionId) {
+        return jdbcClient.sql("""
                         SELECT SUBSTRING(left_family.family_key FROM 4) AS left_key,
                                SUBSTRING(right_family.family_key FROM 4) AS right_key,
                                (SELECT COUNT(*) FROM app.product_retailer_presence AS presence
@@ -129,13 +193,10 @@ public class ProductReviewService {
                         resultSet.getLong("left_chains"),
                         resultSet.getLong("right_chains")
                 ))
-                .optional()
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND,
-                        "Taj predlog više ne postoji."
-                ));
+                .optional();
+    }
 
-        boolean same = request.same();
+    private void recordMerge(long suggestionId, MergePair pair, boolean same) {
         String intoKey = pair.leftChains() >= pair.rightChains() ? pair.leftKey() : pair.rightKey();
         String firstKey = pair.leftKey().compareTo(pair.rightKey()) < 0 ? pair.leftKey() : pair.rightKey();
         String secondKey = firstKey.equals(pair.leftKey()) ? pair.rightKey() : pair.leftKey();
@@ -157,12 +218,6 @@ public class ProductReviewService {
         jdbcClient.sql("DELETE FROM app.product_merge_suggestion WHERE id = ?")
                 .param(1, suggestionId)
                 .update();
-
-        return same
-                ? new ProductMergeDecisionResult(suggestionId, "SAME",
-                        "Zapisano. Postaju jedan proizvod pri sledećem osvežavanju kataloga.")
-                : new ProductMergeDecisionResult(suggestionId, "DIFFERENT",
-                        "Zapisano. Ovaj par se više neće predlagati.");
     }
 
     public List<ProductReportReview> reviewReports(String status, int limit) {
