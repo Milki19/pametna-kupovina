@@ -166,8 +166,14 @@ class ProductReviewTest {
                 .findFirst()
                 .orElseThrow();
 
-        assertThat(reviewService.decideMerge(candies.id(), new ProductMergeDecisionRequest(false)).decision())
-                .isEqualTo("DIFFERENT");
+        assertThat(reviewService.countMergeSuggestions().total()).isEqualTo(1);
+
+        // Several pairs at once; one that no longer exists is skipped.
+        ProductMergeBatchResult batch = reviewService.decideMerges(
+                new ProductMergeBatchRequest(List.of(candies.id(), candies.id() + 1_000_000), false));
+        assertThat(batch.decided()).isEqualTo(1);
+        assertThat(batch.decision()).isEqualTo("DIFFERENT");
+        assertThat(reviewService.countMergeSuggestions().total()).isZero();
         assertThatThrownBy(() -> reviewService.decideMerge(candies.id(), new ProductMergeDecisionRequest(false)))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("više ne postoji");

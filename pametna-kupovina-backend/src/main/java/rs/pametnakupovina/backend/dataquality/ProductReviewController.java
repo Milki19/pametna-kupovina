@@ -32,6 +32,16 @@ public class ProductReviewController {
         return service.reviewMergeSuggestions(limit);
     }
 
+    @GetMapping("/duplicates/count")
+    public ProductMergeSuggestionCount countDuplicates() {
+        return service.countMergeSuggestions();
+    }
+
+    @PostMapping("/duplicates/decisions")
+    public ProductMergeBatchResult decideDuplicates(@RequestBody ProductMergeBatchRequest request) {
+        return service.decideMerges(request);
+    }
+
     @PostMapping("/duplicates/{suggestionId}")
     public ProductMergeDecisionResult decideDuplicate(
             @PathVariable long suggestionId,
