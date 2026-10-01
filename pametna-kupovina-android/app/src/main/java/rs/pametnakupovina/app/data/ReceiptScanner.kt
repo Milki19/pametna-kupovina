@@ -11,12 +11,19 @@ import javax.inject.Singleton
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
+import kotlinx.coroutines.CancellationException
 
 /** Korisnik je odustao od skeniranja; to nije greška. */
 class ScanCancelled : Exception()
 
 /** Skeniran je kod, ali nije sa fiskalnog računa. */
 class NotAFiscalReceipt : Exception()
+
+/**
+ * Google-ov skener nije ni proradio, a greška nije ML Kit-ova. Bez ovoga je
+ * padala u opšte „proveri internet", iako zahtev nikad nije ni krenuo.
+ */
+class ScannerFailed(cause: Throwable) : Exception(cause)
 
 /**
  * Skeniranje otvara Google-ov ekran, pa slika nikad ne prođe kroz naš kod i
@@ -27,16 +34,14 @@ class NotAFiscalReceipt : Exception()
 class ReceiptScanner @Inject constructor() {
 
     suspend fun verificationUrl(activityContext: Context): String {
-        val scanner = GmsBarcodeScanning.getClient(
-            activityContext,
-            GmsBarcodeScannerOptions.Builder()
-                .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
-                .enableAutoZoom()
-                .build()
-        )
-
         val value = try {
-            scanner.startScan().await()
+            GmsBarcodeScanning.getClient(
+                activityContext,
+                GmsBarcodeScannerOptions.Builder()
+                    .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+                    .enableAutoZoom()
+                    .build()
+            ).startScan().await()
         } catch (failure: MlKitException) {
             // Pritisak na „nazad" ML Kit javlja kao grešku sa svojom šifrom,
             // ne kao otkazivanje. Korisnik koji se predomisli ne sme da dobije
@@ -45,6 +50,12 @@ class ReceiptScanner @Inject constructor() {
                 throw ScanCancelled()
             }
             throw failure
+        } catch (failure: ScanCancelled) {
+            throw failure
+        } catch (failure: CancellationException) {
+            throw failure
+        } catch (failure: Exception) {
+            throw ScannerFailed(failure)
         } ?: throw NotAFiscalReceipt()
 
         // Poreska uprava je jedina adresa koju server uopšte čita; ovde se
@@ -64,15 +75,19 @@ data class ScannedBarcode(val value: String, val format: String)
 class BarcodeScanner @Inject constructor() {
 
     suspend fun anyBarcode(activityContext: Context): ScannedBarcode {
-        val scanner = GmsBarcodeScanning.getClient(activityContext)
-
         val barcode = try {
-            scanner.startScan().awaitBarcode()
+            GmsBarcodeScanning.getClient(activityContext).startScan().awaitBarcode()
         } catch (failure: MlKitException) {
             if (failure.errorCode == MlKitException.CODE_SCANNER_CANCELLED) {
                 throw ScanCancelled()
             }
             throw failure
+        } catch (failure: ScanCancelled) {
+            throw failure
+        } catch (failure: CancellationException) {
+            throw failure
+        } catch (failure: Exception) {
+            throw ScannerFailed(failure)
         } ?: throw ScanCancelled()
 
         val value = barcode.rawValue?.trim().orEmpty()

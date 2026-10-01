@@ -16,6 +16,7 @@ import rs.pametnakupovina.app.R
 import rs.pametnakupovina.app.data.NotAFiscalReceipt
 import rs.pametnakupovina.app.data.ReceiptScanner
 import rs.pametnakupovina.app.data.ScanCancelled
+import rs.pametnakupovina.app.data.ScannerFailed
 import rs.pametnakupovina.app.data.ShoppingRepository
 import rs.pametnakupovina.app.data.market.CurrentMarket
 import rs.pametnakupovina.app.data.network.CategorySpendingDto
@@ -105,6 +106,8 @@ class ReceiptViewModel @Inject constructor(
                 null
             } catch (notReceipt: NotAFiscalReceipt) {
                 uiText(R.string.receipt_not_fiscal)
+            } catch (_: ScannerFailed) {
+                uiText(R.string.receipt_scan_failed)
             } catch (scanFailed: MlKitException) {
                 // Kamera nije uspela da pročita kod. Račun nije ni pokušan da
                 // se zavede, pa ne sme da piše da nije zaveden.

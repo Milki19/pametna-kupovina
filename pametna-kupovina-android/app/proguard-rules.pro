@@ -3,3 +3,8 @@
 # neiskorišćen kod i resurse.
 -dontobfuscate
 -keepattributes SourceFile,LineNumberTable
+
+# ML Kit (Google-ov skener za račune i domaćinstvo) pravi svoje delove kroz
+# refleksiju, praznim konstruktorom. R8 ih je izbacivao, pa se skener u
+# release verziji nije ni otvarao.
+-keep class * implements com.google.firebase.components.ComponentRegistrar { <init>(); }
