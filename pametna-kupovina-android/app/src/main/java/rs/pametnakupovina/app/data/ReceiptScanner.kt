@@ -1,6 +1,7 @@
 package rs.pametnakupovina.app.data
 
 import android.content.Context
+import android.util.Log
 import com.google.android.gms.tasks.Task
 import com.google.mlkit.common.MlKitException
 import com.google.mlkit.vision.barcode.common.Barcode
@@ -42,20 +43,8 @@ class ReceiptScanner @Inject constructor() {
                     .enableAutoZoom()
                     .build()
             ).startScan().await()
-        } catch (failure: MlKitException) {
-            // Pritisak na „nazad" ML Kit javlja kao grešku sa svojom šifrom,
-            // ne kao otkazivanje. Korisnik koji se predomisli ne sme da dobije
-            // crveno.
-            if (failure.errorCode == MlKitException.CODE_SCANNER_CANCELLED) {
-                throw ScanCancelled()
-            }
-            throw failure
-        } catch (failure: ScanCancelled) {
-            throw failure
-        } catch (failure: CancellationException) {
-            throw failure
         } catch (failure: Exception) {
-            throw ScannerFailed(failure)
+            throw failure.asScanFailure()
         } ?: throw NotAFiscalReceipt()
 
         // Poreska uprava je jedina adresa koju server uopšte čita; ovde se
@@ -77,17 +66,8 @@ class BarcodeScanner @Inject constructor() {
     suspend fun anyBarcode(activityContext: Context): ScannedBarcode {
         val barcode = try {
             GmsBarcodeScanning.getClient(activityContext).startScan().awaitBarcode()
-        } catch (failure: MlKitException) {
-            if (failure.errorCode == MlKitException.CODE_SCANNER_CANCELLED) {
-                throw ScanCancelled()
-            }
-            throw failure
-        } catch (failure: ScanCancelled) {
-            throw failure
-        } catch (failure: CancellationException) {
-            throw failure
         } catch (failure: Exception) {
-            throw ScannerFailed(failure)
+            throw failure.asScanFailure()
         } ?: throw ScanCancelled()
 
         val value = barcode.rawValue?.trim().orEmpty()
@@ -113,6 +93,30 @@ class BarcodeScanner @Inject constructor() {
         else -> "CODE_128"
     }
 }
+
+private const val TAG = "Skener"
+
+/**
+ * Pritisak na „nazad" ML Kit javlja kao grešku, ne kao otkazivanje, i to ne
+ * uvek sa šifrom za otkazivanje — ponekad samo porukom. Korisnik koji se
+ * predomisli ne sme da dobije crveno; prava greška i dalje kaže svoje. Šifra
+ * ide u logcat, da se vidi šta je skener stvarno javio.
+ */
+internal fun Exception.asScanFailure(): Exception = when (this) {
+    is ScanCancelled, is CancellationException -> this
+    is MlKitException -> {
+        Log.w(TAG, "ML Kit skener: šifra $errorCode, $message")
+        if (looksCancelled()) ScanCancelled() else this
+    }
+    else -> {
+        Log.w(TAG, "Skener nije proradio", this)
+        ScannerFailed(this)
+    }
+}
+
+internal fun MlKitException.looksCancelled(): Boolean =
+    errorCode == MlKitException.CODE_SCANNER_CANCELLED ||
+        message?.contains("cancel", ignoreCase = true) == true
 
 private suspend fun Task<Barcode>.awaitBarcode(): Barcode? =
     suspendCoroutine { waiting ->
