@@ -10,6 +10,7 @@
     <string name="app_menu_scan_receipt">Skeniraj račun</string>
     <string name="app_menu_household">Domaćinstvo</string>
     <string name="app_menu_about">O aplikaciji</string>
+    <string name="app_menu_sales">Akcije</string>
 
     <!-- Shared components -->
     <string name="ui_back">Nazad</string>

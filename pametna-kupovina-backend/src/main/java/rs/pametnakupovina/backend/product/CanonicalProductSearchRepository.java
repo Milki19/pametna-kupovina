@@ -52,7 +52,12 @@ public class CanonicalProductSearchRepository {
                             resultSet.getBigDecimal(
                                     "minimum_effective_price"
                             ),
-                            resultSet.getBoolean("price_needs_check")
+                            resultSet.getBoolean("price_needs_check"),
+                            resultSet.getBigDecimal("sale_regular_price"),
+                            resultSet.getObject(
+                                    "sale_end_date",
+                                    LocalDate.class
+                            )
                     )
             );
 
@@ -247,14 +252,17 @@ public class CanonicalProductSearchRepository {
                                presence.store_count,
                                presence.format_count,
                                COALESCE(
-                                   checked.minimum_price,
+                                   best.price,
                                    presence.minimum_effective_price
                                ) AS minimum_effective_price,
                                -- Every offer of the chain is far below the
                                -- other chains' price (V72).
-                               checked.minimum_price IS NULL
-                                   AND checked.offer_count > 0
-                                   AS price_needs_check
+                               COALESCE(best.needs_check, FALSE)
+                                   AS price_needs_check,
+                               -- The chain's lowest price is a sale today:
+                               -- what it costs otherwise and until when.
+                               best.regular_price AS sale_regular_price,
+                               best.discount_end AS sale_end_date
                         FROM app.product_retailer_presence AS presence
                         JOIN app.retailer AS retailer
                           ON retailer.id = presence.retailer_id
@@ -267,41 +275,62 @@ public class CanonicalProductSearchRepository {
                           ON typical_price.product_family_id =
                               presence.product_family_id
                          AND typical_price.market_id = retailer.market_id
-                        -- The chain's lowest price that needs no checking.
-                        -- Only a product several chains price has a
-                        -- typical price to compare with.
-                        CROSS JOIN LATERAL (
-                            SELECT MIN(
-                                       CASE
-                                           WHEN offer.discounted_price > 0
-                                               THEN offer.discounted_price
-                                           WHEN offer.regular_price > 0
-                                               THEN offer.regular_price
-                                       END
-                                   ) FILTER (
-                                       WHERE NOT app.price_needs_check(
+                        -- The chain's lowest price today, one that needs no
+                        -- checking first. A sale counts only while it lasts
+                        -- (V115). Only a product several chains price has a
+                        -- typical price to check against.
+                        LEFT JOIN LATERAL (
+                            SELECT priced.price,
+                                   priced.needs_check,
+                                   CASE WHEN priced.sale IS NOT NULL
+                                       THEN priced.regular_price END
+                                       AS regular_price,
+                                   CASE WHEN priced.sale IS NOT NULL
+                                       THEN priced.discount_end END
+                                       AS discount_end
+                            FROM (
+                                SELECT app.effective_price(
+                                           offer.regular_price,
+                                           offer.discounted_price,
+                                           offer.discount_start,
+                                           offer.discount_end,
+                                           (NOW() AT TIME ZONE market.time_zone)::DATE
+                                       ) AS price,
+                                       app.sale_price(
+                                           offer.regular_price,
+                                           offer.discounted_price,
+                                           offer.discount_start,
+                                           offer.discount_end,
+                                           (NOW() AT TIME ZONE market.time_zone)::DATE
+                                       ) AS sale,
+                                       app.price_needs_check(
                                            offer.regular_price,
                                            offer.discounted_price,
                                            typical_price.typical_price
-                                       )
-                                   ) AS minimum_price,
-                                   COUNT(*) AS offer_count
-                            FROM app.retailer_product AS product
-                            JOIN app.current_price_offer AS offer
-                              ON offer.retailer_product_id = product.id
-                            WHERE typical_price.typical_price IS NOT NULL
-                              AND product.product_family_id =
-                                  presence.product_family_id
-                              AND product.retailer_id = presence.retailer_id
-                              AND app.in_latest_price_list(
-                                  product.retailer_id,
-                                  offer.scope_key,
-                                  offer.price_date,
-                                  (NOW() AT TIME ZONE market.time_zone)::DATE
-                              )
-                              AND product.package_count =
-                                  app.family_base_package_count(product.product_family_id)
-                        ) AS checked
+                                       ) AS needs_check,
+                                       offer.regular_price,
+                                       offer.discount_end
+                                FROM app.retailer_product AS product
+                                JOIN app.current_price_offer AS offer
+                                  ON offer.retailer_product_id = product.id
+                                WHERE product.product_family_id =
+                                      presence.product_family_id
+                                  AND product.retailer_id = presence.retailer_id
+                                  AND app.in_latest_price_list(
+                                      product.retailer_id,
+                                      offer.scope_key,
+                                      offer.price_date,
+                                      (NOW() AT TIME ZONE market.time_zone)::DATE
+                                  )
+                                  AND product.package_count =
+                                      app.family_base_package_count(product.product_family_id)
+                            ) AS priced
+                            WHERE priced.price > 0
+                            ORDER BY priced.needs_check,
+                                     priced.price,
+                                     priced.sale IS NULL
+                            LIMIT 1
+                        ) AS best ON TRUE
                         WHERE presence.product_family_id IN (:familyIds)
                         ORDER BY presence.product_family_id,
                                  retailer.name,
@@ -388,6 +417,23 @@ public class CanonicalProductSearchRepository {
                 .list()
                 .stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    /** Which of these products some chain sells on sale today (V115). */
+    public java.util.Set<Long> findFamiliesOnSale(List<Long> familyIds) {
+        if (familyIds.isEmpty()) {
+            return java.util.Set.of();
+        }
+        return java.util.Set.copyOf(jdbcClient.sql("""
+                        SELECT DISTINCT sale.product_family_id
+                        FROM app.current_sale AS sale
+                        WHERE sale.product_family_id
+                                  = ANY(STRING_TO_ARRAY(:ids, ',')::BIGINT[])
+                        """)
+                .param("ids", familyIds.stream().map(String::valueOf)
+                        .collect(Collectors.joining(",")))
+                .query(Long.class)
+                .list());
     }
 
     public java.util.Map<Long, List<String>> findKnownRetailers(List<Long> familyIds) {

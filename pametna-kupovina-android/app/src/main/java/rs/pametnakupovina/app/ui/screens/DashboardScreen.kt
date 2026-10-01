@@ -94,6 +94,7 @@ private enum class DashboardTab(@param:StringRes val label: Int, val tag: String
 @Composable
 fun DashboardScreen(
     onOpenList: () -> Unit,
+    onOpenSales: () -> Unit = {},
     dashboardViewModel: DashboardViewModel = hiltViewModel(),
     receiptViewModel: ReceiptViewModel = hiltViewModel()
 ) {
@@ -146,6 +147,9 @@ fun DashboardScreen(
             }
             item(key = "list-shortcut") {
                 ActiveListCard(listItemCount, onOpenList)
+            }
+            item(key = "sales-shortcut") {
+                SalesShortcutCard(onOpenSales)
             }
             item(key = "weekly-chart") {
                 WeeklyBarChart(weekBars(receiptState.selectedMonth, receiptState.byWeek))

@@ -124,6 +124,7 @@ internal fun ItemEditorDialog(
     onRetryProductSearch: () -> Unit,
     onLoadMoreProducts: () -> Unit,
     onIncludeWithoutPrice: (Boolean) -> Unit,
+    onOnlyOnSale: ((Boolean) -> Unit)? = null,
     onDismiss: () -> Unit,
     onSave: (DraftItemInput) -> Unit,
     onScanBarcode: suspend () -> String?
@@ -309,6 +310,7 @@ internal fun ItemEditorDialog(
                     },
                     onRetry = onRetryProductSearch,
                     onIncludeWithoutPrice = onIncludeWithoutPrice,
+                    onOnlyOnSale = onOnlyOnSale,
                     onLoadMore = onLoadMoreProducts,
                     onScan = { scope.launch { onScanBarcode()?.let(::search) } }
                 )

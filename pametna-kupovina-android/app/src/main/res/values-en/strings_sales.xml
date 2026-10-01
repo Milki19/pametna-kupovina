@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Products on sale -->
+    <string name="sale_title">On sale</string>
+    <string name="sale_shortcut_text">What is discounted today in shops near you</string>
+    <string name="sale_nearby_subtitle">Shops within 10 km of you</string>
+    <string name="sale_loading">Loading sales…</string>
+    <string name="sale_load_error">Sales are not available right now.</string>
+    <string name="sale_empty">Nothing is on sale today for this choice.</string>
+    <string name="sale_empty_nearby">Shops near you have nothing on sale today for this choice.</string>
+    <string name="sale_sort_discount">Biggest discount</string>
+    <string name="sale_sort_saving">Biggest saving</string>
+    <string name="sale_sort_price">Lowest price</string>
+    <string name="sale_all_categories">All</string>
+    <string name="sale_category_chip">%1$s (%2$d)</string>
+    <plurals name="sale_count">
+        <item quantity="one">%d product on sale</item>
+        <item quantity="other">%d products on sale</item>
+    </plurals>
+    <string name="sale_discount_badge">−%1$d%%</string>
+    <string name="sale_discount_description">%1$d percent off</string>
+    <string name="sale_regular_price">Regular price %1$s</string>
+    <string name="sale_until">until %1$s</string>
+    <string name="sale_at_chain">at %1$s</string>
+    <string name="sale_nearest_store">nearest shop %1$s</string>
+    <plurals name="sale_other_chains">
+        <item quantity="one">also on sale at %d more chain</item>
+        <item quantity="other">also on sale at %d more chains</item>
+    </plurals>
+    <string name="sale_all_prices">Prices by chain</string>
+    <string name="sale_add_to_list">Add to list</string>
+    <string name="sale_added">On the list</string>
+</resources>

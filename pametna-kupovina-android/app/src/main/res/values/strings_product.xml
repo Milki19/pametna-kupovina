@@ -18,7 +18,6 @@
     <string name="product_no_offers">Za ovaj proizvod još nema važećih cena.</string>
     <string name="product_price_history">Poslednje promene cena</string>
     <string name="product_offer_scope_and_date">%1$s · cene od %2$s</string>
-    <string name="product_offer_sale">Akcija, redovno %1$s</string>
     <string name="product_offer_case">Pakovanje od %1$d kom · %2$s po komadu</string>
     <string name="product_offer_suspicious">Manje od pola uobičajene cene u drugim lancima</string>
     <string name="product_check_price">Proveri cenu</string>
@@ -49,6 +48,8 @@
     <string name="picker_scan_barcode">Skeniraj barkod</string>
     <string name="picker_price_not_stock">Cena u cenovniku nije potvrda da proizvoda ima na stanju.</string>
     <string name="picker_include_without_price">Prikaži i proizvode bez cene</string>
+    <string name="picker_only_on_sale">Samo proizvodi na akciji</string>
+    <string name="picker_no_results_on_sale">Nema proizvoda na akciji za ovaj upit.</string>
     <string name="picker_searching">Pretražujem proizvode…</string>
     <string name="picker_no_results">Nema pronađenih proizvoda.</string>
     <string name="picker_no_results_with_price">Nema rezultata sa aktuelnom cenom. Promeni upit ili uključi proizvode bez cene.</string>

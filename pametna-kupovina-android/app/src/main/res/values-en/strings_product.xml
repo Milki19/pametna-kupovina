@@ -18,7 +18,6 @@
     <string name="product_no_offers">There are no valid prices for this product yet.</string>
     <string name="product_price_history">Recent price changes</string>
     <string name="product_offer_scope_and_date">%1$s · prices from %2$s</string>
-    <string name="product_offer_sale">On sale, regularly %1$s</string>
     <string name="product_offer_case">Pack of %1$d pcs · %2$s each</string>
     <string name="product_offer_suspicious">Less than half the usual price at other chains</string>
     <string name="product_check_price">Check price</string>
@@ -48,6 +47,8 @@
     <string name="picker_scan_barcode">Scan barcode</string>
     <string name="picker_price_not_stock">A listed price doesn\'t mean the product is in stock.</string>
     <string name="picker_include_without_price">Also show products without a price</string>
+    <string name="picker_only_on_sale">Only products on sale</string>
+    <string name="picker_no_results_on_sale">No products on sale for this search.</string>
     <string name="picker_searching">Searching products…</string>
     <string name="picker_no_results">No products found.</string>
     <string name="picker_no_results_with_price">No results with a current price. Change your search or include products without a price.</string>

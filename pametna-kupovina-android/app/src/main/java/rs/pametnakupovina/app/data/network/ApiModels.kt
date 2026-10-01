@@ -153,8 +153,60 @@ data class ProductRetailerAvailabilityDto(
     val storeCount: Int = 0,
     val formatCount: Int = 0,
     val minimumEffectivePrice: Double? = null,
-    val priceNeedsCheck: Boolean = false
+    val priceNeedsCheck: Boolean = false,
+    // Najniža cena lanca je danas akcija: koliko je inače, koliko je popust
+    // i do kada traje. Stariji server ovo ne šalje.
+    val saleRegularPrice: Double? = null,
+    val discountPercent: Int? = null,
+    val saleEndDate: String? = null
 )
+
+@Serializable
+data class SalePageDto(
+    val page: Int,
+    val limit: Int,
+    val totalElements: Long,
+    val totalPages: Int,
+    val hasNext: Boolean,
+    val items: List<SaleItemDto> = emptyList(),
+    val categories: List<SaleCategoryDto> = emptyList(),
+    val nearbyChecked: Boolean = false
+)
+
+@Serializable
+data class SaleItemDto(
+    val productFamilyId: Long,
+    val canonicalProductId: Long? = null,
+    val name: String,
+    val brand: String? = null,
+    val quantityValue: Double? = null,
+    val baseUnit: String? = null,
+    val packageCount: Int = 1,
+    val categoryCode: String? = null,
+    val categoryName: String? = null,
+    val retailerCode: String,
+    val retailerName: String,
+    val salePrice: Double,
+    val regularPrice: Double,
+    val discountPercent: Int,
+    val saleEndDate: String? = null,
+    val otherChainCount: Int = 0,
+    val nearestStoreMeters: Double? = null
+)
+
+@Serializable
+data class SaleCategoryDto(
+    val code: String,
+    val name: String,
+    val productCount: Int
+)
+
+@Serializable
+enum class SaleSortDto {
+    DISCOUNT,
+    SAVING,
+    PRICE
+}
 
 @Serializable
 data class LoyaltyCardDto(
@@ -331,7 +383,9 @@ data class CanonicalProductOfferDto(
     val unitPrice: Double? = null,
     val priceScope: String,
     val priceNeedsCheck: Boolean = false,
-    val packageCount: Int = 1
+    val packageCount: Int = 1,
+    // Poslednji dan akcije kad je cena akcijska i lanac ga navodi.
+    val saleEndDate: String? = null
 )
 
 @Serializable

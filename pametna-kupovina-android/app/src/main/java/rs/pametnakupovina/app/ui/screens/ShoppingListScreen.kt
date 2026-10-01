@@ -230,6 +230,7 @@ fun ShoppingListScreen(
             onRetryProductSearch = productSearchViewModel::retry,
             onLoadMoreProducts = productSearchViewModel::loadNextPage,
             onIncludeWithoutPrice = productSearchViewModel::includeWithoutPrice,
+            onOnlyOnSale = productSearchViewModel::onlyOnSale,
             onScanBarcode = { productSearchViewModel.scanBarcode(context) },
             onDismiss = {
                 productSearchViewModel.clear()

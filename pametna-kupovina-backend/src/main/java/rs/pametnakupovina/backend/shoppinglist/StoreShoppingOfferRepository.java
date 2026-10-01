@@ -757,29 +757,13 @@ public class StoreShoppingOfferRepository {
                                     SELECT current_offer.price_date,
                                            current_offer.regular_price,
                                            current_offer.discounted_price,
-                                           COALESCE(
-                                               CASE
-                                                   WHEN current_offer.discounted_price
-                                                            > 0
-                                                    AND (
-                                                        current_offer.discount_start
-                                                            IS NULL
-                                                        OR current_offer.discount_start
-                                                            <= :asOfDate
-                                                    )
-                                                    AND (
-                                                        current_offer.discount_end
-                                                            IS NULL
-                                                        OR current_offer.discount_end
-                                                            >= :asOfDate
-                                                    )
-                                                   THEN current_offer.discounted_price
-                                               END,
-                                               CASE
-                                                   WHEN current_offer.regular_price
-                                                            > 0
-                                                       THEN current_offer.regular_price
-                                               END
+                                           -- A sale counts only while it lasts (V115).
+                                           app.effective_price(
+                                               current_offer.regular_price,
+                                               current_offer.discounted_price,
+                                               current_offer.discount_start,
+                                               current_offer.discount_end,
+                                               :asOfDate
                                            ) AS effective_price,
                                            current_offer.scope_type AS price_scope,
                                            CASE
@@ -848,29 +832,13 @@ public class StoreShoppingOfferRepository {
                                     SELECT observation.price_date,
                                            observation.regular_price,
                                            observation.discounted_price,
-                                           COALESCE(
-                                               CASE
-                                                   WHEN observation.discounted_price
-                                                            > 0
-                                                    AND (
-                                                        observation.discount_start
-                                                            IS NULL
-                                                        OR observation.discount_start
-                                                            <= :asOfDate
-                                                    )
-                                                    AND (
-                                                        observation.discount_end
-                                                            IS NULL
-                                                        OR observation.discount_end
-                                                            >= :asOfDate
-                                                    )
-                                                   THEN observation.discounted_price
-                                               END,
-                                               CASE
-                                                   WHEN observation.regular_price
-                                                            > 0
-                                                       THEN observation.regular_price
-                                               END
+                                           -- A sale counts only while it lasts (V115).
+                                           app.effective_price(
+                                               observation.regular_price,
+                                               observation.discounted_price,
+                                               observation.discount_start,
+                                               observation.discount_end,
+                                               :asOfDate
                                            ) AS effective_price,
                                            CASE
                                                WHEN observation.store_id = store.id

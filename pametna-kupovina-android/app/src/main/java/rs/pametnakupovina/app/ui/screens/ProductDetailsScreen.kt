@@ -56,7 +56,9 @@ import rs.pametnakupovina.app.ui.components.ErrorState
 import rs.pametnakupovina.app.ui.components.LoadingState
 import rs.pametnakupovina.app.ui.components.NoticeBanner
 import rs.pametnakupovina.app.ui.components.SectionHeader
+import rs.pametnakupovina.app.ui.components.SaleLine
 import rs.pametnakupovina.app.ui.components.StatusPill
+import rs.pametnakupovina.app.ui.components.discountPercent
 import rs.pametnakupovina.app.ui.components.StatusTone
 import rs.pametnakupovina.app.ui.date
 import rs.pametnakupovina.app.ui.money
@@ -309,17 +311,16 @@ private fun OfferRow(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            if (
-                offer.discountedPrice != null &&
-                offer.regularPrice != null &&
-                offer.discountedPrice < offer.regularPrice
-            ) {
-                Text(
-                    stringResource(R.string.product_offer_sale, money(offer.regularPrice)),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.tertiary
-                )
-            }
+            // Akcija samo dok traje: posle kraja je cena opet redovna (V115).
+            discountPercent(offer.regularPrice, offer.effectivePrice)
+                ?.takeUnless { offer.priceNeedsCheck }
+                ?.let { percent ->
+                    SaleLine(
+                        discountPercent = percent,
+                        regularPrice = offer.regularPrice,
+                        saleEndDate = offer.saleEndDate
+                    )
+                }
             caseOf?.let { single ->
                 Text(
                     stringResource(
