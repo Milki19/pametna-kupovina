@@ -31,6 +31,8 @@ data class ProductSearchUiState(
     val hasNext: Boolean = false,
     val errorMessage: UiText? = null,
     val includeWithoutPrice: Boolean = false,
+    // Samo proizvodi koje neki lanac danas prodaje na akciji.
+    val onlyOnSale: Boolean = false,
     // Pretraga je znala gde je kupac, pa „nema u blizini" nešto znači.
     val locationKnown: Boolean = false
 )
@@ -76,20 +78,27 @@ class ProductSearchViewModel @Inject constructor(
         updateQuery(_uiState.value.query)
     }
 
+    fun onlyOnSale(only: Boolean) {
+        _uiState.value = _uiState.value.copy(onlyOnSale = only)
+        updateQuery(_uiState.value.query)
+    }
+
     fun updateQuery(query: String) {
         searchJob?.cancel()
 
         // Keep the editable text verbatim, including the space before the next
         // word. ShoppingRepository trims only the outgoing API query.
         val include = _uiState.value.includeWithoutPrice
+        val onSale = _uiState.value.onlyOnSale
         if (query.trim().length < MIN_QUERY_LENGTH) {
-            _uiState.value = ProductSearchUiState(query = query,includeWithoutPrice=include)
+            _uiState.value = ProductSearchUiState(query = query, includeWithoutPrice = include, onlyOnSale = onSale)
             return
         }
 
         _uiState.value = ProductSearchUiState(
             query = query,
             includeWithoutPrice = include,
+            onlyOnSale = onSale,
             isSearching = true
         )
         searchJob = launchSearch(
@@ -148,6 +157,7 @@ class ProductSearchViewModel @Inject constructor(
         debounce: Boolean = false
     ): Job = viewModelScope.launch {
         val include = _uiState.value.includeWithoutPrice
+        val onSale = _uiState.value.onlyOnSale
         if (debounce) delay(DEBOUNCE_MILLIS)
 
         try {
@@ -156,14 +166,16 @@ class ProductSearchViewModel @Inject constructor(
                 page = page,
                 limit = PAGE_SIZE,
                 includeWithoutPrice = include,
-                near = near()
+                near = near(),
+                onSale = onSale
             )
-            if (_uiState.value.query != query || _uiState.value.includeWithoutPrice != include) return@launch
+            if (!stillAsked(query, include, onSale)) return@launch
 
             _uiState.value = ProductSearchUiState(
                 query = query,
                 correctedQuery = response.correctedQuery,
                 includeWithoutPrice = include,
+                onlyOnSale = onSale,
                 page = response.page,
                 results = if (append) {
                     (_uiState.value.results + response.items)
@@ -180,7 +192,7 @@ class ProductSearchViewModel @Inject constructor(
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
-            if (_uiState.value.query == query && _uiState.value.includeWithoutPrice == include) {
+            if (stillAsked(query, include, onSale)) {
                 _uiState.value = _uiState.value.copy(
                     isSearching = false,
                     isLoadingMore = false,
@@ -191,6 +203,9 @@ class ProductSearchViewModel @Inject constructor(
             }
         }
     }
+
+    private fun stillAsked(query: String, include: Boolean, onSale: Boolean): Boolean =
+        _uiState.value.let { it.query == query && it.includeWithoutPrice == include && it.onlyOnSale == onSale }
 
     private companion object {
         const val MIN_QUERY_LENGTH = 2

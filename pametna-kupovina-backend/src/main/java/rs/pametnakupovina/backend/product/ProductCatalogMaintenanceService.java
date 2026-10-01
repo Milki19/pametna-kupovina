@@ -962,14 +962,16 @@ public class ProductCatalogMaintenanceService {
                                    offer.retailer_format_name
                                ), '') IS NOT NULL
                            )::INTEGER,
-                           MIN(
-                               CASE
-                                   WHEN offer.discounted_price > 0
-                                       THEN offer.discounted_price
-                                   WHEN offer.regular_price > 0
-                                       THEN offer.regular_price
-                               END
-                           )
+                           -- A sale counts only while it lasts (V115).
+                           MIN(app.effective_price(
+                               offer.regular_price,
+                               offer.discounted_price,
+                               offer.discount_start,
+                               offer.discount_end,
+                               (SELECT app.market_today(chain.market_id)
+                                FROM app.retailer AS chain
+                                WHERE chain.id = product.retailer_id)
+                           ))
                     FROM app.current_price_offer AS offer
                     JOIN app.retailer_product AS product
                       ON product.id = offer.retailer_product_id

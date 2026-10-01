@@ -221,12 +221,30 @@ class ShoppingRepository @Inject constructor(
         page: Int = 0,
         limit: Int = 10,
         includeWithoutPrice: Boolean = false,
-        near: Coordinates? = null
+        near: Coordinates? = null,
+        onSale: Boolean = false
     ): CanonicalProductSearchPageDto = api.searchProducts(
         query = query.trim(),
         page = page,
         limit = limit,
         includeWithoutPrice = includeWithoutPrice,
+        latitude = near?.latitude,
+        longitude = near?.longitude,
+        // Bez parametra kad nije uključen, kao i ranije.
+        onSale = onSale.takeIf { it }
+    )
+
+    suspend fun sales(
+        category: String?,
+        sort: rs.pametnakupovina.app.data.network.SaleSortDto,
+        page: Int,
+        limit: Int,
+        near: Coordinates?
+    ): rs.pametnakupovina.app.data.network.SalePageDto = api.getSales(
+        category = category,
+        sort = sort,
+        page = page,
+        limit = limit,
         latitude = near?.latitude,
         longitude = near?.longitude
     )

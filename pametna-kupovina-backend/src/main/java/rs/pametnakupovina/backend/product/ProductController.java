@@ -33,6 +33,7 @@ public class ProductController {
     private final CanonicalProductDetailsService productDetailsService;
     private final ProductFamilyDetailsService familyDetailsService;
     private final PreciseLocationPolicy locationPolicy;
+    private final SaleService saleService;
 
     public ProductController(
             CanonicalProductSearchService canonicalSearchService,
@@ -41,7 +42,8 @@ public class ProductController {
             ProductMatchFeedbackService matchFeedbackService,
             CanonicalProductDetailsService productDetailsService,
             ProductFamilyDetailsService familyDetailsService,
-            PreciseLocationPolicy locationPolicy
+            PreciseLocationPolicy locationPolicy,
+            SaleService saleService
     ) {
         this.canonicalSearchService = canonicalSearchService;
         this.fuzzyCandidateService = fuzzyCandidateService;
@@ -50,6 +52,7 @@ public class ProductController {
         this.productDetailsService = productDetailsService;
         this.familyDetailsService = familyDetailsService;
         this.locationPolicy = locationPolicy;
+        this.saleService = saleService;
     }
 
     @GetMapping("/families/{productFamilyId}")
@@ -115,6 +118,7 @@ public class ProductController {
                     defaultValue = "20"
             ) int limit,
             @RequestParam(name = "includeWithoutPrice", defaultValue = "false") boolean includeWithoutPrice,
+            @RequestParam(name = "onSale", defaultValue = "false") boolean onSale,
             // Oko kilometar tačno, samo za redosled; ne čuva se.
             @RequestParam(name = "latitude", required = false) Double latitude,
             @RequestParam(name = "longitude", required = false) Double longitude
@@ -125,10 +129,45 @@ public class ProductController {
                         PreciseLocationPurpose.SEARCH_RANKING,
                         latitude,
                         longitude,
-                        near -> canonicalSearchService.search(query, page, limit, includeWithoutPrice, near)
+                        near -> canonicalSearchService.search(query, page, limit, includeWithoutPrice, near, onSale)
                 );
             }
-            return canonicalSearchService.search(query, page, limit, includeWithoutPrice);
+            return canonicalSearchService.search(query, page, limit, includeWithoutPrice, null, onSale);
+        } catch (IllegalArgumentException exception) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    exception.getMessage(),
+                    exception
+            );
+        }
+    }
+
+    /**
+     * Products on sale today, the largest discount first. With a location,
+     * only chains with a shop nearby; the location is not kept.
+     */
+    @GetMapping("/on-sale")
+    public SalePage onSale(
+            @RequestParam(name = "category", required = false) String category,
+            @RequestParam(name = "retailer", required = false) String retailer,
+            @RequestParam(name = "query", required = false) String query,
+            @RequestParam(name = "minDiscount", defaultValue = "1") int minDiscount,
+            @RequestParam(name = "sort", defaultValue = "DISCOUNT") SaleSort sort,
+            @RequestParam(name = "page", defaultValue = "0") int page,
+            @RequestParam(name = "limit", defaultValue = "20") int limit,
+            @RequestParam(name = "latitude", required = false) Double latitude,
+            @RequestParam(name = "longitude", required = false) Double longitude
+    ) {
+        try {
+            if (latitude != null && longitude != null) {
+                return locationPolicy.useForRequest(
+                        PreciseLocationPurpose.NEARBY_SALES,
+                        latitude,
+                        longitude,
+                        near -> saleService.find(near, category, retailer, query, minDiscount, sort, page, limit)
+                );
+            }
+            return saleService.find(null, category, retailer, query, minDiscount, sort, page, limit);
         } catch (IllegalArgumentException exception) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,

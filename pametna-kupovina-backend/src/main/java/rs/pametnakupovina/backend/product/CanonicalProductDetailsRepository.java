@@ -38,7 +38,8 @@ public class CanonicalProductDetailsRepository {
                     resultSet.getBigDecimal("unit_price"),
                     resultSet.getString("price_scope"),
                     resultSet.getBoolean("price_needs_check"),
-                    resultSet.getInt("package_count")
+                    resultSet.getInt("package_count"),
+                    resultSet.getObject("sale_end_date", LocalDate.class)
             );
 
     private static final RowMapper<CanonicalProductPricePoint> HISTORY_MAPPER =
@@ -116,25 +117,24 @@ public class CanonicalProductDetailsRepository {
                                    observation.price_date,
                                    observation.regular_price,
                                    observation.discounted_price,
-                                   COALESCE(
-                                       CASE
-                                           WHEN observation.discounted_price
-                                                    > 0
-                                            AND (
-                                                observation.discount_start IS NULL
-                                                OR observation.discount_start <= :asOfDate
-                                            )
-                                            AND (
-                                                observation.discount_end IS NULL
-                                                OR observation.discount_end >= :asOfDate
-                                            )
-                                           THEN observation.discounted_price
-                                       END,
-                                       CASE
-                                           WHEN observation.regular_price > 0
-                                               THEN observation.regular_price
-                                       END
+                                   -- A sale counts only while it lasts (V115).
+                                   app.effective_price(
+                                       observation.regular_price,
+                                       observation.discounted_price,
+                                       observation.discount_start,
+                                       observation.discount_end,
+                                       :asOfDate
                                    ) AS effective_price,
+                                   CASE
+                                       WHEN app.sale_price(
+                                           observation.regular_price,
+                                           observation.discounted_price,
+                                           observation.discount_start,
+                                           observation.discount_end,
+                                           :asOfDate
+                                       ) IS NOT NULL
+                                           THEN observation.discount_end
+                                   END AS sale_end_date,
                                    observation.unit_price,
                                    app.price_needs_check(
                                        observation.regular_price,
@@ -290,7 +290,8 @@ public class CanonicalProductDetailsRepository {
                                unit_price,
                                price_scope,
                                price_needs_check,
-                               package_count
+                               package_count,
+                               sale_end_date
                         FROM ranked
                         WHERE rank_number = 1
                           AND effective_price > 0
@@ -326,26 +327,13 @@ public class CanonicalProductDetailsRepository {
                                observation.price_date,
                                observation.regular_price,
                                observation.discounted_price,
-                               COALESCE(
-                                   CASE
-                                       WHEN observation.discounted_price
-                                                > 0
-                                        AND (
-                                            observation.discount_start IS NULL
-                                            OR observation.discount_start <=
-                                                observation.price_date
-                                        )
-                                        AND (
-                                            observation.discount_end IS NULL
-                                            OR observation.discount_end >=
-                                                observation.price_date
-                                        )
-                                       THEN observation.discounted_price
-                                   END,
-                                   CASE
-                                       WHEN observation.regular_price > 0
-                                           THEN observation.regular_price
-                                   END
+                               -- What the shopper paid that day (V115).
+                               app.effective_price(
+                                   observation.regular_price,
+                                   observation.discounted_price,
+                                   observation.discount_start,
+                                   observation.discount_end,
+                                   observation.price_date
                                ) AS effective_price,
                                CASE
                                    WHEN observation.store_id IS NOT NULL

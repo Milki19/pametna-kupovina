@@ -53,6 +53,7 @@ import rs.pametnakupovina.app.ui.screens.ProductDetailsScreen
 import rs.pametnakupovina.app.ui.screens.RecommendationScreen
 import rs.pametnakupovina.app.ui.screens.ShoppingListScreen
 import rs.pametnakupovina.app.ui.screens.PurchaseScreen
+import rs.pametnakupovina.app.ui.screens.SalesScreen
 
 private object Route {
     const val DASHBOARD = "dashboard"
@@ -63,6 +64,7 @@ private object Route {
     const val PRODUCT_DETAILS = "product/{canonicalProductId}"
     const val CARDS = "cards"
     const val HISTORY = "purchases"
+    const val SALES = "sales"
 
     fun matching(listId: Long) = "matching/$listId"
     fun location(listId: Long) = "location/$listId"
@@ -125,6 +127,10 @@ fun PametnaKupovinaApp() {
             containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
         ) {
             AppMenuContent(
+                onSales = {
+                    showMenu = false
+                    navController.navigate(Route.SALES)
+                },
                 onScan = {
                     showMenu = false
                     // Ishod skeniranja se javlja na početnom ekranu.
@@ -179,7 +185,17 @@ fun PametnaKupovinaApp() {
             composable(Route.DASHBOARD) {
                 DashboardScreen(
                     onOpenList = { navController.openTab(Route.LIST) },
+                    onOpenSales = { navController.navigate(Route.SALES) },
                     receiptViewModel = receiptViewModel
+                )
+            }
+
+            composable(Route.SALES) {
+                SalesScreen(
+                    onBack = navController::popBackStack,
+                    onOpenProduct = { canonicalProductId ->
+                        navController.navigate(Route.productDetails(canonicalProductId))
+                    }
                 )
             }
 
@@ -287,12 +303,14 @@ private fun NavLabel(text: String) {
 
 @Composable
 private fun AppMenuContent(
+    onSales: () -> Unit,
     onScan: () -> Unit,
     onHousehold: () -> Unit,
     onAbout: () -> Unit
 ) {
     Column(modifier = Modifier.padding(bottom = AppSpacing.lg)) {
         listOf(
+            Triple(R.string.app_menu_sales, R.drawable.ic_local_offer, onSales) to "menu-sales",
             Triple(R.string.app_menu_scan_receipt, R.drawable.ic_camera, onScan) to "menu-scan",
             Triple(R.string.app_menu_household, R.drawable.ic_home, onHousehold) to "menu-household",
             Triple(R.string.app_menu_about, R.drawable.ic_info, onAbout) to "menu-about"

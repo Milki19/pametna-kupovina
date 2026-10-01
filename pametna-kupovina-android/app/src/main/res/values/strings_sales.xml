@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Products on sale -->
+    <string name="sale_title">Akcije</string>
+    <string name="sale_shortcut_text">Šta je danas na popustu u radnjama blizu tebe</string>
+    <string name="sale_nearby_subtitle">Radnje do 10 km od tebe</string>
+    <string name="sale_loading">Učitavam akcije…</string>
+    <string name="sale_load_error">Akcije trenutno nisu dostupne.</string>
+    <string name="sale_empty">Danas nema proizvoda na akciji za ovaj izbor.</string>
+    <string name="sale_empty_nearby">U radnjama blizu tebe danas nema akcija za ovaj izbor.</string>
+    <string name="sale_sort_discount">Najveći popust</string>
+    <string name="sale_sort_saving">Najveća ušteda</string>
+    <string name="sale_sort_price">Najniža cena</string>
+    <string name="sale_all_categories">Sve</string>
+    <string name="sale_category_chip">%1$s (%2$d)</string>
+    <plurals name="sale_count">
+        <item quantity="one">%d proizvod na akciji</item>
+        <item quantity="few">%d proizvoda na akciji</item>
+        <item quantity="other">%d proizvoda na akciji</item>
+    </plurals>
+    <string name="sale_discount_badge">−%1$d%%</string>
+    <string name="sale_discount_description">Popust %1$d odsto</string>
+    <string name="sale_regular_price">Redovna cena %1$s</string>
+    <string name="sale_until">do %1$s</string>
+    <string name="sale_at_chain">u lancu %1$s</string>
+    <string name="sale_nearest_store">najbliža radnja %1$s</string>
+    <plurals name="sale_other_chains">
+        <item quantity="one">na akciji i u još %d lancu</item>
+        <item quantity="few">na akciji i u još %d lanca</item>
+        <item quantity="other">na akciji i u još %d lanaca</item>
+    </plurals>
+    <string name="sale_all_prices">Cene u lancima</string>
+    <string name="sale_add_to_list">Na spisak</string>
+    <string name="sale_added">Na spisku</string>
+</resources>

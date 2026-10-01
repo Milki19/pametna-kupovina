@@ -53,6 +53,8 @@ internal fun LazyListScope.canonicalProductPicker(
     onLoadMore: () -> Unit,
     onIncludeWithoutPrice: (Boolean) -> Unit = {},
     showWithoutPriceFilter: Boolean = true,
+    // Null skriva izbor „Samo na akciji".
+    onOnlyOnSale: ((Boolean) -> Unit)? = null,
     onScan: (() -> Unit)? = null
 ) {
     item(key = "product-query") {
@@ -116,6 +118,19 @@ internal fun LazyListScope.canonicalProductPicker(
                     )
                 }
             }
+            if (onOnlyOnSale != null) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(
+                        checked = searchState.onlyOnSale,
+                        onCheckedChange = onOnlyOnSale,
+                        modifier = Modifier.testTag("only-on-sale")
+                    )
+                    Text(
+                        stringResource(R.string.picker_only_on_sale),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
         }
     }
 
@@ -146,10 +161,10 @@ internal fun LazyListScope.canonicalProductPicker(
         searchState.query.length >= 2 && searchState.results.isEmpty() ->
             item(key = "search-empty") {
                 Text(
-                    if (searchState.includeWithoutPrice) {
-                        stringResource(R.string.picker_no_results)
-                    } else {
-                        stringResource(R.string.picker_no_results_with_price)
+                    when {
+                        searchState.onlyOnSale -> stringResource(R.string.picker_no_results_on_sale)
+                        searchState.includeWithoutPrice -> stringResource(R.string.picker_no_results)
+                        else -> stringResource(R.string.picker_no_results_with_price)
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -402,6 +417,7 @@ private fun ProductPriceSummary(
         val roomForDate = maxWidth > 300.dp * LocalDensity.current.fontScale
         Column {
             shown.forEach { offer ->
+                val discount = offer.discountPercent.takeUnless { offer.priceNeedsCheck }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         offer.retailerName,
@@ -430,9 +446,23 @@ private fun ProductPriceSummary(
                         Text(
                             stringResource(R.string.picker_price_from, money(it)),
                             style = MaterialTheme.typography.labelLarge,
+                            // Akcijska cena u boji svoje oznake popusta.
+                            color = if (discount != null) {
+                                saleTextColor(discount)
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            },
                             modifier = Modifier.padding(start = AppSpacing.sm)
                         )
                     }
+                }
+                if (discount != null) {
+                    SaleLine(
+                        discountPercent = discount,
+                        regularPrice = offer.saleRegularPrice,
+                        saleEndDate = offer.saleEndDate,
+                        modifier = Modifier.padding(bottom = AppSpacing.xs)
+                    )
                 }
             }
             if (offers.size > shown.size) {

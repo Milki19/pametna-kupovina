@@ -67,7 +67,6 @@ public class CanonicalProductSearchService {
         return search(query, page, limit, includeWithoutPrice, null);
     }
 
-    /** @param near gde je kupac; null = redosled bez blizine */
     public CanonicalProductSearchPage search(
             String query,
             int page,
@@ -75,11 +74,33 @@ public class CanonicalProductSearchService {
             boolean includeWithoutPrice,
             PreciseLocation near
     ) {
+        return search(query, page, limit, includeWithoutPrice, near, false);
+    }
+
+    /**
+     * @param near   gde je kupac; null = redosled bez blizine
+     * @param onSale samo proizvodi koje neki lanac danas prodaje na akciji
+     */
+    public CanonicalProductSearchPage search(
+            String query,
+            int page,
+            int limit,
+            boolean includeWithoutPrice,
+            PreciseLocation near,
+            boolean onSale
+    ) {
         validate(query, page, limit);
 
         String strippedQuery = query.strip();
         RankedQuery ranked = rank(query, includeWithoutPrice, near);
         List<ScoredRow> scoredRows = ranked.rows();
+        if (onSale) {
+            var familiesOnSale = searchRepository.findFamiliesOnSale(
+                    scoredRows.stream().map(row -> row.source().productFamilyId()).toList());
+            scoredRows = scoredRows.stream()
+                    .filter(row -> familiesOnSale.contains(row.source().productFamilyId()))
+                    .toList();
+        }
 
         int totalElements = scoredRows.size();
         long offset = (long) page * limit;

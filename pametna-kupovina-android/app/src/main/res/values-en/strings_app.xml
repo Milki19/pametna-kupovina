@@ -10,6 +10,7 @@
     <string name="app_menu_scan_receipt">Scan receipt</string>
     <string name="app_menu_household">Household</string>
     <string name="app_menu_about">About</string>
+    <string name="app_menu_sales">On sale</string>
 
     <!-- Shared components -->
     <string name="ui_back">Back</string>

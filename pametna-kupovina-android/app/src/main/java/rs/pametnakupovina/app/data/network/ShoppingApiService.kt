@@ -18,8 +18,19 @@ interface ShoppingApiService {
         @Query("limit") limit: Int = 10,
         @Query("includeWithoutPrice") includeWithoutPrice: Boolean = false,
         @Query("latitude") latitude: Double? = null,
-        @Query("longitude") longitude: Double? = null
+        @Query("longitude") longitude: Double? = null,
+        @Query("onSale") onSale: Boolean? = null
     ): CanonicalProductSearchPageDto
+
+    @GET("api/v1/products/on-sale")
+    suspend fun getSales(
+        @Query("category") category: String? = null,
+        @Query("sort") sort: SaleSortDto = SaleSortDto.DISCOUNT,
+        @Query("page") page: Int = 0,
+        @Query("limit") limit: Int = 20,
+        @Query("latitude") latitude: Double? = null,
+        @Query("longitude") longitude: Double? = null
+    ): SalePageDto
 
     @GET("api/v1/products/{canonicalProductId}")
     suspend fun getProductDetails(
