@@ -57,6 +57,7 @@
     <string name="household_join">Join (scan code)</string>
     <string name="household_invite_failed">The code wasn\'t created. Check your internet connection and try again.</string>
     <string name="household_join_failed">Joining failed. Try again.</string>
+    <string name="household_scan_failed">The scanner could not open. Try again.</string>
     <string name="household_joined">You now share the list, receipts and cards.</string>
     <string name="household_not_a_code">That\'s not a household code.</string>
 

@@ -58,6 +58,7 @@
     <string name="household_join">Pridruži se (skeniraj kod)</string>
     <string name="household_invite_failed">Kod nije napravljen. Proveri internet i probaj ponovo.</string>
     <string name="household_join_failed">Pridruživanje nije uspelo. Probaj ponovo.</string>
+    <string name="household_scan_failed">Skener nije uspeo da se otvori. Probaj ponovo.</string>
     <string name="household_joined">Sada delite spisak, račune i kartice.</string>
     <string name="household_not_a_code">To nije kod za domaćinstvo.</string>
 

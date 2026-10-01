@@ -31,6 +31,7 @@ import kotlinx.coroutines.launch
 import rs.pametnakupovina.app.data.BarcodeScanner
 import rs.pametnakupovina.app.data.NotAHouseholdCode
 import rs.pametnakupovina.app.data.ScanCancelled
+import rs.pametnakupovina.app.data.ScannerFailed
 import rs.pametnakupovina.app.data.ShoppingRepository
 import rs.pametnakupovina.app.data.network.serverMessage
 import rs.pametnakupovina.app.ui.components.AppSpacing
@@ -88,6 +89,8 @@ class HouseholdViewModel @Inject constructor(
                 throw error
             } catch (_: ScanCancelled) {
                 null
+            } catch (_: ScannerFailed) {
+                uiText(R.string.household_scan_failed)
             } catch (_: NotAHouseholdCode) {
                 uiText(R.string.household_not_a_code)
             } catch (error: HttpException) {
