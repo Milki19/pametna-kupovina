@@ -225,8 +225,30 @@ const icon = {
   pin: '<svg viewBox="0 0 24 24"><path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.99 8.99 0 0 0 13 3.06V1h-2v2.06A8.99 8.99 0 0 0 3.06 11H1v2h2.06A8.99 8.99 0 0 0 11 20.94V23h2v-2.06A8.99 8.99 0 0 0 20.94 13H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/></svg>',
   route: '<svg viewBox="0 0 24 24"><path d="M21.71 11.29l-9-9a1 1 0 0 0-1.42 0l-9 9a1 1 0 0 0 0 1.42l9 9a1 1 0 0 0 1.42 0l9-9a1 1 0 0 0 0-1.42zM14 14.5V12h-4v3H8v-4c0-.55.45-1 1-1h5V7.5l3.5 3.5-3.5 3.5z"/></svg>',
   card: '<svg viewBox="0 0 24 24"><path d="M20 4H4c-1.11 0-1.99.89-1.99 2L2 18c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V6c0-1.11-.89-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z"/></svg>',
+  tag: '<svg viewBox="0 0 24 24"><path d="M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58.55 0 1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.41 0-.55-.23-1.06-.59-1.42zM5.5 7C4.67 7 4 6.33 4 5.5S4.67 4 5.5 4 7 4.67 7 5.5 6.33 7 5.5 7z"/></svg>',
   chevron: '<svg viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>'
 };
+
+// ---------- Akcije: popust, boja i red ispod cene ----------
+
+/** Ceo procenat popusta, kao na serveru; null kad nema niže cene. */
+function discountPercent(regular, price) {
+  if (regular == null || price == null || regular <= 0 || price >= regular) return null;
+  const percent = Math.round((1 - price / regular) * 100);
+  return percent >= 1 ? percent : null;
+}
+// Iste boje kao Android: nana do 19 %, ćilibar do 39 %, crvena od 40 %.
+const tier = percent => percent >= 40 ? 't-l' : percent >= 20 ? 't-m' : 't-s';
+const saleBadge = (percent, large = false) =>
+  `<span class="sale-badge ${tier(percent)} ${large ? 'large' : ''}" aria-label="Popust ${percent} odsto">−${percent}%</span>`;
+/** Popust, precrtana redovna cena i do kada važi; sa krupnim slovima prelazi u novi red. */
+const saleLine = (percent, regular, end) => `<div class="sale-line">${saleBadge(percent)}
+  ${regular != null ? `<span class="strike small" aria-label="Redovna cena ${money(regular)}">${money(regular)}</span>` : ''}
+  ${end ? `<span class="muted small">do ${shortDate(end)}</span>` : ''}</div>`;
+const salesShortcut = () => `<a class="card row" href="#/akcije" style="text-decoration:none;color:inherit">
+  <span class="letter t-m" style="border-radius:50%;background:var(--tier-bg);color:var(--tier-ink)">${icon.tag}</span>
+  <span class="grow"><span class="name" style="display:block">Akcije</span>
+  <span class="muted small">Šta je danas na popustu u radnjama blizu tebe</span></span>${icon.chevron}</a>`;
 
 // ---------- Ekran, traka, obaveštenje ----------
 
@@ -326,7 +348,7 @@ function renderList() {
       `<div class="btn-row">
          <button class="btn primary" data-act="add-one">${icon.add}Dodaj stavku</button>
          <button class="btn" data-act="add-many">${icon.paste}Nalepi spisak</button>
-       </div>` + form +
+       </div>` + form + (listState.adding ? '' : salesShortcut()) +
       (items.length
         ? `<div class="section">Stavke na spisku ${pill(items.length)}</div>` + items.map(item => `
           <div class="card">
@@ -763,7 +785,7 @@ function showPurchase() {
 
 // ---------- Cene proizvoda ----------
 
-let search = { query: '', page: null, items: [], error: null };
+let search = { query: '', onSale: false, page: null, items: [], error: null };
 
 function searchLocation() {
   const origin = saved.get('origin');
@@ -779,10 +801,13 @@ function renderSearch(loading = false) {
       <form data-form="search" role="search">
         <input name="q" type="search" enterkeyhint="search" placeholder="Naziv ili barkod, npr. kravica mleko" value="${esc(search.query)}" autocomplete="off">
       </form>
+      <label class="toggle"><input type="checkbox" data-sale-filter ${search.onSale ? 'checked' : ''}>Samo proizvodi na akciji</label>
       <p class="muted small">Cena u cenovniku nije potvrda da proizvoda ima na stanju.</p>` +
+      (!page && !loading ? salesShortcut() : '') +
       (search.error ? notice(search.error, 'err') : '') +
       (page && page.correctedQuery ? `<p class="small muted">Prikazujem rezultate za „${esc(page.correctedQuery)}“.</p>` : '') +
-      (page && !search.items.length ? `<div class="card soft center">Nema proizvoda za „${esc(search.query)}“.</div>` : '') +
+      (page && !search.items.length ? `<div class="card soft center">${search.onSale
+        ? 'Nema proizvoda na akciji za ovaj upit.' : `Nema proizvoda za „${esc(search.query)}“.`}</div>` : '') +
       search.items.map((p, index) => `
         <div class="card">
           <div class="name">${esc(p.name)}</div>
@@ -790,9 +815,11 @@ function renderSearch(loading = false) {
           ${page.nearbyChecked && p.hasUsablePrice ? (p.nearestStoreMeters == null
             ? pill('Nema ga u radnjama blizu tebe', 'warn')
             : `<div class="muted small">Najbliža radnja koja ga ima: ${distance(p.nearestStoreMeters / 1000)}</div>`) : ''}
-          ${(p.availability || []).slice(0, 3).map(a => `<div class="row small"><span class="grow">${esc(a.retailerName)}</span>
+          ${(p.availability || []).slice(0, 3).map(a => `<div class="${a.discountPercent ? tier(a.discountPercent) : ''}">
+            <div class="row small"><span class="grow">${esc(a.retailerName)}</span>
             <span class="muted">${shortDate(a.latestPriceDate)}</span>
-            <b>${a.minimumEffectivePrice != null ? 'od ' + money(a.minimumEffectivePrice) : 'bez cene'}</b></div>`).join('')}
+            <b class="${a.discountPercent ? 'sale-price' : ''}">${a.minimumEffectivePrice != null ? 'od ' + money(a.minimumEffectivePrice) : 'bez cene'}</b></div>
+            ${a.discountPercent ? saleLine(a.discountPercent, a.saleRegularPrice, a.saleEndDate) : ''}</div>`).join('')}
           <div class="btn-row">
             ${p.canonicalProductId ? `<a class="btn text" href="#/proizvod/${p.canonicalProductId}">Sve cene</a>` : ''}
             <button class="btn primary" data-act="add-product" data-index="${index}">${icon.add}Na spisak</button>
@@ -810,7 +837,8 @@ async function runSearch(more = false) {
   search.error = null;
   renderSearch(true);
   try {
-    const page = await api('GET', `products/search?query=${encodeURIComponent(search.query.trim())}&page=${next}&limit=10${searchLocation()}`);
+    const page = await api('GET', `products/search?query=${encodeURIComponent(search.query.trim())}&page=${next}&limit=10${
+      search.onSale ? '&onSale=true' : ''}${searchLocation()}`);
     search.page = page;
     search.items = more ? search.items.concat(page.items) : page.items;
   } catch (error) {
@@ -848,8 +876,11 @@ function unitPriceLabel(offer, product) {
   return offer.unitPrice != null ? `jed. ${money(offer.unitPrice)}` : null;
 }
 
+// Detalji se otvaraju iz pretrage i iz akcija; Nazad vodi tamo odakle se došlo.
+let productFrom = '#/cene';
+
 async function showProduct(id) {
-  screen({ title: 'Cene proizvoda', back: '#/cene', html: spinner('Učitavam ponude…') });
+  screen({ title: 'Cene proizvoda', back: productFrom, html: spinner('Učitavam ponude…') });
   let product;
   try {
     product = await api('GET', `products/${id}?historyLimit=30`);
@@ -868,7 +899,7 @@ async function showProduct(id) {
   window.currentProduct = product;
   screen({
     title: 'Cene proizvoda',
-    back: '#/cene',
+    back: productFrom,
     html: `
       <div class="card">
         ${product.brand ? `<div class="label accent">${esc(product.brand)}</div>` : ''}
@@ -885,15 +916,16 @@ async function showProduct(id) {
       (offers.length ? offers.map((o, index) => {
         const cheapest = index === 0 && offers.length > 1 && !o.priceNeedsCheck && !isCaseOf(o, product);
         const single = product.packageCount;
-        return `<div class="card ${cheapest ? 'selected' : ''}"><div class="row top-align">
+        const off = o.priceNeedsCheck ? null : discountPercent(o.regularPrice, o.effectivePrice);
+        return `<div class="card ${cheapest ? 'selected' : ''} ${off ? tier(off) : ''}"><div class="row top-align">
           <span class="letter">${esc(o.retailerName.trim().charAt(0).toUpperCase())}</span>
           <div class="grow"><div class="name">${esc(o.retailerName)}</div>
             <div class="muted small">${esc(offerScope(o))} · cene od ${shortDate(o.priceDate)}</div>
-            ${o.discountedPrice != null && o.regularPrice != null && o.discountedPrice < o.regularPrice ? `<div class="small" style="color:var(--on-amber)">Akcija, redovno ${money(o.regularPrice)}</div>` : ''}
+            ${off ? saleLine(off, o.regularPrice, o.saleEndDate) : ''}
             ${isCaseOf(o, product) ? `<div class="small" style="color:var(--on-amber)">Pakovanje od ${o.packageCount / single} kom · ${money(o.effectivePrice * single / o.packageCount)} po komadu</div>` : ''}
             ${o.priceNeedsCheck ? `<div class="muted small">Manje od pola uobičajene cene u drugim lancima</div>${pill('Proveri cenu', 'warn')}` : ''}
             ${cheapest ? pill('Najbolja cena', 'pos') : ''}</div>
-          <div style="text-align:right"><div class="price ${cheapest ? 'accent' : ''}" style="font-size:18px">${money(o.effectivePrice)}</div>
+          <div style="text-align:right"><div class="price ${off ? 'sale-price' : cheapest ? 'accent' : ''}" style="font-size:18px">${money(o.effectivePrice)}</div>
             ${unitPriceLabel(o, product) ? `<div class="muted small">${unitPriceLabel(o, product)}</div>` : ''}</div>
         </div></div>`;
       }).join('') : notice('Za ovaj proizvod još nema važećih cena.')) +
@@ -902,6 +934,91 @@ async function showProduct(id) {
         <div class="muted small">${esc([date(p.priceDate), p.storeName, p.storeFormatName].filter(Boolean).join(' · '))}</div></div>
         <span class="price">${money(p.effectivePrice)}</span></div>`).join('')}</div>` : '')
   });
+}
+
+// ---------- Akcije ----------
+
+let sales = { sort: 'DISCOUNT', category: null, place: null, page: null, items: [], categories: [], error: null };
+const saleSorts = { DISCOUNT: 'Najveći popust', SAVING: 'Najveća ušteda', PRICE: 'Najniža cena' };
+
+/** Lista se pamti dok se ide na detalje i nazad; nova kad se promeni mesto. */
+function showSales() {
+  if (sales.page && sales.place === searchLocation()) return renderSales();
+  return loadSales();
+}
+
+async function loadSales(more = false) {
+  const next = more ? sales.page.page + 1 : 0;
+  if (!more) { sales.items = []; sales.page = null; }
+  sales.error = null;
+  sales.place = searchLocation();
+  renderSales(true);
+  try {
+    const page = await api('GET', `products/on-sale?sort=${sales.sort}&page=${next}&limit=20${
+      sales.category ? '&category=' + encodeURIComponent(sales.category) : ''}${sales.place}`);
+    sales.page = page;
+    sales.items = more ? sales.items.concat(page.items) : page.items;
+    if (!more) sales.categories = page.categories;
+  } catch (error) {
+    sales.error = error.message;
+  }
+  renderSales();
+}
+
+function saleCard(p, index) {
+  return `<div class="card sale ${tier(p.discountPercent)}">
+    <div class="row top-align">
+      <div class="grow"><div class="name">${esc(p.name)}</div>
+        <div class="muted small">${esc([p.brand, p.quantityValue && p.baseUnit ? amountLabel(p.quantityValue, p.baseUnit, p.packageCount) : null].filter(Boolean).join(' · '))}</div></div>
+      ${saleBadge(p.discountPercent, true)}
+    </div>
+    <div class="sale-line"><span class="price sale-price" style="font-size:22px">${money(p.salePrice)}</span>
+      <span class="strike" aria-label="Redovna cena ${money(p.regularPrice)}">${money(p.regularPrice)}</span>
+      ${p.saleEndDate ? `<span class="muted small">do ${shortDate(p.saleEndDate)}</span>` : ''}</div>
+    <div class="small">u lancu ${esc(p.retailerName)}${p.nearestStoreMeters != null ? `<span class="muted"> · najbliža radnja ${distance(p.nearestStoreMeters / 1000)}</span>` : ''}</div>
+    ${p.otherChainCount > 0 ? `<div class="muted small">na akciji i u još ${counted(p.otherChainCount, 'lancu', 'lanca', 'lanaca')}</div>` : ''}
+    <div class="btn-row">
+      ${p.canonicalProductId ? `<a class="btn text" href="#/proizvod/${p.canonicalProductId}">Cene u lancima</a>` : ''}
+      <button class="btn primary" data-act="add-sale" data-index="${index}">${icon.add}Na spisak</button>
+    </div>
+  </div>`;
+}
+
+function renderSales(loading = false) {
+  const page = sales.page;
+  const chip = (act, value, label, pressed) =>
+    `<button class="chip" data-act="${act}" data-value="${esc(value)}" aria-pressed="${pressed}">${esc(label)}</button>`;
+  screen({
+    title: 'Akcije',
+    subtitle: page ? (page.nearbyChecked ? 'Radnje do 10 km od tebe' : 'Svi lanci') : null,
+    back: '#/cene',
+    html:
+      (!saved.get('origin') ? `<button class="card soft row" style="text-align:left;cursor:pointer" data-act="sales-locate">
+        <span class="letter" style="border-radius:50%;background:var(--mint);color:var(--on-mint)">${icon.pin}</span>
+        <span class="grow"><span class="name" style="display:block">Samo radnje blizu mene</span>
+        <span class="muted small">Safari će pitati za dozvolu</span></span>${icon.chevron}</button>` : '') +
+      `<div class="chips" role="group" aria-label="Redosled">${Object.entries(saleSorts).map(([key, label]) =>
+        chip('sale-sort', key, label, key === sales.sort)).join('')}</div>` +
+      (sales.categories.length ? `<div class="chips" role="group" aria-label="Kategorija">${chip('sale-category', '', 'Sve', !sales.category)}${
+        sales.categories.map(c => chip('sale-category', c.code, `${c.name} (${c.productCount})`, c.code === sales.category)).join('')}</div>` : '') +
+      (sales.error ? notice('Akcije trenutno nisu dostupne. ' + sales.error, 'err') : '') +
+      (page ? `<div class="section">${counted(page.totalElements, 'proizvod', 'proizvoda', 'proizvoda')} na akciji</div>` : '') +
+      (page && !sales.items.length ? `<div class="card soft center">${page.nearbyChecked
+        ? 'U radnjama blizu tebe danas nema akcija za ovaj izbor.' : 'Danas nema proizvoda na akciji za ovaj izbor.'}</div>` : '') +
+      sales.items.map(saleCard).join('') +
+      (loading ? spinner('Učitavam akcije…') : '') +
+      (page && page.hasNext && !loading ? `<button class="btn" data-act="sales-more">Prikaži još</button>` : '') +
+      `<p class="muted small">Cene su iz zvaničnih cenovnika. Merodavna je cena u prodavnici.</p>`
+  });
+}
+
+function salesLocate() {
+  if (!navigator.geolocation) return toast('Ovaj pregledač ne daje lokaciju.');
+  navigator.geolocation.getCurrentPosition(
+    position => { saved.set('origin', { lat: position.coords.latitude, lng: position.coords.longitude }); loadSales(); },
+    error => toast(error.code === 1 ? 'Safari nema dozvolu za lokaciju.' : 'Lokacija trenutno nije dostupna.'),
+    { enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 }
+  );
 }
 
 // ---------- Lojalti kartice ----------
@@ -1011,6 +1128,7 @@ const routes = {
   preporuke: showRecommendation,
   kupovina: showPurchase,
   cene: () => renderSearch(),
+  akcije: showSales,
   proizvod: showProduct,
   kartice: showCards,
   vise: showMore
@@ -1019,8 +1137,10 @@ const routes = {
 function route() {
   const [name, arg] = location.hash.replace(/^#\/?/, '').split('/');
   const handler = routes[name] || routes.spisak;
+  if (name === 'cene' || name === 'akcije') productFrom = '#/' + name;
+  const tab = name === 'akcije' || name === 'proizvod' ? 'cene' : routes[name] ? name : 'spisak';
   document.querySelectorAll('.tabs a').forEach(a => {
-    const current = a.dataset.tab === (routes[name] ? name : 'spisak');
+    const current = a.dataset.tab === tab;
     if (current) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
   });
   window.scrollTo(0, 0);
@@ -1063,7 +1183,16 @@ const actions = {
     cards.shown = null;
     await showCards();
   },
-  'delete-account': deleteAccount
+  'delete-account': deleteAccount,
+  'sale-sort': el => { sales.sort = el.dataset.value; return loadSales(); },
+  'sale-category': el => { sales.category = el.dataset.value || null; return loadSales(); },
+  'sales-more': () => loadSales(true),
+  'sales-locate': salesLocate,
+  'add-sale': el => {
+    const p = sales.items[Number(el.dataset.index)];
+    return addProduct({ name: p.name, productFamilyId: p.productFamilyId, canonicalProductId: p.canonicalProductId })
+      .then(() => { el.innerHTML = 'Na spisku'; el.dataset.act = ''; });
+  }
 };
 
 const forms = {
@@ -1111,6 +1240,11 @@ document.addEventListener('click', event => {
 });
 
 document.addEventListener('change', event => {
+  if (event.target.matches('[data-sale-filter]')) {
+    search.onSale = event.target.checked;
+    runSearch();
+    return;
+  }
   const box = event.target.closest('[data-check]');
   if (!box) return;
   const purchase = saved.get('purchase');
