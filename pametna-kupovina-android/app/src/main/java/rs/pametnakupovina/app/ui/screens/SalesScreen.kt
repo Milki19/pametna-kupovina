@@ -29,7 +29,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -306,21 +305,17 @@ private fun SaleCard(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Row(
+                // Sa krupnim slovima dugmad prelaze jedno ispod drugog
+                // umesto da se tekst seče.
+                FlowRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalArrangement = Arrangement.spacedBy(AppSpacing.xs),
+                    itemVerticalAlignment = Alignment.CenterVertically
                 ) {
                     if (onOpen != null) {
-                        TextButton(
-                            onClick = onOpen,
-                            modifier = Modifier.weight(1f, fill = false)
-                        ) {
-                            Text(
-                                stringResource(R.string.sale_all_prices),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
+                        TextButton(onClick = onOpen) {
+                            Text(stringResource(R.string.sale_all_prices))
                         }
                     } else {
                         Box(Modifier.size(0.dp))

@@ -8,7 +8,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 /**
- * Products on sale today, read from app.current_sale (V115): one row per
+ * Products on sale today, read from app.current_sale_list (V117): one row per
  * product with the chain where it comes off the most.
  */
 @Repository
@@ -74,15 +74,12 @@ public class SaleRepository {
             ),
             sale AS (
                 SELECT sale.*,
-                       COALESCE(
-                           (SELECT nearby_store.meters
-                            FROM nearby_store
-                            WHERE nearby_store.id = sale.store_id),
-                           nearby_chain.meters
-                       ) AS meters
-                FROM app.current_sale AS sale
+                       COALESCE(nearby_store.meters, nearby_chain.meters) AS meters
+                FROM app.current_sale_list AS sale
                 JOIN app.retailer AS retailer
                   ON retailer.id = sale.retailer_id
+                LEFT JOIN nearby_store
+                  ON nearby_store.id = sale.store_id
                 LEFT JOIN nearby_chain
                   ON nearby_chain.retailer_id = sale.retailer_id
                 WHERE sale.discount_percent >= :minDiscount
@@ -91,7 +88,7 @@ public class SaleRepository {
                   AND (
                       NOT CAST(:located AS BOOLEAN)
                       OR (sale.scope_type = 'STORE'
-                          AND sale.store_id IN (SELECT id FROM nearby_store))
+                          AND nearby_store.id IS NOT NULL)
                       OR (sale.scope_type <> 'STORE'
                           AND nearby_chain.retailer_id IS NOT NULL)
                   )

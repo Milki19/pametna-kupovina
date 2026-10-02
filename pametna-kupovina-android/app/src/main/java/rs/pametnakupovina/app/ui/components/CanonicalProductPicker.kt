@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -306,21 +307,17 @@ private fun ProductSearchResultCard(
                     )
                 }
             }
-            // „Izaberi" se meri prvi i nikad se ne lomi; sa krupnim slovima
-            // popušta „Više o proizvodu".
-            Row(
+            // Sa krupnim slovima „Izaberi" prelazi ispod „Više o proizvodu"
+            // umesto da se tekst seče.
+            FlowRow(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalArrangement = Arrangement.spacedBy(AppSpacing.xs),
+                itemVerticalAlignment = Alignment.CenterVertically
             ) {
-                TextButton(
-                    onClick = { detailsExpanded = !detailsExpanded },
-                    modifier = Modifier.weight(1f, fill = false)
-                ) {
+                TextButton(onClick = { detailsExpanded = !detailsExpanded }) {
                     Text(
-                        stringResource(if (detailsExpanded) R.string.picker_less else R.string.picker_more_about),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        stringResource(if (detailsExpanded) R.string.picker_less else R.string.picker_more_about)
                     )
                 }
                 Button(
@@ -422,7 +419,7 @@ private fun ProductPriceSummary(
                     Text(
                         offer.retailerName,
                         style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 1,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
                     )

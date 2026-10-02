@@ -35,6 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
@@ -296,11 +297,30 @@ private fun OfferRow(
     cheapest: Boolean,
     caseOf: Int? = null
 ) {
+    // Sa najkrupnijim slovima kolona sa lancem bila bi reč po reč: tada
+    // cena ide ispod, a slovo lanca otpada.
+    val stacked = LocalDensity.current.fontScale >= 1.5f
+    val price: @Composable () -> Unit = {
+        Text(
+            money(offer.effectivePrice),
+            style = MaterialTheme.typography.titleLarge,
+            color = if (cheapest) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+        )
+        offerUnitPriceLabel(offer, product)?.let {
+            Text(
+                it.asString(),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
     Row(
         modifier = Modifier.padding(horizontal = AppSpacing.lg, vertical = AppSpacing.md),
         verticalAlignment = Alignment.Top
     ) {
-        LetterTile(offer.retailerName, modifier = Modifier.padding(end = AppSpacing.md))
+        if (!stacked) {
+            LetterTile(offer.retailerName, modifier = Modifier.padding(end = AppSpacing.md))
+        }
         Column(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(2.dp)
@@ -343,20 +363,10 @@ private fun OfferRow(
             if (cheapest) {
                 StatusPill(stringResource(R.string.product_best_price), StatusTone.POSITIVE)
             }
+            if (stacked) price()
         }
-        Column(horizontalAlignment = Alignment.End) {
-            Text(
-                money(offer.effectivePrice),
-                style = MaterialTheme.typography.titleLarge,
-                color = if (cheapest) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-            )
-            offerUnitPriceLabel(offer, product)?.let {
-                Text(
-                    it.asString(),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+        if (!stacked) {
+            Column(horizontalAlignment = Alignment.End) { price() }
         }
     }
 }

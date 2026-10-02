@@ -136,6 +136,28 @@ class FusedLocationProvider @Inject constructor(
         return Coordinates(roughly(location.latitude), roughly(location.longitude))
     }
 
+    /**
+     * Kao [roughLocation], ali kad telefon još nema poslednju lokaciju
+     * (posle instalacije ili restarta), traži je od mreže, najviše nekoliko
+     * sekundi. Za listu akcija u blizini, gde bez lokacije stiže cela zemlja.
+     */
+    suspend fun nearbyLocation(): Coordinates? {
+        roughLocation()?.let { return it }
+        if (!hasLocationPermission(context)) return null
+        val location = runCatching {
+            withTimeoutOrNull(NEARBY_TIMEOUT_MILLIS + 1_000L) {
+                awaitCurrentLocation(
+                    locationRequest(
+                        Priority.PRIORITY_BALANCED_POWER_ACCURACY,
+                        NEARBY_TIMEOUT_MILLIS,
+                        FALLBACK_MAX_AGE_MILLIS
+                    )
+                )
+            }
+        }.getOrNull() ?: return null
+        return Coordinates(roughly(location.latitude), roughly(location.longitude))
+    }
+
     private fun roughly(degrees: Double) = Math.round(degrees * 100) / 100.0
 
     /**
@@ -213,6 +235,7 @@ class FusedLocationProvider @Inject constructor(
         const val MAX_LOCATION_AGE_MILLIS = 30_000L
         const val FALLBACK_TIMEOUT_MILLIS = 5_000L
         const val FALLBACK_MAX_AGE_MILLIS = 300_000L
+        const val NEARBY_TIMEOUT_MILLIS = 5_000L
     }
 }
 
