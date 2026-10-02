@@ -98,9 +98,10 @@ private const val TAG = "Skener"
 
 /**
  * Pritisak na „nazad" ML Kit javlja kao grešku, ne kao otkazivanje, i to ne
- * uvek sa šifrom za otkazivanje — ponekad samo porukom. Korisnik koji se
- * predomisli ne sme da dobije crveno; prava greška i dalje kaže svoje. Šifra
- * ide u logcat, da se vidi šta je skener stvarno javio.
+ * uvek sa šifrom za otkazivanje: Google Play services 26.x šalje INTERNAL
+ * (13) „Failed to scan code.". Korisnik koji se predomisli ne sme da dobije
+ * crveno; skener koji se ne otvori (nedostupan, stari Play services) i dalje
+ * kaže svoje. Šifra ide u logcat, da se vidi šta je skener stvarno javio.
  */
 internal fun Exception.asScanFailure(): Exception = when (this) {
     is ScanCancelled, is CancellationException -> this
@@ -116,6 +117,7 @@ internal fun Exception.asScanFailure(): Exception = when (this) {
 
 internal fun MlKitException.looksCancelled(): Boolean =
     errorCode == MlKitException.CODE_SCANNER_CANCELLED ||
+        errorCode == MlKitException.INTERNAL ||
         message?.contains("cancel", ignoreCase = true) == true
 
 private suspend fun Task<Barcode>.awaitBarcode(): Barcode? =
