@@ -232,14 +232,22 @@ public class RetailerDataSourceRepository {
      * Confirms that the source's current distinct-price-format count is a
      * legitimate catalog shape (not a broken/partial feed), so future imports
      * with that same format count are compared normally instead of being
-     * flagged again.
+     * flagged again. The volume history restarts at the latest accepted run,
+     * so the confirmed list size becomes the baseline instead of the old size
+     * rejecting every import of the new shape.
      */
     public boolean acknowledgeFormatCount(Long dataSourceId) {
         return jdbcClient.sql("""
-                    UPDATE app.retailer_data_source
+                    UPDATE app.retailer_data_source source
                     SET acknowledged_format_count = pending_format_count,
                         pending_format_count = NULL,
                         format_count_flagged_at = NULL,
+                        volume_history_from_run_id = COALESCE((
+                            SELECT MAX(run.id) FROM app.import_run run
+                            WHERE run.data_source_id = source.id
+                              AND run.status IN ('SUCCEEDED', 'SUCCEEDED_WITH_ERRORS',
+                                                 'SUCCEEDED_FORMAT_REVIEW')
+                        ), volume_history_from_run_id),
                         updated_at = NOW()
                     WHERE id = ?
                       AND pending_format_count IS NOT NULL

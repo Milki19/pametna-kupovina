@@ -112,6 +112,49 @@ class PriceImportSafetyTest {
     }
 
     @Test
+    void confirmedSmallerListBecomesTheNewBaseline() {
+        long retailerId = insertRetailer("SAFETY_CONFIRMED_SMALLER");
+        // A chain's list shrank and changed shape (Euro Ša M, October 2026):
+        // accepted for review, then the review was confirmed.
+        Long sourceId = insertDataSource(retailerId, "SAFETY_CONFIRMED_SMALLER_SRC", 1);
+        for (int i = 0; i < 7; i++) {
+            seedImportRun(retailerId, sourceId, null, 100, "SUCCEEDED");
+        }
+        assertThat(safety.validate(retailerId, sourceId, null, TODAY, 45, 0, 2).needsFormatReview()).isTrue();
+        seedImportRun(retailerId, sourceId, null, 45, "SUCCEEDED_FORMAT_REVIEW");
+        assertThat(dataSourceRepository.acknowledgeFormatCount(sourceId)).isTrue();
+
+        // The next days bring the same smaller list.
+        for (int day = 0; day < 4; day++) {
+            assertThat(safety.validate(retailerId, sourceId, null, TODAY, 44, 0, 2).needsFormatReview()).isFalse();
+            seedImportRun(retailerId, sourceId, null, 44, "SUCCEEDED");
+        }
+
+        // And the guard still protects the new size.
+        assertThatThrownBy(() ->
+                safety.validate(retailerId, sourceId, null, TODAY, 10, 0, 2))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageStartingWith("VOLUME_DROP");
+    }
+
+    @Test
+    void unconfirmedReviewDoesNotLowerTheBaseline() {
+        long retailerId = insertRetailer("SAFETY_UNCONFIRMED");
+        Long sourceId = insertDataSource(retailerId, "SAFETY_UNCONFIRMED_SRC", 1);
+        for (int i = 0; i < 7; i++) {
+            seedImportRun(retailerId, sourceId, null, 100, "SUCCEEDED");
+        }
+        assertThat(safety.validate(retailerId, sourceId, null, TODAY, 45, 0, 2).needsFormatReview()).isTrue();
+        seedImportRun(retailerId, sourceId, null, 45, "SUCCEEDED_FORMAT_REVIEW");
+
+        // Not confirmed: a small list with the old shape is still a drop.
+        assertThatThrownBy(() ->
+                safety.validate(retailerId, sourceId, null, TODAY, 45, 0, 1))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageStartingWith("VOLUME_DROP");
+    }
+
+    @Test
     void oneAcceptedAnomalyDoesNotRatchetTheFloorDown() {
         long retailerId = insertRetailer("SAFETY_RATCHET");
         Long sourceId = insertDataSource(retailerId, "SAFETY_RATCHET_SRC", 1);

@@ -76,6 +76,8 @@ public class PriceImportSafety {
      * catalog restructuring (e.g. IDEA/Roda moving from eight to three price
      * formats): the import is accepted but flagged for one manual review
      * instead of silently lowering the bar or rejecting a legitimate feed.
+     * Once that review is confirmed, the history starts again at the reviewed
+     * run, so the confirmed size becomes the new baseline.
      */
     private ValidationOutcome requireVolume(long retailerId, Long sourceId, Long storeId,
                                              long selected, int distinctFormatCount, BigDecimal ratio) {
@@ -104,11 +106,14 @@ public class PriceImportSafety {
 
     private List<Integer> recentRowCounts(long retailerId, Long sourceId, Long storeId) {
         return jdbc.sql("""
-                SELECT rows_saved FROM app.import_run
-                WHERE retailer_id=? AND data_source_id IS NOT DISTINCT FROM ?::BIGINT
-                  AND store_id IS NOT DISTINCT FROM ?::BIGINT
-                  AND status IN ('SUCCEEDED','SUCCEEDED_WITH_ERRORS')
-                ORDER BY id DESC LIMIT ?
+                SELECT r.rows_saved FROM app.import_run r
+                LEFT JOIN app.retailer_data_source s ON s.id = r.data_source_id
+                WHERE r.retailer_id=? AND r.data_source_id IS NOT DISTINCT FROM ?::BIGINT
+                  AND r.store_id IS NOT DISTINCT FROM ?::BIGINT
+                  AND (r.status IN ('SUCCEEDED','SUCCEEDED_WITH_ERRORS')
+                       OR r.id = s.volume_history_from_run_id)
+                  AND r.id >= COALESCE(s.volume_history_from_run_id, 0)
+                ORDER BY r.id DESC LIMIT ?
                 """).param(1, retailerId).param(2, sourceId, Types.BIGINT).param(3, storeId, Types.BIGINT)
                 .param(4, VOLUME_HISTORY_WINDOW)
                 .query(Integer.class).list();
