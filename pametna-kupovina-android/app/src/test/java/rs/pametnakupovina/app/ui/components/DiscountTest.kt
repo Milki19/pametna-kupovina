@@ -3,6 +3,7 @@ package rs.pametnakupovina.app.ui.components
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import rs.pametnakupovina.app.data.network.ProductRetailerAvailabilityDto
 
 class DiscountTest {
 
@@ -28,5 +29,28 @@ class DiscountTest {
         assertEquals(DiscountTier.MEDIUM, discountTier(20))
         assertEquals(DiscountTier.MEDIUM, discountTier(39))
         assertEquals(DiscountTier.LARGE, discountTier(40))
+    }
+
+    private fun chain(name: String, price: Double, discount: Int? = null) =
+        ProductRetailerAvailabilityDto(
+            retailerCode = name,
+            retailerName = name,
+            latestPriceDate = "2026-10-02",
+            minimumEffectivePrice = price,
+            discountPercent = discount
+        )
+
+    @Test
+    fun `lanac na akciji je uvek medju tri prikazana`() {
+        val offers = listOf(chain("A", 100.0), chain("B", 110.0), chain("C", 120.0), chain("D", 130.0, 20))
+        assertEquals(listOf("A", "B", "D"), shortList(offers).map { it.retailerCode })
+    }
+
+    @Test
+    fun `bez akcije ili sa akcijom medju prvima ostaju tri najjeftinija`() {
+        val plain = listOf(chain("A", 100.0), chain("B", 110.0), chain("C", 120.0), chain("D", 130.0))
+        assertEquals(listOf("A", "B", "C"), shortList(plain).map { it.retailerCode })
+        val early = listOf(chain("A", 100.0, 10), chain("B", 110.0), chain("C", 120.0), chain("D", 130.0, 20))
+        assertEquals(listOf("A", "B", "C"), shortList(early).map { it.retailerCode })
     }
 }

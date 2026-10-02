@@ -137,24 +137,32 @@ class FusedLocationProvider @Inject constructor(
     }
 
     /**
-     * Kao [roughLocation], ali kad telefon još nema poslednju lokaciju
-     * (posle instalacije ili restarta), traži je od mreže, najviše nekoliko
-     * sekundi. Za listu akcija u blizini, gde bez lokacije stiže cela zemlja.
+     * Kao [roughLocation], ali poslednja lokacija važi samo dok je sveža (pola
+     * sata): telefon koji je putovao ili emulator bi inače tražio akcije u
+     * drugom gradu. Bez sveže traži novu od mreže, najviše nekoliko sekundi,
+     * a bez nje vraća null, pa lista pokazuje celu zemlju.
      */
     suspend fun nearbyLocation(): Coordinates? {
-        roughLocation()?.let { return it }
         if (!hasLocationPermission(context)) return null
-        val location = runCatching {
-            withTimeoutOrNull(NEARBY_TIMEOUT_MILLIS + 1_000L) {
-                awaitCurrentLocation(
-                    locationRequest(
-                        Priority.PRIORITY_BALANCED_POWER_ACCURACY,
-                        NEARBY_TIMEOUT_MILLIS,
-                        FALLBACK_MAX_AGE_MILLIS
+        val now = android.os.SystemClock.elapsedRealtimeNanos()
+        val fresh = { location: Location ->
+            hasUsableCoordinates(location) &&
+                isUsableLocation(location.elapsedRealtimeNanos, now, NEARBY_MAX_AGE_MILLIS * 1_000_000L)
+        }
+        val location = runCatching { withTimeoutOrNull(1_000L) { awaitLastLocation() } }
+            .getOrNull()?.takeIf(fresh)
+            ?: runCatching {
+                withTimeoutOrNull(NEARBY_TIMEOUT_MILLIS + 1_000L) {
+                    awaitCurrentLocation(
+                        locationRequest(
+                            Priority.PRIORITY_BALANCED_POWER_ACCURACY,
+                            NEARBY_TIMEOUT_MILLIS,
+                            NEARBY_MAX_AGE_MILLIS
+                        )
                     )
-                )
-            }
-        }.getOrNull() ?: return null
+                }
+            }.getOrNull()
+            ?: return null
         return Coordinates(roughly(location.latitude), roughly(location.longitude))
     }
 
@@ -236,6 +244,7 @@ class FusedLocationProvider @Inject constructor(
         const val FALLBACK_TIMEOUT_MILLIS = 5_000L
         const val FALLBACK_MAX_AGE_MILLIS = 300_000L
         const val NEARBY_TIMEOUT_MILLIS = 5_000L
+        const val NEARBY_MAX_AGE_MILLIS = 1_800_000L
     }
 }
 

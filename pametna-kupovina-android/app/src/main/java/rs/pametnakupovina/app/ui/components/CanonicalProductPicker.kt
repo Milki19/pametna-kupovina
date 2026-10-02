@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import rs.pametnakupovina.app.R
 import rs.pametnakupovina.app.data.amountLabel
 import rs.pametnakupovina.app.data.network.CanonicalProductSearchItemDto
+import rs.pametnakupovina.app.data.network.ProductRetailerAvailabilityDto
 import rs.pametnakupovina.app.text.asString
 import rs.pametnakupovina.app.ui.ProductSearchUiState
 import rs.pametnakupovina.app.ui.money
@@ -407,7 +408,7 @@ private fun ProductPriceSummary(
     val offers = product.availability.sortedWith(
         compareBy({ it.priceNeedsCheck }, { it.minimumEffectivePrice ?: Double.MAX_VALUE })
     )
-    val shown = if (showAll) offers else offers.take(3)
+    val shown = if (showAll) offers else shortList(offers)
     BoxWithConstraints {
         // Datum je tih podatak: kad nema mesta (krupna slova, uvećan ekran),
         // odlazi on, a ne ime lanca.
@@ -488,3 +489,18 @@ private fun productDetails(product: CanonicalProductSearchItemDto): String =
 private fun CanonicalProductSearchItemDto.resultId(): String =
     (productFamilyId ?: canonicalProductId)?.toString()
         ?: name.hashCode().toString()
+
+/**
+ * Tri najjeftinija lanca, a lanac na akciji uvek među njima: sa filterom
+ * „Samo proizvodi na akciji" proizvod je tu zbog akcije, pa je i prikazuje.
+ */
+internal fun shortList(
+    offers: List<ProductRetailerAvailabilityDto>
+): List<ProductRetailerAvailabilityDto> {
+    val first = offers.take(3)
+    if (first.any { it.onSaleHere() }) return first
+    val sale = offers.firstOrNull { it.onSaleHere() } ?: return first
+    return first.take(2) + sale
+}
+
+private fun ProductRetailerAvailabilityDto.onSaleHere() = discountPercent != null && !priceNeedsCheck
