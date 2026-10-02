@@ -207,9 +207,32 @@ form { display: flex; flex-direction: column; gap: 8px; }
 
 /* Kućice za kupovinu */
 .check { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-top: 1px solid var(--line); cursor: pointer; }
-.check input { appearance: none; -webkit-appearance: none; flex: none; width: 28px; height: 28px; margin: 0; border: 2px solid var(--outline); border-radius: 8px; background: var(--card); display: grid; place-items: center; }
-.check input:checked { background: var(--primary); border-color: var(--primary); }
-.check input:checked::after { content: ""; width: 7px; height: 13px; border: solid var(--on-primary); border-width: 0 3px 3px 0; transform: rotate(45deg) translate(-1px, -1px); }
+.check input, .toggle input { appearance: none; -webkit-appearance: none; flex: none; width: 28px; height: 28px; margin: 0; border: 2px solid var(--outline); border-radius: 8px; background: var(--card); display: grid; place-items: center; }
+.check input:checked, .toggle input:checked { background: var(--primary); border-color: var(--primary); }
+.check input:checked::after, .toggle input:checked::after { content: ""; width: 7px; height: 13px; border: solid var(--on-primary); border-width: 0 3px 3px 0; transform: rotate(45deg) translate(-1px, -1px); }
+
+.toggle { display: flex; align-items: center; gap: 12px; min-height: 44px; cursor: pointer; font-weight: 600; }
+
+/* Akcije: iste tri boje kao Android, broj uvek stoji na oznaci */
+.t-s { --tier: var(--on-mint); --tier-bg: var(--mint); --tier-ink: var(--on-mint); }
+.t-m { --tier: var(--on-amber); --tier-bg: var(--amber); --tier-ink: var(--on-amber); }
+.t-l { --tier: var(--error); --tier-bg: var(--error-soft); --tier-ink: var(--on-error-soft); }
+.sale-badge {
+  display: inline-flex; align-items: center; flex: none; align-self: flex-start;
+  padding: 2px 8px; border-radius: 999px; font-size: 13px; font-weight: 700; white-space: nowrap;
+  background: var(--tier-bg); color: var(--tier-ink);
+}
+.sale-badge.large { padding: 4px 12px; font-size: 17px; }
+.sale-price { color: var(--tier); }
+.sale-line { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 8px; row-gap: 2px; margin-top: 2px; }
+.card.sale { border-top: 6px solid var(--tier); }
+.chips { display: flex; gap: 8px; overflow-x: auto; margin: 0 -16px; padding: 2px 16px; scrollbar-width: none; }
+.chips::-webkit-scrollbar { display: none; }
+.chip {
+  flex: none; min-height: 40px; padding: 6px 14px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--outline); background: var(--card); font-size: 14px; font-weight: 600; white-space: nowrap;
+}
+.chip[aria-pressed="true"] { background: var(--mint); color: var(--on-mint); border-color: transparent; }
 
 details summary { cursor: pointer; font-weight: 600; list-style: none; display: flex; align-items: center; gap: 8px; }
 details summary::-webkit-details-marker { display: none; }
