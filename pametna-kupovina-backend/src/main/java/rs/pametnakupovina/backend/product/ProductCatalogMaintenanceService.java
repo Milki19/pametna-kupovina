@@ -10,9 +10,11 @@ import java.util.List;
 public class ProductCatalogMaintenanceService {
 
     private final JdbcClient jdbcClient;
+    private final SaleListRefresher saleListRefresher;
 
-    public ProductCatalogMaintenanceService(JdbcClient jdbcClient) {
+    public ProductCatalogMaintenanceService(JdbcClient jdbcClient, SaleListRefresher saleListRefresher) {
         this.jdbcClient = jdbcClient;
+        this.saleListRefresher = saleListRefresher;
     }
 
     @Transactional
@@ -48,6 +50,7 @@ public class ProductCatalogMaintenanceService {
         synchronizePresence(retailerId);
         synchronizeTypicalPrices();
         synchronizeMergeSuggestions();
+        saleListRefresher.pricesChanged();
 
         return readResult(retailerId, retailerCode);
     }

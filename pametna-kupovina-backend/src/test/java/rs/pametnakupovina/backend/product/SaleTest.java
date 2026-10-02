@@ -76,6 +76,9 @@ class SaleTest {
     private SaleService saleService;
 
     @Autowired
+    private SaleListRefresher saleListRefresher;
+
+    @Autowired
     private CanonicalProductDetailsRepository detailsRepository;
 
     @Autowired
@@ -135,6 +138,9 @@ class SaleTest {
                 + row("KEKS CETVRTOVISE 200G", "8601234500131", "100,00", "120,00",
                         today, today.minusDays(2), today.plusDays(5));
         assertThat(priceImportService.importPrices("SALE").status()).isEqualTo("SUCCEEDED");
+        // The list of sales is kept ready; the scheduler would refresh it
+        // within minutes of the import.
+        saleListRefresher.refresh();
 
         ProductRetailerAvailability onSale = chainPrice("prvoakcijski");
         assertThat(onSale.minimumEffectivePrice()).isEqualByComparingTo("150.00");

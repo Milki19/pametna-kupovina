@@ -419,14 +419,14 @@ public class CanonicalProductSearchRepository {
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
-    /** Which of these products some chain sells on sale today (V115). */
+    /** Which of these products some chain sells on sale today (V117 list). */
     public java.util.Set<Long> findFamiliesOnSale(List<Long> familyIds) {
         if (familyIds.isEmpty()) {
             return java.util.Set.of();
         }
         return java.util.Set.copyOf(jdbcClient.sql("""
                         SELECT DISTINCT sale.product_family_id
-                        FROM app.current_sale AS sale
+                        FROM app.current_sale_list AS sale
                         WHERE sale.product_family_id
                                   = ANY(STRING_TO_ARRAY(:ids, ',')::BIGINT[])
                         """)

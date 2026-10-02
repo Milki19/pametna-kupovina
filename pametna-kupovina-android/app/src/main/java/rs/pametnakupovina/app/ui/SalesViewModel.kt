@@ -38,7 +38,7 @@ data class SalesUiState(
     val nearby: Boolean = false,
     val errorMessage: UiText? = null,
     val notice: UiText? = null,
-    // Proizvodi već dodati na spisak sa ovog ekrana.
+    // Proizvodi koji su već na spisku, odakle god da su dodati.
     val added: Set<Long> = emptySet()
 )
 
@@ -58,6 +58,14 @@ class SalesViewModel @Inject constructor(
 
     init {
         load()
+        // „Na spisku" važi dok je proizvod na spisku, i kad se ekran ponovo otvori.
+        viewModelScope.launch {
+            repository.draftItems.collect { items ->
+                _uiState.update { state ->
+                    state.copy(added = items.mapNotNullTo(mutableSetOf()) { it.productFamilyId })
+                }
+            }
+        }
     }
 
     fun chooseCategory(code: String?) {
@@ -129,7 +137,7 @@ class SalesViewModel @Inject constructor(
             try {
                 if (!nearAsked) {
                     nearAsked = true
-                    near = locationProvider.roughLocation()
+                    near = locationProvider.nearbyLocation()
                 }
                 val response = repository.sales(
                     category = asked.category,

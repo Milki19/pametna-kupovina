@@ -947,9 +947,16 @@ function showSales() {
   return loadSales();
 }
 
+/** Proizvodi koji su već na spisku, da njihova kartica kaže „Na spisku". */
+const familiesOnList = () => new Set((listState.list?.items || [])
+  .filter(item => item.matchingRule === 'PRODUCT_FAMILY').map(item => item.matchedProductFamilyId));
+
 async function loadSales(more = false) {
   const next = more ? sales.page.page + 1 : 0;
-  if (!more) { sales.items = []; sales.page = null; }
+  if (!more) {
+    sales.items = []; sales.page = null;
+    loadList().then(list => { listState.list = list; if (location.hash === '#/akcije' && sales.page) renderSales(); }).catch(() => {});
+  }
   sales.error = null;
   sales.place = searchLocation();
   renderSales(true);
@@ -965,7 +972,7 @@ async function loadSales(more = false) {
   renderSales();
 }
 
-function saleCard(p, index) {
+function saleCard(p, index, onList) {
   return `<div class="card sale ${tier(p.discountPercent)}">
     <div class="row top-align">
       <div class="grow"><div class="name">${esc(p.name)}</div>
@@ -979,7 +986,8 @@ function saleCard(p, index) {
     ${p.otherChainCount > 0 ? `<div class="muted small">na akciji i u još ${counted(p.otherChainCount, 'lancu', 'lanca', 'lanaca')}</div>` : ''}
     <div class="btn-row">
       ${p.canonicalProductId ? `<a class="btn text" href="#/proizvod/${p.canonicalProductId}">Cene u lancima</a>` : ''}
-      <button class="btn primary" data-act="add-sale" data-index="${index}">${icon.add}Na spisak</button>
+      ${onList.has(p.productFamilyId) ? `<button class="btn" disabled>Na spisku</button>`
+        : `<button class="btn primary" data-act="add-sale" data-index="${index}">${icon.add}Na spisak</button>`}
     </div>
   </div>`;
 }
@@ -1005,7 +1013,7 @@ function renderSales(loading = false) {
       (page ? `<div class="section">${counted(page.totalElements, 'proizvod', 'proizvoda', 'proizvoda')} na akciji</div>` : '') +
       (page && !sales.items.length ? `<div class="card soft center">${page.nearbyChecked
         ? 'U radnjama blizu tebe danas nema akcija za ovaj izbor.' : 'Danas nema proizvoda na akciji za ovaj izbor.'}</div>` : '') +
-      sales.items.map(saleCard).join('') +
+      sales.items.map((p, index) => saleCard(p, index, familiesOnList())).join('') +
       (loading ? spinner('Učitavam akcije…') : '') +
       (page && page.hasNext && !loading ? `<button class="btn" data-act="sales-more">Prikaži još</button>` : '') +
       `<p class="muted small">Cene su iz zvaničnih cenovnika. Merodavna je cena u prodavnici.</p>`
@@ -1191,7 +1199,8 @@ const actions = {
   'add-sale': el => {
     const p = sales.items[Number(el.dataset.index)];
     return addProduct({ name: p.name, productFamilyId: p.productFamilyId, canonicalProductId: p.canonicalProductId })
-      .then(() => { el.innerHTML = 'Na spisku'; el.dataset.act = ''; });
+      .then(() => api('GET', `shopping-lists/${listState.list.id}`))
+      .then(list => { listState.list = list; renderSales(); });
   }
 };
 
