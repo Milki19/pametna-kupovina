@@ -437,22 +437,31 @@ private fun ProductHeader(
             if (chains > 1) {
                 val lowest = comparable.minBy { it.effectivePrice }
                 val highest = comparable.maxBy { it.effectivePrice }
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(IntrinsicSize.Min)
-                        .background(MaterialTheme.colorScheme.surfaceContainerLow, MaterialTheme.shapes.small)
-                        .padding(AppSpacing.xs)
-                ) {
-                    PriceStat(stringResource(R.string.product_stat_lowest), lowest.effectivePrice, lowest.retailerName, highlighted = true, Modifier.weight(1f))
+                val stats: @Composable (Modifier) -> Unit = { each ->
+                    PriceStat(stringResource(R.string.product_stat_lowest), lowest.effectivePrice, lowest.retailerName, highlighted = true, each)
                     PriceStat(
                         stringResource(R.string.product_stat_average),
                         comparable.map { it.effectivePrice }.average(),
                         pluralStringResource(R.plurals.product_chain_count, chains, chains),
                         highlighted = false,
-                        Modifier.weight(1f)
+                        each
                     )
-                    PriceStat(stringResource(R.string.product_stat_highest), highest.effectivePrice, highest.retailerName, highlighted = false, Modifier.weight(1f))
+                    PriceStat(stringResource(R.string.product_stat_highest), highest.effectivePrice, highest.retailerName, highlighted = false, each)
+                }
+                val box = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surfaceContainerLow, MaterialTheme.shapes.small)
+                    .padding(AppSpacing.xs)
+                // Sa najkrupnijim slovima tri kolone bi lomile reči („PROSEČ/NA"),
+                // pa pločice idu jedna ispod druge.
+                if (LocalDensity.current.fontScale >= 1.5f) {
+                    Column(modifier = box, verticalArrangement = Arrangement.spacedBy(AppSpacing.xs)) {
+                        stats(Modifier.fillMaxWidth())
+                    }
+                } else {
+                    Row(modifier = box.height(IntrinsicSize.Min)) {
+                        stats(Modifier.weight(1f).fillMaxHeight())
+                    }
                 }
             }
             if (bestPrice(product) != null || watching) {
@@ -494,7 +503,7 @@ private fun PriceStat(
         shape = MaterialTheme.shapes.small,
         color = if (highlighted) MaterialTheme.colorScheme.surfaceContainerLowest else androidx.compose.ui.graphics.Color.Transparent,
         shadowElevation = if (highlighted) 1.dp else 0.dp,
-        modifier = modifier.fillMaxHeight()
+        modifier = modifier
     ) {
         Column(modifier = Modifier.padding(AppSpacing.sm)) {
             Text(

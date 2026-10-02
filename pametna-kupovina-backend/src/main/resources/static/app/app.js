@@ -4,7 +4,7 @@
 // menja za sesiju i dalje šalje samo kratak pristupni token. Napredak kupovine
 // ostaje u pregledaču, kao u aplikaciji.
 
-const VERSION = '1.8';
+const VERSION = '1.9';
 const view = document.getElementById('view');
 const actionBar = document.getElementById('action');
 
@@ -793,6 +793,14 @@ function searchLocation() {
   return origin ? `&latitude=${origin.lat.toFixed(2)}&longitude=${origin.lng.toFixed(2)}` : '';
 }
 
+/** Tri najjeftinija lanca, a lanac na akciji uvek među njima, kao u aplikaciji. */
+function shortList(offers) {
+  const first = offers.slice(0, 3);
+  const onSale = a => a.discountPercent && !a.priceNeedsCheck;
+  const sale = offers.find(onSale);
+  return first.some(onSale) || !sale ? first : [...first.slice(0, 2), sale];
+}
+
 function renderSearch(loading = false) {
   const page = search.page;
   screen({
@@ -815,7 +823,7 @@ function renderSearch(loading = false) {
           ${page.nearbyChecked && p.hasUsablePrice ? (p.nearestStoreMeters == null
             ? pill('Nema ga u radnjama blizu tebe', 'warn')
             : `<div class="muted small">Najbliža radnja koja ga ima: ${distance(p.nearestStoreMeters / 1000)}</div>`) : ''}
-          ${(p.availability || []).slice(0, 3).map(a => `<div class="${a.discountPercent ? tier(a.discountPercent) : ''}">
+          ${shortList(p.availability || []).map(a => `<div class="${a.discountPercent ? tier(a.discountPercent) : ''}">
             <div class="row small"><span class="grow">${esc(a.retailerName)}</span>
             <span class="muted">${shortDate(a.latestPriceDate)}</span>
             <b class="${a.discountPercent ? 'sale-price' : ''}">${a.minimumEffectivePrice != null ? 'od ' + money(a.minimumEffectivePrice) : 'bez cene'}</b></div>
@@ -1142,8 +1150,14 @@ const routes = {
   vise: showMore
 };
 
+// Gde je lista bila kad se otišlo na detalje, da Nazad vrati na isto mesto.
+const scrolls = {};
+let currentRoute = null;
+
 function route() {
   const [name, arg] = location.hash.replace(/^#\/?/, '').split('/');
+  if (currentRoute) scrolls[currentRoute] = window.scrollY;
+  currentRoute = name;
   const handler = routes[name] || routes.spisak;
   if (name === 'cene' || name === 'akcije') productFrom = '#/' + name;
   const tab = name === 'akcije' || name === 'proizvod' ? 'cene' : routes[name] ? name : 'spisak';
@@ -1152,7 +1166,11 @@ function route() {
     if (current) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
   });
   window.scrollTo(0, 0);
-  handler(arg ? Number(arg) : undefined);
+  const shown = handler(arg ? Number(arg) : undefined);
+  // Lista koja se samo ponovo iscrtava (pretraga, akcije) vraća se gde je bila.
+  if ((name === 'cene' && search.page) || (name === 'akcije' && sales.page && sales.place === searchLocation())) {
+    Promise.resolve(shown).then(() => window.scrollTo(0, scrolls[name] || 0));
+  }
 }
 
 const actions = {
