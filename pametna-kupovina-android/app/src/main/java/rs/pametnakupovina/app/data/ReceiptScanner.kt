@@ -49,12 +49,27 @@ class ReceiptScanner @Inject constructor() {
 
         // Poreska uprava je jedina adresa koju server uopšte čita; ovde se
         // proverava samo da korisniku ne bi putovao uzalud kod sa kutije mleka.
-        if (!value.startsWith("https://suf.purs.gov.rs/", ignoreCase = true)) {
+        return fiscalVerificationUrl(value) ?: run {
+            Log.w(TAG, "Nije fiskalni QR: ${value.take(40).substringBefore('?')}")
             throw NotAFiscalReceipt()
         }
-
-        return value
     }
+}
+
+private val FISCAL_URL = Regex(
+    """^https?://suf\.purs\.gov\.rs(?::443)?(/.*)$""",
+    RegexOption.IGNORE_CASE
+)
+
+/**
+ * Isti račun ne izgleda isto na papiru i na ekranu: digitalni računi i
+ * aplikacije trgovina ume da daju adresu sa „http", velikim slovima ili
+ * razmakom na kraju. Sve to je ista adresa Poreske uprave; samo deo posle
+ * nje (kod računa) mora da ostane tačno kakav je.
+ */
+internal fun fiscalVerificationUrl(scanned: String): String? {
+    val match = FISCAL_URL.find(scanned.trim().trim('\uFEFF')) ?: return null
+    return "https://suf.purs.gov.rs" + match.groupValues[1]
 }
 
 /** Kod sa kartice lojalnosti: bilo koji oblik koji kasa ume da odštampa. */
