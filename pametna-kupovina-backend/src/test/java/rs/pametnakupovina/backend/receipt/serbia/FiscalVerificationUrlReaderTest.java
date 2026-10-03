@@ -74,6 +74,32 @@ class FiscalVerificationUrlReaderTest {
     }
 
     /**
+     * Digitalni račun na ekranu ili u aplikaciji trgovine ume da da istu
+     * adresu drugačije napisanu; kod računa je isti, pa i račun.
+     */
+    @Test
+    void aDigitalReceiptsAddressReadsTheSame() {
+        for (String scanned : new String[]{
+                "http://suf.purs.gov.rs/v/?vl=" + SAMPLE_PAYLOAD,
+                "HTTPS://SUF.PURS.GOV.RS/v/?vl=" + SAMPLE_PAYLOAD,
+                "https://suf.purs.gov.rs:443/v/?vl=" + SAMPLE_PAYLOAD,
+                "\uFEFF https://suf.purs.gov.rs/v/?vl=" + SAMPLE_PAYLOAD + "\n"
+        }) {
+            FiscalReceiptStamp stamp = reader.read(scanned);
+
+            assertThat(stamp.invoiceNumber()).as(scanned).isEqualTo("LUEDV8LB-Dt1Ov1o0-308");
+        }
+
+        String urlSafe = java.net.URLDecoder.decode(REAL_PAYLOAD_ENCODED, java.nio.charset.StandardCharsets.UTF_8)
+                .replace('+', '-').replace('/', '_');
+        assertThat(reader.read("https://suf.purs.gov.rs/v/?vl=" + urlSafe).invoiceNumber())
+                .isEqualTo("VBMHX9SX-W6UBPZO0-76722");
+
+        assertThat(FiscalVerificationUrlReader.canonical("HTTP://SUF.PURS.GOV.RS/v/?vl=Ab+c"))
+                .isEqualTo("https://suf.purs.gov.rs/v/?vl=Ab%2Bc");
+    }
+
+    /**
      * Telefon šalje ono što je pročitao sa papira, a papir može da napiše
      * bilo šta: adresa koja nije Poreska uprava ne sme da se ni dodirne.
      */
@@ -85,8 +111,15 @@ class FiscalVerificationUrlReaderTest {
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("nije adresa Poreske uprave");
 
+        // „http" se čita kao https (aDigitalReceiptsAddressReadsTheSame), ali
+        // ni druga šema ni lažni nastavak imena ne prolaze.
         assertThatThrownBy(() -> reader.read(
-                "http://suf.purs.gov.rs/v/?vl=" + SAMPLE_PAYLOAD
+                "ftp://suf.purs.gov.rs/v/?vl=" + SAMPLE_PAYLOAD
+        ))
+                .hasMessageContaining("nije adresa Poreske uprave");
+
+        assertThatThrownBy(() -> reader.read(
+                "http://suf.purs.gov.rs.zlonamerni.example/v/?vl=" + SAMPLE_PAYLOAD
         ))
                 .hasMessageContaining("nije adresa Poreske uprave");
     }

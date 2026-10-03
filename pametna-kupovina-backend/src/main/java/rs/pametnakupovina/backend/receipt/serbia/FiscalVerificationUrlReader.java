@@ -15,7 +15,10 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * The QR code on a fiscal receipt is not a link to a page that happens to
@@ -72,8 +75,24 @@ public class FiscalVerificationUrlReader {
      * i za čitanje i za poziv Poreskoj upravi.
      */
     public static String canonical(String verificationUrl) {
-        return verificationUrl.strip().replace("+", "%2B");
+        String url = verificationUrl.replace("\uFEFF", "").strip().replace("+", "%2B");
+        Matcher address = ADDRESS.matcher(url);
+
+        // Digitalni računi i aplikacije trgovina daju istu adresu i kao
+        // „http", velikim slovima ili sa :443. Poreska uprava je jedna, pa
+        // se sve svede na nju; kod posle adrese ostaje tačno kakav je.
+        if (address.lookingAt()) {
+            return "https://" + address.group(1).toLowerCase(Locale.ROOT)
+                    + url.substring(address.end());
+        }
+
+        return url;
     }
+
+    private static final Pattern ADDRESS = Pattern.compile(
+            "https?://([A-Za-z0-9.-]+)(?::443)?(?=/|\\?|$)",
+            Pattern.CASE_INSENSITIVE
+    );
 
     public FiscalReceiptStamp read(String verificationUrl) {
         byte[] payload = payloadOf(canonical(verificationUrl));
@@ -183,7 +202,10 @@ public class FiscalVerificationUrlReader {
         }
 
         try {
-            return Base64.getDecoder().decode(padded(encoded));
+            // Neki ekrani daju URL-bezbedan zapis (- i _ umesto + i /).
+            return Base64.getDecoder().decode(padded(
+                    encoded.strip().replace('-', '+').replace('_', '/')
+            ));
         } catch (IllegalArgumentException unreadable) {
             throw badReceipt("Kod na računu se ne može pročitati.");
         }
