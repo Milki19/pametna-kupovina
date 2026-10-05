@@ -1,5 +1,7 @@
 package rs.pametnakupovina.backend.retailerlocation.univerexport;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
@@ -12,9 +14,17 @@ import java.net.http.HttpClient;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Pattern;
 
 @Component
 class UniverexportLocationClient {
+
+    private static final Logger log =
+            LoggerFactory.getLogger(UniverexportLocationClient.class);
+    private static final Pattern SHOP_CODE_PREFIX =
+            Pattern.compile("^\\s*[A-Za-z]{1,4}\\d+(\\s+|$)");
+    private static final int MIN_SKIPPED_ALLOWED = 3;
+    private static final double MAX_SKIPPED_SHARE = 0.05;
 
     private final RestClient restClient;
     private final ObjectMapper objectMapper;
@@ -74,6 +84,8 @@ class UniverexportLocationClient {
 
         List<UniverexportApiLocation> locations =
                 new ArrayList<>(rows.size());
+        List<String> skipped = new ArrayList<>();
+        int activeRows = 0;
         for (JsonNode row : rows) {
             JsonNode value = row.isArray() && row.size() > 1
                     ? row.get(1)
@@ -84,23 +96,115 @@ class UniverexportLocationClient {
                 );
             }
 
-            locations.add(new UniverexportApiLocation(
-                    text(value, "place_id"),
-                    text(value, "sr_name"),
-                    text(value, "address"),
-                    text(value, "grad"),
-                    text(value, "format"),
-                    decimal(value, "lat"),
-                    decimal(value, "lon"),
-                    value.path("status").asInt(0) == 1
-            ));
+            // A closed shop is left out rather than checked: the sync
+            // deactivates every shop the source no longer lists, and the
+            // source stops filling in a closed shop's address.
+            if (value.path("status").asInt(0) != 1) {
+                continue;
+            }
+            activeRows++;
+
+            try {
+                locations.add(parse(value));
+            } catch (IllegalArgumentException exception) {
+                skipped.add(exception.getMessage());
+            }
+        }
+
+        // One incomplete shop used to fail the whole week's sync. It is now
+        // left out, but a source that loses data on many shops at once
+        // would deactivate them all, so that still fails.
+        if (skipped.size() > Math.max(
+                MIN_SKIPPED_ALLOWED,
+                activeRows * MAX_SKIPPED_SHARE
+        )) {
+            throw new IllegalStateException(
+                    "Previše neispravnih Univerexport lokacija: "
+                            + skipped.size() + " od " + activeRows
+                            + ", npr. " + skipped.getFirst()
+            );
+        }
+        skipped.forEach(reason -> log.warn(
+                "Preskočena Univerexport lokacija: {}",
+                reason
+        ));
+        if (locations.isEmpty()) {
+            throw new IllegalStateException(
+                    "Zvanični Univerexport API nije vratio aktivne lokacije."
+            );
         }
 
         return List.copyOf(locations);
     }
 
+    private UniverexportApiLocation parse(JsonNode value) {
+        String code = text(value, "place_id");
+        String name = text(value, "sr_name");
+        try {
+            String city = optionalText(value, "grad");
+            if (city.isEmpty()) {
+                city = cityFromName(name);
+            }
+            String address = optionalText(value, "address");
+            if (address.isEmpty()) {
+                address = addressFromName(name, city);
+            }
+            if (city.isEmpty() || address.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "Univerexport lokacija nema polje: "
+                                + (address.isEmpty() ? "address" : "grad")
+                );
+            }
+
+            return new UniverexportApiLocation(
+                    code,
+                    name,
+                    address,
+                    city,
+                    text(value, "format"),
+                    decimal(value, "lat"),
+                    decimal(value, "lon"),
+                    true
+            );
+        } catch (IllegalArgumentException exception) {
+            throw new IllegalArgumentException(
+                    exception.getMessage() + " (place_id=" + code
+                            + ", " + name + ")",
+                    exception
+            );
+        }
+    }
+
+    /**
+     * The name reads "MP033 Sentandrejski put bb, Novi Sad": the shop code,
+     * the street, then the town after the last comma.
+     */
+    static String addressFromName(String name, String city) {
+        String address = SHOP_CODE_PREFIX.matcher(name).replaceFirst("");
+        int comma = address.lastIndexOf(',');
+        if (comma >= 0 && (city.isEmpty() || address.substring(comma + 1)
+                .strip()
+                .equalsIgnoreCase(city))) {
+            address = address.substring(0, comma);
+        }
+        address = address.strip();
+        return address.equalsIgnoreCase(city) ? "" : address;
+    }
+
+    static String cityFromName(String name) {
+        int comma = name.lastIndexOf(',');
+        return comma < 0 ? "" : name.substring(comma + 1).strip();
+    }
+
+    private String optionalText(JsonNode node, String field) {
+        JsonNode value = node.path(field);
+        return value.isValueNode() && !value.isNull()
+                ? value.asText().strip()
+                : "";
+    }
+
     private String text(JsonNode node, String field) {
-        String value = node.path(field).asText().strip();
+        String value = optionalText(node, field);
         if (value.isEmpty()) {
             throw new IllegalArgumentException(
                     "Univerexport lokacija nema polje: " + field
