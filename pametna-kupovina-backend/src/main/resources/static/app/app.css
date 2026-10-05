@@ -258,3 +258,16 @@ details[open] summary::after { content: "⌃"; }
 .spinner { width: 28px; height: 28px; border: 3px solid var(--high); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 32px auto 8px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } }
+
+/* Potrošnja i domaćinstvo */
+.hero .big { color: inherit; }
+.hero .stats { background: rgba(255, 255, 255, 0.14); }
+.bar-row { display: flex; flex-direction: column; gap: 4px; }
+.bar-row + .bar-row { margin-top: 10px; }
+details.list-row > summary { list-style: none; cursor: pointer; }
+details.list-row > summary::-webkit-details-marker { display: none; }
+details.list-row[open] > summary { margin-bottom: 8px; }
+details.list-row > .row { padding: 2px 0; gap: 8px; }
+.code-box.household svg { width: min(260px, 100%); height: auto; aspect-ratio: 1; }
+.icon-action:disabled { opacity: 0.3; cursor: default; }
+.hero .label { color: inherit; opacity: 0.85; }
