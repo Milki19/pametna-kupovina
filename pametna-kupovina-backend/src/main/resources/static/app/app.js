@@ -103,9 +103,10 @@ async function api(method, path, body, retried = false) {
       method,
       headers: {
         'Authorization': 'Bearer ' + token,
-        ...(body === undefined ? {} : { 'Content-Type': 'application/json' })
+        // FormData (fajl računa) sam postavlja svoj Content-Type.
+        ...(body === undefined || body instanceof FormData ? {} : { 'Content-Type': 'application/json' })
       },
-      body: body === undefined ? undefined : JSON.stringify(body)
+      body: body === undefined || body instanceof FormData ? body : JSON.stringify(body)
     });
   } catch {
     throw new Error('Nema veze sa serverom. Proveri internet i probaj ponovo.');
@@ -1120,11 +1121,14 @@ function showMore() {
         <div class="title">Dodaj na početni ekran</div>
         <p>U Safari-ju dodirni <b>Podeli</b> pa <b>Dodaj na početni ekran</b>. Otvara se kao aplikacija, a spisak i kartice ostaju i kad Safari čisti stare podatke sajtova.</p>
       </div>`) +
-      `<div class="card">
+      `<a class="card row" href="#/racun" style="text-decoration:none;color:inherit">
+        <span class="grow"><span class="name" style="display:block">Dodaj račun</span>
+        <span class="muted small">Screenshot ili PDF digitalnog računa</span></span>${icon.chevron}</a>
+      <div class="card">
         <div class="title">O aplikaciji</div>
         <p>Pametna kupovina ${VERSION}, web verzija</p>
         <p class="muted small">Cene su iz zvaničnih cenovnika trgovaca. Merodavna je cena u prodavnici.</p>
-        <p class="muted small">Web verzija nema skeniranje računa i barkoda, obaveštenja o pojeftinjenju ni prijavu preko Google-a — to ima Android aplikacija.</p>
+        <p class="muted small">Web verzija nema skeniranje kamerom (račun se dodaje sa screenshot-a ili PDF-a), obaveštenja o pojeftinjenju ni prijavu preko Google-a — to ima Android aplikacija.</p>
         <div class="btn-row"><a class="btn text" href="/privatnost">Politika privatnosti</a><a class="btn text" href="/uslovi">Uslovi korišćenja</a></div>
       </div>
       <div class="card">
@@ -1159,7 +1163,8 @@ const routes = {
   akcije: showSales,
   proizvod: showProduct,
   kartice: showCards,
-  vise: showMore
+  vise: showMore,
+  racun: showReceipt
 };
 
 // Gde je lista bila kad se otišlo na detalje, da Nazad vrati na isto mesto.
@@ -1177,7 +1182,7 @@ function route() {
   if (name === 'akcije' && (currentFrom === 'spisak' || currentFrom === 'cene')) salesFrom = '#/' + currentFrom;
   // Obaveštenje pripada ekranu na kome je nastalo.
   if (name !== currentFrom) document.getElementById('toast').hidden = true;
-  const tab = name === 'akcije' || name === 'proizvod' ? 'cene' : routes[name] ? name : 'spisak';
+  const tab = name === 'akcije' || name === 'proizvod' ? 'cene' : name === 'racun' ? 'vise' : routes[name] ? name : 'spisak';
   document.querySelectorAll('.tabs a').forEach(a => {
     const current = a.dataset.tab === tab;
     if (current) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
