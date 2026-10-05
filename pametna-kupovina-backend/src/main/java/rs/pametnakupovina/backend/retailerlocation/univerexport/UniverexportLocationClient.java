@@ -22,7 +22,7 @@ class UniverexportLocationClient {
     private static final Logger log =
             LoggerFactory.getLogger(UniverexportLocationClient.class);
     private static final Pattern SHOP_CODE_PREFIX =
-            Pattern.compile("^\\s*[A-Za-z]{1,4}\\d+(\\s+|$)");
+            Pattern.compile("^\\s*(?:[A-Za-z]{1,4}\\d+\\b[\\s,]*)+");
     private static final int MIN_SKIPPED_ALLOWED = 3;
     private static final double MAX_SKIPPED_SHARE = 0.05;
 
@@ -177,7 +177,8 @@ class UniverexportLocationClient {
 
     /**
      * The name reads "MP033 Sentandrejski put bb, Novi Sad": the shop code,
-     * the street, then the town after the last comma.
+     * the street, then the town after the last comma. A name with only the
+     * code ("MP161 MP161, Novi Beograd") has no street to give.
      */
     static String addressFromName(String name, String city) {
         String address = SHOP_CODE_PREFIX.matcher(name).replaceFirst("");

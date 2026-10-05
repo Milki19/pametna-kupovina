@@ -84,6 +84,27 @@ class UniverexportLocationClientTest {
     }
 
     @Test
+    void skipsTheTwoShopsThatBrokeTheSyncOnFourthOctober() {
+        String embeddedJson = """
+                [["0",{"place_id":"10161","status":1,
+                  "sr_name":"MP161 MP161, Novi Beograd ","address":null,
+                  "grad":"Novi Beograd","format":"Veliki",
+                  "lat":"44.8281798","lon":"20.4004579"}],
+                 ["1",{"place_id":"10260","status":1,
+                  "sr_name":"MP260 MP260, Kragujevac ","address":null,
+                  "grad":"Kragujevac","format":null,"lat":null,"lon":null}],
+                 ["2",{"place_id":"10033","status":1,
+                  "sr_name":"MP033 Sentandrejski put bb, Novi Sad",
+                  "address":"Sentandrejski put bb","grad":"Novi Sad",
+                  "format":"Veliki","lon":"19.831535","lat":"45.272553"}]]
+                """;
+
+        assertThat(fetch(embeddedJson))
+                .extracting(UniverexportApiLocation::code)
+                .containsExactly("10033");
+    }
+
+    @Test
     void manyIncompleteShopsStillFailRatherThanDeactivateThem() {
         StringBuilder rows = new StringBuilder("[");
         for (int index = 0; index < 4; index++) {
@@ -117,6 +138,9 @@ class UniverexportLocationClientTest {
                 .isEmpty();
         assertThat(UniverexportLocationClient.addressFromName(
                 "MP033 Novi Sad", "Novi Sad"))
+                .isEmpty();
+        assertThat(UniverexportLocationClient.addressFromName(
+                "MP161 MP161, Novi Beograd ", "Novi Beograd"))
                 .isEmpty();
     }
 
