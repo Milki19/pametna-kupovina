@@ -58,6 +58,8 @@ public final class AccessRules {
             new Rule(null, "/api/v1/receipts", Access.DEVICE),
             new Rule(null, "/api/v1/loyalty-cards/**", Access.DEVICE),
             new Rule(null, "/api/v1/loyalty-cards", Access.DEVICE),
+            // Adresa polazne tačke ide spolja (OpenStreetMap), pa samo uz sesiju.
+            new Rule(HttpMethod.GET, "/api/v1/places", Access.DEVICE),
 
             // Javno: cene su javne, a prijava greške ne traži nalog.
             new Rule(HttpMethod.POST, "/api/v1/products/*/reports", Access.DEVICE_OPTIONAL),

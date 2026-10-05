@@ -65,7 +65,7 @@ class AccessRulesTest {
                         unlisted.add(where);
                     } else if (path.startsWith("/api/v1/imports/")) {
                         assertThat(access).as(where).isEqualTo(AccessRules.Access.ADMIN);
-                    } else if (path.matches("/api/v1/(shopping-lists|accounts|receipts|loyalty-cards)(/.*)?")) {
+                    } else if (path.matches("/api/v1/(shopping-lists|accounts|receipts|loyalty-cards|places)(/.*)?")) {
                         assertThat(access).as(where).isEqualTo(AccessRules.Access.DEVICE);
                     }
                 }
