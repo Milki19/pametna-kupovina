@@ -859,13 +859,15 @@ async function runSearch(more = false) {
 
 async function addProduct(product) {
   await loadList().then(list => { listState.list = list; });
-  await api('POST', `shopping-lists/${listState.list.id}/items`, {
+  const added = await api('POST', `shopping-lists/${listState.list.id}/items`, {
     name: product.name,
     canonicalProductId: product.productFamilyId ? null : product.canonicalProductId,
     productFamilyId: product.productFamilyId || null,
     quantity: 1,
     matchingRule: product.productFamilyId ? 'PRODUCT_FAMILY' : 'EXACT_PRODUCT'
   });
+  // Spisak u memoriji zna za novu stavku, pa Akcije kažu „Na spisku".
+  if (added?.id) listState.list.items.push(added);
   toast(`Na spisku: ${product.name}`);
 }
 
@@ -886,6 +888,8 @@ function unitPriceLabel(offer, product) {
 
 // Detalji se otvaraju iz pretrage i iz akcija; Nazad vodi tamo odakle se došlo.
 let productFrom = '#/cene';
+// Akcije se otvaraju sa spiska i iz cena; Nazad vodi tamo odakle se došlo.
+let salesFrom = '#/cene';
 
 async function showProduct(id) {
   screen({ title: 'Cene proizvoda', back: productFrom, html: spinner('Učitavam ponude…') });
@@ -956,8 +960,16 @@ function showSales() {
 }
 
 /** Proizvodi koji su već na spisku, da njihova kartica kaže „Na spisku". */
-const familiesOnList = () => new Set((listState.list?.items || [])
-  .filter(item => item.matchingRule === 'PRODUCT_FAMILY').map(item => item.matchedProductFamilyId));
+function onListKeys() {
+  const keys = new Set();
+  for (const item of listState.list?.items || []) {
+    if (item.matchingRule === 'PRODUCT_FAMILY' && item.matchedProductFamilyId) keys.add('f' + item.matchedProductFamilyId);
+    if (item.matchingRule === 'EXACT_PRODUCT' && item.matchedCanonicalProductId) keys.add('c' + item.matchedCanonicalProductId);
+  }
+  return keys;
+}
+/** I kad je dodat iz detalja proizvoda (tačan proizvod), ne samo sa akcija. */
+const isOnList = (p, keys) => keys.has('f' + p.productFamilyId) || keys.has('c' + p.canonicalProductId);
 
 async function loadSales(more = false) {
   const next = more ? sales.page.page + 1 : 0;
@@ -980,7 +992,7 @@ async function loadSales(more = false) {
   renderSales();
 }
 
-function saleCard(p, index, onList) {
+function saleCard(p, index, keys) {
   return `<div class="card sale ${tier(p.discountPercent)}">
     <div class="row top-align">
       <div class="grow"><div class="name">${esc(p.name)}</div>
@@ -994,7 +1006,7 @@ function saleCard(p, index, onList) {
     ${p.otherChainCount > 0 ? `<div class="muted small">na akciji i u još ${counted(p.otherChainCount, 'lancu', 'lanca', 'lanaca')}</div>` : ''}
     <div class="btn-row">
       ${p.canonicalProductId ? `<a class="btn text" href="#/proizvod/${p.canonicalProductId}">Cene u lancima</a>` : ''}
-      ${onList.has(p.productFamilyId) ? `<button class="btn" disabled>Na spisku</button>`
+      ${isOnList(p, keys) ? `<button class="btn" disabled>Na spisku</button>`
         : `<button class="btn primary" data-act="add-sale" data-index="${index}">${icon.add}Na spisak</button>`}
     </div>
   </div>`;
@@ -1007,7 +1019,7 @@ function renderSales(loading = false) {
   screen({
     title: 'Akcije',
     subtitle: page ? (page.nearbyChecked ? 'Radnje do 10 km od tebe' : 'Svi lanci') : null,
-    back: '#/cene',
+    back: salesFrom,
     html:
       (!saved.get('origin') ? `<button class="card soft row" style="text-align:left;cursor:pointer" data-act="sales-locate">
         <span class="letter" style="border-radius:50%;background:var(--mint);color:var(--on-mint)">${icon.pin}</span>
@@ -1021,7 +1033,7 @@ function renderSales(loading = false) {
       (page ? `<div class="section">${counted(page.totalElements, 'proizvod', 'proizvoda', 'proizvoda')} na akciji</div>` : '') +
       (page && !sales.items.length ? `<div class="card soft center">${page.nearbyChecked
         ? 'U radnjama blizu tebe danas nema akcija za ovaj izbor.' : 'Danas nema proizvoda na akciji za ovaj izbor.'}</div>` : '') +
-      sales.items.map((p, index) => saleCard(p, index, familiesOnList())).join('') +
+      (keys => sales.items.map((p, index) => saleCard(p, index, keys)).join(''))(onListKeys()) +
       (loading ? spinner('Učitavam akcije…') : '') +
       (page && page.hasNext && !loading ? `<button class="btn" data-act="sales-more">Prikaži još</button>` : '') +
       `<p class="muted small">Cene su iz zvaničnih cenovnika. Merodavna je cena u prodavnici.</p>`
@@ -1155,11 +1167,16 @@ const scrolls = {};
 let currentRoute = null;
 
 function route() {
-  const [name, arg] = location.hash.replace(/^#\/?/, '').split('/');
+  const [path, arg] = location.hash.replace(/^#\/?/, '').split('/');
+  const name = routes[path] ? path : 'spisak';
   if (currentRoute) scrolls[currentRoute] = window.scrollY;
+  const currentFrom = currentRoute;
   currentRoute = name;
   const handler = routes[name] || routes.spisak;
   if (name === 'cene' || name === 'akcije') productFrom = '#/' + name;
+  if (name === 'akcije' && (currentFrom === 'spisak' || currentFrom === 'cene')) salesFrom = '#/' + currentFrom;
+  // Obaveštenje pripada ekranu na kome je nastalo.
+  if (name !== currentFrom) document.getElementById('toast').hidden = true;
   const tab = name === 'akcije' || name === 'proizvod' ? 'cene' : routes[name] ? name : 'spisak';
   document.querySelectorAll('.tabs a').forEach(a => {
     const current = a.dataset.tab === tab;
@@ -1217,8 +1234,7 @@ const actions = {
   'add-sale': el => {
     const p = sales.items[Number(el.dataset.index)];
     return addProduct({ name: p.name, productFamilyId: p.productFamilyId, canonicalProductId: p.canonicalProductId })
-      .then(() => api('GET', `shopping-lists/${listState.list.id}`))
-      .then(list => { listState.list = list; renderSales(); });
+        .then(() => renderSales());
   }
 };
 
