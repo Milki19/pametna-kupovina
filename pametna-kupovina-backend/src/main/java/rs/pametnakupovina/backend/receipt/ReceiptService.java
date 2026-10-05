@@ -66,6 +66,37 @@ public class ReceiptService {
                 ));
     }
 
+    /**
+     * Digitalni račun: kodovi sa screenshot-a ili PDF-a. Na fajlu može biti više QR kodova
+     * (kupon, link trgovine); zavodi se prvi koji čitač tržišta prihvati kao
+     * račun, a ako nijedan, kupac dobija razlog za prvi koji je probao.
+     */
+    @Transactional
+    public Receipt scanCodes(long accountId, List<String> codes) {
+        if (codes.isEmpty()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Na slici nema QR koda. Pošalji screenshot na kom se ceo QR kod računa vidi."
+            );
+        }
+
+        ResponseStatusException firstRefusal = null;
+
+        for (String code : codes) {
+            try {
+                return scan(accountId, code);
+            } catch (ResponseStatusException refused) {
+                if (!refused.getStatusCode().is4xxClientError()) {
+                    throw refused;
+                }
+                if (firstRefusal == null) {
+                    firstRefusal = refused;
+                }
+            }
+        }
+        throw firstRefusal;
+    }
+
     public List<Receipt> history(long accountId, int limit) {
         return receiptRepository.findAll(
                 accountId,

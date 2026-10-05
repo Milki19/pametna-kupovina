@@ -1,6 +1,7 @@
 package rs.pametnakupovina.backend.receipt;
 
 import jakarta.validation.constraints.NotBlank;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -8,8 +9,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 import rs.pametnakupovina.backend.security.DeviceCaller;
 
+import java.io.IOException;
 import java.util.List;
 
 @RestController
@@ -17,9 +20,11 @@ import java.util.List;
 public class ReceiptController {
 
     private final ReceiptService receiptService;
+    private final ReceiptFileCodes fileCodes;
 
-    public ReceiptController(ReceiptService receiptService) {
+    public ReceiptController(ReceiptService receiptService, ReceiptFileCodes fileCodes) {
         this.receiptService = receiptService;
+        this.fileCodes = fileCodes;
     }
 
     @PostMapping
@@ -28,6 +33,18 @@ public class ReceiptController {
             @RequestBody ScanReceiptRequest request
     ) {
         return receiptService.scan(caller.accountId(), request.verificationUrl());
+    }
+
+    /**
+     * Digitalni račun iz aplikacije trgovine: screenshot ili PDF. Kod se
+     * čita pre nego što se otvori transakcija, jer čitanje slike traje.
+     */
+    @PostMapping(path = "/file", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Receipt scanFile(
+            DeviceCaller caller,
+            @RequestParam("file") MultipartFile file
+    ) throws IOException {
+        return receiptService.scanCodes(caller.accountId(), fileCodes.read(file.getBytes()));
     }
 
     @GetMapping
