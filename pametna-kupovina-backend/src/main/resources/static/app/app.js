@@ -4,7 +4,7 @@
 // menja za sesiju i dalje šalje samo kratak pristupni token. Napredak kupovine
 // ostaje u pregledaču, kao u aplikaciji.
 
-const VERSION = '1.9';
+const VERSION = '2.0';
 const view = document.getElementById('view');
 const actionBar = document.getElementById('action');
 
@@ -62,6 +62,14 @@ async function sessionCall(path, body) {
   return session.accessToken;
 }
 
+/** Da se u spisku telefona na nalogu vidi koji je koji. */
+function webDeviceName() {
+  const ua = navigator.userAgent;
+  const kind = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' : /Android/.test(ua) ? 'Android'
+    : /Macintosh/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'Windows' : null;
+  return kind ? `${kind} (web)` : 'Web';
+}
+
 async function renewSession() {
   const refresh = saved.get('session')?.refresh;
   if (refresh) {
@@ -72,14 +80,14 @@ async function renewSession() {
     }
   }
   try {
-    return await sessionCall('sessions', { deviceToken: clientToken(), deviceName: 'Web' });
+    return await sessionCall('sessions', { deviceToken: clientToken(), deviceName: webDeviceName() });
   } catch (error) {
     if (error.status !== 401) throw error;
     // Ključ ovog pregledača više ne otvara nalog: počinje se kao nov uređaj.
     saved.set('token', null);
     saved.set('session', null);
     saved.set('listId', null);
-    return sessionCall('sessions', { deviceToken: clientToken(), deviceName: 'Web' });
+    return sessionCall('sessions', { deviceToken: clientToken(), deviceName: webDeviceName() });
   }
 }
 
@@ -311,10 +319,93 @@ function itemAttention(item) {
   return '';
 }
 
-let listState = { list: null, adding: null };
+let listState = { list: null, adding: null, editing: null };
+
+// Jedinice kao u Android uređivaču: kilogram mesa, ali 400 grama sira.
+const editUnits = { kg: ['g', 1000], g: ['g', 1], l: ['ml', 1000], ml: ['ml', 1], kom: ['piece', 1] };
+function storedUnit(baseUnit, amount) {
+  if (baseUnit === 'g') return amount != null && amount < 1000 ? 'g' : 'kg';
+  if (baseUnit === 'ml') return amount != null && amount < 1000 ? 'ml' : 'l';
+  return baseUnit === 'piece' ? 'kom' : null;
+}
+const inputNumber = value => decimal(value, 3).split(separators.group).join('');
+const parseNumber = text => {
+  const value = Number(String(text ?? '').trim().replace(/\s/g, '').replace(',', '.'));
+  return String(text ?? '').trim() && Number.isFinite(value) ? value : null;
+};
+
+/** Izmena na mestu: „bilo koji" menja naziv, količinu i brend; tačan proizvod samo broj pakovanja. */
+function itemEditor(item) {
+  const flexible = item.matchingRule === 'FLEXIBLE_CATEGORY';
+  const c = item.flexibleConstraints || {};
+  const unit = storedUnit(c.requiredBaseUnit, c.targetQuantity) || 'kg';
+  const amount = c.targetQuantity ? inputNumber(c.targetQuantity / editUnits[unit][1]) : '';
+  return `<form class="card" data-form="edit-item" data-id="${item.id}">
+    <div class="label accent">Izmeni stavku</div>
+    ${flexible ? `
+      <label class="label" for="edit-name">Šta kupuješ</label>
+      <input id="edit-name" name="name" type="text" value="${esc(item.name)}" autocomplete="off" required>
+      <label class="label" for="edit-amount">Koliko ti ukupno treba (opciono)</label>
+      <div class="row"><input id="edit-amount" name="amount" inputmode="decimal" value="${esc(amount)}" placeholder="npr. 1,5" style="flex:1">
+        <select name="unit" aria-label="Jedinica" style="width:96px">${Object.keys(editUnits).map(u =>
+          `<option value="${u}" ${u === unit ? 'selected' : ''}>${u}</option>`).join('')}</select></div>
+      <p class="muted small">Biramo cela pakovanja, sa najviše 25% viška. Bez količine kupuješ onoliko pakovanja koliko upišeš ispod.</p>
+      <label class="label" for="edit-brand">Samo ovaj brend (opciono)</label>
+      <input id="edit-brand" name="brand" type="text" value="${esc(c.requiredBrand || '')}" autocomplete="off">`
+      : `<div class="name">${esc(item.name)}</div>`}
+    <label class="label" for="edit-quantity">${flexible ? 'Puta' : 'Broj pakovanja'}</label>
+    <input id="edit-quantity" name="quantity" inputmode="decimal" value="${esc(inputNumber(item.quantity))}" required>
+    <div class="btn-row"><button type="button" class="btn" data-act="cancel-edit">Odustani</button><button class="btn primary">Sačuvaj</button></div>
+  </form>`;
+}
+
+async function saveItem(id, data) {
+  const listId = listState.list.id;
+  const item = listState.list.items.find(i => i.id === id);
+  const quantity = parseNumber(data.get('quantity'));
+  if (!(quantity > 0)) throw new Error('Upiši broj veći od nule.');
+  const flexible = item.matchingRule === 'FLEXIBLE_CATEGORY';
+  let name = item.name;
+  let constraints = item.flexibleConstraints;
+  if (flexible) {
+    name = String(data.get('name') || '').trim();
+    if (!name) throw new Error('Upiši šta kupuješ.');
+    const c = item.flexibleConstraints || {};
+    const amountText = String(data.get('amount') || '').trim();
+    const amount = parseNumber(amountText);
+    if (amountText && !(amount > 0)) throw new Error('Količina nije ispravna. Primer: 1,5.');
+    const [baseUnit, factor] = editUnits[data.get('unit')] || editUnits.kg;
+    // Kategorija prati naziv kad je bila isto što i naziv, kao u aplikaciji.
+    const sameCategory = !c.category || c.category.trim().toLowerCase() === item.name.trim().toLowerCase();
+    constraints = {
+      ...c,
+      category: sameCategory ? name : c.category,
+      requiredBrand: String(data.get('brand') || '').trim() || null,
+      targetQuantity: amount ? amount * factor : null,
+      requiredBaseUnit: amount ? baseUnit : c.minPackageQuantity || c.maxPackageQuantity ? c.requiredBaseUnit : null,
+      // Granice pakovanja važe u jedinici količine; druga jedinica ih poništava.
+      ...(amount && c.requiredBaseUnit && c.requiredBaseUnit !== baseUnit ? { minPackageQuantity: null, maxPackageQuantity: null } : {})
+    };
+  }
+  await api('PUT', `shopping-lists/${listId}/items/${id}`, {
+    name,
+    rawInput: name === item.name ? item.rawInput : name,
+    barcode: item.barcode,
+    canonicalProductId: item.matchingRule === 'EXACT_PRODUCT' ? item.matchedCanonicalProductId : null,
+    productFamilyId: item.matchingRule === 'PRODUCT_FAMILY' ? item.matchedProductFamilyId : null,
+    quantity,
+    matchingRule: item.matchingRule,
+    flexibleConstraints: flexible ? constraints : item.flexibleConstraints
+  });
+  listState.editing = null;
+  listState.list = await api('GET', `shopping-lists/${listId}`);
+  renderList();
+  toast('Sačuvano.');
+}
 
 async function showList() {
   screen({ title: 'Moj spisak', html: spinner('Učitavam spisak…') });
+  listState.editing = null;
   try {
     listState.list = await loadList();
   } catch (error) {
@@ -351,10 +442,10 @@ function renderList() {
          <button class="btn" data-act="add-many">${icon.paste}Nalepi spisak</button>
        </div>` + form + (listState.adding ? '' : salesShortcut()) +
       (items.length
-        ? `<div class="section">Stavke na spisku ${pill(items.length)}</div>` + items.map(item => `
+        ? `<div class="section">Stavke na spisku ${pill(items.length)}</div>` + items.map(item => item.id === listState.editing ? itemEditor(item) : `
           <div class="card">
             <div class="row">
-              <div class="grow">
+              <div class="grow" data-act="edit" data-id="${item.id}" role="button" tabindex="0" style="cursor:pointer" aria-label="Izmeni ${esc(item.name)}">
                 ${itemAttention(item)}
                 <div class="name">${esc(item.name)}</div>
                 ${itemRule(item) ? `<div class="muted small">${esc(itemRule(item))}</div>` : ''}
@@ -367,8 +458,10 @@ function renderList() {
            <p class="muted">Nalepi spisak iz poruke ili beleške, ili dodaj stavku po stavku.</p></div>`),
     action: `<button class="btn primary main" data-act="calculate" ${items.length ? '' : 'disabled'}>Izračunaj</button>`
   });
-  const field = view.querySelector('[data-form] input, [data-form] textarea');
-  if (field) field.focus();
+  const field = view.querySelector('[data-form] input:not([type=hidden]), [data-form] textarea');
+  if (field && !listState.editing) field.focus();
+  const editing = view.querySelector('[data-form=edit-item]');
+  if (editing) editing.scrollIntoView({ block: 'nearest' });
 }
 
 async function addText(text) {
@@ -506,6 +599,10 @@ async function useAsFlexible(itemId) {
 // ---------- Polazna tačka (korak 2) ----------
 
 const coordinates = (lat, lng) => `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+const originLabel = origin => origin.label || coordinates(origin.lat, origin.lng);
+
+// Adrese iz pretrage ostaju na ekranu dok se ne izabere jedna.
+let places = { query: '', results: null };
 
 function showLocation(message = null, tone = 'err') {
   const last = saved.get('origin');
@@ -518,16 +615,26 @@ function showLocation(message = null, tone = 'err') {
         <div class="title">Polazna tačka</div>
         <p class="muted small">Put računamo od polazne tačke do prodavnica u blizini.</p>
       </div>
+      <form class="card" data-form="place" role="search">
+        <label class="label" for="place">Adresa ili kraj</label>
+        <div class="row"><input id="place" name="q" type="search" enterkeyhint="search" autocomplete="street-address"
+          placeholder="npr. Bulevar oslobođenja 10, Novi Sad" value="${esc(places.query)}" style="flex:1">
+          <button class="btn primary">Traži</button></div>
+      </form>
+      ${places.results ? (places.results.length ? `<div class="card flush">${places.results.map((p, index) => `
+        <button class="list-row row" style="width:100%;text-align:left;cursor:pointer;background:none;border:0" data-act="use-place" data-index="${index}">
+          <span style="color:var(--primary)">${icon.pin}</span><span class="grow">${esc(p.name)}</span>${icon.chevron}</button>`).join('')}</div>`
+        : notice('Ne nalazimo tu adresu. Dodaj grad ili probaj sa nazivom kraja.', 'warn')) : ''}
       <button class="card row" style="text-align:left;cursor:pointer" data-act="locate">
         <span class="letter" style="border-radius:50%;background:var(--mint);color:var(--on-mint)">${icon.pin}</span>
         <span class="grow"><span class="name" style="display:block">Koristi trenutnu lokaciju</span>
         <span class="muted small">Safari će pitati za dozvolu</span></span>${icon.chevron}
       </button>
       ${last ? `<button class="card row" style="text-align:left;cursor:pointer" data-act="use-last">
-        <span class="grow"><span class="label">Poslednja polazna tačka</span><span style="display:block">${coordinates(last.lat, last.lng)}</span></span>
+        <span class="grow"><span class="label">Poslednja polazna tačka</span><span style="display:block">${esc(originLabel(last))}</span></span>
         <span class="btn">Koristi</span></button>` : ''}
       ${message ? notice(message, tone) : ''}
-      <p class="muted small">Lokacija služi samo za ovo računanje i za redosled pretrage. Ne prati se u pozadini, a server je ne čuva.</p>
+      <p class="muted small">Lokacija služi samo za ovo računanje i za redosled pretrage. Ne prati se u pozadini, a server je ne čuva. Adresu server traži preko OpenStreetMap-a i ne upisuje je.</p>
       <details class="card">
         <summary>Unesi koordinate ručno</summary>
         <form data-form="coordinates">
@@ -540,8 +647,9 @@ function showLocation(message = null, tone = 'err') {
   });
 }
 
-function useOrigin(lat, lng) {
-  saved.set('origin', { lat, lng });
+function useOrigin(lat, lng, label = null) {
+  saved.set('origin', label ? { lat, lng, label } : { lat, lng });
+  places = { query: '', results: null };
   location.hash = '#/preporuke';
 }
 
@@ -649,7 +757,7 @@ function renderRecommendation() {
     html: `
       <div class="card row">
         <span class="letter" style="border-radius:50%;background:var(--mint);color:var(--on-mint)">${icon.pin}</span>
-        <div class="grow"><div class="label accent">Polazna tačka</div><div>${coordinates(origin.lat, origin.lng)}</div></div>
+        <div class="grow"><div class="label accent">Polazna tačka</div><div>${esc(originLabel(origin))}</div></div>
         <a class="btn" href="#/lokacija">Promeni</a>
       </div>
       <div class="scenarios">${scenarios.map(x => `
@@ -1112,8 +1220,12 @@ function renderCards() {
 
 // ---------- Više ----------
 
-function showMore() {
+function showMore(_, __, loaded = false) {
   const standalone = navigator.standalone || matchMedia('(display-mode: standalone)').matches;
+  // Prvo ono što se zna, pa sveže stanje naloga čim stigne.
+  if (!loaded) loadAccount().then(() => { if (location.hash === '#/vise') showMore(null, null, true); });
+  const link = (href, title, text) => `<a class="card row" href="${href}" style="text-decoration:none;color:inherit">
+    <span class="grow"><span class="name" style="display:block">${title}</span><span class="muted small">${text}</span></span>${icon.chevron}</a>`;
   screen({
     title: 'Više',
     html:
@@ -1121,32 +1233,40 @@ function showMore() {
         <div class="title">Dodaj na početni ekran</div>
         <p>U Safari-ju dodirni <b>Podeli</b> pa <b>Dodaj na početni ekran</b>. Otvara se kao aplikacija, a spisak i kartice ostaju i kad Safari čisti stare podatke sajtova.</p>
       </div>`) +
+      accountCard() +
       `<a class="card row" href="#/racun" style="text-decoration:none;color:inherit">
         <span class="grow"><span class="name" style="display:block">Dodaj račun</span>
-        <span class="muted small">Screenshot ili PDF digitalnog računa</span></span>${icon.chevron}</a>
-      <div class="card">
+        <span class="muted small">Screenshot ili PDF digitalnog računa</span></span>${icon.chevron}</a>` +
+      link('#/potrosnja', 'Potrošnja', 'Koliko trošiš mesečno, po prodavnicama i kategorijama') +
+      link('#/domacinstvo', 'Domaćinstvo', account.state?.household ? 'Delite spisak, račune i kartice' : 'Pozovi ukućanina da delite spisak') +
+      `<div class="card">
         <div class="title">O aplikaciji</div>
         <p>Pametna kupovina ${VERSION}, web verzija</p>
         <p class="muted small">Cene su iz zvaničnih cenovnika trgovaca. Merodavna je cena u prodavnici.</p>
-        <p class="muted small">Web verzija nema skeniranje kamerom (račun se dodaje sa screenshot-a ili PDF-a), obaveštenja o pojeftinjenju ni prijavu preko Google-a — to ima Android aplikacija.</p>
+        <p class="muted small">Web verzija nema skeniranje kamerom (račun se dodaje sa screenshot-a ili PDF-a) ni obaveštenja o pojeftinjenju — to ima Android aplikacija.</p>
         <div class="btn-row"><a class="btn text" href="/privatnost">Politika privatnosti</a><a class="btn text" href="/uslovi">Uslovi korišćenja</a></div>
       </div>
       <div class="card">
         <div class="name">Broj uređaja (za pitanja o podacima)</div>
         <p class="muted small" style="overflow-wrap:anywhere">${esc(saved.get('session')?.deviceId ? 'PK-' + saved.get('session').deviceId : '…')}</p>
-        <button class="btn danger" data-act="delete-account">Obriši moje podatke</button>
+        <button class="btn danger" data-act="delete-account">${account.state?.household ? 'Izađi iz domaćinstva i obriši podatke' : 'Obriši moje podatke'}</button>
       </div>`
   });
 }
 
 async function deleteAccount() {
-  if (!confirm('Obrisati spisak, kartice i sve podatke ovog uređaja sa servera? Ovo se ne može vratiti.')) return;
+  const shared = account.state?.household;
+  if (!confirm(shared
+    ? 'Ovaj pregledač izlazi iz domaćinstva i briše sve sa sebe. Zajednički spisak, računi i kartice ostaju ukućanima.'
+    : 'Obrisati spisak, račune, kartice i sve podatke ovog uređaja sa servera? Ovo se ne može vratiti.')) return;
   await api('DELETE', 'accounts/me');
-  try { Object.keys(localStorage).filter(k => k.startsWith('pk.')).forEach(k => localStorage.removeItem(k)); } catch { /* nema čega */ }
+  clearBrowser();
+  account = { state: null, devices: [], error: null };
   // Bez odlaska na spisak: on bi odmah napravio nov nalog.
   screen({
     title: 'Podaci obrisani',
-    html: notice('Spisak, kartice i broj ovog uređaja su obrisani sa servera i iz pregledača.', 'pos') +
+    html: notice(shared ? 'Ovaj pregledač je izašao iz domaćinstva i obrisao svoje podatke.'
+      : 'Spisak, računi, kartice i broj ovog uređaja su obrisani sa servera i iz pregledača.', 'pos') +
       `<a class="btn" href="#/spisak">Počni ispočetka</a>`
   });
 }
@@ -1164,7 +1284,8 @@ const routes = {
   proizvod: showProduct,
   kartice: showCards,
   vise: showMore,
-  racun: showReceipt
+  racun: showReceipt,
+  ...accountRoutes
 };
 
 // Gde je lista bila kad se otišlo na detalje, da Nazad vrati na isto mesto.
@@ -1172,7 +1293,8 @@ const scrolls = {};
 let currentRoute = null;
 
 function route() {
-  const [path, arg] = location.hash.replace(/^#\/?/, '').split('/');
+  const [path, ...parts] = location.hash.replace(/^#\/?/, '').split('/');
+  const arg = parts[0];
   const name = routes[path] ? path : 'spisak';
   if (currentRoute) scrolls[currentRoute] = window.scrollY;
   const currentFrom = currentRoute;
@@ -1182,13 +1304,14 @@ function route() {
   if (name === 'akcije' && (currentFrom === 'spisak' || currentFrom === 'cene')) salesFrom = '#/' + currentFrom;
   // Obaveštenje pripada ekranu na kome je nastalo.
   if (name !== currentFrom) document.getElementById('toast').hidden = true;
-  const tab = name === 'akcije' || name === 'proizvod' ? 'cene' : name === 'racun' ? 'vise' : routes[name] ? name : 'spisak';
+  const tab = name === 'akcije' || name === 'proizvod' ? 'cene'
+    : name === 'racun' || name === 'domacinstvo' || name === 'potrosnja' ? 'vise' : routes[name] ? name : 'spisak';
   document.querySelectorAll('.tabs a').forEach(a => {
     const current = a.dataset.tab === tab;
     if (current) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
   });
   window.scrollTo(0, 0);
-  const shown = handler(arg ? Number(arg) : undefined);
+  const shown = handler(arg ? Number(arg) : undefined, parts);
   // Lista koja se samo ponovo iscrtava (pretraga, akcije) vraća se gde je bila.
   if ((name === 'cene' && search.page) || (name === 'akcije' && sales.page && sales.place === searchLocation())) {
     Promise.resolve(shown).then(() => window.scrollTo(0, scrolls[name] || 0));
@@ -1197,9 +1320,11 @@ function route() {
 
 const actions = {
   retry: () => route(),
-  'add-one': () => { listState.adding = 'one'; renderList(); },
-  'add-many': () => { listState.adding = 'paste'; renderList(); },
+  'add-one': () => { listState.adding = 'one'; listState.editing = null; renderList(); },
+  'add-many': () => { listState.adding = 'paste'; listState.editing = null; renderList(); },
   'cancel-add': () => { listState.adding = null; renderList(); },
+  edit: el => { listState.editing = Number(el.dataset.id); listState.adding = null; renderList(); },
+  'cancel-edit': () => { listState.editing = null; renderList(); },
   delete: el => deleteItem(Number(el.dataset.id)),
   calculate: () => { location.hash = '#/provera'; },
   choose: el => {
@@ -1210,7 +1335,8 @@ const actions = {
   flexible: el => useAsFlexible(Number(el.dataset.item)),
   'to-location': () => { location.hash = '#/lokacija'; },
   locate,
-  'use-last': () => { const o = saved.get('origin'); useOrigin(o.lat, o.lng); },
+  'use-last': () => { const o = saved.get('origin'); useOrigin(o.lat, o.lng, o.label); },
+  'use-place': el => { const p = places.results[Number(el.dataset.index)]; useOrigin(p.latitude, p.longitude, p.name); },
   scenario: el => { selectedType = el.dataset.type; renderRecommendation(); },
   'start-purchase': startPurchase,
   'finish-purchase': () => {
@@ -1232,6 +1358,7 @@ const actions = {
     await showCards();
   },
   'delete-account': deleteAccount,
+  ...accountActions,
   'sale-sort': el => { sales.sort = el.dataset.value; return loadSales(); },
   'sale-category': el => { sales.category = el.dataset.value || null; return loadSales(); },
   'sales-more': () => loadSales(true),
@@ -1244,8 +1371,10 @@ const actions = {
 };
 
 const forms = {
+  ...accountForms,
   'add-one': data => addText(data.get('text')),
   'add-many': data => addText(data.get('text')),
+  'edit-item': (data, form) => saveItem(Number(form.dataset.id), data),
   coordinates: data => {
     const lat = Number(String(data.get('lat')).replace(',', '.'));
     const lng = Number(String(data.get('lng')).replace(',', '.'));
@@ -1253,6 +1382,18 @@ const forms = {
       return showLocation('Koordinate nisu ispravne. Primer: 44.8170 i 20.4930.');
     }
     useOrigin(lat, lng);
+  },
+  place: async data => {
+    places.query = String(data.get('q') || '').trim();
+    document.activeElement.blur();
+    try {
+      places.results = await api('GET', `places?query=${encodeURIComponent(places.query)}`);
+    } catch (error) {
+      places.results = null;
+      return showLocation(error.status === 503 || error.status === 502
+        ? 'Pretraga adrese trenutno ne radi. Probaj ponovo za koji trenutak ili koristi trenutnu lokaciju.' : error.message);
+    }
+    showLocation();
   },
   search: data => { search.query = String(data.get('q') || ''); document.activeElement.blur(); return runSearch(); },
   card: async data => {
@@ -1305,7 +1446,7 @@ document.addEventListener('submit', event => {
   const handler = forms[event.target.dataset.form];
   if (!handler) return;
   event.preventDefault();
-  run(event.target.querySelector('button:not([type=button])'), () => handler(new FormData(event.target)));
+  run(event.target.querySelector('button:not([type=button])'), () => handler(new FormData(event.target), event.target));
 });
 
 window.addEventListener('hashchange', route);
