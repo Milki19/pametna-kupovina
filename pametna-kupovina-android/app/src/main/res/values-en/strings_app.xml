@@ -54,7 +54,7 @@
     <string name="household_title">Household</string>
     <string name="household_qr_description">QR code for joining the household</string>
     <string name="household_code_validity">Valid for 15 minutes</string>
-    <string name="household_join_instructions">Have the other household member open Menu → Household → Join in their app and scan this code.</string>
+    <string name="household_join_instructions">Have the other household member open Menu → Household → Join in their app and scan this code. On an iPhone they scan it with the camera, which opens the web version.</string>
     <string name="household_intro">Household members share the same list, receipts and cards. When someone joins, everything they had on their phone becomes shared.</string>
     <string name="household_invite">Invite a household member</string>
     <string name="household_new_code">New code</string>

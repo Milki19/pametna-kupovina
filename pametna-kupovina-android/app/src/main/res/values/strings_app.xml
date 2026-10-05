@@ -55,7 +55,7 @@
     <string name="household_title">Domaćinstvo</string>
     <string name="household_qr_description">QR kod za pridruživanje domaćinstvu</string>
     <string name="household_code_validity">Važi 15 minuta</string>
-    <string name="household_join_instructions">Neka ukućanin u svojoj aplikaciji otvori Meni → Domaćinstvo → Pridruži se i skenira ovaj kod.</string>
+    <string name="household_join_instructions">Neka ukućanin u svojoj aplikaciji otvori Meni → Domaćinstvo → Pridruži se i skenira ovaj kod. Na iPhone-u ga skenira kamerom, pa se otvara web verzija.</string>
     <string name="household_intro">Ukućani dele isti spisak, račune i kartice. Kad se neko pridruži, sve što je imao na svom telefonu prelazi u zajedničko.</string>
     <string name="household_invite">Pozovi ukućanina</string>
     <string name="household_new_code">Novi kod</string>
