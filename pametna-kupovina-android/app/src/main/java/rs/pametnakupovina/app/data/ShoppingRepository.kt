@@ -9,6 +9,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import retrofit2.HttpException
+import rs.pametnakupovina.app.BuildConfig
 import rs.pametnakupovina.app.data.local.DraftItemDao
 import rs.pametnakupovina.app.data.local.DraftItemEntity
 import rs.pametnakupovina.app.data.local.SyncState
@@ -513,11 +514,23 @@ class NotAHouseholdCode : Exception()
 
 private const val HOUSEHOLD_PREFIX = "pametnakupovina:domacinstvo:"
 
-internal fun householdCode(code: String, listId: Long) = "$HOUSEHOLD_PREFIX$code:$listId"
+// Link do web verzije: iPhone ga otvori kamerom, a aplikacija ga čita kao kod.
+private val HOUSEHOLD_LINK =
+    Regex("^https?://[^/\\s]+/app/(?:index\\.html)?#/domacinstvo/([A-Za-z0-9_-]+)/(\\d+)$")
 
-/** Kod i spisak iz skeniranog QR-a, ili null za bilo koji drugi kod. */
+internal fun householdCode(
+    code: String,
+    listId: Long,
+    baseUrl: String = BuildConfig.BACKEND_BASE_URL
+) = "${baseUrl.trimEnd('/')}/app/#/domacinstvo/$code/$listId"
+
+/** Kod i spisak iz skeniranog QR-a (link ili kod iz aplikacije 1.x), ili null za bilo koji drugi kod. */
 internal fun parseHouseholdCode(scanned: String): Pair<String, Long>? {
-    val rest = scanned.trim().takeIf { it.startsWith(HOUSEHOLD_PREFIX) }
+    val text = scanned.trim()
+    HOUSEHOLD_LINK.matchEntire(text)?.let { link ->
+        return link.groupValues[1] to (link.groupValues[2].toLongOrNull() ?: return null)
+    }
+    val rest = text.takeIf { it.startsWith(HOUSEHOLD_PREFIX) }
         ?.removePrefix(HOUSEHOLD_PREFIX) ?: return null
     val listId = rest.substringAfter(':', "").toLongOrNull() ?: return null
     return rest.substringBefore(':').takeIf(String::isNotBlank)?.let { it to listId }
