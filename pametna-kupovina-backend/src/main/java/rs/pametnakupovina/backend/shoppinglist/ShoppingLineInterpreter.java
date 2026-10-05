@@ -21,6 +21,12 @@ public class ShoppingLineInterpreter {
 
     private static final BigDecimal ONE_THOUSAND = BigDecimal.valueOf(1000);
 
+    /** A bare whole number up to this counts packages; a larger one is a size. */
+    private static final BigDecimal MAX_BARE_COUNT = BigDecimal.valueOf(30);
+
+    /** "jaja 10" means ten eggs, not ten cartons; "2x jaja" stays two cartons. */
+    private static final BigDecimal MIN_COUNT_OF_PIECES = BigDecimal.valueOf(4);
+
     private final ShoppingListTextParser parser;
     private final ShoppingIntentResolver intentResolver;
     private final ProductNameNormalizer normalizer;
@@ -40,50 +46,130 @@ public class ShoppingLineInterpreter {
     }
 
     public InterpretedLine interpret(ParsedShoppingListLine line) {
+        // A number can be part of the kind itself: "3 u 1" is instant coffee.
+        if (line.bareNumber() != null) {
+            var whole = intentResolver.resolve(line.nameWithAmount())
+                    .filter(ShoppingIntentResolver.ResolvedShoppingIntent::exactAlias);
+            if (whole.isPresent()) {
+                return choice(line.nameWithAmount(), line.nameWithAmount(), whole.get(),
+                        null, line.quantity(), null, null);
+            }
+        }
+
+        String name = line.name();
         ShoppingIntentResolver.ResolvedShoppingIntent intent =
-                intentResolver.resolve(line.name()).orElse(null);
+                intentResolver.resolve(name).orElse(null);
+
+        if (intent == null) {
+            Optional<Spelled> dictionaryForm = dictionaryForm(name);
+            if (dictionaryForm.isPresent()) {
+                name = dictionaryForm.get().name();
+                intent = dictionaryForm.get().intent();
+            }
+        }
 
         if (intent == null) {
             return product(line);
         }
 
+        BigDecimal packages = line.quantity();
         BigDecimal target = line.targetQuantity();
         String unit = line.baseUnit();
 
-        // "Kisela voda 1.75" can only be litres for something sold by volume.
-        // "Vrat 1,5" could be kilograms or pieces, so it stays unread.
+        // "mleko 2" and "10 jaja" count packages. "Kisela voda 1.75" can only
+        // be litres for something sold by volume, while "Vrat 1,5" could be
+        // kilograms or pieces, so it stays unread.
         if (line.bareNumber() != null) {
-            if (!"ml".equals(intent.defaultBaseUnit())) {
+            if (isCount(line.bareNumber())) {
+                packages = packages.multiply(line.bareNumber());
+            } else if ("ml".equals(intent.defaultBaseUnit())) {
+                target = line.bareNumber().multiply(ONE_THOUSAND).stripTrailingZeros();
+                unit = "ml";
+            } else {
                 return product(line);
             }
-            target = line.bareNumber().multiply(ONE_THOUSAND).stripTrailingZeros();
-            unit = "ml";
+        }
+
+        // Something counted by the piece and sold in cartons: "jaja 10 kom"
+        // asks for ten eggs, however many fit in one shop's carton.
+        if ("piece".equals(intent.defaultBaseUnit())
+                && target == null
+                && packages.compareTo(MIN_COUNT_OF_PIECES) >= 0
+                && packages.stripTrailingZeros().scale() <= 0) {
+            target = packages;
+            unit = "piece";
+            packages = BigDecimal.ONE;
         }
 
         if (intent.exactAlias()) {
-            return choice(line, line.name(), intent, null, target, unit);
+            return choice(name, name, intent, null, packages, target, unit);
         }
 
         Optional<CategoryAndBrand> split =
-                brandBesideCategory(line.name(), intent.normalizedAlias());
+                brandBesideCategory(name, intent.normalizedAlias());
 
         if (split.isEmpty()) {
             return product(line);
         }
 
         return choice(
-                line,
+                name,
                 split.get().category(),
                 intent,
                 split.get().brand(),
+                packages,
                 target,
                 unit
         );
     }
 
+    private static boolean isCount(BigDecimal number) {
+        return number.stripTrailingZeros().scale() <= 0
+                && number.signum() > 0
+                && number.compareTo(MAX_BARE_COUNT) <= 0;
+    }
+
+    /**
+     * "2 mleka", "kisele vode": a list says how many of something, so its
+     * last word often comes in the genitive. Only a form that is exactly a
+     * kind of product counts, so a product's own name never turns into one.
+     */
+    private Optional<Spelled> dictionaryForm(String name) {
+        String trimmed = name.trim();
+        int lastSpace = trimmed.lastIndexOf(' ');
+        String head = lastSpace < 0 ? "" : trimmed.substring(0, lastSpace + 1);
+        String word = trimmed.substring(lastSpace + 1);
+        if (word.length() < 3) {
+            return Optional.empty();
+        }
+        String stem = word.substring(0, word.length() - 1);
+        List<String> forms = switch (Character.toLowerCase(word.charAt(word.length() - 1))) {
+            case 'a' -> List.of(stem, stem + "o", stem + "e");
+            case 'e' -> List.of(stem + "a");
+            default -> List.of();
+        };
+        for (String form : forms) {
+            String candidate = head + form;
+            Optional<ShoppingIntentResolver.ResolvedShoppingIntent> intent =
+                    intentResolver.resolve(candidate)
+                            .filter(ShoppingIntentResolver.ResolvedShoppingIntent::exactAlias);
+            if (intent.isPresent()) {
+                return Optional.of(new Spelled(candidate, intent.get()));
+            }
+        }
+        return Optional.empty();
+    }
+
+    private record Spelled(
+            String name,
+            ShoppingIntentResolver.ResolvedShoppingIntent intent
+    ) {
+    }
+
     private InterpretedLine product(ParsedShoppingListLine line) {
         return new InterpretedLine(
                 line.nameWithAmount(),
+                line.quantity(),
                 ShoppingItemRule.EXACT_PRODUCT,
                 null,
                 null,
@@ -95,10 +181,11 @@ public class ShoppingLineInterpreter {
     }
 
     private InterpretedLine choice(
-            ParsedShoppingListLine line,
+            String name,
             String category,
             ShoppingIntentResolver.ResolvedShoppingIntent intent,
             String brand,
+            BigDecimal packages,
             BigDecimal target,
             String unit
     ) {
@@ -106,7 +193,8 @@ public class ShoppingLineInterpreter {
                 && target.compareTo(BigDecimal.ZERO) > 0;
 
         return new InterpretedLine(
-                line.name(),
+                name,
+                packages,
                 ShoppingItemRule.FLEXIBLE_CATEGORY,
                 category,
                 intent.normalizedAlias(),
@@ -184,6 +272,7 @@ public class ShoppingLineInterpreter {
 
     public record InterpretedLine(
             String name,
+            BigDecimal quantity,
             ShoppingItemRule matchingRule,
             String category,
             String normalizedCategory,
