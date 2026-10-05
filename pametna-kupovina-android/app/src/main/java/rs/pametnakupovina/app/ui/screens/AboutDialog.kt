@@ -193,6 +193,27 @@ fun AboutDialog(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
+    var deviceToRemove by rememberSaveable { mutableStateOf<Long?>(null) }
+
+    deviceToRemove?.let { deviceId ->
+        val device = state.devices.firstOrNull { it.id == deviceId }
+        val name = device?.name ?: stringResource(R.string.about_device_unnamed, deviceId)
+        AlertDialog(
+            onDismissRequest = { deviceToRemove = null },
+            title = { Text(stringResource(R.string.about_remove_device_title, name)) },
+            text = { Text(stringResource(R.string.about_remove_device_text)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.removeDevice(deviceId)
+                        deviceToRemove = null
+                    },
+                    modifier = Modifier.testTag("about-remove-device-confirm")
+                ) { Text(stringResource(R.string.about_remove_device), color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { deviceToRemove = null }) { Text(stringResource(R.string.common_cancel)) } }
+        )
+    }
 
     if (confirmDelete) {
         AlertDialog(
@@ -300,7 +321,7 @@ fun AboutDialog(
                             )
                             if (!device.current) {
                                 TextButton(
-                                    onClick = { viewModel.removeDevice(device.id) },
+                                    onClick = { deviceToRemove = device.id },
                                     modifier = Modifier.testTag("about-remove-device-${device.id}")
                                 ) { Text(stringResource(R.string.about_remove_device)) }
                             }

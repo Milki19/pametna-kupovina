@@ -45,6 +45,8 @@
     <string name="about_device_unnamed">Telefon %1$d</string>
     <string name="about_device_current">%1$s (ovaj)</string>
     <string name="about_remove_device">Ukloni</string>
+    <string name="about_remove_device_title">Ukloniti telefon „%1$s“?</string>
+    <string name="about_remove_device_text">Taj telefon se odjavljuje sa naloga i više ne vidi spisak, račune ni kartice. Na njemu počinje ispočetka.</string>
     <string name="about_remove_device_failed">Telefon nije uklonjen. Proveri internet i probaj ponovo.</string>
     <string name="about_privacy_policy">Politika privatnosti</string>
     <string name="about_terms">Uslovi korišćenja</string>

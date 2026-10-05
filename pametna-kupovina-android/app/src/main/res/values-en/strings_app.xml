@@ -44,6 +44,8 @@
     <string name="about_device_unnamed">Phone %1$d</string>
     <string name="about_device_current">%1$s (this one)</string>
     <string name="about_remove_device">Remove</string>
+    <string name="about_remove_device_title">Remove the phone “%1$s”?</string>
+    <string name="about_remove_device_text">That phone is signed out of the account and no longer sees the list, receipts or cards. It starts over.</string>
     <string name="about_remove_device_failed">The phone was not removed. Check your connection and try again.</string>
     <string name="about_privacy_policy">Privacy policy</string>
     <string name="about_terms">Terms of use</string>
