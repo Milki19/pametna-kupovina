@@ -1,6 +1,7 @@
 package rs.pametnakupovina.backend.account;
 
 import jakarta.validation.constraints.NotBlank;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,18 +22,30 @@ public class AccountController {
 
     private final AccountSignInService signInService;
     private final DeviceSessionService sessionService;
+    private final String googleClientId;
 
     public AccountController(
             AccountSignInService signInService,
-            DeviceSessionService sessionService
+            DeviceSessionService sessionService,
+            @Value("${account.google.client-id:}") String googleClientId
     ) {
         this.signInService = signInService;
         this.sessionService = sessionService;
+        this.googleClientId = googleClientId == null ? "" : googleClientId.strip();
     }
 
     @GetMapping("/me")
     public AccountSignInService.AccountState me(DeviceCaller caller) {
         return signInService.state(caller);
+    }
+
+    /**
+     * The web app asks Google for a token itself, so it needs the client ID
+     * the server accepts tokens for. Not a secret; empty while not set up.
+     */
+    @GetMapping("/sign-in/google")
+    public GoogleSignInSettings googleSignInSettings() {
+        return new GoogleSignInSettings(googleClientId);
     }
 
     @PostMapping("/sign-in/google")
@@ -81,5 +94,8 @@ public class AccountController {
     }
 
     public record JoinRequest(@NotBlank String code) {
+    }
+
+    public record GoogleSignInSettings(String clientId) {
     }
 }
