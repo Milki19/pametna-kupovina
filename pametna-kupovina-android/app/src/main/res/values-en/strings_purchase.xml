@@ -15,6 +15,7 @@
     </plurals>
     <string name="purchase_scanning">Scanning…</string>
     <string name="purchase_scan_receipt">Scan receipt</string>
+    <string name="purchase_import_receipt">Load from image or PDF</string>
     <string name="purchase_empty_title">No saved shopping trips yet</string>
     <string name="purchase_empty_hint">Calculate a plan and choose to start shopping with it.</string>
     <string name="purchase_session_progress">%1$s · %2$d of %3$d bought</string>

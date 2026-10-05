@@ -8,6 +8,7 @@
     <string name="app_tab_history">Istorija</string>
     <string name="app_menu">Meni</string>
     <string name="app_menu_scan_receipt">Skeniraj račun</string>
+    <string name="app_menu_import_receipt">Učitaj račun sa slike</string>
     <string name="app_menu_household">Domaćinstvo</string>
     <string name="app_menu_about">O aplikaciji</string>
     <string name="app_menu_sales">Akcije</string>

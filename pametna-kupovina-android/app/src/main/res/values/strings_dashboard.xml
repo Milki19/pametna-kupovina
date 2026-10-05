@@ -45,6 +45,8 @@
     <string name="receipt_not_fiscal">To nije QR sa fiskalnog računa.</string>
     <string name="receipt_scanner_downloading">Google skener se još preuzima na telefon. Sačekaj minut pa probaj ponovo.</string>
     <string name="receipt_scan_failed">Skeniranje nije uspelo. Probaj ponovo.</string>
+    <string name="receipt_file_too_large">Fajl je prevelik. Pošalji screenshot računa ili PDF manji od 1 MB.</string>
+    <string name="receipt_file_unreadable">Taj fajl ne može da se otvori. Izaberi screenshot računa ili PDF.</string>
     <string name="receipt_not_saved">Račun nije zaveden. Proveri internet i probaj ponovo.</string>
 
     <!-- Lojalti kartice -->

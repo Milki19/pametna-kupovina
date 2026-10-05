@@ -5,6 +5,9 @@ import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import retrofit2.HttpException
 import rs.pametnakupovina.app.data.local.DraftItemDao
 import rs.pametnakupovina.app.data.local.DraftItemEntity
@@ -167,6 +170,15 @@ class ShoppingRepository @Inject constructor(
 
     suspend fun scanReceipt(verificationUrl: String): ReceiptDto =
         api.scanReceipt(ScanReceiptRequestDto(verificationUrl))
+
+    suspend fun scanReceiptFile(file: ReceiptFile): ReceiptDto =
+        api.scanReceiptFile(
+            MultipartBody.Part.createFormData(
+                "file",
+                if (file.mimeType == "application/pdf") "racun.pdf" else "racun.jpg",
+                file.bytes.toRequestBody(file.mimeType.toMediaType())
+            )
+        )
 
     suspend fun receipts(limit: Int = 50): List<ReceiptDto> =
         api.getReceipts(limit)

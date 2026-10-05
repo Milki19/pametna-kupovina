@@ -1,6 +1,9 @@
 package rs.pametnakupovina.app.ui
 
 import android.content.Intent
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Column
@@ -21,6 +24,7 @@ import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -53,6 +57,7 @@ import rs.pametnakupovina.app.ui.screens.ProductDetailsScreen
 import rs.pametnakupovina.app.ui.screens.RecommendationScreen
 import rs.pametnakupovina.app.ui.screens.ShoppingListScreen
 import rs.pametnakupovina.app.ui.screens.PurchaseScreen
+import rs.pametnakupovina.app.ui.screens.RECEIPT_FILE_TYPES
 import rs.pametnakupovina.app.ui.screens.SalesScreen
 
 private object Route {
@@ -90,7 +95,10 @@ private fun NavHostController.openTab(route: String) = navigate(route) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PametnaKupovinaApp() {
+fun PametnaKupovinaApp(
+    sharedReceipt: Uri? = null,
+    onSharedReceiptTaken: () -> Unit = {}
+) {
     val navController = rememberNavController()
     val calculationSession: CalculationSessionViewModel = hiltViewModel()
     val calculationLocation by calculationSession.location
@@ -104,6 +112,20 @@ fun PametnaKupovinaApp() {
     var showAbout by rememberSaveable { mutableStateOf(false) }
     var showHousehold by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
+    // Ishod učitavanja računa se javlja na početnom ekranu, kao i skeniranje.
+    val pickReceiptFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            navController.openTab(Route.DASHBOARD)
+            receiptViewModel.importFile(uri)
+        }
+    }
+    LaunchedEffect(sharedReceipt) {
+        sharedReceipt?.let {
+            onSharedReceiptTaken()
+            navController.openTab(Route.DASHBOARD)
+            receiptViewModel.importFile(it)
+        }
+    }
 
     if (showAbout) {
         AboutDialog(
@@ -136,6 +158,10 @@ fun PametnaKupovinaApp() {
                     // Ishod skeniranja se javlja na početnom ekranu.
                     navController.openTab(Route.DASHBOARD)
                     receiptViewModel.scan(context)
+                },
+                onImportFile = {
+                    showMenu = false
+                    pickReceiptFile.launch(RECEIPT_FILE_TYPES)
                 },
                 onHousehold = {
                     showMenu = false
@@ -305,6 +331,7 @@ private fun NavLabel(text: String) {
 private fun AppMenuContent(
     onSales: () -> Unit,
     onScan: () -> Unit,
+    onImportFile: () -> Unit,
     onHousehold: () -> Unit,
     onAbout: () -> Unit
 ) {
@@ -312,6 +339,7 @@ private fun AppMenuContent(
         listOf(
             Triple(R.string.app_menu_sales, R.drawable.ic_local_offer, onSales) to "menu-sales",
             Triple(R.string.app_menu_scan_receipt, R.drawable.ic_camera, onScan) to "menu-scan",
+            Triple(R.string.app_menu_import_receipt, R.drawable.ic_image, onImportFile) to "menu-import-receipt",
             Triple(R.string.app_menu_household, R.drawable.ic_home, onHousehold) to "menu-household",
             Triple(R.string.app_menu_about, R.drawable.ic_info, onAbout) to "menu-about"
         ).forEach { (entry, tag) ->

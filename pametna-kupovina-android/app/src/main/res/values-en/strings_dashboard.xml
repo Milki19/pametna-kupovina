@@ -43,6 +43,8 @@
     <string name="receipt_not_fiscal">That isn\'t a QR code from a fiscal receipt.</string>
     <string name="receipt_scanner_downloading">The Google scanner is still downloading to your phone. Wait a minute and try again.</string>
     <string name="receipt_scan_failed">Scanning failed. Try again.</string>
+    <string name="receipt_file_too_large">The file is too large. Send a receipt screenshot or a PDF under 1 MB.</string>
+    <string name="receipt_file_unreadable">That file can\'t be opened. Pick a receipt screenshot or PDF.</string>
     <string name="receipt_not_saved">Receipt not saved. Check your internet connection and try again.</string>
 
     <!-- Loyalty cards -->
