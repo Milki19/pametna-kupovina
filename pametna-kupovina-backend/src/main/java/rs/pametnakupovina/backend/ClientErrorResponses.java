@@ -1,9 +1,11 @@
 package rs.pametnakupovina.backend;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.LinkedHashMap;
@@ -33,5 +35,14 @@ public class ClientErrorResponses {
         return ResponseEntity.status(status)
                 .headers(exception.getHeaders())
                 .body(body);
+    }
+
+    /** Screenshot računa je mali; veći fajl ni ne stigne do čitanja. */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<Map<String, Object>> tooLarge(MaxUploadSizeExceededException exception) {
+        return refused(new ResponseStatusException(
+                HttpStatus.PAYLOAD_TOO_LARGE,
+                "Fajl je prevelik. Pošalji screenshot računa ili PDF manji od 1 MB."
+        ));
     }
 }
