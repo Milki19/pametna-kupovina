@@ -8,6 +8,7 @@
     <string name="app_tab_history">History</string>
     <string name="app_menu">Menu</string>
     <string name="app_menu_scan_receipt">Scan receipt</string>
+    <string name="app_menu_import_receipt">Load receipt from image</string>
     <string name="app_menu_household">Household</string>
     <string name="app_menu_about">About</string>
     <string name="app_menu_sales">On sale</string>

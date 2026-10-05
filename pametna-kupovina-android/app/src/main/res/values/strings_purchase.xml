@@ -17,6 +17,7 @@
     </plurals>
     <string name="purchase_scanning">Skeniram…</string>
     <string name="purchase_scan_receipt">Skeniraj račun</string>
+    <string name="purchase_import_receipt">Učitaj sa slike ili PDF-a</string>
     <string name="purchase_empty_title">Još nema sačuvanih kupovina</string>
     <string name="purchase_empty_hint">Izračunaj plan i izaberi „Započni kupovinu po ovom planu“.</string>
     <string name="purchase_session_progress">%1$s · kupljeno %2$d od %3$d</string>

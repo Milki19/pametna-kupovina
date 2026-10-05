@@ -1,11 +1,14 @@
 package rs.pametnakupovina.app.data.network
 
+import okhttp3.MultipartBody
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
+import retrofit2.http.Multipart
 import retrofit2.http.POST
 import retrofit2.http.PUT
+import retrofit2.http.Part
 import retrofit2.http.Path
 import retrofit2.http.Query
 
@@ -49,6 +52,10 @@ interface ShoppingApiService {
 
     @DELETE("api/v1/loyalty-cards/{cardId}")
     suspend fun deleteLoyaltyCard(@Path("cardId") cardId: Long)
+
+    @Multipart
+    @POST("api/v1/receipts/file")
+    suspend fun scanReceiptFile(@Part file: MultipartBody.Part): ReceiptDto
 
     @GET("api/v1/receipts/habits")
     suspend fun getHabits(

@@ -1,5 +1,7 @@
 package rs.pametnakupovina.app.ui.screens
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.BorderStroke
@@ -118,6 +120,9 @@ private fun PurchaseHistory(
     val (active, finished) = sessions.partition { it.archivedAt == null }
     val receipts by receiptViewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val pickReceiptFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let(receiptViewModel::importFile)
+    }
     Scaffold(topBar = { AppTopBar(title = stringResource(R.string.purchase_history_title)) }) { padding ->
         LazyColumn(
             modifier = Modifier
@@ -150,7 +155,8 @@ private fun PurchaseHistory(
                     byMonth = receipts.byMonth,
                     receiptCount = receipts.receipts.size,
                     scanning = receipts.scanning,
-                    onScan = { receiptViewModel.scan(context) }
+                    onScan = { receiptViewModel.scan(context) },
+                    onImportFile = { pickReceiptFile.launch(RECEIPT_FILE_TYPES) }
                 )
             }
             if (receipts.receipts.isNotEmpty()) {
@@ -194,7 +200,8 @@ private fun SpendingCard(
     byMonth: List<MonthlySpendingDto>,
     receiptCount: Int,
     scanning: Boolean,
-    onScan: () -> Unit
+    onScan: () -> Unit,
+    onImportFile: () -> Unit
 ) {
     Surface(
         shape = MaterialTheme.shapes.medium,
@@ -242,6 +249,17 @@ private fun SpendingCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("scan-receipt")
+            )
+            // Digitalni račun iz aplikacije trgovine je na istom telefonu,
+            // pa ga kamera ne može uhvatiti: učitava se screenshot ili PDF.
+            TonalActionButton(
+                text = stringResource(R.string.purchase_import_receipt),
+                icon = R.drawable.ic_image,
+                enabled = !scanning,
+                onClick = onImportFile,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("import-receipt")
             )
         }
     }
@@ -1085,3 +1103,6 @@ private fun PurchaseDetailsDialog(
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) } }
     )
 }
+
+/** Screenshot ili PDF digitalnog računa. */
+internal val RECEIPT_FILE_TYPES = arrayOf("image/*", "application/pdf")
