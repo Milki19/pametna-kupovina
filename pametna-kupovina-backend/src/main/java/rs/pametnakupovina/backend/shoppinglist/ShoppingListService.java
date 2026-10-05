@@ -790,7 +790,7 @@ public class ShoppingListService {
         return new ValidatedShoppingListItem(
                 line.name(),
                 rawInput,
-                normalizedQuantity,
+                line.quantity().stripTrailingZeros(),
                 line.matchingRule(),
                 line.category(),
                 line.normalizedCategory(),

@@ -19,7 +19,7 @@ public class ShoppingListTextParser {
             "(?<quantity>[0-9]+(?:[.,][0-9]+)?)";
 
     private static final String PIECE_UNIT =
-            "(?:kom(?:ad(?:a|i)?)?\\.?|pcs)";
+            "(?:kom(?:ad(?:a|i)?)?\\.?|ком(?:ад(?:а|и)?)?\\.?|pcs)";
 
     /** "• mleko", "- hleb", "1. jaja": list marks copied from notes and chats. */
     private static final Pattern LIST_MARK = Pattern.compile(
@@ -48,7 +48,9 @@ public class ShoppingListTextParser {
      */
     private static final String AMOUNT_UNIT =
             "(?<unit>kg|kilogram(?:a)?|g|gr|grama|gram"
-                    + "|l|lit(?:ar|ra|ara)?|ml|mililitar(?:a)?)";
+                    + "|l|lit(?:ar|ra|ara)?|ml|mililitar(?:a)?"
+                    + "|кг|килограм(?:а)?|г|гр|грама|грам"
+                    + "|л|лит(?:ар|ра|ара)?|мл|милилитар(?:а)?)";
 
     private static final List<Pattern> AMOUNT_PATTERNS = List.of(
             Pattern.compile(
@@ -59,10 +61,23 @@ public class ShoppingListTextParser {
                             + "\\s+(?<name>.+)$", FLAGS)
     );
 
-    /** "Pivo Zaječarsko 0.5": a size whose unit the reader has to supply. */
-    private static final Pattern BARE_DECIMAL = Pattern.compile(
-            "^(?<name>.*\\p{L}.*?)\\s+(?<number>[0-9]+[.,][0-9]+)$", FLAGS
+    /**
+     * "Pivo Zaječarsko 0.5", "mleko 2": a number whose meaning the kind of
+     * product has to supply, a size for a decimal and a count for a whole one.
+     */
+    private static final Pattern BARE_NUMBER = Pattern.compile(
+            "^(?<name>.*\\p{L}.*?)\\s+(?<number>[0-9]+(?:[.,][0-9]+)?)$", FLAGS
     );
+
+    /** "10 jaja", "2 mleka": a count written first, without "x" or "kom". */
+    private static final Pattern LEADING_NUMBER = Pattern.compile(
+            "^(?<number>[0-9]{1,2})\\s+(?<name>\\p{L}{2,}.*)$", FLAGS
+    );
+
+    /** "Mleko, hleb, jaja": several items written on one line of a message. */
+    private static final Pattern ITEM_SEPARATOR = Pattern.compile("\\s*[,;]\\s+|\\s*;\\s*");
+
+    private static final Pattern WORD = Pattern.compile("\\p{L}{2,}");
 
     public ParsedShoppingListText parse(String text) {
         if (text == null) {
@@ -78,13 +93,36 @@ public class ShoppingListTextParser {
                 continue;
             }
 
-            items.add(parseLine(rawLine));
+            for (String part : itemsOnLine(rawLine)) {
+                items.add(parseLine(part));
+            }
         }
 
         return new ParsedShoppingListText(
                 List.copyOf(items),
                 blankLineCount
         );
+    }
+
+    /**
+     * A comma or semicolon followed by a space separates items only when every
+     * part has a word of its own, so "Mleko 2,8%" and "mleko, 2l" stay whole.
+     */
+    private static List<String> itemsOnLine(String rawLine) {
+        String[] parts = ITEM_SEPARATOR.split(rawLine.trim());
+        if (parts.length < 2) {
+            return List.of(rawLine);
+        }
+        List<String> items = new ArrayList<>();
+        for (String part : parts) {
+            if (!part.isBlank() && !WORD.matcher(part).find()) {
+                return List.of(rawLine);
+            }
+            if (!part.isBlank()) {
+                items.add(part.trim());
+            }
+        }
+        return items;
     }
 
     /** A count and an amount can share a line: "2x ćevapi 3kg" is 2 × 3 kg. */
@@ -113,7 +151,10 @@ public class ShoppingListTextParser {
             }
         }
 
-        Matcher bare = BARE_DECIMAL.matcher(rest);
+        Matcher bare = BARE_NUMBER.matcher(rest);
+        if (!bare.matches()) {
+            bare = LEADING_NUMBER.matcher(rest);
+        }
         if (bare.matches()) {
             return new ParsedShoppingListLine(
                     bare.group("name").trim(),
@@ -138,7 +179,7 @@ public class ShoppingListTextParser {
             String nameWithAmount
     ) {
         BigDecimal amount = number(matcher.group("quantity"));
-        String unit = matcher.group("unit").toLowerCase(Locale.ROOT);
+        String unit = latinUnit(matcher.group("unit").toLowerCase(Locale.ROOT));
 
         BigDecimal inBaseUnit = unit.startsWith("k") || unit.startsWith("l")
                 ? amount.multiply(BigDecimal.valueOf(1000))
@@ -156,6 +197,26 @@ public class ShoppingListTextParser {
                 nameWithAmount,
                 null
         );
+    }
+
+    /** "кг" reads as "kg": only the letters the units are written with. */
+    private static String latinUnit(String unit) {
+        StringBuilder latin = new StringBuilder(unit.length());
+        for (char letter : unit.toCharArray()) {
+            latin.append(switch (letter) {
+                case 'к' -> 'k';
+                case 'г' -> 'g';
+                case 'р' -> 'r';
+                case 'а' -> 'a';
+                case 'м' -> 'm';
+                case 'л' -> 'l';
+                case 'и' -> 'i';
+                case 'т' -> 't';
+                case 'о' -> 'o';
+                default -> letter;
+            });
+        }
+        return latin.toString();
     }
 
     private static boolean hasLetter(String value) {

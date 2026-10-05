@@ -98,7 +98,43 @@ class ShoppingListTextParserTest {
         assertThat(water.targetQuantity()).isNull();
         assertThat(water.nameWithAmount()).isEqualTo("Kisela voda 1.75");
 
-        assertThat(parseOne("jaja 10").bareNumber()).isNull();
+        assertThat(parseOne("jaja 10").bareNumber()).isEqualByComparingTo("10");
+        assertThat(parseOne("jaja 10").name()).isEqualTo("jaja");
+    }
+
+    @Test
+    void aCountWrittenFirstWaitsForTheKindOfProductToo() {
+        ParsedShoppingListLine eggs = parseOne("10 jaja");
+        assertThat(eggs.name()).isEqualTo("jaja");
+        assertThat(eggs.bareNumber()).isEqualByComparingTo("10");
+        assertThat(eggs.nameWithAmount()).isEqualTo("10 jaja");
+        assertThat(eggs.quantity()).isEqualByComparingTo("1");
+
+        // One letter after the number is part of a name: "3 u 1" coffee.
+        assertThat(parseOne("3 u 1").bareNumber()).isEqualByComparingTo("1");
+        assertThat(parseOne("3 u 1").nameWithAmount()).isEqualTo("3 u 1");
+    }
+
+    @Test
+    void cyrillicUnitsReadLikeLatinOnes() {
+        ParsedShoppingListLine milk = parseOne("млеко 1л");
+        assertThat(milk.name()).isEqualTo("млеко");
+        assertThat(milk.targetQuantity()).isEqualByComparingTo("1000");
+        assertThat(milk.baseUnit()).isEqualTo("ml");
+
+        assertThat(parseOne("кромпир 2 кг").targetQuantity()).isEqualByComparingTo("2000");
+        assertThat(parseOne("јаја 10 ком").quantity()).isEqualByComparingTo("10");
+    }
+
+    @Test
+    void severalItemsOnOneLineOfAMessageBecomeSeparateItems() {
+        List<ParsedShoppingListLine> items = parser.parse("Mleko, hleb, jaja 10 kom; 2x pivo").items();
+        assertThat(items).extracting(ParsedShoppingListLine::name)
+                .containsExactly("Mleko", "hleb", "jaja", "pivo");
+        assertThat(items.get(1).rawInput()).isEqualTo("hleb");
+
+        assertThat(parseOne("Mleko 2,8% 1l").name()).isEqualTo("Mleko 2,8%");
+        assertThat(parseOne("mleko, 2l").name()).isEqualTo("mleko,");
     }
 
     @Test
