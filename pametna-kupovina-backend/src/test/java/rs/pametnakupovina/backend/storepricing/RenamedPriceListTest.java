@@ -234,6 +234,33 @@ class RenamedPriceListTest {
     }
 
     /**
+     * METRO (03.10.2026): nine per-store lists became one list for the whole
+     * chain. Every shop follows it, whichever list it quoted before.
+     */
+    @Test
+    void shopsOnSeveralListsFollowTheChainsOneNewList() {
+        long wide = chain("WIDE");
+        placedShop(wide, "WIDE_ZEMUN", "ST ZEMUN");
+        placedShop(wide, "WIDE_NIS", "ST Nis");
+
+        importDay("WIDE", priceList("02-10-2026", "ST ZEMUN", "ST Nis"));
+        assertThat(shop("WIDE_ZEMUN_1").get("pricing_eligible")).isEqualTo(true);
+        assertThat(shop("WIDE_NIS_1").get("pricing_eligible")).isEqualTo(true);
+
+        importDay("WIDE", priceList("03-10-2026", "Metro CashCarry"));
+
+        assertThat(shop("WIDE_ZEMUN_1"))
+                .containsEntry("pricing_eligible", true)
+                .containsEntry("retailer_format_name", "Metro CashCarry")
+                .containsEntry("mapping_method", "SINGLE_PRICE_LIST_RENAMED");
+        assertThat(shop("WIDE_NIS_1"))
+                .containsEntry("pricing_eligible", true)
+                .containsEntry("retailer_format_name", "Metro CashCarry");
+        // The list placed shops quote is not shown again without an address.
+        assertThat(listsWithoutAddress("WIDE")).isEmpty();
+    }
+
+    /**
      * Cash & Carry Plus Kula, Euro Ša M i Matijević (23.09.): naziv
      * cenovnika duži od 50 znakova rušio je ceo uvoz lanca.
      */
