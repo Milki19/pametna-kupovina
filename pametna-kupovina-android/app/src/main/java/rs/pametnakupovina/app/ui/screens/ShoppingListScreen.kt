@@ -214,7 +214,8 @@ fun ShoppingListScreen(
                         item = item,
                         onEdit = { openEditor(item) },
                         onDelete = { delete(item) },
-                        onOpenProduct = onOpenProduct
+                        onOpenProduct = onOpenProduct,
+                        onOpenFamily = { familyId -> viewModel.openFamilyPrices(familyId, onOpenProduct) }
                     )
                 }
             }
@@ -320,7 +321,8 @@ private fun DraftItemRow(
     item: DraftItemEntity,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
-    onOpenProduct: (Long) -> Unit
+    onOpenProduct: (Long) -> Unit,
+    onOpenFamily: (Long) -> Unit
 ) {
     val attention = if (item.syncError != null) {
         stringResource(R.string.list_status_not_sent) to StatusTone.ERROR
@@ -381,8 +383,12 @@ private fun DraftItemRow(
                         modifier = Modifier.padding(horizontal = AppSpacing.md, vertical = AppSpacing.sm)
                     )
                 }
-                item.canonicalProductId?.let { canonicalProductId ->
-                    IconButton(onClick = { onOpenProduct(canonicalProductId) }) {
+                val openPrices: (() -> Unit)? = item.canonicalProductId?.let { id -> { onOpenProduct(id) } }
+                    ?: item.productFamilyId
+                        ?.takeIf { item.matchingRule == ShoppingItemRuleDto.PRODUCT_FAMILY.name }
+                        ?.let { familyId -> { onOpenFamily(familyId) } }
+                openPrices?.let { open ->
+                    IconButton(onClick = open) {
                         AppIcon(R.drawable.ic_local_offer, contentDescription = stringResource(R.string.list_cd_prices_for, item.name))
                     }
                 }

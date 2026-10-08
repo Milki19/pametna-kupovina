@@ -115,3 +115,13 @@ fun dateTime(
 
 @Composable
 fun dateTime(epochMillis: Long): String = dateTime(epochMillis, LocalResources.current)
+
+/** A moment from the server, 2026-09-25T17:15:06.992Z, as the phone's date and time. */
+fun instantDateTime(iso: String, resources: Resources): String = try {
+    dateTime(Instant.parse(iso).toEpochMilli(), resources)
+} catch (_: DateTimeParseException) {
+    iso
+}
+
+@Composable
+fun instantDateTime(iso: String): String = instantDateTime(iso, LocalResources.current)

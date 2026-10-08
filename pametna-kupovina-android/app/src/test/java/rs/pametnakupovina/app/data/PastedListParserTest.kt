@@ -21,6 +21,16 @@ class PastedListParserTest {
     }
 
     @Test
+    fun `zarez sa razmakom deli stavke kao na serveru`() {
+        val result = PastedListParser.parse("10 jaja, mleko 2, 2 mleka\nмлеко 1л\nMleko 2,8%\nmleko, 2l")
+
+        assertEquals(
+            listOf("10 jaja", "mleko 2", "2 mleka", "млеко 1л", "Mleko 2,8%", "mleko, 2l"),
+            result.map { it.rawInput }
+        )
+    }
+
+    @Test
     fun `prepoznaje kolicinu pre i posle naziva`() {
         val result = PastedListParser.parse(
             """

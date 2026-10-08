@@ -198,6 +198,24 @@ class ShoppingListViewModel @Inject constructor(
         _uiState.update { it.copy(notice = null) }
     }
 
+    /** Stavka iz Akcija pamti porodicu, a cene se gledaju po proizvodu iz nje. */
+    fun openFamilyPrices(productFamilyId: Long, onOpen: (Long) -> Unit) {
+        viewModelScope.launch {
+            val productId = try {
+                repository.productInFamily(productFamilyId)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                null
+            }
+            if (productId != null) {
+                onOpen(productId)
+            } else {
+                _uiState.update { it.copy(errorMessage = uiText(R.string.list_error_prices_unavailable)) }
+            }
+        }
+    }
+
     /**
      * Undoes a delete by creating the item again through the normal path, so
      * it syncs like any new item even if the delete already reached the server.

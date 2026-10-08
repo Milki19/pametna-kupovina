@@ -1,6 +1,8 @@
 package rs.pametnakupovina.app.ui.screens
 
 import android.content.Context
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.size
@@ -125,9 +127,11 @@ fun HouseholdDialog(
         onDismissRequest = close,
         title = { Text(stringResource(R.string.household_title)) },
         text = {
+            // Sa krupnim slovima QR i uputstvo potisnu dugmad ispod ivice.
             Column(
                 verticalArrangement = Arrangement.spacedBy(AppSpacing.md),
-                horizontalAlignment = Alignment.CenterHorizontally
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.verticalScroll(rememberScrollState())
             ) {
                 val qr = state.inviteQr
                 if (qr != null) {

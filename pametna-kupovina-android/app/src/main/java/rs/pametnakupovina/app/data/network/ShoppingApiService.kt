@@ -35,6 +35,11 @@ interface ShoppingApiService {
         @Query("longitude") longitude: Double? = null
     ): SalePageDto
 
+    @GET("api/v1/products/families/{productFamilyId}")
+    suspend fun getProductFamily(
+        @Path("productFamilyId") productFamilyId: Long
+    ): ProductFamilyDetailsDto
+
     @GET("api/v1/products/{canonicalProductId}")
     suspend fun getProductDetails(
         @Path("canonicalProductId") canonicalProductId: Long,
