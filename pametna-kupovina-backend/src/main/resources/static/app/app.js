@@ -91,12 +91,23 @@ async function renewSession() {
   }
 }
 
-function accessToken() {
+const freshAccess = () => {
   const session = saved.get('session');
-  if (session?.access && session.expiresAt - 30000 > Date.now()) {
-    return Promise.resolve(session.access);
+  return session?.access && session.expiresAt - 30000 > Date.now() ? session.access : null;
+};
+
+function accessToken() {
+  const access = freshAccess();
+  if (access) return Promise.resolve(access);
+  // Druga kartica istog pregledača deli isti token za obnovu. Kad bi obe
+  // obnovile u isto vreme, server bi drugu video kao krađu i ugasio sesiju, a
+  // pregledač bi otvorio nov prazan nalog. Zato jedna po jedna, a ona koja
+  // čeka uzima sesiju koju je prva već obnovila.
+  const renew = () => freshAccess() || renewSession();
+  if (!renewing) {
+    renewing = (navigator.locks ? navigator.locks.request('pk-session', renew) : renew())
+      .finally(() => { renewing = null; });
   }
-  if (!renewing) renewing = renewSession().finally(() => { renewing = null; });
   return renewing;
 }
 
@@ -138,8 +149,19 @@ async function api(method, path, body, retried = false) {
   return text ? JSON.parse(text) : null;
 }
 
-/** Jedan spisak po uređaju, kao u aplikaciji; nov ako je stari nestao. */
-async function loadList() {
+/**
+ * Jedan spisak po uređaju, kao u aplikaciji; nov ako je stari nestao. Dva
+ * istovremena poziva (prvo otvaranje pa osvežen izgled tržišta) dele isti
+ * odgovor, inače bi prazan pregledač napravio dva spiska i stavke bi završile
+ * u onom koji se posle više ne otvara.
+ */
+let listLoading = null;
+function loadList() {
+  if (!listLoading) listLoading = loadListOnce().finally(() => { listLoading = null; });
+  return listLoading;
+}
+
+async function loadListOnce() {
   const id = saved.get('listId');
   if (id) {
     try {
