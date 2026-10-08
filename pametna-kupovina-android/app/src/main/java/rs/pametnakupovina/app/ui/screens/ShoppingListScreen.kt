@@ -63,6 +63,7 @@ import rs.pametnakupovina.app.text.UiText
 import rs.pametnakupovina.app.text.asString
 import rs.pametnakupovina.app.text.uiText
 import rs.pametnakupovina.app.ui.decimal
+import androidx.compose.ui.platform.LocalDensity
 
 @Composable
 fun ShoppingListScreen(
@@ -330,6 +331,8 @@ private fun DraftItemRow(
         draftAttention(item.matchingStatus)?.let { (text, tone) -> stringResource(text) to tone }
     }
 
+    // Sa krupnim pismom količina ide ispod naziva, da naziv ne ostane u uskoj koloni.
+    val largeFont = LocalDensity.current.fontScale >= 1.5f
     Surface(
         onClick = onEdit,
         shape = MaterialTheme.shapes.medium,
@@ -356,6 +359,13 @@ private fun DraftItemRow(
                         Spacer(Modifier.size(AppSpacing.xs))
                     }
                     Text(item.name, style = MaterialTheme.typography.titleMedium)
+                    if (largeFont) {
+                        Text(
+                            draftAmountLabel(item),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
                     draftRuleLabel(item)?.let { label ->
                         Text(
                             label.asString(),
@@ -372,16 +382,18 @@ private fun DraftItemRow(
                         )
                     }
                 }
-                Surface(
-                    shape = MaterialTheme.shapes.small,
-                    color = MaterialTheme.colorScheme.surfaceContainerLow,
-                    modifier = Modifier.padding(horizontal = AppSpacing.xs)
-                ) {
-                    Text(
-                        draftAmountLabel(item),
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.padding(horizontal = AppSpacing.md, vertical = AppSpacing.sm)
-                    )
+                if (!largeFont) {
+                    Surface(
+                        shape = MaterialTheme.shapes.small,
+                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                        modifier = Modifier.padding(horizontal = AppSpacing.xs)
+                    ) {
+                        Text(
+                            draftAmountLabel(item),
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.padding(horizontal = AppSpacing.md, vertical = AppSpacing.sm)
+                        )
+                    }
                 }
                 val openPrices: (() -> Unit)? = item.canonicalProductId?.let { id -> { onOpenProduct(id) } }
                     ?: item.productFamilyId

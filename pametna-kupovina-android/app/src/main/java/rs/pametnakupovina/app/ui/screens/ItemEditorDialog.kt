@@ -60,6 +60,7 @@ import androidx.compose.material3.Checkbox
 import rs.pametnakupovina.app.data.similarItem
 import rs.pametnakupovina.app.data.similarKind
 import androidx.compose.ui.platform.testTag
+import rs.pametnakupovina.app.data.PastedListParser
 
 /** The unit a person writes an amount in, mapped onto the one the server stores. */
 internal enum class AmountUnit(
@@ -603,7 +604,8 @@ internal fun PasteItemsDialog(
     onSave: (String) -> Unit
 ) {
     var text by rememberSaveable { mutableStateOf("") }
-    val lineCount = text.lines().count(String::isNotBlank)
+    // Isto brojanje kao pri dodavanju: „Mleko, hleb, jaja" su tri stavke.
+    val lineCount = PastedListParser.parse(text).size
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
 
