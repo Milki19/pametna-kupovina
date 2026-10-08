@@ -45,8 +45,12 @@ import rs.pametnakupovina.app.text.UiText
 import rs.pametnakupovina.app.text.asString
 import rs.pametnakupovina.app.text.uiText
 import rs.pametnakupovina.app.ui.components.AppSpacing
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.unit.dp
 
 data class AboutUiState(
     val deviceId: Long? = null,
@@ -340,23 +344,21 @@ fun AboutDialog(
                     )
                 }
 
-                // Dugačak tekst domaćinstva sa krupnim slovima prelazi u novi red
-                // umesto da ga dugme centrira i odseče levo.
-                TextButton(
-                    onClick = { confirmDelete = true },
+                // Dugačak tekst domaćinstva sa krupnim slovima: u TextButton-u je
+                // prelazio u novi red, ali je prvo slovo svakog reda bilo odsečeno.
+                Text(
+                    stringResource(
+                        if (state.household) R.string.about_delete_data_household else R.string.about_delete_data
+                    ),
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.labelLarge,
                     modifier = Modifier
                         .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .clickable(role = Role.Button) { confirmDelete = true }
+                        .padding(horizontal = AppSpacing.md, vertical = AppSpacing.md)
                         .testTag("about-delete")
-                ) {
-                    Text(
-                        stringResource(
-                            if (state.household) R.string.about_delete_data_household else R.string.about_delete_data
-                        ),
-                        color = MaterialTheme.colorScheme.error,
-                        textAlign = TextAlign.Start,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
+                )
 
                 Text(
                     stringResource(R.string.about_device_number),

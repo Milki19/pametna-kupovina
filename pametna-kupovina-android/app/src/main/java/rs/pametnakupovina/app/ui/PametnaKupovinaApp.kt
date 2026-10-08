@@ -59,6 +59,7 @@ import rs.pametnakupovina.app.ui.screens.ShoppingListScreen
 import rs.pametnakupovina.app.ui.screens.PurchaseScreen
 import rs.pametnakupovina.app.ui.screens.RECEIPT_FILE_TYPES
 import rs.pametnakupovina.app.ui.screens.SalesScreen
+import androidx.compose.ui.platform.LocalDensity
 
 private object Route {
     const val DASHBOARD = "dashboard"
@@ -319,11 +320,16 @@ fun PametnaKupovinaApp(
 /** Sa krupnim slovima pet natpisa ne staje, pa se smanjuju umesto da se seku. */
 @Composable
 private fun NavLabel(text: String) {
+    // Sa pismom 2.0 se „Početna" smanjivala sama, pa su natpisi bili različiti.
+    // Svi rastu najviše do 1,3×; tada staju, a smanjenje ostaje samo za krajnji slučaj.
+    val fontScale = LocalDensity.current.fontScale
+    val base = LocalTextStyle.current.fontSize
+    val size = if (fontScale > 1.3f) base * (1.3f / fontScale) else base
     BasicText(
         text,
         maxLines = 1,
-        style = LocalTextStyle.current.copy(color = LocalContentColor.current),
-        autoSize = TextAutoSize.StepBased(minFontSize = 8.sp, maxFontSize = LocalTextStyle.current.fontSize)
+        style = LocalTextStyle.current.copy(color = LocalContentColor.current, fontSize = size),
+        autoSize = TextAutoSize.StepBased(minFontSize = 8.sp, maxFontSize = size)
     )
 }
 
