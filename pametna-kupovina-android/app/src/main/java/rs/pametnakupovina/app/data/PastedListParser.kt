@@ -17,10 +17,23 @@ object PastedListParser {
     )
     private val bullet = Regex("^[\\s*•·▪◦-]+")
 
+    // Isto pravilo kao na serveru: „Mleko, hleb, jaja" su tri stavke, a
+    // „Mleko 2,8%" i „mleko, 2l" ostaju jedna jer svaki deo nema svoju reč.
+    private val itemSeparator = Regex("\\s*[,;]\\s+|\\s*;\\s*")
+    private val word = Regex("\\p{L}{2,}")
+
+    private fun itemsOnLine(line: String): List<String> {
+        val parts = line.split(itemSeparator)
+        if (parts.size < 2) return listOf(line)
+        if (parts.any { it.isNotBlank() && !word.containsMatchIn(it) }) return listOf(line)
+        return parts.map(String::trim).filter(String::isNotBlank)
+    }
+
     fun parse(text: String): List<ParsedDraftLine> = text
         .lineSequence()
         .map(String::trim)
         .filter(String::isNotBlank)
+        .flatMap { itemsOnLine(it) }
         .map { rawLine ->
             val clean = rawLine.replace(bullet, "").trim()
             val leading = leadingQuantity.matchEntire(clean)

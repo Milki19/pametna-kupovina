@@ -44,6 +44,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import rs.pametnakupovina.app.R
+import androidx.compose.ui.platform.LocalDensity
 
 object AppSpacing {
     val xs = 4.dp
@@ -137,6 +138,8 @@ fun StatusPill(
  * to go back to. The subtitle is for state the reader should notice, such as
  * working offline, and stays empty otherwise.
  */
+private const val MAX_TITLE_SCALE = 1.3f
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppTopBar(
@@ -146,12 +149,19 @@ fun AppTopBar(
     subtitle: String? = null,
     actions: @Composable RowScope.() -> Unit = {}
 ) {
+    // Traka je fiksne visine: sa pismom 2.0 ni dva reda naslova ne staju
+    // („Cene proizv…"). Naslov raste najviše do 1,3×, ostatak ekrana i dalje
+    // prati podešavanje telefona.
+    val fontScale = LocalDensity.current.fontScale
+    val titleStyle = MaterialTheme.typography.titleLarge.let { style ->
+        if (fontScale > MAX_TITLE_SCALE) style.copy(fontSize = style.fontSize * (MAX_TITLE_SCALE / fontScale)) else style
+    }
     TopAppBar(
         title = {
             Column {
                 // Na telefonu sa uvećanim pismom „Provera proizvoda" je bila
                 // „Provera proiz…"; naslov ekrana sme da pređe u drugi red.
-                Text(title, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(title, style = titleStyle, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 subtitle?.let {
                     Text(
                         it,

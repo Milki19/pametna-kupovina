@@ -196,6 +196,10 @@ class ShoppingRepository @Inject constructor(
 
     suspend fun deleteAccount() = api.deleteAccount()
 
+    /** Proizvod čije cene se otvaraju za stavku „isti proizvod, sve varijante". */
+    suspend fun productInFamily(productFamilyId: Long): Long? =
+        api.getProductFamily(productFamilyId).variants.firstNotNullOfOrNull { it.canonicalProductId }
+
     /** Telefoni na ovom nalogu; ovaj je označen sa `current`. */
     suspend fun accountDevices(): List<AccountDeviceDto> = api.getAccountDevices()
 

@@ -85,6 +85,7 @@ import rs.pametnakupovina.app.ui.components.StatusPill
 import rs.pametnakupovina.app.ui.components.StatusTone
 import rs.pametnakupovina.app.ui.date
 import rs.pametnakupovina.app.ui.dateTime
+import rs.pametnakupovina.app.ui.instantDateTime
 import rs.pametnakupovina.app.ui.decimal
 import rs.pametnakupovina.app.ui.money
 
@@ -292,7 +293,7 @@ private fun ReceiptGroup(receipts: List<ReceiptDto>) {
                             style = MaterialTheme.typography.bodyLarge
                         )
                         Text(
-                            date(receipt.issuedAt),
+                            instantDateTime(receipt.issuedAt),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

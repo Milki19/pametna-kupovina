@@ -45,6 +45,8 @@ import rs.pametnakupovina.app.text.UiText
 import rs.pametnakupovina.app.text.asString
 import rs.pametnakupovina.app.text.uiText
 import rs.pametnakupovina.app.ui.components.AppSpacing
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.foundation.layout.fillMaxWidth
 
 data class AboutUiState(
     val deviceId: Long? = null,
@@ -338,15 +340,21 @@ fun AboutDialog(
                     )
                 }
 
+                // Dugačak tekst domaćinstva sa krupnim slovima prelazi u novi red
+                // umesto da ga dugme centrira i odseče levo.
                 TextButton(
                     onClick = { confirmDelete = true },
-                    modifier = Modifier.testTag("about-delete")
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("about-delete")
                 ) {
                     Text(
                         stringResource(
                             if (state.household) R.string.about_delete_data_household else R.string.about_delete_data
                         ),
-                        color = MaterialTheme.colorScheme.error
+                        color = MaterialTheme.colorScheme.error,
+                        textAlign = TextAlign.Start,
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
 

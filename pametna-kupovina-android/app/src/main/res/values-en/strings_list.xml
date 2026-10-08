@@ -87,6 +87,7 @@
     <string name="list_error_paste_failed">The list wasn\'t added.</string>
     <string name="list_error_matching_needs_server">Checking products needs a connection to the server.</string>
     <string name="list_error_change_not_saved">The change wasn\'t saved.</string>
+    <string name="list_error_prices_unavailable">Prices aren\'t available right now. Check your connection and try again.</string>
     <string name="list_error_sync_failed">Couldn\'t sync right now.</string>
     <string name="list_error_replacement_not_saved">The replacement wasn\'t saved. Try again.</string>
     <string name="list_error_replacement_saved_no_plan">The replacement is saved on this device, but the new plan wasn\'t calculated. Check your connection and calculate again.</string>

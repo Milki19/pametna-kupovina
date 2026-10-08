@@ -173,6 +173,18 @@ data class SalePageDto(
     val nearbyChecked: Boolean = false
 )
 
+/** Samo ono što spisku treba: koji proizvodi pripadaju porodici. */
+@Serializable
+data class ProductFamilyVariantDto(
+    val canonicalProductId: Long? = null
+)
+
+@Serializable
+data class ProductFamilyDetailsDto(
+    val productFamilyId: Long,
+    val variants: List<ProductFamilyVariantDto> = emptyList()
+)
+
 @Serializable
 data class SaleItemDto(
     val productFamilyId: Long,

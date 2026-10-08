@@ -89,6 +89,7 @@
     <string name="list_error_paste_failed">Spisak nije dodat.</string>
     <string name="list_error_matching_needs_server">Za proveru proizvoda je potrebna veza sa serverom.</string>
     <string name="list_error_change_not_saved">Izmena nije sačuvana.</string>
+    <string name="list_error_prices_unavailable">Cene trenutno nisu dostupne. Proveri internet i probaj ponovo.</string>
     <string name="list_error_sync_failed">Sinhronizacija trenutno nije uspela.</string>
     <string name="list_error_replacement_not_saved">Zamena nije sačuvana. Pokušaj ponovo.</string>
     <string name="list_error_replacement_saved_no_plan">Zamena je sačuvana na ovom uređaju, ali novi plan nije izračunat. Proveri vezu i ponovi računanje.</string>
