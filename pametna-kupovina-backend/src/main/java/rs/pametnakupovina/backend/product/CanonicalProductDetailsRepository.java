@@ -192,13 +192,17 @@ public class CanonicalProductDetailsRepository {
                                        history.discount_end,
                                        1 AS source_priority
                                 FROM app.price_observation AS history
-                                WHERE NOT EXISTS (
+                                -- History stands in only for a day before the
+                                -- current price. A list with no current price
+                                -- left was dropped: IDEA's zone lists of 09.09.
+                                -- (V103) kept showing up here.
+                                WHERE EXISTS (
                                     SELECT 1
                                     FROM app.current_price_offer
                                         AS available_current
                                     WHERE available_current.retailer_product_id =
                                           history.retailer_product_id
-                                      AND available_current.price_date <=
+                                      AND available_current.price_date >
                                           :asOfDate
                                       AND available_current.scope_key = CASE
                                           WHEN history.store_id IS NOT NULL

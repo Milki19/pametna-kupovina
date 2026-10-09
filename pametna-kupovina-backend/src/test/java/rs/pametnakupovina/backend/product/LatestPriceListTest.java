@@ -195,5 +195,27 @@ class LatestPriceListTest {
                         """)
                 .query(Integer.class)
                 .single()).isZero();
+
+        // A list the chain stopped publishing loses its current prices (V103
+        // for IDEA's zone lists); its history is no offer on the product screen.
+        long milkProduct = jdbcClient.sql("""
+                        SELECT canonical_product_id FROM app.retailer_product
+                        WHERE name = 'MLEKO TESTNO 2.8% 1L'
+                        """)
+                .query(Long.class)
+                .single();
+        assertThat(detailsRepository.findLatestOffers(milkProduct, SECOND_DAY)).hasSize(1);
+        jdbcClient.sql("""
+                        DELETE FROM app.current_price_offer AS offer
+                        USING app.retailer_product AS product
+                        WHERE product.id = offer.retailer_product_id
+                          AND product.retailer_id = ?
+                        """)
+                .param(retailerId)
+                .update();
+        jdbcClient.sql("SELECT app.refresh_price_list_snapshots()")
+                .query((resultSet, rowNumber) -> true)
+                .single();
+        assertThat(detailsRepository.findLatestOffers(milkProduct, SECOND_DAY)).isEmpty();
     }
 }
