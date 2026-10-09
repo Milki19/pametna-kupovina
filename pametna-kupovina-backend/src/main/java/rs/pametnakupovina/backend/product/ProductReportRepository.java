@@ -45,9 +45,28 @@ public class ProductReportRepository {
                 .single();
     }
 
+    /** The shop belongs to the chain that lists this product. */
+    public boolean storeSellsListing(long storeId, long retailerProductId) {
+        return jdbcClient.sql("""
+                        SELECT EXISTS (
+                            SELECT 1
+                            FROM app.store AS store
+                            JOIN app.retailer_product AS product
+                              ON product.retailer_id = store.retailer_id
+                            WHERE store.id = ?
+                              AND product.id = ?
+                        )
+                        """)
+                .param(1, storeId)
+                .param(2, retailerProductId)
+                .query(Boolean.class)
+                .single();
+    }
+
     public long insert(
             long canonicalProductId,
             Long retailerProductId,
+            Long storeId,
             ProductReportReason reason,
             String note,
             String clientTokenHash
@@ -56,18 +75,20 @@ public class ProductReportRepository {
                         INSERT INTO app.product_report (
                             canonical_product_id,
                             retailer_product_id,
+                            store_id,
                             reason,
                             note,
                             client_token_hash
                         )
-                        VALUES (?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?)
                         RETURNING id
                         """)
                 .param(1, canonicalProductId)
                 .param(2, retailerProductId, Types.BIGINT)
-                .param(3, reason.name())
-                .param(4, note, Types.VARCHAR)
-                .param(5, clientTokenHash, Types.VARCHAR)
+                .param(3, storeId, Types.BIGINT)
+                .param(4, reason.name())
+                .param(5, note, Types.VARCHAR)
+                .param(6, clientTokenHash, Types.VARCHAR)
                 .query(Long.class)
                 .single();
     }

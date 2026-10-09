@@ -621,13 +621,14 @@ data class ShoppingRecommendationDto(
 )
 
 @Serializable
-enum class ProductReportReasonDto { WRONG_PRICE, NOT_SAME_PRODUCT, OTHER }
+enum class ProductReportReasonDto { WRONG_PRICE, NOT_SAME_PRODUCT, OTHER, NOT_IN_STORE }
 
 @Serializable
 data class ProductReportRequestDto(
     val reason: ProductReportReasonDto,
     val note: String? = null,
-    val retailerProductId: Long? = null
+    val retailerProductId: Long? = null,
+    val storeId: Long? = null
 )
 
 @Serializable

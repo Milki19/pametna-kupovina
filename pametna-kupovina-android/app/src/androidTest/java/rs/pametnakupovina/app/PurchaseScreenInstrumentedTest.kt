@@ -27,7 +27,7 @@ class PurchaseScreenInstrumentedTest {
             val repository = PurchaseRepository(database, Json { ignoreUnknownKeys = true })
             val result = purchaseTestResult()
             val id = runBlocking { repository.start(result, result.recommendedBalance) }
-            val viewModel = PurchaseViewModel(repository)
+            val viewModel = PurchaseViewModel(repository, MissingProductReporter { _, _, _ -> })
             compose.setContent {
                 MaterialTheme { PurchaseScreen(id, onBack = {}, onOpen = {}, viewModel = viewModel) }
             }

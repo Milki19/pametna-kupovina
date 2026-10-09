@@ -24,7 +24,7 @@ class ProductReportServiceTest {
     void aReportWithAReasonIsKeptForReview() {
         when(repository.productExists(42L)).thenReturn(true);
         when(repository.listingBelongsToProduct(42L, 7L)).thenReturn(true);
-        when(repository.insert(eq(42L), eq(7L), eq(ProductReportReason.WRONG_PRICE), eq("Gajba, ne flaša"), any()))
+        when(repository.insert(eq(42L), eq(7L), isNull(), eq(ProductReportReason.WRONG_PRICE), eq("Gajba, ne flaša"), any()))
                 .thenReturn(3L);
 
         ProductReportResponse response = service.report(42L, "a".repeat(64),
@@ -46,13 +46,13 @@ class ProductReportServiceTest {
         assertThatThrownBy(() -> service.report(5L, null,
                 new ProductReportRequest(ProductReportReason.OTHER, null, null)))
                 .hasMessageContaining("nije pronađen");
-        verify(repository, never()).insert(anyLong(), any(), any(), any(), any());
+        verify(repository, never()).insert(anyLong(), any(), any(), any(), any(), any());
     }
 
     @Test
     void aReportNeedsNoAccountButTheNoteHasALimit() {
         when(repository.productExists(42L)).thenReturn(true);
-        when(repository.insert(eq(42L), isNull(), eq(ProductReportReason.OTHER), isNull(), isNull()))
+        when(repository.insert(eq(42L), isNull(), isNull(), eq(ProductReportReason.OTHER), isNull(), isNull()))
                 .thenReturn(4L);
 
         assertThat(service.report(42L, null, new ProductReportRequest(ProductReportReason.OTHER, " ", null)).id())
@@ -60,5 +60,24 @@ class ProductReportServiceTest {
         assertThatThrownBy(() -> service.report(42L, null,
                 new ProductReportRequest(ProductReportReason.OTHER, "a".repeat(501), null)))
                 .hasMessageContaining("500");
+    }
+
+    @Test
+    void notInStoreNamesTheShopOfThatChain() {
+        when(repository.productExists(42L)).thenReturn(true);
+        when(repository.listingBelongsToProduct(42L, 7L)).thenReturn(true);
+        when(repository.storeSellsListing(5L, 7L)).thenReturn(true);
+        when(repository.insert(eq(42L), eq(7L), eq(5L), eq(ProductReportReason.NOT_IN_STORE), isNull(), any()))
+                .thenReturn(8L);
+
+        assertThat(service.report(42L, "b".repeat(64),
+                new ProductReportRequest(ProductReportReason.NOT_IN_STORE, null, 7L, 5L)).id())
+                .isEqualTo(8L);
+        assertThatThrownBy(() -> service.report(42L, null,
+                new ProductReportRequest(ProductReportReason.NOT_IN_STORE, null, 7L, null)))
+                .hasMessageContaining("prodavnica");
+        assertThatThrownBy(() -> service.report(42L, null,
+                new ProductReportRequest(ProductReportReason.NOT_IN_STORE, null, 7L, 6L)))
+                .hasMessageContaining("nije iz te prodavnice");
     }
 }

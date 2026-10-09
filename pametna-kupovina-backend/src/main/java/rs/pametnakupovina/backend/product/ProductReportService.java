@@ -46,9 +46,21 @@ public class ProductReportService {
             throw badRequest("Ta ponuda ne pripada ovom proizvodu.");
         }
 
+        Long storeId = null;
+        if (request.reason() == ProductReportReason.NOT_IN_STORE) {
+            if (request.retailerProductId() == null || request.storeId() == null) {
+                throw badRequest("Javi koja ponuda i koja prodavnica.");
+            }
+            if (!repository.storeSellsListing(request.storeId(), request.retailerProductId())) {
+                throw badRequest("Ta ponuda nije iz te prodavnice.");
+            }
+            storeId = request.storeId();
+        }
+
         long id = repository.insert(
                 canonicalProductId,
                 request.retailerProductId(),
+                storeId,
                 request.reason(),
                 note,
                 clientTokenHash

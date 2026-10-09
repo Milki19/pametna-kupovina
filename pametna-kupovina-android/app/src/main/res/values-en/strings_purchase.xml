@@ -88,4 +88,7 @@
     <string name="purchase_error_bought_range">The bought quantity must be between 0 and the planned quantity.</string>
     <string name="purchase_error_note_length">A note can have at most %1$d characters.</string>
     <string name="purchase_error_price">Enter a non-negative total with at most two decimal places.</string>
+    <string name="purchase_report_missing">Report it is missing here</string>
+    <string name="purchase_reported_missing">Reported. Once someone else reports it too, plans skip this product here.</string>
+    <string name="purchase_report_missing_failed">Could not send the report. It needs a connection; try again.</string>
 </resources>

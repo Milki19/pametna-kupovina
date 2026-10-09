@@ -700,6 +700,8 @@ public class StoreShoppingOfferRepository {
                             ) AS candidate(retailer_product_id, by_the_kilogram)
                             JOIN app.retailer_product AS product
                               ON product.id = candidate.retailer_product_id
+                             -- Kupci su u ovoj radnji javili da ga nema (V121).
+                             AND NOT app.reported_not_in_store(product.id, store.id, :asOfDate)
                             LEFT JOIN app.canonical_product AS canonical
                               ON canonical.id =
                                   product.canonical_product_id

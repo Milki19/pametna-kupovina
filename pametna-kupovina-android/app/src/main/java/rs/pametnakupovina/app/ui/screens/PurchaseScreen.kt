@@ -484,6 +484,7 @@ private fun PurchaseInProgress(
         val onStatus: (Long, PurchaseStatus) -> Unit = { itemId, status ->
             viewModel.status(session.id, itemId, status)
         }
+        val onReportMissing: (RecommendationItemDto) -> Unit = { viewModel.reportMissing(session.id, it) }
         val unresolved = scenario.items.filter { it.storeId == null }
 
         LazyColumn(
@@ -543,6 +544,7 @@ private fun PurchaseInProgress(
                         archived = archived,
                         onStatus = onStatus,
                         onDetails = { editingId = it },
+                        onReportMissing = onReportMissing,
                         onRoute = {
                             launchGoogleMapsDirections(
                                 context,
@@ -759,6 +761,7 @@ private fun PurchaseStoreSection(
     archived: Boolean,
     onStatus: (Long, PurchaseStatus) -> Unit,
     onDetails: (Long) -> Unit,
+    onReportMissing: (RecommendationItemDto) -> Unit,
     onRoute: () -> Unit
 ) {
     val bought = products.count { session.progress[it.itemId]?.status == PurchaseStatus.PURCHASED }
@@ -798,7 +801,7 @@ private fun PurchaseStoreSection(
                 }
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            ItemRows(products, session, archived, onStatus, onDetails)
+            ItemRows(products, session, archived, onStatus, onDetails, onReportMissing)
         }
     }
 }
@@ -827,7 +830,8 @@ private fun ItemRows(
     session: PurchaseSession,
     archived: Boolean,
     onStatus: (Long, PurchaseStatus) -> Unit,
-    onDetails: (Long) -> Unit
+    onDetails: (Long) -> Unit,
+    onReportMissing: ((RecommendationItemDto) -> Unit)? = null
 ) {
     items.forEachIndexed { index, product ->
         PurchaseItemRow(
@@ -835,7 +839,8 @@ private fun ItemRows(
             progress = session.progress[product.itemId] ?: PurchaseItemProgress(),
             archived = archived,
             onStatus = { onStatus(product.itemId, it) },
-            onDetails = { onDetails(product.itemId) }
+            onDetails = { onDetails(product.itemId) },
+            onReportMissing = onReportMissing?.let { report -> { report(product) } }
         )
         if (index < items.lastIndex) {
             HorizontalDivider(
@@ -852,7 +857,8 @@ private fun PurchaseItemRow(
     progress: PurchaseItemProgress,
     archived: Boolean,
     onStatus: (PurchaseStatus) -> Unit,
-    onDetails: () -> Unit
+    onDetails: () -> Unit,
+    onReportMissing: (() -> Unit)? = null
 ) {
     val purchased = progress.status == PurchaseStatus.PURCHASED
     var menuOpen by remember { mutableStateOf(false) }
@@ -888,6 +894,24 @@ private fun PurchaseItemRow(
                 Text(it, style = MaterialTheme.typography.bodySmall, color = muted)
             }
             purchaseStatus(progress, item)?.let { (text, tone) -> StatusPill(text, tone) }
+            // Cenovnik ne zna šta je na polici; kad više kupaca javi, plan
+            // tu ponudu u toj radnji preskače.
+            if (
+                progress.status == PurchaseStatus.NOT_FOUND && onReportMissing != null &&
+                item.canonicalProductId != null && item.retailerProductId != null && item.storeId != null
+            ) {
+                if (progress.reportedMissing) {
+                    Text(stringResource(R.string.purchase_reported_missing), style = MaterialTheme.typography.bodySmall, color = muted)
+                } else if (!archived) {
+                    TextButton(
+                        onClick = onReportMissing,
+                        contentPadding = PaddingValues(0.dp),
+                        modifier = Modifier.testTag("report-missing-${item.itemId}")
+                    ) {
+                        Text(stringResource(R.string.purchase_report_missing))
+                    }
+                }
+            }
             if (progress.note.isNotBlank()) {
                 Text(stringResource(R.string.purchase_note_value, progress.note), style = MaterialTheme.typography.bodySmall)
             }

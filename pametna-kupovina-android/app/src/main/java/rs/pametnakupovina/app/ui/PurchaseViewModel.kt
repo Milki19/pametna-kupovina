@@ -18,7 +18,10 @@ import rs.pametnakupovina.app.text.UserFacingException
 import rs.pametnakupovina.app.text.uiText
 
 @HiltViewModel
-class PurchaseViewModel @Inject constructor(private val repository: PurchaseRepository) : ViewModel() {
+class PurchaseViewModel @Inject constructor(
+    private val repository: PurchaseRepository,
+    private val missingReporter: MissingProductReporter
+) : ViewModel() {
     private val _sessions = MutableStateFlow<List<rs.pametnakupovina.app.data.local.PurchaseSessionSummary>>(emptyList())
     val sessions = _sessions.asStateFlow()
     private val _session = MutableStateFlow<PurchaseSession?>(null)
@@ -81,6 +84,24 @@ class PurchaseViewModel @Inject constructor(private val repository: PurchaseRepo
         onSaved()
     }
     fun archive(id: String, archived: Boolean) = action { repository.archive(id, archived) }
+
+    /** Jednim dodirom: „nema u prodavnici" ide serveru, a stavka pamti da je javljeno. */
+    fun reportMissing(id: String, item: RecommendationItemDto) {
+        val canonicalProductId = item.canonicalProductId ?: return
+        val retailerProductId = item.retailerProductId ?: return
+        val storeId = item.storeId ?: return
+        viewModelScope.launch {
+            _message.value = null
+            try {
+                missingReporter.report(canonicalProductId, retailerProductId, storeId)
+                repository.update(id, item.itemId) { it.copy(reportedMissing = true) }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                _message.value = error.userText(R.string.purchase_report_missing_failed)
+            }
+        }
+    }
     private fun action(block: suspend () -> Unit) {
         viewModelScope.launch {
             _message.value = null

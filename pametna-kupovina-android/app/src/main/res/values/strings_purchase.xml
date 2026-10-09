@@ -92,4 +92,7 @@
     <string name="purchase_error_bought_range">Kupljena količina mora biti između 0 i planirane količine.</string>
     <string name="purchase_error_note_length">Napomena može imati najviše %1$d znakova.</string>
     <string name="purchase_error_price">Unesi nenegativan ukupan iznos, sa najviše dve decimale.</string>
+    <string name="purchase_report_missing">Javi da ovde nema</string>
+    <string name="purchase_reported_missing">Javljeno. Kad javi još neko, plan ovde preskače ovaj proizvod.</string>
+    <string name="purchase_report_missing_failed">Javljanje nije uspelo. Treba mreža, probaj ponovo.</string>
 </resources>
