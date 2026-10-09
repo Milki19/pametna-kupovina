@@ -151,6 +151,18 @@ class ApiSecurityTest {
     }
 
     @Test
+    void versionedWebFilesAreKeptAndThePageIsAlwaysChecked() throws Exception {
+        MvcResult script = mvc.perform(call("GET", "/app/app.js").param("v", "2.0.4")).andReturn();
+        MvcResult page = mvc.perform(call("GET", "/app/index.html")).andReturn();
+        MvcResult worker = mvc.perform(call("GET", "/app/sw.js").param("v", "1")).andReturn();
+
+        assertThat(script.getResponse().getHeader("Cache-Control")).contains("immutable");
+        assertThat(page.getResponse().getHeader("Cache-Control")).isEqualTo("no-cache");
+        assertThat(worker.getResponse().getStatus()).isEqualTo(200);
+        assertThat(worker.getResponse().getHeader("Cache-Control")).isEqualTo("no-cache");
+    }
+
+    @Test
     void anUnlistedApiPathIsClosed() throws Exception {
         assertThat(status(call("GET", "/api/v1/something-new"))).isEqualTo(403);
         assertThat(status(call("DELETE", "/api/v1/products/5"))).isEqualTo(403);

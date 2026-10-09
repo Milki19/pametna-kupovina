@@ -14,6 +14,7 @@ import org.springframework.security.web.firewall.HttpStatusRequestRejectedHandle
 import org.springframework.security.web.firewall.RequestRejectedHandler;
 import org.springframework.security.web.header.writers.CacheControlHeadersWriter;
 import org.springframework.security.web.header.writers.DelegatingRequestMatcherHeaderWriter;
+import org.springframework.security.web.header.writers.StaticHeadersWriter;
 import org.springframework.security.web.savedrequest.NullRequestCache;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 
@@ -62,7 +63,15 @@ public class SecurityConfiguration {
                         .cacheControl(cache -> cache.disable())
                         .addHeaderWriter(new DelegatingRequestMatcherHeaderWriter(
                                 PathPatternRequestMatcher.withDefaults().matcher("/api/**"),
-                                new CacheControlHeadersWriter())))
+                                new CacheControlHeadersWriter()))
+                        // Skripta sa ?v= se ne menja dok se broj ne podigne, pa
+                        // je pregledač ne traži ponovo; stranica i sw.js uvek.
+                        .addHeaderWriter(new DelegatingRequestMatcherHeaderWriter(
+                                SecurityConfiguration::isVersionedWebFile,
+                                new StaticHeadersWriter("Cache-Control", "public, max-age=31536000, immutable")))
+                        .addHeaderWriter(new DelegatingRequestMatcherHeaderWriter(
+                                SecurityConfiguration::isWebEntryPoint,
+                                new StaticHeadersWriter("Cache-Control", "no-cache"))))
                 .addFilterBefore(new CredentialsFilter(sessionService, adminKey), AnonymousAuthenticationFilter.class)
                 .authorizeHttpRequests(AccessRules::applyTo)
                 .exceptionHandling(exceptions -> exceptions
@@ -71,6 +80,19 @@ public class SecurityConfiguration {
                         .accessDeniedHandler((request, response, denied) ->
                                 Refusals.forbidden(response)))
                 .build();
+    }
+
+    private static boolean isVersionedWebFile(jakarta.servlet.http.HttpServletRequest request) {
+        String path = request.getRequestURI();
+        return path.startsWith("/app/")
+                && !isWebEntryPoint(request)
+                && request.getParameter("v") != null;
+    }
+
+    private static boolean isWebEntryPoint(jakarta.servlet.http.HttpServletRequest request) {
+        String path = request.getRequestURI();
+        return path.equals("/app") || path.equals("/app/")
+                || path.equals("/app/index.html") || path.equals("/app/sw.js");
     }
 
     /** A path the firewall refuses is the caller's mistake: 400, not 500. */
