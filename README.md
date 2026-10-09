@@ -5,9 +5,9 @@ spiska prave predlog kupovine u jednoj ili dve obližnje prodavnice. Sistem
 objedinjuje kataloge i cenovnike više trgovinskih lanaca, uparuje proizvode i u
 obračun uključuje cenu korpe, put, vreme i broj stajanja.
 
-Projekat je trenutno tehnička alfa. Glavni tok radi na emulatoru, ali kvalitet i
-svežina podataka, operativni nadzor i završni korisnički tok još nisu na nivou
-javne produkcije.
+Verzija 2.0 radi na serveru https://pametna-kupovina.duckdns.org: Android
+aplikacija i web verzija na `/app` (može se dodati na početni ekran telefona).
+Cene se uvoze svakog dana iz cenovnika koje lanci objavljuju po Pravilniku.
 
 ## Struktura repozitorijuma
 
@@ -15,15 +15,21 @@ javne produkcije.
   Flyway migracije;
 - `pametna-kupovina-android/` — Kotlin, Jetpack Compose, Room, Retrofit,
   WorkManager i Hilt;
-- `infra/` — lokalni PostGIS i nacrt produkcionog Docker Compose okruženja;
-- `docs/` — roadmap, prezentacija i razvojna dokumentacija.
+- `pametna-kupovina-backend/src/main/resources/static/app/` — web verzija
+  (posle izmene podići `?v=` u `index.html`);
+- `pametna-kupovina-backend/docs/` — API preporuka i pravila o lokaciji;
+- `infra/` — lokalna baza, server (Docker Compose, Caddy) i skripte za
+  puštanje i backup;
+- `play-store.md` — tekstovi za Play Console.
 
 ## Brzi početak
 
-Kompletan postupak od čistog klona do pokrenutog backenda i Android emulatora
-nalazi se u [docs/DEVELOPMENT_SETUP.md](docs/DEVELOPMENT_SETUP.md).
+Baza za razvoj se pokreće iz `infra/compose.yaml`, a backend sa dnevnim
+uvozom cena preko `infra/run-local-daily.sh` (detalji u
+[infra/README.md](infra/README.md)). Android čita adresu servera iz
+`local.properties` (primer je u `pametna-kupovina-android/local.properties.example`).
 
-Kratka provera koda bez pokretanja aplikacije:
+Provera koda bez pokretanja aplikacije:
 
 ```bash
 cd pametna-kupovina-backend
@@ -35,10 +41,10 @@ cd ../pametna-kupovina-android
 
 Backend testovi koriste Testcontainers, pa Docker mora biti pokrenut.
 
-## Dalji razvoj
+## Server
 
-Jedinstven pregled završenih funkcionalnosti, poznatih rizika i puta do bete i
-produkcije nalazi se u [docs/ROADMAP.md](docs/ROADMAP.md). Produkciona Docker
-postavka i backup procedura opisane su u [infra/README.md](infra/README.md).
+Produkciona Docker postavka, puštanje nove verzije i backup opisani su u
+[infra/README.md](infra/README.md), a postavljanje servera na Oracle Cloud u
+[infra/ORACLE.md](infra/ORACLE.md).
 
 Konfiguracioni fajlovi sa stvarnim lozinkama i lokalni dump baze ne ulaze u Git.
