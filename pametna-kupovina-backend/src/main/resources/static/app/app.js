@@ -841,7 +841,7 @@ function renderRecommendation() {
           s.disclaimer || result.disclaimer,
           s.available ? `Korpa ${money(s.basketCost)}, put ${money(s.travelCost)}, vreme ${money(s.timeCost)}, stajanja ${money(s.stopCost)}.` : null,
           `Put računamo ${money(a.costPerKm)} po kilometru, vreme ${money(a.valuePerHour)} po satu i ${money(a.costPerStop)} po stajanju.`,
-          s.approximateRoute ? 'Udaljenosti su procena vazdušnom linijom, pravi put je obično duži.' : null,
+          s.approximateRoute ? 'Udaljenosti su procena: vazdušna linija uvećana za ulice, bez saobraćaja.' : null,
           `Razmotreno ${counted(result.candidateStoreCount, 'prodavnica', 'prodavnice', 'prodavnica')} u krugu od ${decimal(a.candidateRadiusMeters / 1000, 1)} km.`
         ].filter(Boolean).map(line => `<p class="small">${esc(line)}</p>`).join('')}
       </details>`,

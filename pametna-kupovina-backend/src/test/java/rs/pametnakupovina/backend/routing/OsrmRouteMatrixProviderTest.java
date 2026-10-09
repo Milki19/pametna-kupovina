@@ -60,7 +60,7 @@ class OsrmRouteMatrixProviderTest {
                     new OsrmRouteMatrixProvider(
                             properties,
                             new PublicRoutePairCache(),
-                            new StraightLineRouteMatrixProvider(),
+                            new StraightLineRouteMatrixProvider(1.0),
                             RestClient.create()
                     );
 

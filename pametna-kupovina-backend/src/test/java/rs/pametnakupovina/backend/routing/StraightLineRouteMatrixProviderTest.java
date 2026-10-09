@@ -10,7 +10,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class StraightLineRouteMatrixProviderTest {
 
     private final StraightLineRouteMatrixProvider provider =
-            new StraightLineRouteMatrixProvider();
+            new StraightLineRouteMatrixProvider(1.0);
 
     @Test
     void calculatesCompleteSymmetricMatrixWithMetadata() {
@@ -38,6 +38,31 @@ class StraightLineRouteMatrixProviderTest {
                 );
         assertThat(matrix.entry("A", "B").durationSeconds())
                 .isNull();
+    }
+
+    @Test
+    void streetsMakeTheEstimateLongerThanTheStraightLine() {
+        RouteMatrix matrix = new StraightLineRouteMatrixProvider(1.3)
+                .calculate(
+                        List.of(
+                                new RouteWaypoint("A", 0, 0),
+                                new RouteWaypoint("B", 0, 1)
+                        )
+                );
+
+        assertThat(matrix.entry("A", "B").distanceMeters())
+                .isBetween(144_552L, 144_555L);
+        assertThat(matrix.entry("A", "A").distanceMeters())
+                .isZero();
+    }
+
+    @Test
+    void refusesAFactorThatWouldShortenTheRoute() {
+        assertThatThrownBy(
+                () -> new StraightLineRouteMatrixProvider(0.9)
+        )
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("detour-factor");
     }
 
     @Test
