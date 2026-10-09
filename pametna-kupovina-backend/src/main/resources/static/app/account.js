@@ -269,7 +269,9 @@ async function showSpending() {
     [spending.data, spending.receipts, spending.habits] = await Promise.all([
       api('GET', `receipts/spending?month=${spending.month}-01`),
       api('GET', 'receipts?limit=200'),
-      api('GET', 'receipts/habits?limit=20')
+      api('GET', 'receipts/habits?limit=20'),
+      // Da navika koja je već na spisku kaže „Na spisku".
+      loadList().then(list => { listState.list = list; }).catch(() => {})
     ]);
     spending.error = null;
   } catch (error) {
@@ -338,7 +340,9 @@ function renderSpending() {
       : `<div class="card soft center">Kategorije se vide kad skeniraš račune sa stavkama.</div>`,
     habits: () => spending.habits.length ? `<div class="card flush">${spending.habits.map(h => `<div class="list-row row">
         <span class="grow"><span style="display:block">${esc(h.name)}</span><span class="muted small">poslednji put ${date(localIsoDate(h.lastBought))}</span></span>
-        <b>${counted(h.times, 'put', 'puta', 'puta')}</b></div>`).join('')}</div>`
+        <b>${counted(h.times, 'put', 'puta', 'puta')}</b>
+        ${onListKeys().has('f' + h.productFamilyId) ? `<button class="btn" disabled>Na spisku</button>`
+          : `<button class="btn primary" data-act="add-habit" data-family="${h.productFamilyId}">${icon.add}Na spisak</button>`}</div>`).join('')}</div>`
       : `<div class="card soft center">Navike se vide kad skeniraš račune sa stavkama.</div>`
   };
   screen({
@@ -377,6 +381,11 @@ const accountRoutes = {
 };
 
 const accountActions = {
+  'add-habit': el => {
+    const habit = spending.habits.find(h => String(h.productFamilyId) === el.dataset.family);
+    return habit && addProduct({ name: habit.name, productFamilyId: habit.productFamilyId })
+      .then(() => renderSpending());
+  },
   'google-sign-in': el => googleSignIn(el),
   'sign-out': signOut,
   'remove-device': removeDevice,
