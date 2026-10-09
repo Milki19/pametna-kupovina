@@ -35,6 +35,14 @@ interface ShoppingApiService {
         @Query("longitude") longitude: Double? = null
     ): SalePageDto
 
+    @GET("api/v1/stores/nearby")
+    suspend fun getNearbyStores(
+        @Query("latitude") latitude: Double,
+        @Query("longitude") longitude: Double,
+        @Query("radiusMeters") radiusMeters: Int,
+        @Query("limit") limit: Int
+    ): List<NearbyStoreDto>
+
     @GET("api/v1/products/families/{productFamilyId}")
     suspend fun getProductFamily(
         @Path("productFamilyId") productFamilyId: Long

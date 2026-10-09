@@ -40,6 +40,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import rs.pametnakupovina.app.R
@@ -82,6 +83,12 @@ fun ShoppingListScreen(
     var showPasteDialog by rememberSaveable { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+
+    // Zajednički spisak: ono što je ukućanin dodao vidi se po povratku.
+    LifecycleResumeEffect(viewModel) {
+        viewModel.refreshOnReturn()
+        onPauseOrDispose { }
+    }
 
     // A snackbar rather than a card above the list, so reporting what was
     // pasted never pushes the buttons out from under the reader's thumb.

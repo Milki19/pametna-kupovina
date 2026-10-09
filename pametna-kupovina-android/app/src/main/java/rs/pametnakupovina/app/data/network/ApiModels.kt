@@ -379,6 +379,13 @@ data class CanonicalProductSearchPageDto(
     val nearbyChecked: Boolean = false
 )
 
+/** Prodavnica u krugu oko korisnika; za alarm je dovoljno koja je i čija. */
+@Serializable
+data class NearbyStoreDto(
+    val storeId: Long,
+    val retailerCode: String
+)
+
 @Serializable
 data class CanonicalProductOfferDto(
     val retailerProductId: Long,

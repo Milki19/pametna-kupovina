@@ -1,5 +1,6 @@
 package rs.pametnakupovina.app.ui
 
+import android.os.SystemClock
 import androidx.annotation.StringRes
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
@@ -63,7 +64,10 @@ class ShoppingListViewModel @Inject constructor(
         refresh()
     }
 
+    private var lastRefreshAt = 0L
+
     fun refresh() {
+        lastRefreshAt = SystemClock.elapsedRealtime()
         viewModelScope.launch {
             _uiState.update {
                 it.copy(
@@ -97,6 +101,28 @@ class ShoppingListViewModel @Inject constructor(
                         }
                     )
                 }
+            }
+        }
+    }
+
+    /**
+     * Ukućanin je možda nešto dodao dok je spisak bio u pozadini. Tiho, bez
+     * poruka preko onoga što korisnik upravo čita, i ne češće od pola minuta.
+     */
+    fun refreshOnReturn() {
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastRefreshAt < RETURN_REFRESH_INTERVAL_MS) return
+        lastRefreshAt = now
+        viewModelScope.launch {
+            try {
+                repository.synchronizeAndRefresh()
+                _uiState.update { it.copy(isOffline = false) }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                // Sledeća izmena ili sledeći povratak pokušaće ponovo.
+                syncScheduler.enqueue()
+                _uiState.update { it.copy(isOffline = error is IOException) }
             }
         }
     }
@@ -492,3 +518,5 @@ internal fun Throwable.toUserMessage(@StringRes fallback: Int): UiText = when (t
     is IllegalArgumentException -> message?.asUiText() ?: uiText(fallback)
     else -> uiText(fallback)
 }
+
+private const val RETURN_REFRESH_INTERVAL_MS = 30_000L

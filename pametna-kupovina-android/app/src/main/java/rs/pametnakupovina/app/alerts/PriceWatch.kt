@@ -38,6 +38,9 @@ import rs.pametnakupovina.app.MainActivity
 import rs.pametnakupovina.app.R
 import rs.pametnakupovina.app.data.ShoppingRepository
 import rs.pametnakupovina.app.data.network.CanonicalProductDetailsDto
+import rs.pametnakupovina.app.data.network.CanonicalProductOfferDto
+import rs.pametnakupovina.app.data.network.NearbyStoreDto
+import rs.pametnakupovina.app.location.Coordinates
 import rs.pametnakupovina.app.ui.money
 import rs.pametnakupovina.app.ui.screens.isCaseOf
 
@@ -52,12 +55,35 @@ import rs.pametnakupovina.app.ui.screens.isCaseOf
 data class WatchedProduct(
     val canonicalProductId: Long,
     val name: String,
-    val price: Double
-)
+    val price: Double,
+    // Kraj u kome je praćenje uključeno, zaokružen na oko kilometar. Bez
+    // njega (nema dozvole za lokaciju) gleda se cela zemlja, kao ranije.
+    val latitude: Double? = null,
+    val longitude: Double? = null
+) {
+    fun area(): Coordinates? =
+        if (latitude != null && longitude != null) Coordinates(latitude, longitude) else null
+}
 
-/** Najniža cena koju ekran proizvoda i sam ističe kao najpovoljniju. */
-fun bestPrice(product: CanonicalProductDetailsDto) = product.offers
+/**
+ * Prodavnice u kraju. Cena jedne radnje važi samo za nju, a cena za ceo lanac
+ * važi ako lanac ima radnju u kraju.
+ */
+class Nearby(stores: List<NearbyStoreDto>) {
+    private val storeIds = stores.map { it.storeId }.toSet()
+    private val retailerCodes = stores.map { it.retailerCode }.toSet()
+
+    fun reaches(offer: CanonicalProductOfferDto) =
+        offer.storeId?.let { it in storeIds } ?: (offer.retailerCode in retailerCodes)
+}
+
+/**
+ * Najniža cena koju ekran proizvoda i sam ističe kao najpovoljniju; sa
+ * [nearby] samo iz prodavnica u kraju, da alarm ne javlja radnju u drugom gradu.
+ */
+fun bestPrice(product: CanonicalProductDetailsDto, nearby: Nearby? = null) = product.offers
     .filter { !it.priceNeedsCheck && !isCaseOf(it, product) }
+    .filter { nearby == null || nearby.reaches(it) }
     .minByOrNull { it.effectivePrice }
 
 private val Context.priceWatchDataStore by preferencesDataStore(name = "price_watch")
@@ -114,9 +140,16 @@ class PriceWatchWorker @AssistedInject constructor(
 
     override suspend fun doWork(): Result {
         val latest = mutableMapOf<Long, Double>()
+        val areas = mutableMapOf<Coordinates, Nearby>()
         store.watched.first().forEach { watched ->
             val offer = try {
-                bestPrice(repository.getProductDetails(watched.canonicalProductId))
+                val area = watched.area()
+                val nearby = area?.let {
+                    areas[it] ?: Nearby(repository.nearbyStores(it, NEARBY_RADIUS_METERS))
+                        .also { found -> areas[it] = found }
+                }
+                // Istorija cena alarmu ne treba, samo današnje ponude.
+                bestPrice(repository.getProductDetails(watched.canonicalProductId, historyLimit = 0), nearby)
             } catch (error: CancellationException) {
                 throw error
             } catch (_: Exception) {
@@ -135,6 +168,9 @@ class PriceWatchWorker @AssistedInject constructor(
 
 private const val CHANNEL = "price-drops"
 
+// Isti krug u kome preporuka traži prodavnice.
+private const val NEARBY_RADIUS_METERS = 15_000
+
 private fun notifyDrop(context: Context, watched: WatchedProduct, price: Double, retailer: String) {
     if (
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
@@ -149,10 +185,14 @@ private fun notifyDrop(context: Context, watched: WatchedProduct, price: Double,
             NotificationManager.IMPORTANCE_DEFAULT
         )
     )
+    // Dodir otvara baš taj proizvod; svaki proizvod ima svoj PendingIntent.
     val open = PendingIntent.getActivity(
-        context, 0,
-        Intent(context, MainActivity::class.java),
-        PendingIntent.FLAG_IMMUTABLE
+        context,
+        watched.canonicalProductId.toInt(),
+        Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            .putExtra(MainActivity.EXTRA_PRODUCT, watched.canonicalProductId),
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
     )
     NotificationManagerCompat.from(context).notify(
         watched.canonicalProductId.toInt(),
