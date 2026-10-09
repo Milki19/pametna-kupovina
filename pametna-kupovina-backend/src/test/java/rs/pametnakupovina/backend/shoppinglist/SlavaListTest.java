@@ -77,6 +77,8 @@ class SlavaListTest {
             VINO;Vino;VINO ROZE SPRICER RUBIN 0.5L;RUBIN;;KOM;Test format;149,99;;13-09-2026;299,98;;;20
             VINO;Vino;Vinjak Rubin 1l;Rubin;;KOM;Test format;999,99;;13-09-2026;999,99;;;20
             VODA;Voda;Mineralna voda gazirana Minaqua 2l;Minaqua;;KOM;Test format;69,99;;13-09-2026;35,00;;;20
+            SIR;Sir;Sir trapist Maxi 500g;Maxi;;KOM;Test format;349,99;;13-09-2026;699,98;;;10
+            SIR;Sir;Sir Gauda Imlek 400g;Imlek;;KOM;Test format;459,99;;13-09-2026;1149,98;;;10
             """;
 
     private static HttpServer csvServer;
@@ -195,6 +197,21 @@ class SlavaListTest {
                 .containsEntry("Pivo Zaječarsko", "Pivo svetlo Zajecarsko 0,5l RGB")
                 .containsEntry("Rubin roze", "Vino ruzicasto Rose Rubin 1l")
                 .containsEntry("Kisela voda", "Mineralna voda gazirana Minaqua 2l");
+
+        // „Neka aplikacija izabere“ za „sir gauda“: sir, ali samo gauda (V120).
+        shoppingListService.addItem(
+                list.id(),
+                callers.account(TOKEN),
+                new AddShoppingListItemRequest(
+                        "sir gauda", "sir gauda", null, BigDecimal.ONE,
+                        ShoppingItemRule.FLEXIBLE_CATEGORY,
+                        new FlexibleItemConstraints("sir gauda", null, null, null, null)
+                )
+        );
+        assertThat(offerRepository.findPriceListOffers(list.id(), List.of(shop), PRICE_DATE))
+                .filteredOn(offer -> offer.requestedName().equals("sir gauda"))
+                .singleElement()
+                .satisfies(offer -> assertThat(offer.productName()).isEqualTo("Sir Gauda Imlek 400g"));
     }
 
     @Test
