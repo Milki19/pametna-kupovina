@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -150,24 +151,39 @@ fun AppTopBar(
     actions: @Composable RowScope.() -> Unit = {}
 ) {
     // Traka je fiksne visine: sa pismom 2.0 ni dva reda naslova ne staju
-    // („Cene proizv…"). Naslov raste najviše do 1,3×, ostatak ekrana i dalje
-    // prati podešavanje telefona.
+    // („Cene proizv…"). Naslov i podnaslov rastu najviše do 1,3×, ostatak
+    // ekrana i dalje prati podešavanje telefona. Visina reda se smanjuje
+    // zajedno sa slovima; inače je red naslova ostajao visok kao na 2.0 i
+    // podnaslov ga je u Akcijama gurao van trake.
     val fontScale = LocalDensity.current.fontScale
-    val titleStyle = MaterialTheme.typography.titleLarge.let { style ->
-        if (fontScale > MAX_TITLE_SCALE) style.copy(fontSize = style.fontSize * (MAX_TITLE_SCALE / fontScale)) else style
+    val capped: (TextStyle) -> TextStyle = { style ->
+        if (fontScale > MAX_TITLE_SCALE) {
+            val factor = MAX_TITLE_SCALE / fontScale
+            style.copy(fontSize = style.fontSize * factor, lineHeight = style.lineHeight * factor)
+        } else {
+            style
+        }
     }
+    val titleStyle = capped(MaterialTheme.typography.titleLarge)
+    val subtitleStyle = capped(MaterialTheme.typography.bodySmall)
     TopAppBar(
         title = {
             Column {
                 // Na telefonu sa uvećanim pismom „Provera proizvoda" je bila
                 // „Provera proiz…"; naslov ekrana sme da pređe u drugi red.
-                Text(title, style = titleStyle, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                // Sa podnaslovom u traku staje samo po jedan red od svakog.
+                Text(
+                    title,
+                    style = titleStyle,
+                    maxLines = if (subtitle == null) 2 else 1,
+                    overflow = TextOverflow.Ellipsis
+                )
                 subtitle?.let {
                     Text(
                         it,
-                        style = MaterialTheme.typography.bodySmall,
+                        style = subtitleStyle,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
+                        maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
