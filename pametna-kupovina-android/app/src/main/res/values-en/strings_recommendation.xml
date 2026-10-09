@@ -92,7 +92,7 @@
     <string name="rec_calc_no_prices">There are no valid prices for this scenario.</string>
     <string name="rec_calc_costs">Basket %1$s, travel %2$s, time %3$s, stops %4$s.</string>
     <string name="rec_calc_rates">We count travel at %1$s per kilometer, time at %2$s per hour and %3$s per stop.</string>
-    <string name="rec_calc_approximate">Distances are straight-line estimates; the actual route is usually longer.</string>
+    <string name="rec_calc_approximate">Distances are estimates: the straight line plus an allowance for streets, without traffic.</string>
     <plurals name="rec_calc_candidates">
         <item quantity="one">Considered %1$d store within %2$s km.</item>
         <item quantity="other">Considered %1$d stores within %2$s km.</item>

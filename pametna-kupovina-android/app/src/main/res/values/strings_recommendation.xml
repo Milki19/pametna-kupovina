@@ -94,7 +94,7 @@
     <string name="rec_calc_no_prices">Za ovaj scenario nema važećih cena.</string>
     <string name="rec_calc_costs">Korpa %1$s, put %2$s, vreme %3$s, stajanja %4$s.</string>
     <string name="rec_calc_rates">Put računamo %1$s po kilometru, vreme %2$s po satu i %3$s po stajanju.</string>
-    <string name="rec_calc_approximate">Udaljenosti su procena vazdušnom linijom, pravi put je obično duži.</string>
+    <string name="rec_calc_approximate">Udaljenosti su procena: vazdušna linija uvećana za ulice, bez saobraćaja.</string>
     <plurals name="rec_calc_candidates">
         <item quantity="one">Razmotreno %1$d prodavnica u krugu od %2$s km.</item>
         <item quantity="few">Razmotreno %1$d prodavnice u krugu od %2$s km.</item>

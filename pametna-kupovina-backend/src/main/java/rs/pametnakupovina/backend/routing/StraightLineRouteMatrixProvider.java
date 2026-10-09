@@ -1,5 +1,6 @@
 package rs.pametnakupovina.backend.routing;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -12,6 +13,24 @@ public class StraightLineRouteMatrixProvider
         implements RouteMatrixProvider {
 
     private static final double EARTH_RADIUS_METERS = 6_371_008.8;
+
+    /*
+     * Ulicama se ne ide pravom linijom: kroz grad je put obično za trećinu
+     * duži. Bez ovoga daleka jeftina radnja izgleda bliže nego što jeste.
+     */
+    private final double detourFactor;
+
+    public StraightLineRouteMatrixProvider(
+            @Value("${routing.straight-line.detour-factor:1.3}")
+            double detourFactor
+    ) {
+        if (!(detourFactor >= 1.0)) {
+            throw new IllegalArgumentException(
+                    "routing.straight-line.detour-factor mora biti bar 1"
+            );
+        }
+        this.detourFactor = detourFactor;
+    }
 
     @Override
     public RouteMatrix calculate(List<RouteWaypoint> waypoints) {
@@ -109,7 +128,8 @@ public class StraightLineRouteMatrixProvider
         double boundedValue = Math.min(1.0, value);
 
         return Math.round(
-                EARTH_RADIUS_METERS
+                detourFactor
+                        * EARTH_RADIUS_METERS
                         * 2
                         * Math.atan2(
                         Math.sqrt(boundedValue),
