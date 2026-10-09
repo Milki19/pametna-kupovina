@@ -649,6 +649,12 @@ function showLocation(message = null, tone = 'err') {
           placeholder="npr. Bulevar oslobođenja 10, Novi Sad" value="${esc(places.query)}" style="flex:1">
           <button class="btn primary">Traži</button></div>
       </form>
+      <div class="label">Kako ideš do prodavnica</div>
+      <div class="chips" role="group" aria-label="Kako ideš do prodavnica">
+        <button class="chip" data-act="travel" data-value="DRIVING" aria-pressed="${!saved.get('walking', false)}">Kolima</button>
+        <button class="chip" data-act="travel" data-value="WALKING" aria-pressed="${saved.get('walking', false)}">Peške</button>
+      </div>
+      ${saved.get('walking', false) ? '<p class="muted small">Peške: radnje do 3 km, put ne košta gorivo, a vreme se računa hodom.</p>' : ''}
       ${places.results ? (places.results.length ? `<div class="card flush">${places.results.map((p, index) => `
         <button class="list-row row" style="width:100%;text-align:left;cursor:pointer;background:none;border:0" data-act="use-place" data-index="${index}">
           <span style="color:var(--primary)">${icon.pin}</span><span class="grow">${esc(p.name)}</span>${icon.chevron}</button>`).join('')}</div>`
@@ -749,13 +755,13 @@ const storeAddress = store => [store.storeName,
   store.city && !store.storeName.toLowerCase().includes(store.city.toLowerCase()) ? store.city : null
 ].filter(Boolean).join(', ');
 
-function mapsUrl(origin, stores) {
+function mapsUrl(origin, stores, walking = false) {
   const stops = stores.map(s => `${s.latitude},${s.longitude}`).filter((v, i, all) => all.indexOf(v) === i);
   let url = 'https://www.google.com/maps/dir/?api=1';
   if (origin) url += `&origin=${origin.lat},${origin.lng}`;
   url += `&destination=${stops[stops.length - 1]}`;
   if (stops.length > 1) url += `&waypoints=${stops.slice(0, -1).join('%7C')}`;
-  return url + '&travelmode=driving';
+  return url + (walking ? '&travelmode=walking' : '&travelmode=driving');
 }
 
 async function showRecommendation() {
@@ -764,7 +770,8 @@ async function showRecommendation() {
   if (!origin || !listId) { location.hash = '#/lokacija'; return; }
   screen({ title: 'Preporuke', back: '#/lokacija', html: spinner('Računam tri scenarija…') });
   try {
-    recommendation = await api('GET', `shopping-lists/${listId}/recommendations?latitude=${origin.lat}&longitude=${origin.lng}`);
+    const travel = saved.get('walking', false) ? '&travelMode=WALKING' : '';
+    recommendation = await api('GET', `shopping-lists/${listId}/recommendations?latitude=${origin.lat}&longitude=${origin.lng}${travel}`);
   } catch (error) {
     return failed('Preporuke', error, '#/preporuke');
   }
@@ -813,7 +820,7 @@ function renderRecommendation() {
       </div>` +
       scenarioWarnings(s, result).map(w => notice(w, 'warn')).join('') +
       (s.available && stores.length ? `
-        <a class="btn" href="${esc(mapsUrl(origin, stores))}" target="_blank" rel="noopener">${icon.route}${stores.length === 1 ? 'Pregled puta do prodavnice' : `Pregled rute kroz ${stores.length} ${plural(stores.length, 'prodavnicu', 'prodavnice', 'prodavnica')}`}</a>
+        <a class="btn" href="${esc(mapsUrl(origin, stores, result.assumptions?.travelMode === 'WALKING'))}" target="_blank" rel="noopener">${icon.route}${stores.length === 1 ? 'Pregled puta do prodavnice' : `Pregled rute kroz ${stores.length} ${plural(stores.length, 'prodavnicu', 'prodavnice', 'prodavnica')}`}</a>
         <p class="muted small">Google Maps prvo prikaže rutu, a navigaciju pokrećeš ti.</p>` : '') +
       stores.map(store => {
         const items = s.items.filter(i => i.storeId === store.storeId);
@@ -863,7 +870,8 @@ const purchaseBought = purchase => Object.values(purchase.checked).filter(Boolea
 function startPurchase() {
   const s = distinctScenarios(recommendation).find(x => x.type === selectedType) || recommendation.recommendedBalance;
   if (saved.get('purchase') && !confirm('Započni novu kupovinu? Napredak prethodne kupovine se briše.')) return;
-  saved.set('purchase', { startedAt: new Date().toISOString(), scenario: s, checked: {} });
+  saved.set('purchase', { startedAt: new Date().toISOString(), scenario: s, checked: {},
+    walking: recommendation.assumptions?.travelMode === 'WALKING' });
   location.hash = '#/kupovina';
 }
 
@@ -910,7 +918,7 @@ function showPurchase() {
             <span class="badge">${store.stopOrder}</span>
             <div class="grow"><div class="name">${esc(store.retailerName)}</div><div class="muted small">${esc(storeAddress(store))}</div></div>
             <b>${done}/${items.length}</b>
-            <a class="icon-action" style="color:var(--primary)" href="${esc(mapsUrl(null, [store]))}" target="_blank" rel="noopener" aria-label="Put do prodavnice ${esc(store.retailerName)}">${icon.route}</a>
+            <a class="icon-action" style="color:var(--primary)" href="${esc(mapsUrl(null, [store], purchase.walking))}" target="_blank" rel="noopener" aria-label="Put do prodavnice ${esc(store.retailerName)}">${icon.route}</a>
           </div>
           ${items.map(row).join('')}
         </div>`;
@@ -1364,6 +1372,7 @@ const actions = {
   flexible: el => useAsFlexible(Number(el.dataset.item)),
   'to-location': () => { location.hash = '#/lokacija'; },
   locate,
+  travel: el => { saved.set('walking', el.dataset.value === 'WALKING'); showLocation(); },
   'use-last': () => { const o = saved.get('origin'); useOrigin(o.lat, o.lng, o.label); },
   'use-place': el => { const p = places.results[Number(el.dataset.index)]; useOrigin(p.latitude, p.longitude, p.name); },
   scenario: el => { selectedType = el.dataset.type; renderRecommendation(); },

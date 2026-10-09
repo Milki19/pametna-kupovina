@@ -16,6 +16,7 @@ import kotlinx.coroutines.launch
 import retrofit2.HttpException
 import rs.pametnakupovina.app.data.DraftItemInput
 import rs.pametnakupovina.app.data.ShoppingRepository
+import rs.pametnakupovina.app.data.preferences.TravelModeStore
 import rs.pametnakupovina.app.data.ItemSyncValidationException
 import kotlinx.coroutines.CancellationException
 import rs.pametnakupovina.app.data.local.DraftItemEntity
@@ -425,7 +426,8 @@ class CalculationSessionViewModel @Inject constructor() : ViewModel() {
 
 @HiltViewModel
 class RecommendationViewModel @Inject constructor(
-    private val repository: ShoppingRepository
+    private val repository: ShoppingRepository,
+    private val travelModes: TravelModeStore
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(RecommendationUiState())
     val uiState: StateFlow<RecommendationUiState> = _uiState.asStateFlow()
@@ -439,7 +441,7 @@ class RecommendationViewModel @Inject constructor(
                 repository.replaceWithSimilar(itemId, kind)
                 _uiState.value = RecommendationUiState(isLoading = true)
                 _uiState.value = RecommendationUiState(
-                    result = repository.getRecommendations(listId, latitude, longitude)
+                    result = repository.getRecommendations(listId, latitude, longitude, walking = travelModes.isWalking())
                 )
             } catch (error: kotlinx.coroutines.CancellationException) { throw error }
             catch (error: Exception) {
@@ -460,7 +462,7 @@ class RecommendationViewModel @Inject constructor(
                 savedLocally = true
                 // The displayed allocation no longer describes the edited list.
                 _uiState.value = RecommendationUiState(isLoading = true)
-                val result=repository.getRecommendations(listId,latitude,longitude)
+                val result = repository.getRecommendations(listId, latitude, longitude, walking = travelModes.isWalking())
                 _uiState.value=RecommendationUiState(result=result)
                 onDone(null)
             } catch(error: kotlinx.coroutines.CancellationException) { throw error }
@@ -485,7 +487,8 @@ class RecommendationViewModel @Inject constructor(
                     result = repository.getRecommendations(
                         listId = listId,
                         latitude = latitude,
-                        longitude = longitude
+                        longitude = longitude,
+                        walking = travelModes.isWalking()
                     )
                 )
             } catch (error: Exception) {

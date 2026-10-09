@@ -76,6 +76,10 @@
     <string name="location_resolving">Tražim lokaciju…</string>
     <string name="location_use_current">Koristi trenutnu lokaciju</string>
     <string name="location_use_current_hint">Samo za ovo računanje</string>
+    <string name="location_travel_title">Kako ideš do prodavnica</string>
+    <string name="location_travel_driving">Kolima</string>
+    <string name="location_travel_walking">Peške</string>
+    <string name="location_travel_walking_hint">Peške: radnje do 3 km, put ne košta gorivo, a vreme se računa hodom.</string>
     <string name="location_address_label">Ili upiši adresu ili kraj</string>
     <string name="location_address_placeholder">npr. Karaburma, Beograd</string>
     <string name="location_find_address">Pronađi adresu</string>

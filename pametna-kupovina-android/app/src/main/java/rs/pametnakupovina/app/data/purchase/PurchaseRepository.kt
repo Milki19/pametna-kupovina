@@ -45,7 +45,8 @@ class PurchaseRepository @Inject constructor(
         val id = UUID.randomUUID().toString()
         // Store public shop coordinates, never the user's origin.
         val snapshot = PurchaseSnapshot(listId = result.listId, listName = result.listName,
-            calculationDate = result.requestedDate, scenario = scenario)
+            calculationDate = result.requestedDate, scenario = scenario,
+            walking = result.assumptions.walking)
         dao.insert(PurchaseSessionEntity(id, System.currentTimeMillis(),
             listName = result.listName, itemCount = scenario.items.size,
             snapshotJson = json.encodeToString(snapshot)))

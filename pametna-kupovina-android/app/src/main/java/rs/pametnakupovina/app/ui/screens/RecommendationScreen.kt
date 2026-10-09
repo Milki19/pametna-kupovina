@@ -380,7 +380,8 @@ internal fun RecommendationContent(
                                 origin = Coordinates(origin.first, origin.second),
                                 orderedStops = orderedStores.map { store ->
                                     Coordinates(store.latitude, store.longitude)
-                                }
+                                },
+                                walking = result.assumptions.walking
                             )
                             launchGoogleMapsDirections(context, url)
                         }

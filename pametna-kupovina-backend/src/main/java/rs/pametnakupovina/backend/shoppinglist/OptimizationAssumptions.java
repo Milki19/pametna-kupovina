@@ -10,6 +10,7 @@ public record OptimizationAssumptions(
         BigDecimal valuePerHour,
         BigDecimal costPerStop,
         BigDecimal straightLineAverageSpeedKmh,
-        String currency
+        String currency,
+        TravelMode travelMode
 ) {
 }

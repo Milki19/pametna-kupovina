@@ -435,6 +435,38 @@ class ShoppingRecommendationServiceTest {
                         .isEqualTo(RecommendationItemStatus.AVAILABLE));
     }
 
+    /** Peške: radnje u krugu od 3 km, kilometar ne košta, a vreme je hodom. */
+    @Test
+    void onFootTheTripCostsTimeButNoKilometres() {
+        ShoppingListRepository listRepository = mock(ShoppingListRepository.class);
+        NearbyStoreRepository nearbyRepository = mock(NearbyStoreRepository.class);
+        StoreShoppingOfferRepository offerRepository = mock(StoreShoppingOfferRepository.class);
+        RouteMatrixProvider routeProvider = mock(RouteMatrixProvider.class);
+        ShoppingRecommendationService service = new ShoppingRecommendationService(
+                listRepository, nearbyRepository, offerRepository, routeProvider,
+                new ShoppingOptimizationProperties(), markets());
+
+        ShoppingListItemResponse milk = item(1L, "Mleko", 101L);
+        when(listRepository.findById(10L)).thenReturn(Optional.of(new ShoppingListResponse(
+                10L, "Test korpa", OffsetDateTime.now(), OffsetDateTime.now(), List.of(milk))));
+        NearbyStore near = store(1L, "A");
+        when(nearbyRepository.findPricingEligibleNearby(SERBIA, 44.0, 19.0, 3_000, 20))
+                .thenReturn(List.of(near));
+        when(offerRepository.findOffers(eq(10L), anyList(), eq(DATE), eq(true)))
+                .thenAnswer(call -> offersFor(call.getArgument(1), List.of(offer(near, milk, 100, 1001L))));
+        when(routeProvider.calculate(anyList())).thenReturn(routeMatrix(List.of(1L)));
+
+        ShoppingRecommendationResponse response =
+                service.recommend(10L, 44.0, 19.0, DATE, TravelMode.WALKING);
+
+        assertThat(response.assumptions().travelMode()).isEqualTo(TravelMode.WALKING);
+        assertThat(response.assumptions().candidateRadiusMeters()).isEqualTo(3_000);
+        assertThat(response.assumptions().costPerKm()).isEqualByComparingTo("0");
+        assertThat(response.recommendedBalance().travelCost()).isEqualByComparingTo("0");
+        // Dva kilometra (tamo i nazad) brzinom 4,5 km/h.
+        assertThat(response.recommendedBalance().routeDurationSeconds()).isEqualTo(1_600L);
+    }
+
     private ShoppingListItemResponse item(
             Long itemId,
             String name,

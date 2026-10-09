@@ -18,6 +18,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Surface
@@ -72,6 +73,7 @@ fun LocationScreen(
 ) {
     val context = LocalContext.current
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val walking by viewModel.walking.collectAsStateWithLifecycle()
     var latitudeText by rememberSaveable { mutableStateOf("") }
     var longitudeText by rememberSaveable { mutableStateOf("") }
     var showManual by rememberSaveable { mutableStateOf(false) }
@@ -227,6 +229,30 @@ fun LocationScreen(
                     .fillMaxWidth()
                     .testTag("address-field")
             )
+
+            // Peške: radnje u kraju, bez troška goriva; mape vode peške.
+            Text(stringResource(R.string.location_travel_title), style = MaterialTheme.typography.titleSmall)
+            Row(horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm)) {
+                FilterChip(
+                    selected = !walking,
+                    onClick = { viewModel.setWalking(false) },
+                    label = { Text(stringResource(R.string.location_travel_driving)) },
+                    modifier = Modifier.testTag("travel-driving")
+                )
+                FilterChip(
+                    selected = walking,
+                    onClick = { viewModel.setWalking(true) },
+                    label = { Text(stringResource(R.string.location_travel_walking)) },
+                    modifier = Modifier.testTag("travel-walking")
+                )
+            }
+            if (walking) {
+                Text(
+                    stringResource(R.string.location_travel_walking_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
 
             state.message?.let { message ->
                 NoticeBanner(

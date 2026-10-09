@@ -450,7 +450,8 @@ private fun PurchaseInProgress(
                                 context,
                                 googleMapsDirectionsUrl(
                                     null,
-                                    stores.map { Coordinates(it.latitude, it.longitude) }
+                                    stores.map { Coordinates(it.latitude, it.longitude) },
+                                    walking = session?.snapshot?.walking == true
                                 )
                             )
                         }) {
@@ -550,7 +551,8 @@ private fun PurchaseInProgress(
                                 context,
                                 googleMapsDirectionsUrl(
                                     null,
-                                    listOf(Coordinates(store.latitude, store.longitude))
+                                    listOf(Coordinates(store.latitude, store.longitude)),
+                                    walking = session.snapshot.walking
                                 )
                             )
                         }

@@ -19,6 +19,24 @@ public class ShoppingOptimizationProperties {
     private int maxPriceAgeDays = 30;
     private BigDecimal straightLineAverageSpeedKmh =
             new BigDecimal("30.00");
+    private BigDecimal walkingSpeedKmh = new BigDecimal("4.50");
+    private int walkingCandidateRadiusMeters = 3_000;
+
+    public BigDecimal getWalkingSpeedKmh() {
+        return walkingSpeedKmh;
+    }
+
+    public void setWalkingSpeedKmh(BigDecimal walkingSpeedKmh) {
+        this.walkingSpeedKmh = walkingSpeedKmh;
+    }
+
+    public int getWalkingCandidateRadiusMeters() {
+        return walkingCandidateRadiusMeters;
+    }
+
+    public void setWalkingCandidateRadiusMeters(int walkingCandidateRadiusMeters) {
+        this.walkingCandidateRadiusMeters = walkingCandidateRadiusMeters;
+    }
 
     public int getCandidateRadiusMeters() {
         return candidateRadiusMeters;

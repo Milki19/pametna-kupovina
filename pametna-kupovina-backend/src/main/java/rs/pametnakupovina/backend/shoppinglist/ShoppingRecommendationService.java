@@ -78,7 +78,18 @@ public class ShoppingRecommendationService {
             double longitude,
             LocalDate requestedDate
     ) {
+        return recommend(listId, latitude, longitude, requestedDate, TravelMode.DRIVING);
+    }
+
+    public ShoppingRecommendationResponse recommend(
+            Long listId,
+            double latitude,
+            double longitude,
+            LocalDate requestedDate,
+            TravelMode travelMode
+    ) {
         validate(latitude, longitude);
+        boolean walking = travelMode == TravelMode.WALKING;
 
         ShoppingListResponse shoppingList = shoppingListRepository
                 .findById(listId)
@@ -89,7 +100,7 @@ public class ShoppingRecommendationService {
 
         // Prices, travel costs and "today" are the market's; a shop across
         // the border quotes another currency and never enters the plan.
-        Market market = marketRepository.forShoppingList(listId);
+        Market market = onFoot(marketRepository.forShoppingList(listId), walking);
         LocalDate asOfDate = requestedDate != null
                 ? requestedDate
                 : market.today();
@@ -123,7 +134,9 @@ public class ShoppingRecommendationService {
                         market.id(),
                         latitude,
                         longitude,
-                        properties.getCandidateRadiusMeters(),
+                        walking
+                                ? properties.getWalkingCandidateRadiusMeters()
+                                : properties.getCandidateRadiusMeters(),
                         properties.getMaxCandidateStores()
                 );
 
@@ -254,11 +267,12 @@ public class ShoppingRecommendationService {
             }
         }
 
-        RouteMatrix routeMatrix = createRouteMatrix(
+        RouteMatrix drivingMatrix = createRouteMatrix(
                 latitude,
                 longitude,
                 nearbyStores
         );
+        RouteMatrix routeMatrix = walking ? onFoot(drivingMatrix) : drivingMatrix;
 
         List<EvaluatedPlan> evaluatedSingles =
                 singleStorePlans.stream()
@@ -313,7 +327,7 @@ public class ShoppingRecommendationService {
                 nearbyStores.size(),
                 singleStorePlans.size(),
                 twoStorePlans.size(),
-                assumptions(market),
+                assumptions(market, walking),
                 singleScenario,
                 recommendedScenario,
                 lowestPriceScenario,
@@ -1167,16 +1181,59 @@ public class ShoppingRecommendationService {
         return "STORE:" + store.storeId();
     }
 
-    private OptimizationAssumptions assumptions(Market market) {
+    private OptimizationAssumptions assumptions(Market market, boolean walking) {
         return new OptimizationAssumptions(
-                properties.getCandidateRadiusMeters(),
+                walking
+                        ? properties.getWalkingCandidateRadiusMeters()
+                        : properties.getCandidateRadiusMeters(),
                 properties.getMaxCandidateStores(),
                 properties.getMaxPriceAgeDays(),
                 money(market.travelCostPerKm()),
                 money(market.valuePerHour()),
                 money(market.costPerStop()),
-                money(properties.getStraightLineAverageSpeedKmh()),
-                market.currencyCode()
+                money(walking
+                        ? properties.getWalkingSpeedKmh()
+                        : properties.getStraightLineAverageSpeedKmh()),
+                market.currencyCode(),
+                walking ? TravelMode.WALKING : TravelMode.DRIVING
+        );
+    }
+
+    /** Peške kilometar ne košta; vreme i stajanja i dalje koštaju. */
+    private static Market onFoot(Market market, boolean walking) {
+        if (!walking) {
+            return market;
+        }
+        return new Market(
+                market.id(),
+                market.code(),
+                market.name(),
+                market.currencyCode(),
+                market.currencyMinorUnits(),
+                market.locale(),
+                market.defaultLanguage(),
+                market.timeZone(),
+                BigDecimal.ZERO,
+                market.valuePerHour(),
+                market.costPerStop()
+        );
+    }
+
+    /** Isto rastojanje, ali vreme brzinom hoda, ne kolima. */
+    private RouteMatrix onFoot(RouteMatrix matrix) {
+        double metersPerSecond = properties.getWalkingSpeedKmh().doubleValue() / 3.6;
+        return new RouteMatrix(
+                matrix.providerCode(),
+                matrix.distanceMethod(),
+                matrix.approximate(),
+                matrix.entries().stream()
+                        .map(entry -> new RouteMatrixEntry(
+                                entry.originId(),
+                                entry.destinationId(),
+                                entry.distanceMeters(),
+                                Math.round(entry.distanceMeters() / metersPerSecond)
+                        ))
+                        .toList()
         );
     }
 
@@ -1205,7 +1262,10 @@ public class ShoppingRecommendationService {
                 || properties.getMaxCandidateStores() > 20
                 || properties.getStraightLineAverageSpeedKmh() == null
                 || properties.getStraightLineAverageSpeedKmh()
-                .compareTo(BigDecimal.ZERO) <= 0) {
+                .compareTo(BigDecimal.ZERO) <= 0
+                || properties.getWalkingCandidateRadiusMeters() <= 0
+                || properties.getWalkingSpeedKmh() == null
+                || properties.getWalkingSpeedKmh().compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalStateException(
                     "Shopping optimization konfiguracija nije ispravna"
             );

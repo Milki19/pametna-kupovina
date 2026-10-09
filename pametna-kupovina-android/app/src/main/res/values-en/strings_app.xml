@@ -75,6 +75,10 @@
     <string name="location_resolving">Finding location…</string>
     <string name="location_use_current">Use current location</string>
     <string name="location_use_current_hint">Only for this calculation</string>
+    <string name="location_travel_title">How you get to the shops</string>
+    <string name="location_travel_driving">By car</string>
+    <string name="location_travel_walking">On foot</string>
+    <string name="location_travel_walking_hint">On foot: shops within 3 km, no fuel cost, time at walking pace.</string>
     <string name="location_address_label">Or enter an address or neighborhood</string>
     <string name="location_address_placeholder">e.g. Karaburma, Belgrade</string>
     <string name="location_find_address">Find address</string>
