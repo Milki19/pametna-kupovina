@@ -222,6 +222,12 @@ function date(iso) {
   return `${d}.${m}.${y}.`;
 }
 const shortDate = iso => date(iso).slice(0, 6);
+// Cena starija od tri dana dobija datum uz stavku; svežu ne treba naglašavati.
+function stalePrice(priceDate, requestedDate) {
+  if (!priceDate || !requestedDate) return false;
+  const day = 24 * 60 * 60 * 1000;
+  return Date.parse(requestedDate.slice(0, 10)) - Date.parse(priceDate.slice(0, 10)) > 3 * day;
+}
 function plural(count, one, few, many) {
   const n10 = count % 10, n100 = count % 100;
   if (n10 === 1 && n100 !== 11) return one;
@@ -823,6 +829,7 @@ function renderRecommendation() {
             <div class="grow"><div class="name">${esc(item.requestedName)}</div>
               ${item.productName && item.productName.toLowerCase() !== item.requestedName.toLowerCase() ? `<div class="muted small">${esc(item.productName)}</div>` : ''}
               ${quantityLine(item) ? `<div class="muted small">${esc(quantityLine(item))}</div>` : ''}
+              ${stalePrice(item.priceDate, result.requestedDate) ? `<div class="muted small">Cena od ${date(item.priceDate)}</div>` : ''}
               ${manySmallPacks(item) ? pill('Mnogo malih pakovanja', 'warn') : ''}</div>
             <span class="price">${item.lineTotal != null ? money(item.lineTotal) : 'nema'}</span></div>`).join('')}
         </div>`;
@@ -1473,4 +1480,6 @@ document.addEventListener('submit', event => {
 
 window.addEventListener('hashchange', route);
 route();
+// Bez mreže u prodavnici stranica se ipak otvori (sw.js).
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 refreshMarket().then(changed => { if (changed) route(); });
