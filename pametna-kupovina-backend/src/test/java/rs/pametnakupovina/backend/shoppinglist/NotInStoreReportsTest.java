@@ -137,17 +137,30 @@ class NotInStoreReportsTest {
                 .toList();
     }
 
+    /** Imported listings are not matched yet, so the reports point at a product of their own. */
+    private long reportedProduct() {
+        return jdbcClient.sql("""
+                        INSERT INTO app.canonical_product (canonical_key, barcode, name, normalized_name)
+                        VALUES ('EAN:8600000002011', '8600000002011', 'Jabuka crvena', 'jabuka crvena')
+                        ON CONFLICT (canonical_key) DO UPDATE SET name = EXCLUDED.name
+                        RETURNING id
+                        """)
+                .query(Long.class)
+                .single();
+    }
+
     private void reportMissing(String productName, long storeId, String phone) {
         jdbcClient.sql("""
                         INSERT INTO app.product_report (
                             canonical_product_id, retailer_product_id, store_id,
                             reason, client_token_hash, created_at
                         )
-                        SELECT product.canonical_product_id, product.id, ?,
+                        SELECT COALESCE(product.canonical_product_id, ?), product.id, ?,
                                'NOT_IN_STORE', ?, ?
                         FROM app.retailer_product AS product
                         WHERE product.name = ?
                         """)
+                .param(reportedProduct())
                 .param(storeId)
                 .param(phone)
                 .param(PRICE_DATE.atTime(10, 0).atOffset(java.time.ZoneOffset.UTC))
