@@ -66,6 +66,7 @@ import rs.pametnakupovina.app.data.market.CurrentMarket
 import rs.pametnakupovina.app.ui.DashboardViewModel
 import rs.pametnakupovina.app.ui.ReceiptViewModel
 import rs.pametnakupovina.app.ui.components.AppIcon
+import rs.pametnakupovina.app.ui.components.TonalActionButton
 import rs.pametnakupovina.app.ui.components.cardBorder
 import rs.pametnakupovina.app.ui.components.heroColors
 import rs.pametnakupovina.app.ui.components.AppSpacing
@@ -99,6 +100,7 @@ fun DashboardScreen(
     receiptViewModel: ReceiptViewModel = hiltViewModel()
 ) {
     val listItemCount by dashboardViewModel.listItemCount.collectAsStateWithLifecycle()
+    val familiesOnList by dashboardViewModel.familiesOnList.collectAsStateWithLifecycle()
     val receiptState by receiptViewModel.uiState.collectAsStateWithLifecycle()
     var tab by rememberSaveable { mutableStateOf(DashboardTab.RECEIPTS) }
     // Redovi se slažu van kompozicije (u LazyColumn bloku), pa tekst čitaju odavde.
@@ -188,7 +190,9 @@ fun DashboardScreen(
                             marketDay(habit.lastBought)?.let {
                                 resources.getString(R.string.dashboard_last_bought, date(it.toString()))
                             }
-                        ).joinToString(" • ")
+                        ).joinToString(" • "),
+                        onList = habit.productFamilyId in familiesOnList,
+                        onAdd = { dashboardViewModel.addHabitToList(habit) }
                     )
                 } to resources.getString(R.string.dashboard_no_habits)
             }
@@ -482,7 +486,10 @@ private data class DashboardRow(
     val subtitle: String? = null,
     val trailing: String? = null,
     /** Udeo u ukupnom, za traku ispod reda. */
-    val share: Float? = null
+    val share: Float? = null,
+    /** Navika: dugme „Na spisak", kao u Akcijama. */
+    val onAdd: (() -> Unit)? = null,
+    val onList: Boolean = false
 )
 
 private fun share(part: Double, total: Double): Float? =
@@ -533,6 +540,16 @@ private fun AnalyticsCard(
                         row.trailing?.let {
                             Spacer(Modifier.width(AppSpacing.md))
                             Text(it, style = MaterialTheme.typography.titleMedium)
+                        }
+                        row.onAdd?.let { add ->
+                            Spacer(Modifier.width(AppSpacing.md))
+                            TonalActionButton(
+                                text = stringResource(if (row.onList) R.string.sale_added else R.string.sale_add_to_list),
+                                onClick = add,
+                                enabled = !row.onList,
+                                icon = if (row.onList) R.drawable.ic_check else R.drawable.ic_add,
+                                primary = !row.onList
+                            )
                         }
                         row.share?.let {
                             Text(
