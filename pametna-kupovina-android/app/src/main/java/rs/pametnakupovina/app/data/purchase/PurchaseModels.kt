@@ -12,7 +12,9 @@ data class PurchaseSnapshot(
     val listId: Long,
     val listName: String,
     val calculationDate: String,
-    val scenario: OptimizationScenarioDto
+    val scenario: OptimizationScenarioDto,
+    /** Plan je računat za put peške; Google mape onda vode peške. */
+    val walking: Boolean = false
 )
 
 @Serializable

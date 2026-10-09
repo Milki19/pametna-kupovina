@@ -505,8 +505,11 @@ data class OptimizationAssumptionsDto(
     val valuePerHour: Double,
     val costPerStop: Double,
     val straightLineAverageSpeedKmh: Double,
-    val currency: String
-)
+    val currency: String,
+    val travelMode: String = "DRIVING"
+) {
+    val walking get() = travelMode == "WALKING"
+}
 
 @Serializable
 data class RecommendationStoreDto(

@@ -488,7 +488,8 @@ class ShoppingRepository @Inject constructor(
         listId: Long,
         latitude: Double,
         longitude: Double,
-        date: String? = null
+        date: String? = null,
+        walking: Boolean = false
     ): ShoppingRecommendationDto {
         // Pre računanja guramo sve lokalne izmene. Ako je server u međuvremenu
         // obrisao spisak, synchronizePending kreira novi i vraća njegov ID.
@@ -502,7 +503,8 @@ class ShoppingRepository @Inject constructor(
             listId = recommendationListId,
             latitude = latitude,
             longitude = longitude,
-            date = date
+            date = date,
+            travelMode = if (walking) "WALKING" else null
         )
     }
 

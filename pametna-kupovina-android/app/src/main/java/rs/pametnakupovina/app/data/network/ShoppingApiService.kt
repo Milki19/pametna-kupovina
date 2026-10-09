@@ -173,7 +173,8 @@ interface ShoppingApiService {
         @Path("listId") listId: Long,
         @Query("latitude") latitude: Double,
         @Query("longitude") longitude: Double,
-        @Query("date") date: String? = null
+        @Query("date") date: String? = null,
+        @Query("travelMode") travelMode: String? = null
     ): ShoppingRecommendationDto
 
     @POST("api/v1/products/{canonicalProductId}/reports")

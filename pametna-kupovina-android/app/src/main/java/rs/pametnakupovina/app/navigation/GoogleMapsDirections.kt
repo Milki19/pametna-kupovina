@@ -11,7 +11,8 @@ private fun Coordinates.queryValue(): String = "$latitude,$longitude"
 
 fun googleMapsDirectionsUrl(
     origin: Coordinates?,
-    orderedStops: List<Coordinates>
+    orderedStops: List<Coordinates>,
+    walking: Boolean = false
 ): String {
     val stops = orderedStops.distinct()
     require(stops.isNotEmpty()) { "Ruta mora imati bar jednu prodavnicu." }
@@ -28,7 +29,7 @@ fun googleMapsDirectionsUrl(
             append("&waypoints=")
             append(waypoints.joinToString("%7C") { it.queryValue() })
         }
-        append("&travelmode=driving")
+        append(if (walking) "&travelmode=walking" else "&travelmode=driving")
     }
 }
 

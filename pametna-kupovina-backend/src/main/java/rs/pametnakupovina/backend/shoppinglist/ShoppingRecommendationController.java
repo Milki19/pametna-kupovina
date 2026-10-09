@@ -41,7 +41,9 @@ public class ShoppingRecommendationController {
                     required = false
             )
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
-            LocalDate date
+            LocalDate date,
+            @RequestParam(name = "travelMode", defaultValue = "DRIVING")
+            TravelMode travelMode
     ) {
         shoppingListService.requireOwnedList(listId, caller.accountId());
 
@@ -53,7 +55,8 @@ public class ShoppingRecommendationController {
                         listId,
                         location.latitude(),
                         location.longitude(),
-                        date
+                        date,
+                        travelMode
                 )
         );
     }

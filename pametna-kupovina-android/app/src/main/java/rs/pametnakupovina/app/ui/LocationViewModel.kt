@@ -5,11 +5,14 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import rs.pametnakupovina.app.location.Coordinates
 import rs.pametnakupovina.app.location.FusedLocationProvider
+import rs.pametnakupovina.app.data.preferences.TravelModeStore
 import rs.pametnakupovina.app.R
 import rs.pametnakupovina.app.text.UiText
 import rs.pametnakupovina.app.text.UserFacingException
@@ -27,11 +30,19 @@ data class LocationUiState(
 
 @HiltViewModel
 class LocationViewModel @Inject constructor(
-    private val locationProvider: FusedLocationProvider
+    private val locationProvider: FusedLocationProvider,
+    private val travelModes: TravelModeStore
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(LocationUiState())
     val uiState: StateFlow<LocationUiState> = _uiState.asStateFlow()
+
+    val walking: StateFlow<Boolean> = travelModes.walking
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    fun setWalking(walking: Boolean) {
+        viewModelScope.launch { travelModes.setWalking(walking) }
+    }
 
     fun resolveCurrentLocation() = resolve(offerSettings = true) {
         locationProvider.currentLocation() to
