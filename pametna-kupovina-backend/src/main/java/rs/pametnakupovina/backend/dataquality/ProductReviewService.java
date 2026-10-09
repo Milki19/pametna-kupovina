@@ -227,6 +227,8 @@ public class ProductReviewService {
         }
         return jdbcClient.sql(REPORT_SELECT + """
                         WHERE report.status = ?
+                          -- „Nema u prodavnici“ deluje sam i sam ističe (V121).
+                          AND report.reason <> 'NOT_IN_STORE'
                         ORDER BY report.created_at DESC, report.id DESC
                         LIMIT ?
                         """)

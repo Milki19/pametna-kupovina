@@ -23,6 +23,8 @@ import rs.pametnakupovina.app.data.local.MIGRATION_2_3
 import rs.pametnakupovina.app.data.local.MIGRATION_3_4
 import rs.pametnakupovina.app.data.local.MIGRATION_4_5
 import rs.pametnakupovina.app.data.local.PametnaKupovinaDatabase
+import rs.pametnakupovina.app.data.ShoppingRepository
+import rs.pametnakupovina.app.data.purchase.MissingProductReporter
 import rs.pametnakupovina.app.data.network.SessionApiService
 import rs.pametnakupovina.app.data.network.SessionAuthenticator
 import rs.pametnakupovina.app.data.network.SessionInterceptor
@@ -87,6 +89,15 @@ object NetworkModule {
     fun provideShoppingApiService(
         retrofit: Retrofit
     ): ShoppingApiService = retrofit.create(ShoppingApiService::class.java)
+}
+
+@Module
+@InstallIn(SingletonComponent::class)
+object PurchaseModule {
+
+    @Provides
+    fun provideMissingProductReporter(repository: ShoppingRepository): MissingProductReporter =
+        MissingProductReporter(repository::reportNotInStore)
 }
 
 @Module

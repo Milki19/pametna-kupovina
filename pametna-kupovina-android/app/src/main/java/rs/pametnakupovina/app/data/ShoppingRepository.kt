@@ -280,6 +280,18 @@ class ShoppingRepository @Inject constructor(
     suspend fun nearbyStores(near: Coordinates, radiusMeters: Int): List<NearbyStoreDto> =
         api.getNearbyStores(near.latitude, near.longitude, radiusMeters, NEARBY_STORE_LIMIT)
 
+    /** „Nema u prodavnici": server tu ponudu preskače kad to javi više kupaca. */
+    suspend fun reportNotInStore(canonicalProductId: Long, retailerProductId: Long, storeId: Long) {
+        api.reportProduct(
+            canonicalProductId,
+            rs.pametnakupovina.app.data.network.ProductReportRequestDto(
+                reason = rs.pametnakupovina.app.data.network.ProductReportReasonDto.NOT_IN_STORE,
+                retailerProductId = retailerProductId,
+                storeId = storeId
+            )
+        )
+    }
+
     suspend fun reportProduct(
         canonicalProductId: Long,
         reason: rs.pametnakupovina.app.data.network.ProductReportReasonDto,

@@ -24,8 +24,21 @@ data class PurchaseItemProgress(
     val boughtPackages: Double = 0.0,
     val note: String = "",
     // Decimal text prevents binary floating-point errors in user-entered money.
-    val actualLineTotal: String? = null
+    val actualLineTotal: String? = null,
+    /** Kupac je javio serveru da ovoga nema u prodavnici. */
+    val reportedMissing: Boolean = false
 )
+
+/**
+ * Šalje serveru „nema u prodavnici"; posebna klasa da kupovina po planu
+ * (i njen test) ne zavisi od celog ShoppingRepository-ja.
+ */
+class MissingProductReporter(
+    private val send: suspend (canonicalProductId: Long, retailerProductId: Long, storeId: Long) -> Unit
+) {
+    suspend fun report(canonicalProductId: Long, retailerProductId: Long, storeId: Long) =
+        send(canonicalProductId, retailerProductId, storeId)
+}
 
 data class PurchaseSession(
     val id: String,
