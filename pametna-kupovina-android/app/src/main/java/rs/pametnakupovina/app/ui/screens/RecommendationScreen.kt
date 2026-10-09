@@ -52,6 +52,8 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.math.BigDecimal
 import kotlin.math.abs
+import java.time.LocalDate
+import java.time.format.DateTimeParseException
 import rs.pametnakupovina.app.R
 import rs.pametnakupovina.app.data.amountLabel
 import rs.pametnakupovina.app.data.network.OptimizationScenarioDto
@@ -390,7 +392,8 @@ internal fun RecommendationContent(
                 item(key = "store-${selected.type}-${store.storeId}") {
                     StoreSection(
                         store = store,
-                        items = selected.items.filter { it.storeId == store.storeId }
+                        items = selected.items.filter { it.storeId == store.storeId },
+                        requestedDate = result.requestedDate
                     )
                 }
             }
@@ -763,7 +766,8 @@ private fun PlanStat(label: String, value: String, modifier: Modifier) {
 @Composable
 private fun StoreSection(
     store: RecommendationStoreDto,
-    items: List<RecommendationItemDto>
+    items: List<RecommendationItemDto>,
+    requestedDate: String
 ) {
     Surface(
         shape = MaterialTheme.shapes.medium,
@@ -809,7 +813,7 @@ private fun StoreSection(
                 )
             }
             items.forEachIndexed { index, item ->
-                PlanItemRow(item)
+                PlanItemRow(item, requestedDate)
                 if (index < items.lastIndex) {
                     HorizontalDivider(
                         modifier = Modifier.padding(start = AppSpacing.lg),
@@ -836,7 +840,7 @@ internal fun StopBadge(number: Int) {
 
 /** What was asked for, what it became, and the line's price on the right. */
 @Composable
-private fun PlanItemRow(item: RecommendationItemDto) {
+private fun PlanItemRow(item: RecommendationItemDto, requestedDate: String) {
     Row(
         modifier = Modifier.padding(horizontal = AppSpacing.lg, vertical = AppSpacing.md),
         verticalAlignment = Alignment.Top
@@ -862,6 +866,13 @@ private fun PlanItemRow(item: RecommendationItemDto) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+            stalePriceDate(item.priceDate, requestedDate)?.let {
+                Text(
+                    stringResource(R.string.rec_item_price_from, date(it)),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
             if (manySmallPacks(item)) {
                 StatusPill(stringResource(R.string.rec_many_small_packs), StatusTone.WARNING)
             }
@@ -873,6 +884,20 @@ private fun PlanItemRow(item: RecommendationItemDto) {
         )
     }
 }
+
+/**
+ * Datum cene kad je starija od nekoliko dana, da se uz stavku vidi da je
+ * možda promenjena; svežu cenu ne treba naglašavati.
+ */
+internal fun stalePriceDate(priceDate: String?, requestedDate: String): String? = try {
+    priceDate?.takeIf {
+        LocalDate.parse(it).plusDays(STALE_PRICE_DAYS) < LocalDate.parse(requestedDate)
+    }
+} catch (_: DateTimeParseException) {
+    null
+}
+
+private const val STALE_PRICE_DAYS = 3L
 
 @Composable
 private fun UnresolvedSection(

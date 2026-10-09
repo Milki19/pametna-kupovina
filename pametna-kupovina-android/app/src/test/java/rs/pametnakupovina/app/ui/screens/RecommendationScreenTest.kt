@@ -3,6 +3,7 @@ package rs.pametnakupovina.app.ui.screens
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import rs.pametnakupovina.app.data.network.PurchaseQuantityDto
@@ -14,6 +15,15 @@ import rs.pametnakupovina.app.data.network.RecommendationScenarioTypeDto
 import rs.pametnakupovina.app.data.network.ShoppingRecommendationDto
 
 class RecommendationScreenTest {
+
+    @Test
+    fun `datum uz stavku samo kad je cena starija od tri dana`() {
+        assertEquals("2026-10-05", stalePriceDate("2026-10-05", "2026-10-09"))
+        assertNull(stalePriceDate("2026-10-06", "2026-10-09"))
+        assertNull(stalePriceDate("2026-10-09", "2026-10-09"))
+        assertNull(stalePriceDate(null, "2026-10-09"))
+        assertNull(stalePriceDate("nije datum", "2026-10-09"))
+    }
 
     @Test
     fun `prikazuje kolicinu puta jedinicnu cenu`() {
