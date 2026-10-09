@@ -98,7 +98,9 @@ private fun NavHostController.openTab(route: String) = navigate(route) {
 @Composable
 fun PametnaKupovinaApp(
     sharedReceipt: Uri? = null,
-    onSharedReceiptTaken: () -> Unit = {}
+    onSharedReceiptTaken: () -> Unit = {},
+    openedProduct: Long? = null,
+    onOpenedProductTaken: () -> Unit = {}
 ) {
     val navController = rememberNavController()
     val calculationSession: CalculationSessionViewModel = hiltViewModel()
@@ -118,6 +120,12 @@ fun PametnaKupovinaApp(
         if (uri != null) {
             navController.openTab(Route.DASHBOARD)
             receiptViewModel.importFile(uri)
+        }
+    }
+    LaunchedEffect(openedProduct) {
+        openedProduct?.let {
+            onOpenedProductTaken()
+            navController.navigate(Route.productDetails(it))
         }
     }
     LaunchedEffect(sharedReceipt) {

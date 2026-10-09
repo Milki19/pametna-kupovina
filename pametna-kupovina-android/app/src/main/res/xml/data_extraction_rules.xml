@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <data-extraction-rules>
     <cloud-backup>
+        <!-- Praćene cene pamte i kraj (~1 km); ne idu u Google rezervnu kopiju. -->
         <exclude domain="database" path="pametna-kupovina.db" />
         <exclude domain="file" path="datastore/client_identity.preferences_pb" />
+        <exclude domain="file" path="datastore/price_watch.preferences_pb" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="database" path="pametna-kupovina.db" />

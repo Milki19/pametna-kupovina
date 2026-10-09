@@ -21,6 +21,7 @@ import rs.pametnakupovina.app.data.network.HabitDto
 import rs.pametnakupovina.app.location.Coordinates
 import rs.pametnakupovina.app.data.network.JoinRequestDto
 import rs.pametnakupovina.app.data.network.LoyaltyCardDto
+import rs.pametnakupovina.app.data.network.NearbyStoreDto
 import rs.pametnakupovina.app.data.network.ReceiptDto
 import rs.pametnakupovina.app.data.network.ScanReceiptRequestDto
 import rs.pametnakupovina.app.data.network.SpendingDto
@@ -276,6 +277,9 @@ class ShoppingRepository @Inject constructor(
         historyLimit = historyLimit
     )
 
+    suspend fun nearbyStores(near: Coordinates, radiusMeters: Int): List<NearbyStoreDto> =
+        api.getNearbyStores(near.latitude, near.longitude, radiusMeters, NEARBY_STORE_LIMIT)
+
     suspend fun reportProduct(
         canonicalProductId: Long,
         reason: rs.pametnakupovina.app.data.network.ProductReportReasonDto,
@@ -516,6 +520,8 @@ data class RejectedItem(val name: String, val reason: String?)
 
 class NotAHouseholdCode : Exception()
 
+// Server daje najviše 100 najbližih; dovoljno da se vidi koji su lanci u kraju.
+private const val NEARBY_STORE_LIMIT = 100
 private const val HOUSEHOLD_PREFIX = "pametnakupovina:domacinstvo:"
 
 // Link do web verzije: iPhone ga otvori kamerom, a aplikacija ga čita kao kod.

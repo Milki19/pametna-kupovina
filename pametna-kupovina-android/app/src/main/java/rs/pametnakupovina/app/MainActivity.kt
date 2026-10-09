@@ -20,16 +20,24 @@ class MainActivity : ComponentActivity() {
     /** Račun (screenshot ili PDF) podeljen iz aplikacije trgovine, dok se ne zavede. */
     private var sharedReceipt by mutableStateOf<Uri?>(null)
 
+    /** Proizvod iz obaveštenja o pojeftinjenju, dok se ne otvori. */
+    private var openedProduct by mutableStateOf<Long?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         // Posle okretanja ekrana isti račun se ne šalje ponovo.
-        if (savedInstanceState == null) sharedReceipt = intent.sharedFile()
+        if (savedInstanceState == null) {
+            sharedReceipt = intent.sharedFile()
+            openedProduct = intent.productToOpen()
+        }
         setContent {
             PametnaKupovinaTheme {
                 PametnaKupovinaApp(
                     sharedReceipt = sharedReceipt,
-                    onSharedReceiptTaken = { sharedReceipt = null }
+                    onSharedReceiptTaken = { sharedReceipt = null },
+                    openedProduct = openedProduct,
+                    onOpenedProductTaken = { openedProduct = null }
                 )
             }
         }
@@ -38,7 +46,11 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         intent.sharedFile()?.let { sharedReceipt = it }
+        intent.productToOpen()?.let { openedProduct = it }
     }
+
+    private fun Intent.productToOpen(): Long? =
+        getLongExtra(EXTRA_PRODUCT, 0L).takeIf { it > 0L }
 
     private fun Intent.sharedFile(): Uri? =
         if (action == Intent.ACTION_SEND) {
@@ -46,4 +58,8 @@ class MainActivity : ComponentActivity() {
         } else {
             null
         }
+
+    companion object {
+        const val EXTRA_PRODUCT = "rs.pametnakupovina.app.PRODUCT"
+    }
 }

@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import rs.pametnakupovina.app.R
 import rs.pametnakupovina.app.alerts.PriceWatchStore
+import rs.pametnakupovina.app.location.FusedLocationProvider
 import rs.pametnakupovina.app.alerts.WatchedProduct
 import rs.pametnakupovina.app.alerts.bestPrice
 import rs.pametnakupovina.app.data.ShoppingRepository
@@ -36,7 +37,8 @@ data class ProductDetailsUiState(
 class ProductDetailsViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val repository: ShoppingRepository,
-    private val priceWatch: PriceWatchStore
+    private val priceWatch: PriceWatchStore,
+    private val locationProvider: FusedLocationProvider
 ) : ViewModel() {
 
     val canonicalProductId: Long = requireNotNull(
@@ -60,7 +62,14 @@ class ProductDetailsViewModel @Inject constructor(
             if (!watch) return@launch priceWatch.unwatch(canonicalProductId)
             val product = _uiState.value.product ?: return@launch
             val offer = bestPrice(product) ?: return@launch
-            priceWatch.watch(WatchedProduct(canonicalProductId, product.name, offer.effectivePrice))
+            // Poslednja poznata lokacija, bez GPS-a i bez pitanja za dozvolu.
+            val area = locationProvider.roughLocation()
+            priceWatch.watch(
+                WatchedProduct(
+                    canonicalProductId, product.name, offer.effectivePrice,
+                    latitude = area?.latitude, longitude = area?.longitude
+                )
+            )
         }
     }
 
