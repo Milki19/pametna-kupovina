@@ -201,7 +201,13 @@ public class StoreShoppingOfferRepository {
                               AND requested_intent.shopping_intent_id IS NOT NULL
                               AND (item.target_quantity IS NULL OR (
                                   pack.size > 0 AND pack.unit = item.required_base_unit
-                                  AND need.packages * pack.size <= item.target_quantity * item.quantity * 1.25
+                                  -- Eggs come in cartons of 6, 10, 15 or 30: twelve
+                                  -- from a shop with only cartons of ten are two
+                                  -- cartons, not no price. Up to twice what was
+                                  -- asked; the cheaper total still wins.
+                                  AND need.packages * pack.size <= item.target_quantity * item.quantity
+                                      * CASE WHEN requested_intent.default_base_unit = 'piece'
+                                             THEN 2 ELSE 1.25 END
                               ))
                               AND (
                                   (
@@ -442,7 +448,13 @@ public class StoreShoppingOfferRepository {
                               )
                               AND (item.target_quantity IS NULL OR (
                                   pack.size > 0 AND pack.unit = item.required_base_unit
-                                  AND need.packages * pack.size <= item.target_quantity * item.quantity * 1.25
+                                  -- Eggs come in cartons of 6, 10, 15 or 30: twelve
+                                  -- from a shop with only cartons of ten are two
+                                  -- cartons, not no price. Up to twice what was
+                                  -- asked; the cheaper total still wins.
+                                  AND need.packages * pack.size <= item.target_quantity * item.quantity
+                                      * CASE WHEN requested_intent.default_base_unit = 'piece'
+                                             THEN 2 ELSE 1.25 END
                               ))
                               AND (
                                   (
@@ -971,7 +983,13 @@ public class StoreShoppingOfferRepository {
                               )
                               AND (item.target_quantity IS NULL OR (
                                   pack.size > 0 AND pack.unit = item.required_base_unit
-                                  AND need.packages * pack.size <= item.target_quantity * item.quantity * 1.25
+                                  -- Eggs come in cartons of 6, 10, 15 or 30: twelve
+                                  -- from a shop with only cartons of ten are two
+                                  -- cartons, not no price. Up to twice what was
+                                  -- asked; the cheaper total still wins.
+                                  AND need.packages * pack.size <= item.target_quantity * item.quantity
+                                      * CASE WHEN requested_intent.default_base_unit = 'piece'
+                                             THEN 2 ELSE 1.25 END
                               ))
                               AND (
                                   (

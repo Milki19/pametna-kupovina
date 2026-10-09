@@ -304,5 +304,25 @@ class PackOfPiecesTest {
                 .filteredOn(offer -> offer.retailerCode().equals("CASES"))
                 .singleElement()
                 .satisfies(offer -> assertThat(offer.available()).isFalse());
+
+        // Twelve eggs where cartons hold ten: two cartons, not no price.
+        assertThat(planFor("jaja", null, "12", shops))
+                .filteredOn(offer -> offer.retailerCode().equals("BOTTLES"))
+                .singleElement()
+                .satisfies(offer -> {
+                    assertThat(offer.available()).isTrue();
+                    assertThat(offer.purchaseQuantity().packages()).isEqualByComparingTo("2");
+                    assertThat(offer.lineTotal()).isEqualByComparingTo("499.98");
+                });
+        // Fourteen take two cartons as well; four would be a carton of ten,
+        // more than twice as many.
+        assertThat(planFor("jaja", null, "14", shops))
+                .filteredOn(offer -> offer.retailerCode().equals("BOTTLES"))
+                .singleElement()
+                .satisfies(offer -> assertThat(offer.purchaseQuantity().packages()).isEqualByComparingTo("2"));
+        assertThat(planFor("jaja", null, "4", shops))
+                .filteredOn(offer -> offer.retailerCode().equals("BOTTLES"))
+                .singleElement()
+                .satisfies(offer -> assertThat(offer.available()).isFalse());
     }
 }
