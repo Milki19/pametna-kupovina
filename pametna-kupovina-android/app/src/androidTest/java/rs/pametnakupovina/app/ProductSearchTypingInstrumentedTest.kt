@@ -7,7 +7,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
-import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performTextInput
@@ -64,8 +64,16 @@ class ProductSearchTypingInstrumentedTest {
                 }
             }
             val field = compose.onNodeWithTag("product-search-field")
+            // Text only: on an emulator the IME may leave a composing span on the last word.
+            fun hasInput(expected: String) = SemanticsMatcher("EditableText = '$expected'") {
+                it.config.getOrNull(SemanticsProperties.EditableText)?.text == expected
+            }
             fun assertInput(expected: String) {
-                field.assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString(expected)))
+                compose.waitUntil(5000) {
+                    compose.onAllNodes(hasTestTag("product-search-field") and hasInput(expected))
+                        .fetchSemanticsNodes().isNotEmpty()
+                }
+                field.assert(hasInput(expected))
             }
             field.performTextInput("mleko")
             compose.waitUntil(5000) { !viewModel.uiState.value.isSearching }
@@ -78,7 +86,7 @@ class ProductSearchTypingInstrumentedTest {
             field.performTextInput("kravica")
             compose.waitUntil(5000) { !viewModel.uiState.value.isSearching }
             assertInput("mleko moja kravica")
-            assertEquals("mleko moja kravica", requests.last())
+            compose.waitUntil(5000) { requests.lastOrNull() == "mleko moja kravica" }
 
             field.performTextReplacement("  mleko moja kravica  ")
             compose.waitUntil(5000) { !viewModel.uiState.value.isSearching }
