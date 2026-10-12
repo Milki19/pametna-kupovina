@@ -22,7 +22,8 @@ private val Context.clientIdentityDataStore by preferencesDataStore(
 /**
  * Sesija sa servera. Pristupni token važi nekoliko minuta; token za obnovu
  * se menja pri svakoj upotrebi. Datoteka je izuzeta iz rezervnih kopija
- * (res/xml/backup_rules.xml), pa sesija ne prelazi na drugi telefon.
+ * (res/xml/backup_rules.xml), pa sesija ne prelazi na drugi telefon, a tokeni
+ * i broj telefona su u njoj šifrovani ([KeystoreBox]).
  */
 data class StoredSession(
     val accessToken: String?,
@@ -57,18 +58,19 @@ class ClientIdentityStore @Inject constructor(
      * samo jednom, da se zameni za sesiju, posle čega ga server više ne prima.
      */
     override suspend fun getOrCreateToken(): String = tokenMutex.withLock {
-        val existing = context.clientIdentityDataStore.data
+        val stored = context.clientIdentityDataStore.data
             .first()[CLIENT_TOKEN]
+        val existing = stored?.let(KeystoreBox::open)
 
-        if (!existing.isNullOrBlank()) {
-            return@withLock existing
+        // Nov broj, ili onaj koji je verzija do 2.0.2 upisala nešifrovan.
+        val token = existing?.takeIf(String::isNotBlank)
+            ?: UUID.randomUUID().toString()
+        if (token != existing || stored == existing) {
+            context.clientIdentityDataStore.edit { preferences ->
+                preferences[CLIENT_TOKEN] = KeystoreBox.seal(token)
+            }
         }
-
-        val generated = UUID.randomUUID().toString()
-        context.clientIdentityDataStore.edit { preferences ->
-            preferences[CLIENT_TOKEN] = generated
-        }
-        generated
+        token
     }
 
     /** Broj ovog telefona na nalogu; ništa ne otvara, pa sme da se pokaže. */
@@ -77,10 +79,11 @@ class ClientIdentityStore @Inject constructor(
 
     override suspend fun session(): StoredSession? {
         val preferences = context.clientIdentityDataStore.data.first()
-        val refreshToken = preferences[REFRESH_TOKEN] ?: return null
+        val refreshToken = preferences[REFRESH_TOKEN]?.let(KeystoreBox::open)
+            ?: return null
 
         return StoredSession(
-            accessToken = preferences[ACCESS_TOKEN],
+            accessToken = preferences[ACCESS_TOKEN]?.let(KeystoreBox::open),
             accessExpiresAtMillis = preferences[ACCESS_EXPIRES_AT] ?: 0L,
             refreshToken = refreshToken
         )
@@ -93,9 +96,9 @@ class ClientIdentityStore @Inject constructor(
         deviceId: Long
     ) {
         context.clientIdentityDataStore.edit { preferences ->
-            preferences[ACCESS_TOKEN] = accessToken
+            preferences[ACCESS_TOKEN] = KeystoreBox.seal(accessToken)
             preferences[ACCESS_EXPIRES_AT] = accessExpiresAtMillis
-            preferences[REFRESH_TOKEN] = refreshToken
+            preferences[REFRESH_TOKEN] = KeystoreBox.seal(refreshToken)
             preferences[DEVICE_ID] = deviceId
         }
     }
