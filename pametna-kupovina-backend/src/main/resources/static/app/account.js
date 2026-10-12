@@ -353,7 +353,7 @@ function renderSpending() {
         <div class="grow center title" style="text-transform:capitalize">${esc(monthName(key))}</div>
         <button class="icon-action" data-act="spending-month" data-by="1" aria-label="Sledeći mesec" ${key >= current ? 'disabled' : ''}>${icon.chevron}</button>
       </div>
-      <div class="card hero">
+      <div class="card hero spend">
         <div class="label">Ukupna mesečna potrošnja</div>
         <div class="big">${money(spent)}</div>
         ${change != null ? `<p class="small">${change >= 0 ? '+' : '−'}${Math.abs(change)}% u odnosu na ${esc(monthName(shiftMonth(key, -1), false))}</p>` : ''}
