@@ -1,5 +1,17 @@
 package rs.pametnakupovina.app.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.border
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import rs.pametnakupovina.app.ui.components.IconTile
+import rs.pametnakupovina.app.ui.components.Meter
+import rs.pametnakupovina.app.ui.components.ShimmerCard
+import rs.pametnakupovina.app.ui.components.enter
+import rs.pametnakupovina.app.ui.components.rememberEntrance
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
@@ -244,7 +256,7 @@ fun RecommendationScreen(
                     message = stringResource(R.string.rec_location_missing_message),
                     onRetry = onBack
                 )
-                state.isLoading -> LoadingState(stringResource(R.string.rec_loading))
+                state.isLoading -> RecommendationLoading()
                 state.errorMessage != null -> ErrorState(
                     title = stringResource(R.string.rec_error_title),
                     message = requireNotNull(state.errorMessage).asString(),
@@ -301,6 +313,8 @@ internal fun RecommendationContent(
         it.resultStatus != RecommendationItemStatusDto.AVAILABLE
     }
     val orderedStores = selected.stores.sortedBy { it.stopOrder }
+    // Scenariji ulaze jedan za drugim kad stigne izračunat plan.
+    val entrance = rememberEntrance(result)
     var confirmNew by rememberSaveable(result.listId, selected.type) { mutableStateOf(false) }
     if (confirmNew) {
         AlertDialog(
@@ -347,19 +361,18 @@ internal fun RecommendationContent(
             }
 
             item(key = "origin") {
-                OriginCard(origin, onChangeOrigin)
+                OriginCard(origin, onChangeOrigin, Modifier.enter(entrance))
             }
 
-            item(key = "scenario-chooser") {
-                ScenarioChooser(
-                    scenarios = scenarios,
-                    selectedType = selected.type,
-                    onSelect = { selectedTypeName = it.name }
-                )
-            }
-
-            item(key = "scenario-hero") {
-                ScenarioHeroCard(selected)
+            scenarios.forEachIndexed { index, scenario ->
+                item(key = "scenario-${scenario.type}") {
+                    ScenarioCard(
+                        scenario = scenario,
+                        selected = scenario.type == selected.type,
+                        onSelect = { selectedTypeName = scenario.type.name },
+                        modifier = Modifier.enter(entrance, index + 1)
+                    )
+                }
             }
 
             scenarioWarnings(selected, result).forEachIndexed { index, warning ->
@@ -513,228 +526,138 @@ internal fun RouteNavigationCard(
     }
 }
 
+/** Dok se računa: trepćuće kartice na mestu scenarija koji stižu. */
 @Composable
-private fun ScenarioChooser(
-    scenarios: List<OptimizationScenarioDto>,
-    selectedType: RecommendationScenarioTypeDto,
-    onSelect: (RecommendationScenarioTypeDto) -> Unit
-) {
-    Row(
+private fun RecommendationLoading() {
+    val description = stringResource(R.string.rec_loading)
+    Column(
         modifier = Modifier
-            .fillMaxWidth()
-            .height(IntrinsicSize.Min),
-        horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm)
+            .fillMaxSize()
+            .padding(AppSpacing.lg)
+            .semantics { contentDescription = description },
+        verticalArrangement = Arrangement.spacedBy(AppSpacing.md)
     ) {
-        scenarios.forEach { scenario ->
-            val isSelected = scenario.type == selectedType
-            // The three totals sit side by side so the choice is a comparison
-            // of prices, not of paragraphs.
-            val weight by animateFloatAsState(
-                targetValue = if (isSelected) 1.25f else 1f,
-                animationSpec = spring(dampingRatio = 0.6f),
-                label = "scenarioWeight"
-            )
-            Surface(
-                onClick = { onSelect(scenario.type) },
-                enabled = scenario.available,
-                shape = MaterialTheme.shapes.medium,
-                color = if (isSelected) {
-                    MaterialTheme.colorScheme.surfaceContainerLowest
-                } else {
-                    MaterialTheme.colorScheme.surfaceContainerLow
-                },
-                border = if (isSelected) {
-                    BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
-                } else {
-                    cardBorder
-                },
-                modifier = Modifier
-                    .weight(weight)
-                    .fillMaxHeight()
-                    .testTag("scenario-${scenario.type.name}")
-            ) {
-                Column(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = AppSpacing.md),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    // Two lines for every label, so a label that wraps does not
-                    // push its price below the others.
-                    // Sa krupnim slovima se naziv i cena smanjuju, umesto da se
-                    // lome usred reči („Najjeftin/ija", „1.50/1").
-                    // Svaka reč u svom redu: reč koja ne stane pravi treći red,
-                    // a to je prekoračenje, pa se slova smanje.
-                    BasicText(
-                        stringResource(scenarioShortTitle(scenario.type)).replace(' ', '\n'),
-                        style = MaterialTheme.typography.labelMedium.copy(
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        ),
-                        minLines = 2,
-                        maxLines = 2,
-                        autoSize = TextAutoSize.StepBased(
-                            minFontSize = 8.sp,
-                            maxFontSize = MaterialTheme.typography.labelMedium.fontSize
-                        )
-                    )
-                    BasicText(
-                        scenario.totalCost?.takeIf { scenario.available }?.let(::wholeAmount)
-                            ?: stringResource(R.string.rec_no_price_short),
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            color = MaterialTheme.colorScheme.onSurface
-                        ),
-                        maxLines = 1,
-                        autoSize = TextAutoSize.StepBased(
-                            minFontSize = 10.sp,
-                            maxFontSize = MaterialTheme.typography.titleLarge.fontSize
-                        )
-                    )
-                    // Says which number this is, so the cheapest basket
-                    // showing the highest figure reads as sense, not error.
-                    Text(
-                        stringResource(R.string.rec_total_caption),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    if (scenario.available) {
-                        Text(
-                            stringResource(R.string.rec_basket_short, wholeAmount(scenario.basketCost)),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-        }
+        Text(
+            description,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = AppSpacing.xs)
+        )
+        repeat(3) { ShimmerCard(Modifier.height(108.dp)) }
     }
 }
 
 /** Polazna tačka plana; „Promeni" vraća na izbor lokacije. */
 @Composable
-private fun OriginCard(origin: Pair<Double, Double>, onChange: () -> Unit) {
-    GlassCard(
-        modifier = Modifier.fillMaxWidth()
-    ) {
+private fun OriginCard(origin: Pair<Double, Double>, onChange: () -> Unit, modifier: Modifier = Modifier) {
+    GlassCard(modifier = modifier.fillMaxWidth()) {
         Row(
-            modifier = Modifier.padding(AppSpacing.md),
+            modifier = Modifier.padding(start = AppSpacing.md, end = AppSpacing.xs, top = AppSpacing.md, bottom = AppSpacing.md),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(AppSpacing.md)
         ) {
-            Surface(
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.secondaryContainer,
-                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                modifier = Modifier.size(44.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    AppIcon(R.drawable.ic_my_location, contentDescription = null)
-                }
-            }
-            Column(modifier = Modifier.weight(1f)) {
+            IconTile(R.drawable.ic_my_location)
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
                     stringResource(R.string.rec_origin_label),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
                     coordinatesLabel(origin.first, origin.second),
-                    style = MaterialTheme.typography.bodyLarge
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold
                 )
             }
-            TonalActionButton(text = stringResource(R.string.rec_change_origin), onClick = onChange)
+            TextButton(onClick = onChange) { Text(stringResource(R.string.rec_change_origin)) }
         }
     }
 }
 
+/**
+ * Jedan scenario: izbor, naziv i cena u jednom redu, ispod oznaka i put u
+ * jednoj rečenici. Izabrani se otvori i pokaže pokrivenost korpe, prodavnice
+ * i od čega se sastoji cena.
+ */
 @Composable
-private fun ScenarioHeroCard(scenario: OptimizationScenarioDto) {
+private fun ScenarioCard(
+    scenario: OptimizationScenarioDto,
+    selected: Boolean,
+    onSelect: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val scheme = MaterialTheme.colorScheme
     GlassCard(
-        modifier = Modifier.fillMaxWidth()
+        onClick = onSelect,
+        enabled = scenario.available,
+        border = if (selected) BorderStroke(2.dp, scheme.primary) else cardBorder,
+        modifier = modifier
+            .fillMaxWidth()
+            .semantics { this.selected = selected }
+            .testTag("scenario-${scenario.type.name}")
     ) {
         Column {
-            // Tamna traka na vrhu, kao na nacrtu: ovo je plan o kome se radi.
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(6.dp)
-                    .background(MaterialTheme.colorScheme.primary)
-            )
             Column(
                 modifier = Modifier.padding(AppSpacing.lg),
-                verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)
+                verticalArrangement = Arrangement.spacedBy(AppSpacing.md)
             ) {
-                // Oznake, naslov i cena jedno ispod drugog: jedno pored drugog
-                // su se sa krupnim slovima lomili po slovima („Prepor/učeni").
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm),
-                    verticalArrangement = Arrangement.spacedBy(AppSpacing.xs)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(AppSpacing.md)
                 ) {
-                    StatusPill(stringResource(scenarioBadge(scenario.type)), StatusTone.POSITIVE)
-                    if (scenario.available) {
-                        scenario.savingsComparedWithSingleStore?.takeIf { it > 0.0 }?.let { savings ->
-                            StatusPill(stringResource(R.string.rec_savings, wholeAmount(savings), currency()), StatusTone.POSITIVE)
-                        }
-                    }
-                }
-                Text(scenarioTitle(scenario.type), style = MaterialTheme.typography.titleLarge)
-                if (scenario.available) {
-                    // The number the screen exists for, at a size that needs
-                    // no searching for.
+                    RadioDot(selected)
                     Text(
-                        scenario.totalCost?.let(::money) ?: stringResource(R.string.rec_no_price),
-                        style = MaterialTheme.typography.displaySmall,
-                        color = MaterialTheme.colorScheme.primary
+                        scenarioTitle(scenario.type),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.ExtraBold,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        scenario.totalCost?.takeIf { scenario.available }?.let { "${wholeAmount(it)} ${currency()}" }
+                            ?: stringResource(R.string.rec_no_price),
+                        style = MaterialTheme.typography.titleLarge,
+                        maxLines = 1
                     )
                 }
-                if (scenario.available) {
-                    // Put i vreme is everything above the basket, so the two
-                    // parts always add up to the total shown above them.
-                    scenario.totalCost?.let {
+                // Sa krupnim slovima opis puta prelazi u drugi red.
+                FlowRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 34.dp),
+                    horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm),
+                    verticalArrangement = Arrangement.spacedBy(AppSpacing.xs),
+                    itemVerticalAlignment = Alignment.CenterVertically
+                ) {
+                    StatusPill(stringResource(scenarioBadge(scenario.type)), scenarioTone(scenario.type))
+                    if (scenario.available) {
                         Text(
                             stringResource(
-                                R.string.rec_basket_plus_travel,
-                                money(scenario.basketCost),
-                                money(it - scenario.basketCost)
+                                R.string.rec_scenario_route,
+                                pluralStringResource(R.plurals.rec_store_count, scenario.stopCount, scenario.stopCount),
+                                distance(scenario.routeDistanceKm),
+                                duration(scenario.routeDurationSeconds)
                             ),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            style = MaterialTheme.typography.bodySmall,
+                            color = scheme.onSurfaceVariant
                         )
                     }
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(IntrinsicSize.Min)
-                            .background(MaterialTheme.colorScheme.surfaceContainerLow, MaterialTheme.shapes.small)
-                            .padding(vertical = AppSpacing.md)
-                    ) {
-                        PlanStat(stringResource(R.string.rec_stat_stores), scenario.stopCount.toString(), Modifier.weight(1f))
-                        PlanStat(stringResource(R.string.rec_stat_distance), distance(scenario.routeDistanceKm), Modifier.weight(1f))
-                        PlanStat(stringResource(R.string.rec_stat_time), "~${duration(scenario.routeDurationSeconds)}", Modifier.weight(1f))
+                }
+            }
+            AnimatedVisibility(visible = selected) {
+                Column(
+                    modifier = Modifier.padding(start = AppSpacing.lg, end = AppSpacing.lg, bottom = AppSpacing.lg),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    HorizontalDivider(color = scheme.outlineVariant)
+                    if (scenario.available) {
+                        ScenarioDetails(scenario)
+                    } else {
+                        Text(scenario.explanation, style = MaterialTheme.typography.bodyMedium)
                     }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        AppIcon(
-                            R.drawable.ic_check_circle,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(Modifier.width(AppSpacing.sm))
-                        Text(
-                            stringResource(R.string.rec_coverage),
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Text(
-                            pluralStringResource(
-                                R.plurals.rec_covered_of,
-                                scenario.items.size,
-                                scenario.coveredItems,
-                                scenario.items.size
-                            ),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                } else {
-                    Text(scenario.explanation, style = MaterialTheme.typography.bodyMedium)
                 }
             }
         }
@@ -742,19 +665,106 @@ private fun ScenarioHeroCard(scenario: OptimizationScenarioDto) {
 }
 
 @Composable
-private fun PlanStat(label: String, value: String, modifier: Modifier) {
-    Column(
-        modifier = modifier.fillMaxHeight(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center
+private fun ScenarioDetails(scenario: OptimizationScenarioDto) {
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                stringResource(R.string.rec_coverage),
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                pluralStringResource(
+                    R.plurals.rec_covered_of,
+                    scenario.items.size,
+                    scenario.coveredItems,
+                    scenario.items.size
+                ),
+                style = MaterialTheme.typography.labelLarge
+            )
+        }
+        Meter(scenario.coveredItems.toFloat() / scenario.items.size.coerceAtLeast(1))
+    }
+    scenario.stores.sortedBy { it.stopOrder }.forEach { store ->
+        val count = scenario.items.count { it.storeId == store.storeId }
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(AppSpacing.md)
+        ) {
+            StopBadge(store.stopOrder)
+            Text(
+                stringResource(
+                    R.string.rec_store_leg,
+                    store.retailerName,
+                    duration(store.durationFromPreviousSeconds)
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                pluralStringResource(R.plurals.count_items, count, count),
+                style = MaterialTheme.typography.bodySmall,
+                color = muted
+            )
+        }
+    }
+    scenario.items.filter { it.resultStatus != RecommendationItemStatusDto.AVAILABLE }.forEach { item ->
+        StatusPill(
+            stringResource(R.string.rec_missing_item, item.requestedName, stringResource(unresolvedStatus(item.resultStatus))),
+            StatusTone.WARNING
         )
-        Text(value, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
+    }
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm),
+        verticalArrangement = Arrangement.spacedBy(AppSpacing.xs),
+        itemVerticalAlignment = Alignment.CenterVertically
+    ) {
+        // Put i vreme is everything above the basket, so the two parts
+        // always add up to the total shown above them.
+        scenario.totalCost?.let {
+            Text(
+                stringResource(
+                    R.string.rec_basket_plus_travel,
+                    money(scenario.basketCost),
+                    money(it - scenario.basketCost)
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = muted
+            )
+        }
+        scenario.savingsComparedWithSingleStore?.takeIf { it > 0.0 }?.let { savings ->
+            StatusPill(stringResource(R.string.rec_savings, wholeAmount(savings), currency()), StatusTone.SAVING)
+        }
+    }
+}
+
+/** Kružić izbora; tačka iskoči kad se scenario izabere. */
+@Composable
+private fun RadioDot(selected: Boolean) {
+    val scheme = MaterialTheme.colorScheme
+    val dot by animateFloatAsState(
+        targetValue = if (selected) 1f else 0f,
+        animationSpec = spring(dampingRatio = 0.5f, stiffness = 500f),
+        label = "radioDot"
+    )
+    Box(
+        modifier = Modifier
+            .size(22.dp)
+            .border(2.dp, if (selected) scheme.primary else scheme.outline, CircleShape),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            Modifier
+                .size(10.dp)
+                .graphicsLayer {
+                    scaleX = dot
+                    scaleY = dot
+                }
+                .background(scheme.primary, CircleShape)
+        )
     }
 }
 
@@ -1008,7 +1018,7 @@ internal fun UnlocatedOptionsSection(
                             )
                             StatusPill(stringResource(R.string.rec_unconfirmed_store), StatusTone.WARNING)
                             if (cheaper) {
-                                StatusPill(stringResource(R.string.rec_cheaper_basket), StatusTone.POSITIVE)
+                                StatusPill(stringResource(R.string.rec_cheaper_basket), StatusTone.SAVING)
                             }
                         }
                         Text(
@@ -1173,6 +1183,12 @@ private fun unresolvedStatus(status: RecommendationItemStatusDto): Int = when (s
     RecommendationItemStatusDto.AVAILABLE -> R.string.rec_status_available
 }
 
+private fun scenarioTone(type: RecommendationScenarioTypeDto): StatusTone = when (type) {
+    RecommendationScenarioTypeDto.SINGLE_STORE -> StatusTone.NEUTRAL
+    RecommendationScenarioTypeDto.RECOMMENDED_BALANCE -> StatusTone.POSITIVE
+    RecommendationScenarioTypeDto.LOWEST_PRICE -> StatusTone.SAVING
+}
+
 /** Oznaka na kartici plana, kao „PREPORUČENO" na nacrtu. */
 @StringRes
 private fun scenarioBadge(type: RecommendationScenarioTypeDto): Int = when (type) {
@@ -1191,18 +1207,6 @@ internal fun scenarioTitleRes(type: RecommendationScenarioTypeDto): Int = when (
 @Composable
 internal fun scenarioTitle(type: RecommendationScenarioTypeDto): String =
     stringResource(scenarioTitleRes(type))
-
-/**
- * Each scenario wins at a different thing, so the label has to say which.
- * "Najjeftinije" alone read as a promise about the total, and the cheapest
- * basket can carry the dearest journey.
- */
-@StringRes
-internal fun scenarioShortTitle(type: RecommendationScenarioTypeDto): Int = when (type) {
-    RecommendationScenarioTypeDto.SINGLE_STORE -> R.string.rec_short_single_store
-    RecommendationScenarioTypeDto.RECOMMENDED_BALANCE -> R.string.rec_short_balance
-    RecommendationScenarioTypeDto.LOWEST_PRICE -> R.string.rec_short_lowest_price
-}
 
 /**
  * Ten or more packs make up an amount the shopper wrote ("šećer 25 kg" as 50 ×

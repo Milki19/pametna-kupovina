@@ -27,15 +27,15 @@
     <string name="dashboard_stat_receipts">Receipts</string>
     <string name="dashboard_stat_shops">Stores</string>
     <string name="dashboard_stat_average">Average basket</string>
-    <string name="dashboard_active_list">ACTIVE LIST</string>
+    <string name="dashboard_active_list">Active list</string>
     <string name="dashboard_my_list">My list</string>
     <string name="dashboard_list_empty">Your list is empty</string>
-    <string name="dashboard_open_list">Open list (%1$s)</string>
+    <!-- %1$s je broj stavki („7 stavki“), %2$s prve dve -->
+    <string name="dashboard_list_summary">%1$s · %2$s</string>
+    <string name="dashboard_list_more">%1$s and %2$d more</string>
     <string name="dashboard_weekly_title">Weekly spending</string>
     <string name="dashboard_busiest_week">Busiest week: %1$s %3$s • average %2$s %3$s/wk</string>
     <string name="dashboard_analytics_title">Spending breakdown</string>
-    <string name="dashboard_previous_view">Previous view</string>
-    <string name="dashboard_next_view">Next view</string>
 
     <!-- Receipt scanning -->
     <string name="receipt_scanning">Saving receipt…</string>
@@ -61,8 +61,6 @@
     <string name="loyalty_subtitle">Barcodes for the checkout</string>
     <string name="loyalty_add">Add card</string>
     <string name="loyalty_empty">Add the cards you carry in your wallet and open them from here at the checkout. Cards are saved to your account, so they move to a new phone too.</string>
-    <string name="loyalty_wallet">Your wallet</string>
-    <string name="loyalty_barcode">Barcode</string>
     <string name="loyalty_tap_to_enlarge">Tap for a bigger code</string>
     <string name="loyalty_scan_failed_retry">Scanning failed. Try again.</string>
     <string name="loyalty_scan_failed">Scanning failed.</string>

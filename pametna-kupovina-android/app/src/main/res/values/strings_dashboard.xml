@@ -29,15 +29,15 @@
     <string name="dashboard_stat_receipts">Računa</string>
     <string name="dashboard_stat_shops">Prodavnica</string>
     <string name="dashboard_stat_average">Prosečna korpa</string>
-    <string name="dashboard_active_list">AKTIVNA LISTA</string>
+    <string name="dashboard_active_list">Aktivna lista</string>
     <string name="dashboard_my_list">Moj spisak</string>
     <string name="dashboard_list_empty">Spisak je prazan</string>
-    <string name="dashboard_open_list">Otvori spisak (%1$s)</string>
+    <!-- %1$s je broj stavki („7 stavki“), %2$s prve dve -->
+    <string name="dashboard_list_summary">%1$s · %2$s</string>
+    <string name="dashboard_list_more">%1$s i još %2$d</string>
     <string name="dashboard_weekly_title">Nedeljni pregled potrošnje</string>
     <string name="dashboard_busiest_week">Najveća nedelja: %1$s %3$s • prosek %2$s %3$s/ned</string>
     <string name="dashboard_analytics_title">Analitika troškova</string>
-    <string name="dashboard_previous_view">Prethodni prikaz</string>
-    <string name="dashboard_next_view">Sledeći prikaz</string>
 
     <!-- Skeniranje računa -->
     <string name="receipt_scanning">Zavodim račun…</string>
@@ -63,8 +63,6 @@
     <string name="loyalty_subtitle">Barkodovi za kasu</string>
     <string name="loyalty_add">Dodaj karticu</string>
     <string name="loyalty_empty">Dodaj kartice koje nosiš u novčaniku pa ih na kasi otvori odavde. Kartice stoje uz nalog, pa prelaze i na nov telefon.</string>
-    <string name="loyalty_wallet">Tvoj novčanik</string>
-    <string name="loyalty_barcode">Barkod</string>
     <string name="loyalty_tap_to_enlarge">Dodirni za veći kod</string>
     <string name="loyalty_scan_failed_retry">Skeniranje nije uspelo. Probaj ponovo.</string>
     <string name="loyalty_scan_failed">Skeniranje nije uspelo.</string>

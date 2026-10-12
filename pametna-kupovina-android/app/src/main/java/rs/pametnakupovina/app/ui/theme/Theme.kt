@@ -4,6 +4,7 @@ import android.app.Activity
 import android.provider.Settings
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
@@ -50,7 +51,8 @@ private val LightColorScheme = lightColorScheme(
     onBackground = Ink,
     surface = Paper,
     onSurface = Ink,
-    surfaceVariant = PaperDim,
+    // Različito od surfaceContainerLow: Material po boji podloge bira boju teksta.
+    surfaceVariant = Line,
     onSurfaceVariant = InkMuted,
     surfaceContainerLowest = White,
     surfaceContainerLow = PaperDim,
@@ -86,7 +88,7 @@ private val DarkColorScheme = darkColorScheme(
     onBackground = Snow,
     surface = Graphite,
     onSurface = Snow,
-    surfaceVariant = White.copy(alpha = 0.1f),
+    surfaceVariant = White.copy(alpha = 0.11f),
     onSurfaceVariant = SnowMuted,
     surfaceContainerLowest = GraphiteSheet,
     surfaceContainerLow = White.copy(alpha = 0.1f),
@@ -103,7 +105,7 @@ private val DarkColorScheme = darkColorScheme(
 private val BlackColorScheme = DarkColorScheme.copy(
     background = Amoled,
     surface = Amoled,
-    surfaceVariant = White.copy(alpha = 0.09f),
+    surfaceVariant = White.copy(alpha = 0.1f),
     surfaceContainerLowest = AmoledSheet,
     surfaceContainerLow = White.copy(alpha = 0.09f),
     surfaceContainer = Color(0x8C1C1C20),
@@ -171,8 +173,10 @@ fun PametnaKupovinaTheme(
         MaterialTheme(
             colorScheme = colorScheme,
             typography = Typography,
-            shapes = AppShapes,
-            content = content
-        )
+            shapes = AppShapes
+        ) {
+            // Ekrani imaju providnu podlogu, pa boju teksta ne dobijaju od nje.
+            CompositionLocalProvider(LocalContentColor provides colorScheme.onBackground, content = content)
+        }
     }
 }

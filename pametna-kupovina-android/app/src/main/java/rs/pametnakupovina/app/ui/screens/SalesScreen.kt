@@ -26,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
@@ -354,30 +355,30 @@ fun SalesShortcutCard(onOpen: () -> Unit) {
             .testTag("open-sales")
     ) {
         Row(
-            modifier = Modifier.padding(AppSpacing.lg),
+            modifier = Modifier.padding(14.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(AppSpacing.md)
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             val (container, content) = discountColors(40)
             Surface(
                 shape = MaterialTheme.shapes.small,
                 color = container,
                 contentColor = content,
-                modifier = Modifier.size(48.dp)
+                modifier = Modifier.size(44.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     AppIcon(R.drawable.ic_local_offer, contentDescription = null)
                 }
             }
             Column(modifier = Modifier.weight(1f)) {
-                Text(stringResource(R.string.sale_title), style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.sale_title), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold)
                 Text(
                     stringResource(R.string.sale_shortcut_text),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            AppIcon(R.drawable.ic_chevron_right, contentDescription = null)
+            AppIcon(R.drawable.ic_chevron_right, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

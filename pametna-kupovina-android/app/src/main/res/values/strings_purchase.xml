@@ -42,9 +42,9 @@
     <string name="purchase_back">Nazad</string>
 
     <!-- Progress header -->
-    <string name="purchase_progress_label">NAPREDAK KUPOVINE</string>
     <string name="purchase_bought_of">Kupljeno %1$d od %2$d</string>
-    <string name="purchase_planned_label">planirano</string>
+    <string name="purchase_planned_value">planirano %1$s</string>
+    <string name="purchase_about_time">oko %1$s</string>
     <string name="purchase_remaining">Još %1$d za odluku. Cene u sačuvanom planu se ne osvežavaju.</string>
     <plurals name="purchase_paid_for_items">
         <item quantity="one">Upisano plaćeno: %2$s za %1$d stavku</item>

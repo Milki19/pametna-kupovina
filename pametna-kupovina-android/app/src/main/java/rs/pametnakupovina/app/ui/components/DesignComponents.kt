@@ -48,6 +48,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import rs.pametnakupovina.app.R
 import androidx.compose.ui.platform.LocalDensity
@@ -443,6 +444,35 @@ fun LetterTile(name: String, modifier: Modifier = Modifier) {
         Box(contentAlignment = Alignment.Center) {
             Text(name.trim().take(1).uppercase(), style = MaterialTheme.typography.titleLarge)
         }
+    }
+}
+
+/** Ikonica na tonalnoj pločici, na početku reda-kartice. */
+@Composable
+fun IconTile(@DrawableRes icon: Int, modifier: Modifier = Modifier, size: Dp = 44.dp) {
+    Surface(
+        shape = RoundedCornerShape(size * 0.32f),
+        color = MaterialTheme.colorScheme.primaryContainer,
+        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        modifier = modifier.size(size)
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            AppIcon(icon, contentDescription = null, modifier = Modifier.size(size / 2))
+        }
+    }
+}
+
+/** Sekcija ekrana: mali naslov iznad kartice. */
+@Composable
+fun Section(
+    title: String,
+    modifier: Modifier = Modifier,
+    trailing: String? = null,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        SectionHeader(title, trailing = trailing)
+        content()
     }
 }
 

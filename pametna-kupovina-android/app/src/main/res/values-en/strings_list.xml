@@ -9,7 +9,6 @@
     <string name="list_loading">Loading list…</string>
     <string name="list_add_item">Add item</string>
     <string name="list_paste_list">Paste list</string>
-    <string name="list_items_header">Items on the list</string>
     <string name="list_snackbar_ok">OK</string>
     <string name="list_snackbar_deleted">Deleted: %1$s</string>
     <string name="list_snackbar_undo">Undo</string>

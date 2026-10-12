@@ -1,5 +1,26 @@
 package rs.pametnakupovina.app.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.EaseOutCubic
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.unit.em
+import rs.pametnakupovina.app.ui.components.AppIcon
+import rs.pametnakupovina.app.ui.components.enter
+import rs.pametnakupovina.app.ui.components.rememberEntrance
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -9,14 +30,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.layout.size
 import androidx.compose.ui.graphics.Color
 import rs.pametnakupovina.app.R
 import rs.pametnakupovina.app.data.network.LoyaltyCardDto
 import rs.pametnakupovina.app.text.asString
-import rs.pametnakupovina.app.ui.components.LetterTile
-import rs.pametnakupovina.app.ui.components.StatusPill
 import rs.pametnakupovina.app.ui.components.TonalActionButton
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
@@ -43,7 +60,6 @@ import rs.pametnakupovina.app.ui.LoyaltyViewModel
 import rs.pametnakupovina.app.ui.components.AppSpacing
 import rs.pametnakupovina.app.ui.components.GlassCard
 import rs.pametnakupovina.app.ui.components.listBottomPadding
-import rs.pametnakupovina.app.ui.theme.LocalAppColors
 import rs.pametnakupovina.app.ui.components.AppTopBar
 import rs.pametnakupovina.app.ui.components.Barcode
 import rs.pametnakupovina.app.ui.components.NoticeBanner
@@ -64,48 +80,7 @@ fun LoyaltyCardsScreen(
     var name by rememberSaveable { mutableStateOf("") }
     var number by rememberSaveable { mutableStateOf("") }
     var format by rememberSaveable { mutableStateOf("CODE_128") }
-
-    state.shown?.let { card ->
-        AlertDialog(
-            onDismissRequest = { viewModel.show(null) },
-            title = { Text(card.name) },
-            text = {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(AppSpacing.md),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Barcode(
-                        value = card.cardNumber,
-                        format = card.barcodeFormat,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(160.dp)
-                            .testTag("card-barcode")
-                    )
-                    Text(
-                        card.cardNumber,
-                        style = MaterialTheme.typography.bodyLarge,
-                        textAlign = TextAlign.Center
-                    )
-                    Text(
-                        stringResource(R.string.loyalty_cashier_hint),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { viewModel.show(null) }) { Text(stringResource(R.string.common_close)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { viewModel.remove(card.id) }) {
-                    Text(stringResource(R.string.loyalty_delete))
-                }
-            }
-        )
-    }
+    val entrance = rememberEntrance()
 
     if (adding) {
         AlertDialog(
@@ -168,7 +143,21 @@ fun LoyaltyCardsScreen(
 
     Scaffold(
         containerColor = Color.Transparent,
-        topBar = { AppTopBar(title = stringResource(R.string.loyalty_title), onBack = onBack) }
+        topBar = {
+            AppTopBar(
+                title = stringResource(R.string.loyalty_title),
+                subtitle = stringResource(R.string.loyalty_subtitle),
+                onBack = onBack,
+                actions = {
+                    TonalActionButton(
+                        text = stringResource(R.string.loyalty_add),
+                        icon = R.drawable.ic_add,
+                        onClick = { adding = true },
+                        modifier = Modifier.testTag("add-card")
+                    )
+                }
+            )
+        }
     ) { padding ->
         LazyColumn(
             modifier = Modifier
@@ -194,27 +183,6 @@ fun LoyaltyCardsScreen(
                 }
             }
 
-            item(key = "add") {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(AppSpacing.md)
-                ) {
-                    Text(
-                        stringResource(R.string.loyalty_subtitle),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.weight(1f)
-                    )
-                    TonalActionButton(
-                        text = stringResource(R.string.loyalty_add),
-                        icon = R.drawable.ic_add,
-                        primary = true,
-                        onClick = { adding = true },
-                        modifier = Modifier.testTag("add-card")
-                    )
-                }
-            }
-
             if (state.cards.isEmpty()) {
                 item(key = "empty") {
                     Text(
@@ -223,90 +191,120 @@ fun LoyaltyCardsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-            } else {
-                // Prva kartica je odmah spremna za čitač, kao na nacrtu; ostale
-                // se otvaraju dodirom.
-                val first = state.cards.first()
-                item(key = "featured") {
-                    FeaturedCard(first, onOpen = { viewModel.show(first) })
-                }
-                if (state.cards.size > 1) {
-                    item(key = "wallet-header") {
-                        Text(
-                            stringResource(R.string.loyalty_wallet),
-                            style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.padding(top = AppSpacing.sm)
-                        )
-                    }
-                }
-                items(state.cards.drop(1), key = { it.id }) { card ->
-                    GlassCard(
-                        onClick = { viewModel.show(card) },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(AppSpacing.md),
-                            modifier = Modifier.padding(AppSpacing.lg)
-                        ) {
-                            LetterTile(card.name)
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(card.name, style = MaterialTheme.typography.titleMedium)
-                                Text(
-                                    card.cardNumber,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            StatusPill(stringResource(R.string.loyalty_barcode), StatusTone.POSITIVE)
-                        }
-                    }
-                }
+            }
+            itemsIndexed(state.cards, key = { _, card -> card.id }) { index, card ->
+                LoyaltyCard(
+                    card = card,
+                    tone = CardTones[index % CardTones.size],
+                    open = state.shown?.id == card.id,
+                    onToggle = { viewModel.show(card.takeUnless { state.shown?.id == card.id }) },
+                    onDelete = { viewModel.remove(card.id) },
+                    modifier = Modifier.enter(entrance, index + 1)
+                )
             }
         }
     }
 }
 
+/** Boje kartica; iste su u svim temama, sa belim slovima. */
+private val CardTones = listOf(Color(0xFF2F4BD8), Color(0xFFB23A0A), Color(0xFF33415C))
+
+/**
+ * Kartica u boji sa odsjajem. Dodir otvara barkod ispod nje, na belom, jer
+ * čitač na kasi drugo ne čita; tu su i broj za kucanje i brisanje.
+ */
 @Composable
-private fun FeaturedCard(card: LoyaltyCardDto, onOpen: () -> Unit) {
-    Surface(
-        onClick = onOpen,
-        shape = MaterialTheme.shapes.large,
-        color = LocalAppColors.current.hero,
-        contentColor = LocalAppColors.current.onHero,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(
-            modifier = Modifier.padding(AppSpacing.lg),
-            verticalArrangement = Arrangement.spacedBy(AppSpacing.md)
+private fun LoyaltyCard(
+    card: LoyaltyCardDto,
+    tone: Color,
+    open: Boolean,
+    onToggle: () -> Unit,
+    onDelete: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val expandDescription = stringResource(R.string.loyalty_tap_to_enlarge)
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        GlassCard(
+            onClick = onToggle,
+            color = tone,
+            contentColor = Color.White,
+            border = null,
+            modifier = Modifier
+                .fillMaxWidth()
+                .semantics { stateDescription = if (open) "" else expandDescription }
+                .testTag("card-${card.id}")
         ) {
-            Text(card.name, style = MaterialTheme.typography.titleLarge)
+            Box {
+                Box(
+                    Modifier
+                        .matchParentSize()
+                        .background(Brush.linearGradient(0f to Color.White.copy(alpha = 0.28f), 0.42f to Color.Transparent))
+                )
+                Column(
+                    modifier = Modifier.padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(28.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            card.name,
+                            style = MaterialTheme.typography.titleLarge,
+                            modifier = Modifier.weight(1f)
+                        )
+                        AppIcon(R.drawable.ic_card, contentDescription = null)
+                    }
+                    Text(
+                        "•••• " + card.cardNumber.takeLast(4),
+                        style = MaterialTheme.typography.titleMedium.copy(letterSpacing = 0.12.em),
+                        modifier = Modifier.alpha(0.9f)
+                    )
+                }
+            }
+        }
+        // Barkod se otvara animacijom visine.
+        AnimatedVisibility(
+            visible = open,
+            enter = expandVertically(tween(450, easing = EaseOutCubic)) + fadeIn(),
+            exit = shrinkVertically(tween(300)) + fadeOut()
+        ) {
             Surface(
-                shape = MaterialTheme.shapes.medium,
+                shape = RoundedCornerShape(18.dp),
                 color = Color.White,
                 contentColor = Color.Black,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
-                    modifier = Modifier.padding(AppSpacing.md),
+                    modifier = Modifier.padding(AppSpacing.lg),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)
                 ) {
-                    // Crno na belom i u tamnoj temi: čitač na kasi drugo ne čita.
                     Barcode(
                         value = card.cardNumber,
                         format = card.barcodeFormat,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(96.dp)
+                            .height(140.dp)
+                            .testTag("card-barcode")
                     )
-                    Text(card.cardNumber, style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        card.cardNumber,
+                        style = MaterialTheme.typography.titleMedium.copy(letterSpacing = 0.12.em),
+                        textAlign = TextAlign.Center
+                    )
+                    Text(
+                        stringResource(R.string.loyalty_cashier_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF545C70),
+                        textAlign = TextAlign.Center
+                    )
+                    TextButton(
+                        onClick = onDelete,
+                        colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFB3261E))
+                    ) {
+                        Text(stringResource(R.string.loyalty_delete))
+                    }
                 }
             }
-            Text(
-                stringResource(R.string.loyalty_tap_to_enlarge),
-                style = MaterialTheme.typography.bodySmall
-            )
         }
     }
 }

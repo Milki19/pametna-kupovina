@@ -45,13 +45,16 @@
     <!-- Scenarios -->
     <string name="rec_no_price_short">none</string>
     <string name="rec_no_price">no price</string>
-    <string name="rec_total_caption">total</string>
-    <string name="rec_basket_short">basket %1$s</string>
     <string name="rec_savings">You save %1$s %2$s</string>
     <string name="rec_basket_plus_travel">basket %1$s + travel and time %2$s</string>
-    <string name="rec_stat_stores">Stores</string>
-    <string name="rec_stat_distance">Distance</string>
-    <string name="rec_stat_time">Time</string>
+    <!-- %1$s broj prodavnica, %2$s razdaljina, %3$s vreme -->
+    <string name="rec_scenario_route">%1$s · %2$s · %3$s</string>
+    <plurals name="rec_store_count">
+        <item quantity="one">%d store</item>
+        <item quantity="other">%d stores</item>
+    </plurals>
+    <!-- %1$s stavka, %2$s zašto nije u planu -->
+    <string name="rec_missing_item">%1$s · %2$s</string>
     <string name="rec_coverage">Basket coverage</string>
     <plurals name="rec_covered_of">
         <item quantity="one">%1$d of %2$d item</item>
@@ -63,9 +66,6 @@
     <string name="rec_scenario_single_store">One store</string>
     <string name="rec_scenario_balance">Recommended balance</string>
     <string name="rec_scenario_lowest_price">Lowest price</string>
-    <string name="rec_short_single_store">One stop</string>
-    <string name="rec_short_balance">Best overall</string>
-    <string name="rec_short_lowest_price">Cheapest basket</string>
 
     <!-- Stores and items -->
     <string name="rec_store_leg">%1$s · about %2$s</string>

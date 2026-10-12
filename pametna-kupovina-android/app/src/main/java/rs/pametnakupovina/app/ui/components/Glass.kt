@@ -159,7 +159,7 @@ fun GlassCard(
 private fun Modifier.softShadow(shape: Shape): Modifier = drawWithCache {
     val path = Path().apply { addOutline(shape.createOutline(size, layoutDirection, this@drawWithCache)) }
     val paint = Paint().apply {
-        color = Ink.copy(alpha = 0.09f)
+        color = Ink.copy(alpha = 0.07f)
         asFrameworkPaint().maskFilter = BlurMaskFilter(16.dp.toPx(), BlurMaskFilter.Blur.NORMAL)
     }
     val drop = 6.dp.toPx()
