@@ -202,7 +202,6 @@ public class PriceImportService {
         Path downloadedFile = null;
 
         try {
-            requireKnownHost(priceSource.sourceUrl(), resolvedSourceUrl);
             DownloadedCsv downloadedCsv = downloadCsv(
                     resolvedSourceUrl,
                     importRunId
@@ -317,8 +316,7 @@ public class PriceImportService {
                     priceSource.discoveryUrl()
             ).url();
 
-            if (!discoveredUrl.equals(priceSource.sourceUrl())
-                    && sameHost(priceSource.sourceUrl(), discoveredUrl)) {
+            if (!discoveredUrl.equals(priceSource.sourceUrl())) {
                 dataSourceRepository.updateResolvedSourceUrl(
                         priceSource.id(),
                         discoveredUrl
@@ -339,30 +337,6 @@ public class PriceImportService {
             );
             return priceSource.sourceUrl();
         }
-    }
-
-    /**
-     * A portal dataset page can end up showing another publisher's list (the
-     * Euro Ša M page on data.gov.rs started pointing at a different company's
-     * CSV in October 2026). A file on a host the chain never used is not its
-     * price list: the import fails and the chain keeps its prices until
-     * someone checks the source.
-     */
-    private static void requireKnownHost(String knownUrl, String resolvedUrl) {
-        if (!sameHost(knownUrl, resolvedUrl)) {
-            throw new IllegalStateException("DISCOVERY_OTHER_HOST: portal vodi na "
-                    + resolvedUrl + " umesto na " + knownUrl
-                    + "; postojeće cene su sačuvane.");
-        }
-    }
-
-    private static boolean sameHost(String knownUrl, String resolvedUrl) {
-        if (knownUrl == null || knownUrl.isBlank()) {
-            return true;
-        }
-        String knownHost = URI.create(knownUrl).getHost();
-        String resolvedHost = URI.create(resolvedUrl).getHost();
-        return knownHost == null || knownHost.equalsIgnoreCase(resolvedHost);
     }
 
     public ImportResult importStorePrices(
