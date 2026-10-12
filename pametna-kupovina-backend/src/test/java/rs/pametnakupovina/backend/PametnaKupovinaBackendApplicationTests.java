@@ -705,6 +705,38 @@ class PametnaKupovinaBackendApplicationTests {
                 }
         );
 
+        // The portal page now lists another publisher's file, on a host the
+        // chain never used (Euro Ša M, October 2026).
+        csvServer.createContext(
+                "/api/1/datasets/discovery-other-host/",
+                exchange -> {
+                    byte[] responseBody = ("""
+                            {
+                              "resources": [
+                                {
+                                  "format": "csv",
+                                  "title": "cenovnik-druge-firme.csv",
+                                  "url": "http://localhost:%d/prices-next-day.csv",
+                                  "last_modified": "2026-08-26T04:00:00Z"
+                                }
+                              ]
+                            }
+                            """).formatted(csvServer.getAddress().getPort())
+                            .getBytes(StandardCharsets.UTF_8);
+
+                    exchange.getResponseHeaders().set(
+                            "Content-Type",
+                            "application/json; charset=UTF-8"
+                    );
+                    exchange.sendResponseHeaders(200, responseBody.length);
+
+                    try (OutputStream outputStream =
+                                 exchange.getResponseBody()) {
+                        outputStream.write(responseBody);
+                    }
+                }
+        );
+
         csvServer.start();
     }
 
@@ -1414,6 +1446,57 @@ class PametnaKupovinaBackendApplicationTests {
         assertThat(resolvedUrl).isEqualTo(
                 baseUrl + "/prices-next-day.csv"
         );
+    }
+
+    @Test
+    void importRefusesADiscoveredListOnAnotherHost() {
+        String baseUrl = "http://127.0.0.1:"
+                + csvServer.getAddress().getPort();
+
+        Long retailerId = jdbcClient.sql("""
+                        INSERT INTO app.retailer (code, name, dataset_url)
+                        VALUES ('DISCOVERY_OTHER_HOST', 'Other host test', ?)
+                        RETURNING id
+                        """)
+                .param(1, baseUrl + "/prices.csv")
+                .query(Long.class)
+                .single();
+
+        jdbcClient.sql("""
+                    INSERT INTO app.retailer_data_source (
+                        retailer_id, code, source_type, parser_profile,
+                        source_url, discovery_url, price_scope, active
+                    )
+                    VALUES (?, 'PRIMARY_PRICE_CATALOG', 'PRICE_CATALOG',
+                        'GOV_RS_SEMICOLON_CSV', ?, ?, 'RETAILER_OR_FORMAT', TRUE)
+                    """)
+                .param(1, retailerId)
+                .param(2, baseUrl + "/prices.csv")
+                .param(3, baseUrl + "/sr/datasets/discovery-other-host/")
+                .update();
+
+        assertThatThrownBy(() -> priceImportService.importPrices(
+                "DISCOVERY_OTHER_HOST"
+        ))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("DISCOVERY_OTHER_HOST");
+
+        assertThat(jdbcClient.sql("""
+                        SELECT source_url || ' ' || last_status
+                        FROM app.retailer_data_source
+                        WHERE retailer_id = ?
+                        """)
+                .param(1, retailerId)
+                .query(String.class)
+                .single()).isEqualTo(baseUrl + "/prices.csv FAILED");
+        assertThat(jdbcClient.sql("""
+                        SELECT COUNT(*) FROM app.current_price_offer o
+                        JOIN app.retailer_product p ON p.id = o.retailer_product_id
+                        WHERE p.retailer_id = ?
+                        """)
+                .param(1, retailerId)
+                .query(Long.class)
+                .single()).isZero();
     }
 
     @Test
