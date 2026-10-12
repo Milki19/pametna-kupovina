@@ -69,6 +69,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -875,6 +876,8 @@ private fun PurchaseItemRow(
     val purchased = progress.status == PurchaseStatus.PURCHASED
     var menuOpen by remember { mutableStateOf(false) }
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    // Sa krupnim slovima cena ide ispod naziva, da naziv ne ostane u uskoj koloni.
+    val largeFont = LocalDensity.current.fontScale >= 1.5f
 
     Row(
         modifier = Modifier
@@ -925,6 +928,15 @@ private fun PurchaseItemRow(
             progress.actualLineTotal?.toDoubleOrNull()?.let {
                 Text(stringResource(R.string.purchase_paid_value, money(it)), style = MaterialTheme.typography.bodySmall)
             }
+            if (largeFont) {
+                item.lineTotal?.let {
+                    Text(
+                        money(it),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = if (purchased) muted else MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
             if (item.storeId == null) {
                 Text(
                     item.explanation,
@@ -933,13 +945,15 @@ private fun PurchaseItemRow(
                 )
             }
         }
-        item.lineTotal?.let {
-            Text(
-                money(it),
-                style = MaterialTheme.typography.titleMedium,
-                color = if (purchased) muted else MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(horizontal = AppSpacing.sm)
-            )
+        if (!largeFont) {
+            item.lineTotal?.let {
+                Text(
+                    money(it),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = if (purchased) muted else MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(horizontal = AppSpacing.sm)
+                )
+            }
         }
         if (!archived) {
             Box {

@@ -49,6 +49,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.material3.IconButton
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
@@ -88,7 +89,7 @@ import rs.pametnakupovina.app.ui.components.GlassCard
 import rs.pametnakupovina.app.ui.components.AppTopBar
 import rs.pametnakupovina.app.ui.components.LoadingState
 import rs.pametnakupovina.app.ui.components.NoticeBanner
-import rs.pametnakupovina.app.ui.components.TonalActionButton
+import rs.pametnakupovina.app.ui.components.TitleAction
 import rs.pametnakupovina.app.ui.components.LocalBottomBarInset
 import rs.pametnakupovina.app.ui.components.PrimaryActionButton
 import rs.pametnakupovina.app.ui.components.StatusPill
@@ -173,6 +174,9 @@ fun ShoppingListScreen(
     }
     val entrance = rememberEntrance(state.isInitialLoading)
     val actionBottom = listBottomPadding() - AppSpacing.sm
+    // Dugme raste sa slovima, pa se njegova visina meri umesto da se pretpostavlja.
+    var actionHeight by remember { mutableStateOf(60.dp) }
+    val density = LocalDensity.current
 
     Scaffold(
         containerColor = Color.Transparent,
@@ -186,7 +190,7 @@ fun ShoppingListScreen(
                     else -> null
                 },
                 actions = {
-                    TonalActionButton(
+                    TitleAction(
                         text = stringResource(R.string.list_paste_list),
                         icon = R.drawable.ic_content_paste,
                         onClick = { showPasteDialog = true },
@@ -197,7 +201,7 @@ fun ShoppingListScreen(
         },
         snackbarHost = {
             // Iznad dugmeta „Izračunaj", koje stoji iznad donje trake.
-            SnackbarHost(snackbar, modifier = Modifier.padding(bottom = LocalBottomBarInset.current + ActionHeight))
+            SnackbarHost(snackbar, modifier = Modifier.padding(bottom = LocalBottomBarInset.current + actionHeight))
         }
     ) { padding ->
         if (state.isInitialLoading) {
@@ -223,7 +227,7 @@ fun ShoppingListScreen(
                     end = AppSpacing.lg,
                     top = AppSpacing.md,
                     // Spisak skroluje ispod dugmeta i donje trake.
-                    bottom = actionBottom + ActionHeight + AppSpacing.lg
+                    bottom = actionBottom + actionHeight + AppSpacing.lg
                 )
             ) {
                 item(key = "add") {
@@ -293,6 +297,7 @@ fun ShoppingListScreen(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(start = AppSpacing.lg, end = AppSpacing.lg, bottom = actionBottom)
+                    .onSizeChanged { actionHeight = with(density) { it.height.toDp() } }
                     .testTag("calculate")
             )
         }
@@ -361,9 +366,6 @@ fun ShoppingListScreen(
         )
     }
 }
-
-/** Visina glavnog dugmeta, za razmak spiska i poruka iznad njega. */
-private val ActionHeight = 60.dp
 
 /** Red sa isprekidanom ivicom: ovde se dodaje nova stavka. */
 @Composable

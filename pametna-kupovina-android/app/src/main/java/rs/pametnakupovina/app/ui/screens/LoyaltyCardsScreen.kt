@@ -34,6 +34,7 @@ import androidx.compose.ui.graphics.Color
 import rs.pametnakupovina.app.R
 import rs.pametnakupovina.app.data.network.LoyaltyCardDto
 import rs.pametnakupovina.app.text.asString
+import rs.pametnakupovina.app.ui.components.TitleAction
 import rs.pametnakupovina.app.ui.components.TonalActionButton
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
@@ -149,7 +150,7 @@ fun LoyaltyCardsScreen(
                 subtitle = stringResource(R.string.loyalty_subtitle),
                 onBack = onBack,
                 actions = {
-                    TonalActionButton(
+                    TitleAction(
                         text = stringResource(R.string.loyalty_add),
                         icon = R.drawable.ic_add,
                         onClick = { adding = true },
