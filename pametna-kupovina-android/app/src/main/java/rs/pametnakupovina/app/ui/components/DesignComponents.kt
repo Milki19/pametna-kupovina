@@ -23,7 +23,9 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -293,7 +295,7 @@ fun PrimaryActionButton(
             AppIcon(it, contentDescription = null, modifier = Modifier.size(22.dp))
             Spacer(Modifier.width(AppSpacing.sm))
         }
-        Text(text, style = MaterialTheme.typography.titleMedium)
+        Text(text, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
     }
 }
 
@@ -340,6 +342,34 @@ fun TonalActionButton(
             Spacer(Modifier.width(AppSpacing.sm))
         }
         Text(text, style = MaterialTheme.typography.labelLarge, textAlign = TextAlign.Center)
+    }
+}
+
+/**
+ * Sporedna radnja pored naslova taba. Sa krupnim slovima natpis bi stisnuo
+ * naslov, pa ostaje samo ikonica, a natpis čita čitač ekrana.
+ */
+@Composable
+fun TitleAction(
+    text: String,
+    @DrawableRes icon: Int,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if (LocalDensity.current.fontScale >= 1.5f) {
+        FilledTonalIconButton(
+            onClick = onClick,
+            shape = MaterialTheme.shapes.small,
+            colors = IconButtonDefaults.filledTonalIconButtonColors(
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+            ),
+            modifier = modifier
+        ) {
+            AppIcon(icon, contentDescription = text)
+        }
+    } else {
+        TonalActionButton(text = text, icon = icon, onClick = onClick, modifier = modifier)
     }
 }
 

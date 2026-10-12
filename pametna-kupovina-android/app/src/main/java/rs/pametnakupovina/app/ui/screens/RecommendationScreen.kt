@@ -57,6 +57,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -605,23 +606,30 @@ private fun ScenarioCard(
                 modifier = Modifier.padding(AppSpacing.lg),
                 verticalArrangement = Arrangement.spacedBy(AppSpacing.md)
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(AppSpacing.md)
-                ) {
-                    RadioDot(selected)
-                    Text(
-                        scenarioTitle(scenario.type),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.ExtraBold,
-                        modifier = Modifier.weight(1f)
-                    )
+                val price: @Composable () -> Unit = {
                     Text(
                         scenario.totalCost?.takeIf { scenario.available }?.let { "${wholeAmount(it)} ${currency()}" }
                             ?: stringResource(R.string.rec_no_price),
                         style = MaterialTheme.typography.titleLarge,
                         maxLines = 1
                     )
+                }
+                // Sa krupnim slovima cena ide ispod naziva, da se naziv ne lomi usred reči.
+                val largeFont = LocalDensity.current.fontScale >= 1.5f
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(AppSpacing.md)
+                ) {
+                    RadioDot(selected)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            scenarioTitle(scenario.type),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                        if (largeFont) price()
+                    }
+                    if (!largeFont) price()
                 }
                 // Sa krupnim slovima opis puta prelazi u drugi red.
                 FlowRow(
