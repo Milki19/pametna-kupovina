@@ -489,7 +489,7 @@ private fun DraftItemRow(
     }
 
     // Sa krupnim pismom količina ide ispod naziva, da naziv ne ostane u uskoj koloni.
-    val largeFont = LocalDensity.current.fontScale >= 1.3f
+    val largeFont = LocalDensity.current.fontScale >= 1.5f
     GlassCard(onClick = onEdit, modifier = modifier.fillMaxWidth()) {
         if (largeFont) {
             Column(

@@ -67,6 +67,7 @@ import rs.pametnakupovina.app.ui.currency
 import rs.pametnakupovina.app.ui.wholeAmount
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -410,10 +411,13 @@ private fun MonthStat(label: String, value: String, modifier: Modifier) {
         verticalArrangement = Arrangement.SpaceBetween
     ) {
         Text(value, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
-        Text(
-            label,
-            style = MaterialTheme.typography.labelMedium,
-            textAlign = TextAlign.Center,
+        // Svaka reč u svom redu; sa krupnim slovima se natpis smanji umesto
+        // da se prelomi usred reči („Prodavni/ca").
+        BasicText(
+            label.replace(' ', '\n'),
+            style = MaterialTheme.typography.labelMedium.copy(color = LocalContentColor.current, textAlign = TextAlign.Center),
+            maxLines = label.count { it == ' ' } + 1,
+            autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = MaterialTheme.typography.labelMedium.fontSize),
             modifier = Modifier.alpha(0.85f)
         )
     }
