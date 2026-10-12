@@ -40,9 +40,9 @@
     <string name="purchase_back">Back</string>
 
     <!-- Progress header -->
-    <string name="purchase_progress_label">SHOPPING PROGRESS</string>
     <string name="purchase_bought_of">Bought %1$d of %2$d</string>
-    <string name="purchase_planned_label">planned</string>
+    <string name="purchase_planned_value">planned %1$s</string>
+    <string name="purchase_about_time">about %1$s</string>
     <string name="purchase_remaining">%1$d left to decide. Prices in a saved plan don\'t refresh.</string>
     <plurals name="purchase_paid_for_items">
         <item quantity="one">Recorded as paid: %2$s for %1$d item</item>

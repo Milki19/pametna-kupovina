@@ -1,5 +1,39 @@
 package rs.pametnakupovina.app.ui.screens
 
+import androidx.annotation.DrawableRes
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ripple
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
+import rs.pametnakupovina.app.ui.components.enter
+import rs.pametnakupovina.app.ui.components.listBottomPadding
+import rs.pametnakupovina.app.ui.components.pressScale
+import rs.pametnakupovina.app.ui.components.rememberEntrance
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -11,7 +45,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
@@ -22,7 +55,6 @@ import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -54,14 +86,10 @@ import rs.pametnakupovina.app.ui.components.AppIcon
 import rs.pametnakupovina.app.ui.components.AppSpacing
 import rs.pametnakupovina.app.ui.components.GlassCard
 import rs.pametnakupovina.app.ui.components.AppTopBar
-import rs.pametnakupovina.app.ui.components.BottomActionBar
 import rs.pametnakupovina.app.ui.components.LoadingState
 import rs.pametnakupovina.app.ui.components.NoticeBanner
 import rs.pametnakupovina.app.ui.components.TonalActionButton
 import rs.pametnakupovina.app.ui.components.LocalBottomBarInset
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.navigationBars
 import rs.pametnakupovina.app.ui.components.PrimaryActionButton
 import rs.pametnakupovina.app.ui.components.StatusPill
 import rs.pametnakupovina.app.ui.components.StatusTone
@@ -88,7 +116,6 @@ fun ShoppingListScreen(
     var showPasteDialog by rememberSaveable { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
-    val systemBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
     // Zajednički spisak: ono što je ukućanin dodao vidi se po povratku.
     LifecycleResumeEffect(viewModel) {
@@ -133,6 +160,20 @@ fun ShoppingListScreen(
         }
     }
 
+    // Stavka se prvo skupi i klizne levo, pa se tek onda briše.
+    var removingId by remember { mutableStateOf<Long?>(null) }
+    // Stavke viđene do sada; one koje stignu kasnije (nova, vraćena) ulaze sa iskakanjem.
+    val seen = remember { mutableSetOf<Long>() }
+    var settled by remember { mutableStateOf(false) }
+    LaunchedEffect(state.items, state.isInitialLoading) {
+        if (!state.isInitialLoading) {
+            seen += state.items.map { it.localId }
+            settled = true
+        }
+    }
+    val entrance = rememberEntrance(state.isInitialLoading)
+    val actionBottom = listBottomPadding() - AppSpacing.sm
+
     Scaffold(
         containerColor = Color.Transparent,
         topBar = {
@@ -143,26 +184,21 @@ fun ShoppingListScreen(
                     state.items.isNotEmpty() ->
                         pluralStringResource(R.plurals.count_items, state.items.size, state.items.size)
                     else -> null
+                },
+                actions = {
+                    TonalActionButton(
+                        text = stringResource(R.string.list_paste_list),
+                        icon = R.drawable.ic_content_paste,
+                        onClick = { showPasteDialog = true },
+                        modifier = Modifier.testTag("paste-list")
+                    )
                 }
             )
         },
-        bottomBar = {
-            if (!state.isInitialLoading) {
-                // Iznad lebdeće donje trake, koja već računa i sistemsku.
-                BottomActionBar(
-                    modifier = Modifier.padding(bottom = (LocalBottomBarInset.current - systemBottom).coerceAtLeast(0.dp))
-                ) {
-                    PrimaryActionButton(
-                        text = stringResource(
-                            if (state.isSyncing) R.string.list_action_sending else R.string.list_action_calculate
-                        ),
-                        enabled = state.items.isNotEmpty() && !state.isSyncing,
-                        onClick = { viewModel.prepareMatching(onOpenMatching) }
-                    )
-                }
-            }
-        },
-        snackbarHost = { SnackbarHost(snackbar) }
+        snackbarHost = {
+            // Iznad dugmeta „Izračunaj", koje stoji iznad donje trake.
+            SnackbarHost(snackbar, modifier = Modifier.padding(bottom = LocalBottomBarInset.current + ActionHeight))
+        }
     ) { padding ->
         if (state.isInitialLoading) {
             Column(
@@ -175,68 +211,90 @@ fun ShoppingListScreen(
             return@Scaffold
         }
 
-        LazyColumn(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
-            contentPadding = PaddingValues(
-                horizontal = AppSpacing.lg,
-                vertical = AppSpacing.md
-            ),
-            verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)
+                .padding(top = padding.calculateTopPadding())
         ) {
-            item(key = "actions") {
-                Row(horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm)) {
-                    TonalActionButton(
-                        text = stringResource(R.string.list_add_item),
-                        icon = R.drawable.ic_add,
-                        primary = true,
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(
+                    start = AppSpacing.lg,
+                    end = AppSpacing.lg,
+                    top = AppSpacing.md,
+                    // Spisak skroluje ispod dugmeta i donje trake.
+                    bottom = actionBottom + ActionHeight + AppSpacing.lg
+                )
+            ) {
+                item(key = "add") {
+                    AddItemRow(
                         onClick = { openEditor(null) },
-                        modifier = Modifier.weight(1f)
-                    )
-                    TonalActionButton(
-                        text = stringResource(R.string.list_paste_list),
-                        icon = R.drawable.ic_content_paste,
-                        onClick = { showPasteDialog = true },
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier
+                            .enter(entrance)
+                            .padding(bottom = AppSpacing.lg)
                     )
                 }
-            }
 
-            state.errorMessage?.let { message ->
-                item(key = "error") {
-                    NoticeBanner(
-                        text = message.asString(),
-                        tone = StatusTone.ERROR,
-                        actionLabel = stringResource(R.string.common_retry),
-                        onAction = viewModel::refresh
-                    )
-                }
-            }
-
-            if (state.items.isEmpty()) {
-                item(key = "empty") { EmptyList() }
-            } else {
-                item(key = "header") {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(top = AppSpacing.sm)
-                    ) {
-                        Text(stringResource(R.string.list_items_header), style = MaterialTheme.typography.titleMedium)
-                        Spacer(Modifier.width(AppSpacing.sm))
-                        StatusPill(state.items.size.toString())
+                state.errorMessage?.let { message ->
+                    item(key = "error") {
+                        NoticeBanner(
+                            text = message.asString(),
+                            tone = StatusTone.ERROR,
+                            actionLabel = stringResource(R.string.common_retry),
+                            onAction = viewModel::refresh,
+                            modifier = Modifier.padding(bottom = AppSpacing.lg)
+                        )
                     }
                 }
-                items(state.items, key = { it.localId }) { item ->
-                    DraftItemRow(
-                        item = item,
-                        onEdit = { openEditor(item) },
-                        onDelete = { delete(item) },
-                        onOpenProduct = onOpenProduct,
-                        onOpenFamily = { familyId -> viewModel.openFamilyPrices(familyId, onOpenProduct) }
-                    )
+
+                if (state.items.isEmpty()) {
+                    item(key = "empty") { EmptyList(Modifier.enter(entrance, 1)) }
+                }
+                itemsIndexed(state.items, key = { _, item -> item.localId }) { index, item ->
+                    val isNew = remember { settled && item.localId !in seen }
+                    val visibility = remember { MutableTransitionState(!isNew) }
+                    visibility.targetState = removingId != item.localId
+                    if (removingId == item.localId && visibility.isIdle && !visibility.currentState) {
+                        LaunchedEffect(Unit) {
+                            removingId = null
+                            delete(item)
+                        }
+                    }
+                    AnimatedVisibility(
+                        visibleState = visibility,
+                        enter = expandVertically() + fadeIn() +
+                            scaleIn(spring(dampingRatio = 0.55f, stiffness = 320f), initialScale = 0.92f),
+                        exit = slideOutHorizontally(tween(280)) { -it / 4 } + fadeOut(tween(220)) +
+                            shrinkVertically(tween(300, delayMillis = 50)),
+                        modifier = Modifier
+                            .animateItem()
+                            .enter(entrance, index + 1)
+                    ) {
+                        DraftItemRow(
+                            item = item,
+                            onEdit = { openEditor(item) },
+                            onQuantity = { viewModel.changeQuantity(item, it) },
+                            onDelete = { removingId = item.localId },
+                            onOpenProduct = onOpenProduct,
+                            onOpenFamily = { familyId -> viewModel.openFamilyPrices(familyId, onOpenProduct) },
+                            modifier = Modifier.padding(bottom = 10.dp)
+                        )
+                    }
                 }
             }
+
+            // Jedino glavno dugme na ekranu, uvek na istom mestu iznad donje trake.
+            PrimaryActionButton(
+                text = stringResource(
+                    if (state.isSyncing) R.string.list_action_sending else R.string.list_action_calculate
+                ),
+                enabled = state.items.isNotEmpty() && !state.isSyncing,
+                onClick = { viewModel.prepareMatching(onOpenMatching) },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(start = AppSpacing.lg, end = AppSpacing.lg, bottom = actionBottom)
+                    .testTag("calculate")
+            )
         }
     }
 
@@ -304,135 +362,237 @@ fun ShoppingListScreen(
     }
 }
 
+/** Visina glavnog dugmeta, za razmak spiska i poruka iznad njega. */
+private val ActionHeight = 60.dp
+
+/** Red sa isprekidanom ivicom: ovde se dodaje nova stavka. */
 @Composable
-private fun EmptyList() {
-    Column(
-        modifier = Modifier
+private fun AddItemRow(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val color = MaterialTheme.colorScheme.onSurfaceVariant
+    val shape = RoundedCornerShape(18.dp)
+    Row(
+        modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = AppSpacing.lg, vertical = 48.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)
+            .clip(shape)
+            .clickable(role = Role.Button, onClick = onClick)
+            .drawBehind {
+                drawRoundRect(
+                    color = color,
+                    cornerRadius = CornerRadius(18.dp.toPx()),
+                    style = Stroke(
+                        width = 1.5.dp.toPx(),
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 5.dp.toPx()))
+                    )
+                )
+            }
+            .heightIn(min = 56.dp)
+            .padding(horizontal = AppSpacing.lg, vertical = AppSpacing.sm)
+            .testTag("add-item"),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(AppSpacing.md)
     ) {
-        AppIcon(
-            R.drawable.ic_content_paste,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(48.dp)
-        )
-        Text(stringResource(R.string.list_empty_title), style = MaterialTheme.typography.titleLarge)
-        Text(
-            stringResource(R.string.list_empty_text),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center
-        )
+        AppIcon(R.drawable.ic_add, contentDescription = null, tint = color)
+        Text(stringResource(R.string.list_add_item), style = MaterialTheme.typography.titleMedium, color = color)
+    }
+}
+
+@Composable
+private fun EmptyList(modifier: Modifier = Modifier) {
+    GlassCard(modifier = modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)
+        ) {
+            Text(
+                stringResource(R.string.list_empty_title),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.ExtraBold,
+                textAlign = TextAlign.Center
+            )
+            Text(
+                stringResource(R.string.list_empty_text),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+        }
     }
 }
 
 /**
- * What to buy and how much on one line. Anything else appears only when it
- * matters: a non-default way of choosing, or a status that needs the reader,
- * so twenty rows of "recognised" no longer bury the one that is not.
+ * Naziv, pravilo i status levo, količina desno. Dodir na karticu otvara
+ * izmenu. Kad je količina 1, minus postaje kanta i briše stavku.
  */
 @Composable
 private fun DraftItemRow(
     item: DraftItemEntity,
     onEdit: () -> Unit,
+    onQuantity: (Double) -> Unit,
     onDelete: () -> Unit,
     onOpenProduct: (Long) -> Unit,
-    onOpenFamily: (Long) -> Unit
+    onOpenFamily: (Long) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val attention = if (item.syncError != null) {
         stringResource(R.string.list_status_not_sent) to StatusTone.ERROR
     } else {
         draftAttention(item.matchingStatus)?.let { (text, tone) -> stringResource(text) to tone }
     }
+    val openPrices: (() -> Unit)? = item.canonicalProductId?.let { id -> { onOpenProduct(id) } }
+        ?: item.productFamilyId
+            ?.takeIf { item.matchingRule == ShoppingItemRuleDto.PRODUCT_FAMILY.name }
+            ?.let { familyId -> { onOpenFamily(familyId) } }
+
+    val texts: @Composable (Modifier) -> Unit = { textModifier ->
+        Column(modifier = textModifier, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(item.name, style = MaterialTheme.typography.titleMedium)
+            draftRuleLabel(item)?.let { label ->
+                Text(
+                    label.asString(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            item.syncError?.let { reason ->
+                Text(
+                    // Blank when the server gave no reason of its own.
+                    reason.ifBlank { stringResource(R.string.list_sync_error_rejected) },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+            attention?.let { (text, tone) ->
+                Spacer(Modifier.size(1.dp))
+                StatusPill(text, tone)
+            }
+        }
+    }
+    val controls: @Composable () -> Unit = {
+        openPrices?.let { open ->
+            IconButton(onClick = open) {
+                AppIcon(
+                    R.drawable.ic_local_offer,
+                    contentDescription = stringResource(R.string.list_cd_prices_for, item.name),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        QuantityStepper(
+            label = draftAmountLabel(item),
+            name = item.name,
+            canDecrease = item.quantity > 1.0,
+            onLess = { onQuantity((item.quantity - 1.0).coerceAtLeast(1.0)) },
+            onMore = { onQuantity(item.quantity + 1.0) },
+            onDelete = onDelete
+        )
+    }
 
     // Sa krupnim pismom količina ide ispod naziva, da naziv ne ostane u uskoj koloni.
-    val largeFont = LocalDensity.current.fontScale >= 1.5f
-    GlassCard(
-        onClick = onEdit,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column {
+    val largeFont = LocalDensity.current.fontScale >= 1.3f
+    GlassCard(onClick = onEdit, modifier = modifier.fillMaxWidth()) {
+        if (largeFont) {
+            Column(
+                modifier = Modifier.padding(start = AppSpacing.lg, end = AppSpacing.md, top = AppSpacing.md, bottom = AppSpacing.md),
+                verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)
+            ) {
+                texts(Modifier.fillMaxWidth())
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) { controls() }
+            }
+        } else {
             Row(
-                modifier = Modifier.padding(
-                    start = AppSpacing.lg,
-                    end = AppSpacing.xs,
-                    top = AppSpacing.md,
-                    bottom = AppSpacing.md
-                ),
+                modifier = Modifier.padding(start = AppSpacing.lg, end = AppSpacing.md, top = AppSpacing.md, bottom = AppSpacing.md),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    attention?.let { (text, tone) ->
-                        StatusPill(text, tone)
-                        Spacer(Modifier.size(AppSpacing.xs))
-                    }
-                    Text(item.name, style = MaterialTheme.typography.titleMedium)
-                    if (largeFont) {
-                        Text(
-                            draftAmountLabel(item),
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    draftRuleLabel(item)?.let { label ->
-                        Text(
-                            label.asString(),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    item.syncError?.let { reason ->
-                        Text(
-                            // Blank when the server gave no reason of its own.
-                            reason.ifBlank { stringResource(R.string.list_sync_error_rejected) },
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    }
-                }
-                if (!largeFont) {
-                    Surface(
-                        shape = MaterialTheme.shapes.small,
-                        color = MaterialTheme.colorScheme.surfaceContainerLow,
-                        modifier = Modifier.padding(horizontal = AppSpacing.xs)
-                    ) {
-                        Text(
-                            draftAmountLabel(item),
-                            style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.padding(horizontal = AppSpacing.md, vertical = AppSpacing.sm)
-                        )
-                    }
-                }
-                val openPrices: (() -> Unit)? = item.canonicalProductId?.let { id -> { onOpenProduct(id) } }
-                    ?: item.productFamilyId
-                        ?.takeIf { item.matchingRule == ShoppingItemRuleDto.PRODUCT_FAMILY.name }
-                        ?.let { familyId -> { onOpenFamily(familyId) } }
-                openPrices?.let { open ->
-                    IconButton(onClick = open) {
-                        AppIcon(R.drawable.ic_local_offer, contentDescription = stringResource(R.string.list_cd_prices_for, item.name))
-                    }
-                }
-                IconButton(onClick = onDelete) {
-                    AppIcon(
-                        R.drawable.ic_delete,
-                        contentDescription = stringResource(R.string.list_cd_delete, item.name),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                texts(Modifier.weight(1f))
+                Spacer(Modifier.width(AppSpacing.sm))
+                controls()
             }
         }
     }
 }
 
+/** − količina +; broj kratko poskoči kad se promeni. */
+@Composable
+private fun QuantityStepper(
+    label: String,
+    name: String,
+    canDecrease: Boolean,
+    onLess: () -> Unit,
+    onMore: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val bump = remember { Animatable(1f) }
+    var shown by remember { mutableStateOf(label) }
+    LaunchedEffect(label) {
+        if (shown != label) {
+            shown = label
+            bump.animateTo(1.35f, tween(140))
+            bump.animateTo(1f, spring(dampingRatio = 0.45f, stiffness = 600f))
+        }
+    }
+    Row(
+        modifier = Modifier
+            .background(MaterialTheme.colorScheme.surfaceContainerHighest, MaterialTheme.shapes.small)
+            .padding(2.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (canDecrease) {
+            StepButton(R.drawable.ic_remove, stringResource(R.string.list_cd_less), onLess)
+        } else {
+            StepButton(
+                R.drawable.ic_delete,
+                stringResource(R.string.list_cd_delete, name),
+                onDelete,
+                tint = MaterialTheme.colorScheme.error
+            )
+        }
+        Text(
+            label,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.ExtraBold,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            modifier = Modifier
+                .widthIn(min = 28.dp)
+                .padding(horizontal = 2.dp)
+                .graphicsLayer {
+                    scaleX = bump.value
+                    scaleY = bump.value
+                }
+        )
+        StepButton(R.drawable.ic_add, stringResource(R.string.list_cd_more), onMore)
+    }
+}
+
+@Composable
+private fun StepButton(
+    @DrawableRes icon: Int,
+    description: String,
+    onClick: () -> Unit,
+    tint: Color = MaterialTheme.colorScheme.onSurface
+) {
+    val source = remember { MutableInteractionSource() }
+    Box(
+        modifier = Modifier
+            .pressScale(source)
+            .size(44.dp)
+            .clip(MaterialTheme.shapes.extraSmall)
+            .clickable(interactionSource = source, indication = ripple(), role = Role.Button, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        AppIcon(icon, contentDescription = description, tint = tint, modifier = Modifier.size(20.dp))
+    }
+}
+
+/** Ukupna količina kad je upisana („2 kg"), inače samo broj pakovanja. */
 internal fun draftAmountLabel(item: DraftItemEntity): String =
     item.targetQuantity?.let { amountLabel(it * item.quantity, item.requiredBaseUnit) }
-        ?: "${decimal(item.quantity)} kom"
+        ?: decimal(item.quantity)
 
 /**
  * Says how an item is chosen only when that differs from the default of

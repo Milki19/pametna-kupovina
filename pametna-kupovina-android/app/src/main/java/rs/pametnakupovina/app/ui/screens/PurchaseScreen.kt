@@ -2,12 +2,40 @@ package rs.pametnakupovina.app.ui.screens
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.clickable
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.EaseOutCubic
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.progressSemantics
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathMeasure
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
+import rs.pametnakupovina.app.ui.components.Meter
+import rs.pametnakupovina.app.ui.components.enter
+import rs.pametnakupovina.app.ui.components.rememberEntrance
+import rs.pametnakupovina.app.ui.duration
+import rs.pametnakupovina.app.ui.theme.LocalAppColors
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -20,12 +48,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -48,7 +74,6 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -349,55 +374,37 @@ private fun SessionGroup(
     sessions: List<PurchaseSessionSummary>,
     onOpen: (String) -> Unit
 ) {
-    GlassCard(
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column {
-            sessions.forEachIndexed { index, saved ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onOpen(saved.id) }
-                        .padding(start = AppSpacing.lg, end = AppSpacing.sm, top = AppSpacing.md, bottom = AppSpacing.md),
-                    verticalAlignment = Alignment.CenterVertically
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        sessions.forEach { saved ->
+            GlassCard(onClick = { onOpen(saved.id) }, modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.padding(AppSpacing.lg),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(AppSpacing.xs)
-                    ) {
-                        Text(dateTime(saved.createdAt), style = MaterialTheme.typography.titleMedium)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            stringResource(
-                                R.string.purchase_session_progress,
-                                saved.listName,
-                                saved.purchasedCount,
-                                saved.itemCount
-                            ),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            dateTime(saved.createdAt),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.ExtraBold,
+                            modifier = Modifier.weight(1f)
                         )
-                        LinearProgressIndicator(
-                            progress = {
-                                saved.purchasedCount.toFloat() / saved.itemCount.coerceAtLeast(1)
-                            },
-                            color = MaterialTheme.colorScheme.primary,
-                            trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                            gapSize = 0.dp,
-                            drawStopIndicator = {},
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = AppSpacing.xs)
+                        AppIcon(
+                            R.drawable.ic_chevron_right,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    AppIcon(
-                        R.drawable.ic_chevron_right,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(start = AppSpacing.sm)
+                    Text(
+                        stringResource(
+                            R.string.purchase_session_progress,
+                            saved.listName,
+                            saved.purchasedCount,
+                            saved.itemCount
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                }
-                if (index < sessions.lastIndex) {
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Meter(saved.purchasedCount.toFloat() / saved.itemCount.coerceAtLeast(1))
                 }
             }
         }
@@ -423,6 +430,7 @@ private fun PurchaseInProgress(
     var confirmArchive by rememberSaveable(session?.id) { mutableStateOf(false) }
     val scenario = session?.snapshot?.scenario
     val stores = scenario?.stores?.sortedBy { it.stopOrder }.orEmpty()
+    val entrance = rememberEntrance(session?.id)
 
     Scaffold(
         containerColor = Color.Transparent,
@@ -495,7 +503,7 @@ private fun PurchaseInProgress(
             ),
             verticalArrangement = Arrangement.spacedBy(AppSpacing.md)
         ) {
-            item(key = "progress") { PurchaseProgressHeader(session, onOpenCards) }
+            item(key = "progress") { PurchaseProgressHeader(session, onOpenCards, Modifier.enter(entrance)) }
 
             if (receipts != null && receiptViewModel != null) {
                 val receiptNotice = if (receipts.scanning) uiText(R.string.purchase_logging_receipt) else receipts.message
@@ -529,10 +537,11 @@ private fun PurchaseInProgress(
                 }
             }
 
-            stores.forEach { store ->
+            stores.forEachIndexed { index, store ->
                 val products = scenario.items.filter { it.storeId == store.storeId }
                 item(key = "store-${store.storeId}") {
                     PurchaseStoreSection(
+                        modifier = Modifier.enter(entrance, index + 1),
                         store = store,
                         products = products,
                         session = session,
@@ -655,56 +664,35 @@ private fun PurchaseInProgress(
 }
 
 @Composable
-private fun PurchaseProgressHeader(session: PurchaseSession, onOpenCards: () -> Unit) {
+private fun PurchaseProgressHeader(session: PurchaseSession, onOpenCards: () -> Unit, modifier: Modifier = Modifier) {
     val scenario = session.snapshot.scenario
     val total = scenario.items.size
     val recorded = session.progress.values.mapNotNull { it.actualLineTotal?.toBigDecimalOrNull() }
-    GlassCard(
-        modifier = Modifier.fillMaxWidth()
-    ) {
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    GlassCard(modifier = modifier.fillMaxWidth()) {
         Column(
-            modifier = Modifier.padding(AppSpacing.lg),
-            verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)
+            modifier = Modifier.padding(horizontal = AppSpacing.lg, vertical = 20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Row(verticalAlignment = Alignment.Bottom) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        stringResource(R.string.purchase_progress_label),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        stringResource(R.string.purchase_bought_of, session.purchasedCount, total),
-                        style = MaterialTheme.typography.titleLarge
-                    )
-                }
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        stringResource(R.string.purchase_planned_label),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        "${wholeAmount(scenario.basketCost)} ${currency()}",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-            }
-            LinearProgressIndicator(
-                progress = { session.purchasedCount.toFloat() / total.coerceAtLeast(1) },
-                color = MaterialTheme.colorScheme.primary,
-                trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                gapSize = 0.dp,
-                drawStopIndicator = {},
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(8.dp)
+            ProgressRing(done = session.purchasedCount, total = total)
+            Text(
+                stringResource(R.string.purchase_bought_of, session.purchasedCount, total),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.ExtraBold,
+                textAlign = TextAlign.Center
+            )
+            Text(
+                stringResource(R.string.purchase_planned_value, "${wholeAmount(scenario.basketCost)} ${currency()}"),
+                style = MaterialTheme.typography.bodyMedium,
+                color = muted,
+                textAlign = TextAlign.Center
             )
             Text(
                 stringResource(R.string.purchase_remaining, total - session.resolvedCount),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = muted,
+                textAlign = TextAlign.Center
             )
             if (recorded.isNotEmpty()) {
                 Text(
@@ -714,7 +702,8 @@ private fun PurchaseProgressHeader(session: PurchaseSession, onOpenCards: () -> 
                         recorded.size,
                         money(recorded.fold(BigDecimal.ZERO, BigDecimal::add).toDouble())
                     ),
-                    style = MaterialTheme.typography.bodyMedium
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center
                 )
             }
             // Na kasi: kartica lanca je jedan dodir daleko, kao na nacrtu.
@@ -735,14 +724,50 @@ private fun PurchaseProgressHeader(session: PurchaseSession, onOpenCards: () -> 
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.weight(1f)
                     )
-                    AppIcon(
-                        R.drawable.ic_chevron_right,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    AppIcon(R.drawable.ic_chevron_right, contentDescription = null, tint = muted)
                 }
             }
         }
+    }
+}
+
+/** Krug napretka sa „x/y" u sredini; puni se animirano, a pun menja boju. */
+@Composable
+private fun ProgressRing(done: Int, total: Int) {
+    val fraction by animateFloatAsState(
+        targetValue = done.toFloat() / total.coerceAtLeast(1),
+        animationSpec = tween(700, easing = EaseOutCubic),
+        label = "ring"
+    )
+    val track = MaterialTheme.colorScheme.surfaceContainerHighest
+    val color by animateColorAsState(
+        if (total > 0 && done == total) LocalAppColors.current.save else MaterialTheme.colorScheme.primary,
+        label = "ringColor"
+    )
+    Box(
+        modifier = Modifier
+            .size(96.dp)
+            .progressSemantics(done.toFloat() / total.coerceAtLeast(1)),
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(Modifier.matchParentSize()) {
+            val stroke = Stroke(width = 9.dp.toPx(), cap = StrokeCap.Round)
+            val inset = stroke.width / 2
+            val arcSize = Size(size.width - stroke.width, size.height - stroke.width)
+            drawArc(track, 0f, 360f, false, Offset(inset, inset), arcSize, style = stroke)
+            drawArc(color, -90f, 360f * fraction, false, Offset(inset, inset), arcSize, style = stroke)
+        }
+        // Krug je fiksne veličine, pa broj u njemu ne raste sa pismom telefona.
+        BasicText(
+            "$done/$total",
+            style = MaterialTheme.typography.titleMedium.copy(
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.ExtraBold
+            ),
+            maxLines = 1,
+            autoSize = TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = 20.sp),
+            modifier = Modifier.padding(horizontal = 18.dp)
+        )
     }
 }
 
@@ -755,43 +780,43 @@ private fun PurchaseStoreSection(
     onStatus: (Long, PurchaseStatus) -> Unit,
     onDetails: (Long) -> Unit,
     onReportMissing: (RecommendationItemDto) -> Unit,
-    onRoute: () -> Unit
+    onRoute: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val bought = products.count { session.progress[it.itemId]?.status == PurchaseStatus.PURCHASED }
-    GlassCard(
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column {
-            Row(
-                modifier = Modifier.padding(
-                    start = AppSpacing.lg,
-                    end = AppSpacing.xs,
-                    top = AppSpacing.md,
-                    bottom = AppSpacing.md
-                ),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(AppSpacing.md)
-            ) {
-                StopBadge(store.stopOrder)
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(store.retailerName, style = MaterialTheme.typography.titleMedium)
-                    Text(
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(AppSpacing.xs)) {
+        Row(
+            modifier = Modifier.padding(start = AppSpacing.xs),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(AppSpacing.md)
+        ) {
+            StopBadge(store.stopOrder)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    store.retailerName,
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.semantics { heading() }
+                )
+                Text(
+                    listOf(
                         storeAddress(store),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Text("$bought/${products.size}", style = MaterialTheme.typography.titleMedium)
-                IconButton(onClick = onRoute) {
-                    AppIcon(
-                        R.drawable.ic_directions,
-                        contentDescription = stringResource(R.string.purchase_route_to_store, store.retailerName),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
+                        stringResource(R.string.purchase_about_time, duration(store.durationFromPreviousSeconds))
+                    ).joinToString(" · "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            ItemRows(products, session, archived, onStatus, onDetails, onReportMissing)
+            Text("$bought/${products.size}", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            IconButton(onClick = onRoute) {
+                AppIcon(
+                    R.drawable.ic_directions,
+                    contentDescription = stringResource(R.string.purchase_route_to_store, store.retailerName),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+        GlassCard(modifier = Modifier.fillMaxWidth()) {
+            Column { ItemRows(products, session, archived, onStatus, onDetails, onReportMissing) }
         }
     }
 }
@@ -868,12 +893,7 @@ private fun PurchaseItemRow(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            Text(
-                item.requestedName,
-                style = MaterialTheme.typography.titleMedium,
-                textDecoration = if (purchased) TextDecoration.LineThrough else null,
-                color = if (purchased) muted else MaterialTheme.colorScheme.onSurface
-            )
+            StrikeText(item.requestedName, struck = purchased)
             item.productName
                 ?.takeUnless { it.equals(item.requestedName, ignoreCase = true) }
                 ?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = muted) }
@@ -971,8 +991,46 @@ private fun PurchaseItemRow(
     }
 }
 
+/** Naziv koji se, kad je kupljeno, precrta linijom s leva na desno i izbledi. */
+@Composable
+private fun StrikeText(text: String, struck: Boolean) {
+    val progress by animateFloatAsState(
+        targetValue = if (struck) 1f else 0f,
+        animationSpec = tween(350, easing = EaseOutCubic),
+        label = "strike"
+    )
+    var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
+    val color = MaterialTheme.colorScheme.onSurface
+    Text(
+        text,
+        style = MaterialTheme.typography.titleMedium,
+        color = color,
+        onTextLayout = { layout = it },
+        modifier = Modifier
+            .graphicsLayer { alpha = 1f - 0.5f * progress }
+            .drawWithContent {
+                drawContent()
+                val lines = layout ?: return@drawWithContent
+                if (progress > 0f) {
+                    // Svaki red teksta dobija svoju liniju.
+                    for (line in 0 until lines.lineCount) {
+                        val left = lines.getLineLeft(line)
+                        val y = (lines.getLineTop(line) + lines.getLineBottom(line)) / 2f + 1.dp.toPx()
+                        drawLine(
+                            color,
+                            Offset(left, y),
+                            Offset(left + (lines.getLineRight(line) - left) * progress, y),
+                            strokeWidth = 2.dp.toPx(),
+                            cap = StrokeCap.Round
+                        )
+                    }
+                }
+            }
+    )
+}
+
 /**
- * Kućica iz nacrta: zaobljen kvadrat, pun teal sa kvačicom kad je kupljeno.
+ * Kućica iz nacrta: zaobljen kvadrat koji se popuni, a kvačica se iscrta.
  * Dodirna površina je 48 dp, za ruku koja gura kolica.
  */
 @Composable
@@ -982,6 +1040,22 @@ private fun BoughtCheck(
     onCheckedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val scheme = MaterialTheme.colorScheme
+    val fill by animateColorAsState(if (checked) scheme.primary else Color.Transparent, label = "checkFill")
+    val edge by animateColorAsState(if (checked) scheme.primary else scheme.outline, label = "checkEdge")
+    val drawn by animateFloatAsState(
+        targetValue = if (checked) 1f else 0f,
+        animationSpec = tween(300, delayMillis = if (checked) 80 else 0),
+        label = "checkMark"
+    )
+    val source = remember { MutableInteractionSource() }
+    val pressed by source.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.85f else 1f,
+        animationSpec = spring(dampingRatio = 0.45f, stiffness = 500f),
+        label = "checkPress"
+    )
+    val markColor = scheme.onPrimary
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
@@ -990,20 +1064,41 @@ private fun BoughtCheck(
                 value = checked,
                 enabled = enabled,
                 role = Role.Checkbox,
+                interactionSource = source,
+                indication = null,
                 onValueChange = onCheckedChange
             )
     ) {
-        Surface(
-            shape = RoundedCornerShape(8.dp),
-            color = if (checked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerLowest,
-            contentColor = MaterialTheme.colorScheme.onPrimary,
-            border = if (checked) null else BorderStroke(2.dp, MaterialTheme.colorScheme.outline),
-            modifier = Modifier.size(28.dp)
-        ) {
-            if (checked) {
-                Box(contentAlignment = Alignment.Center) {
-                    AppIcon(R.drawable.ic_check, contentDescription = null, modifier = Modifier.size(20.dp))
+        Canvas(
+            Modifier
+                .size(28.dp)
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
                 }
+        ) {
+            val corner = CornerRadius(9.dp.toPx())
+            drawRoundRect(fill, cornerRadius = corner)
+            val border = 2.dp.toPx()
+            drawRoundRect(
+                edge,
+                topLeft = Offset(border / 2, border / 2),
+                size = Size(size.width - border, size.height - border),
+                cornerRadius = corner,
+                style = Stroke(border)
+            )
+            if (drawn > 0f) {
+                val mark = Path().apply {
+                    moveTo(size.width * 0.27f, size.height * 0.52f)
+                    lineTo(size.width * 0.43f, size.height * 0.68f)
+                    lineTo(size.width * 0.74f, size.height * 0.34f)
+                }
+                val shown = Path()
+                PathMeasure().apply {
+                    setPath(mark, false)
+                    getSegment(0f, length * drawn, shown)
+                }
+                drawPath(shown, markColor, style = Stroke(3.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
             }
         }
     }

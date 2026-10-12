@@ -248,31 +248,33 @@ class ShoppingListViewModel @Inject constructor(
      * it syncs like any new item even if the delete already reached the server.
      */
     fun restoreItem(item: DraftItemEntity) {
-        val rule = ShoppingItemRuleDto.valueOf(item.matchingRule)
-        mutate {
-            repository.addItem(
-                DraftItemInput(
-                    name = item.name,
-                    rawInput = item.rawInput,
-                    // The server writes its match into these same columns, so
-                    // keep only what the rule allows, as the editor would.
-                    barcode = item.barcode
-                        .takeIf { rule == ShoppingItemRuleDto.EXACT_PRODUCT },
-                    canonicalProductId = item.canonicalProductId
-                        .takeIf { rule == ShoppingItemRuleDto.EXACT_PRODUCT },
-                    productFamilyId = item.productFamilyId
-                        .takeIf { rule == ShoppingItemRuleDto.PRODUCT_FAMILY },
-                    quantity = item.quantity,
-                    matchingRule = rule,
-                    category = item.category,
-                    requiredBrand = item.requiredBrand,
-                    minPackageQuantity = item.minPackageQuantity,
-                    maxPackageQuantity = item.maxPackageQuantity,
-                    requiredBaseUnit = item.requiredBaseUnit,
-                    targetQuantity = item.targetQuantity
-                )
-            )
-        }
+        mutate { repository.addItem(item.asInput()) }
+    }
+
+    /** Stepper na spisku: isto što i izmena količine u uređivaču stavke. */
+    fun changeQuantity(item: DraftItemEntity, quantity: Double) {
+        mutate { repository.updateItem(item, item.asInput(quantity)) }
+    }
+
+    private fun DraftItemEntity.asInput(newQuantity: Double = quantity): DraftItemInput {
+        val rule = ShoppingItemRuleDto.valueOf(matchingRule)
+        return DraftItemInput(
+            name = name,
+            rawInput = rawInput,
+            // The server writes its match into these same columns, so
+            // keep only what the rule allows, as the editor would.
+            barcode = barcode.takeIf { rule == ShoppingItemRuleDto.EXACT_PRODUCT },
+            canonicalProductId = canonicalProductId.takeIf { rule == ShoppingItemRuleDto.EXACT_PRODUCT },
+            productFamilyId = productFamilyId.takeIf { rule == ShoppingItemRuleDto.PRODUCT_FAMILY },
+            quantity = newQuantity,
+            matchingRule = rule,
+            category = category,
+            requiredBrand = requiredBrand,
+            minPackageQuantity = minPackageQuantity,
+            maxPackageQuantity = maxPackageQuantity,
+            requiredBaseUnit = requiredBaseUnit,
+            targetQuantity = targetQuantity
+        )
     }
 
     private fun mutate(

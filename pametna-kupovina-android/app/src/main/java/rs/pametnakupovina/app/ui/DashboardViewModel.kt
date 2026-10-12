@@ -17,7 +17,7 @@ import rs.pametnakupovina.app.data.network.ShoppingItemRuleDto
 import rs.pametnakupovina.app.sync.SyncScheduler
 
 /**
- * Broj stavki na spisku, bez sinhronizacije — to već radi
+ * Nazivi stavki na spisku, bez sinhronizacije — to već radi
  * ShoppingListViewModel kad se otvori Moj spisak — i dodavanje navike na spisak.
  */
 @HiltViewModel
@@ -26,9 +26,9 @@ class DashboardViewModel @Inject constructor(
     private val syncScheduler: SyncScheduler
 ) : ViewModel() {
 
-    val listItemCount: StateFlow<Int> = repository.draftItems
-        .map { it.size }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+    val listItemNames: StateFlow<List<String>> = repository.draftItems
+        .map { items -> items.map { it.name } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     /** Porodice proizvoda koje su već na spisku, za „Na spisku" uz naviku. */
     val familiesOnList: StateFlow<Set<Long>> = repository.draftItems

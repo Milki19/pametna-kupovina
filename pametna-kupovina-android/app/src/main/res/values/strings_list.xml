@@ -9,7 +9,6 @@
     <string name="list_loading">Učitavanje spiska…</string>
     <string name="list_add_item">Dodaj stavku</string>
     <string name="list_paste_list">Nalepi spisak</string>
-    <string name="list_items_header">Stavke na spisku</string>
     <string name="list_snackbar_ok">U redu</string>
     <string name="list_snackbar_deleted">Obrisano: %1$s</string>
     <string name="list_snackbar_undo">Vrati</string>
