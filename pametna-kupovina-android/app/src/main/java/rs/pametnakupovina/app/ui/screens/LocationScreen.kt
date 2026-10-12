@@ -37,6 +37,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
@@ -52,13 +53,13 @@ import rs.pametnakupovina.app.text.asString
 import rs.pametnakupovina.app.ui.LocationViewModel
 import rs.pametnakupovina.app.ui.components.AppIcon
 import rs.pametnakupovina.app.ui.components.AppSpacing
+import rs.pametnakupovina.app.ui.components.GlassCard
 import rs.pametnakupovina.app.ui.components.AppTopBar
 import rs.pametnakupovina.app.ui.components.BottomActionBar
 import rs.pametnakupovina.app.ui.components.NoticeBanner
 import rs.pametnakupovina.app.ui.components.PrimaryActionButton
 import rs.pametnakupovina.app.ui.components.StatusTone
 import rs.pametnakupovina.app.ui.components.StepCard
-import rs.pametnakupovina.app.ui.components.cardBorder
 
 /**
  * One large action for the usual case. Typing coordinates is a fallback for a
@@ -110,6 +111,7 @@ fun LocationScreen(
         (!coordinatesValid && (latitudeText.isNotBlank() || longitudeText.isNotBlank()))
 
     Scaffold(
+        containerColor = Color.Transparent,
         topBar = { AppTopBar(title = stringResource(R.string.location_title), onBack = onBack) },
         bottomBar = {
             BottomActionBar {
@@ -147,11 +149,8 @@ fun LocationScreen(
                 text = stringResource(R.string.location_step_text)
             )
 
-            Surface(
+            GlassCard(
                 enabled = !state.isResolving,
-                shape = MaterialTheme.shapes.medium,
-                color = MaterialTheme.colorScheme.surfaceContainer,
-                border = cardBorder,
                 onClick = {
                     if (hasLocationPermission(context)) {
                         viewModel.resolveCurrentLocation()

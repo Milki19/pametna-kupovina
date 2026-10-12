@@ -41,6 +41,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
@@ -73,10 +74,11 @@ import rs.pametnakupovina.app.ui.ReceiptViewModel
 import rs.pametnakupovina.app.ui.PurchaseViewModel
 import rs.pametnakupovina.app.ui.components.AppIcon
 import rs.pametnakupovina.app.ui.components.TonalActionButton
-import rs.pametnakupovina.app.ui.components.cardBorder
+import rs.pametnakupovina.app.ui.components.listBottomPadding
 import rs.pametnakupovina.app.ui.currency
 import rs.pametnakupovina.app.ui.wholeAmount
 import rs.pametnakupovina.app.ui.components.AppSpacing
+import rs.pametnakupovina.app.ui.components.GlassCard
 import rs.pametnakupovina.app.ui.components.AppTopBar
 import rs.pametnakupovina.app.ui.components.LoadingState
 import rs.pametnakupovina.app.ui.components.NoticeBanner
@@ -124,17 +126,17 @@ private fun PurchaseHistory(
     val pickReceiptFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let(receiptViewModel::importFile)
     }
-    Scaffold(topBar = { AppTopBar(title = stringResource(R.string.purchase_history_title)) }) { padding ->
+    Scaffold(containerColor = Color.Transparent, topBar = { AppTopBar(title = stringResource(R.string.purchase_history_title)) }) { padding ->
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
+                .padding(top = padding.calculateTopPadding())
                 .testTag("purchase-list"),
             contentPadding = PaddingValues(
                 start = AppSpacing.lg,
                 end = AppSpacing.lg,
                 top = AppSpacing.md,
-                bottom = AppSpacing.xl
+                bottom = listBottomPadding()
             ),
             verticalArrangement = Arrangement.spacedBy(AppSpacing.md)
         ) {
@@ -204,10 +206,7 @@ private fun SpendingCard(
     onScan: () -> Unit,
     onImportFile: () -> Unit
 ) {
-    Surface(
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        border = cardBorder,
+    GlassCard(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
@@ -268,10 +267,7 @@ private fun SpendingCard(
 
 @Composable
 private fun ReceiptGroup(receipts: List<ReceiptDto>) {
-    Surface(
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        border = cardBorder,
+    GlassCard(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column {
@@ -353,10 +349,7 @@ private fun SessionGroup(
     sessions: List<PurchaseSessionSummary>,
     onOpen: (String) -> Unit
 ) {
-    Surface(
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        border = cardBorder,
+    GlassCard(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column {
@@ -432,6 +425,7 @@ private fun PurchaseInProgress(
     val stores = scenario?.stores?.sortedBy { it.stopOrder }.orEmpty()
 
     Scaffold(
+        containerColor = Color.Transparent,
         topBar = {
             AppTopBar(
                 title = stringResource(R.string.purchase_in_progress_title),
@@ -491,13 +485,13 @@ private fun PurchaseInProgress(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
+                .padding(top = padding.calculateTopPadding())
                 .testTag("purchase-list"),
             contentPadding = PaddingValues(
                 start = AppSpacing.lg,
                 end = AppSpacing.lg,
                 top = AppSpacing.md,
-                bottom = AppSpacing.xl
+                bottom = listBottomPadding()
             ),
             verticalArrangement = Arrangement.spacedBy(AppSpacing.md)
         ) {
@@ -665,10 +659,7 @@ private fun PurchaseProgressHeader(session: PurchaseSession, onOpenCards: () -> 
     val scenario = session.snapshot.scenario
     val total = scenario.items.size
     val recorded = session.progress.values.mapNotNull { it.actualLineTotal?.toBigDecimalOrNull() }
-    Surface(
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        border = cardBorder,
+    GlassCard(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
@@ -767,10 +758,7 @@ private fun PurchaseStoreSection(
     onRoute: () -> Unit
 ) {
     val bought = products.count { session.progress[it.itemId]?.status == PurchaseStatus.PURCHASED }
-    Surface(
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        border = cardBorder,
+    GlassCard(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column {
@@ -816,10 +804,7 @@ private fun ItemGroup(
     onStatus: (Long, PurchaseStatus) -> Unit,
     onDetails: (Long) -> Unit
 ) {
-    Surface(
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        border = cardBorder,
+    GlassCard(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column { ItemRows(items, session, archived, onStatus, onDetails) }
@@ -944,7 +929,12 @@ private fun PurchaseItemRow(
                 ) {
                     AppIcon(R.drawable.ic_more_vert, contentDescription = stringResource(R.string.purchase_more_for_item, item.requestedName))
                 }
-                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                DropdownMenu(
+                    expanded = menuOpen,
+                    onDismissRequest = { menuOpen = false },
+                    // Meni je preko sadržaja, pa ne sme da bude providan.
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                ) {
                     DropdownMenuItem(
                         text = { Text(stringResource(R.string.purchase_not_in_store)) },
                         onClick = {

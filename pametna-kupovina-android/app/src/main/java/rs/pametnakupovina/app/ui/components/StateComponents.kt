@@ -108,6 +108,7 @@ fun ErrorState(
         Spacer(Modifier.height(AppSpacing.lg))
         Button(
             onClick = onRetry,
+            colors = appButtonColors(),
             modifier = Modifier.heightIn(min = MinimumTouchTarget)
         ) {
             Text(stringResource(R.string.common_retry))

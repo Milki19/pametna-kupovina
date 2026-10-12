@@ -67,9 +67,10 @@ import rs.pametnakupovina.app.ui.DashboardViewModel
 import rs.pametnakupovina.app.ui.ReceiptViewModel
 import rs.pametnakupovina.app.ui.components.AppIcon
 import rs.pametnakupovina.app.ui.components.TonalActionButton
-import rs.pametnakupovina.app.ui.components.cardBorder
-import rs.pametnakupovina.app.ui.components.heroColors
+import rs.pametnakupovina.app.ui.components.listBottomPadding
+import rs.pametnakupovina.app.ui.theme.LocalAppColors
 import rs.pametnakupovina.app.ui.components.AppSpacing
+import rs.pametnakupovina.app.ui.components.GlassCard
 import rs.pametnakupovina.app.ui.components.AppTopBar
 import rs.pametnakupovina.app.ui.components.NoticeBanner
 import rs.pametnakupovina.app.text.asString
@@ -113,15 +114,17 @@ fun DashboardScreen(
         LocalDate.now(CurrentMarket.settings.zone).withDayOfMonth(1)
     )
 
-    Scaffold(topBar = { AppTopBar(title = stringResource(R.string.dashboard_title)) }) { padding ->
+    Scaffold(containerColor = Color.Transparent, topBar = { AppTopBar(title = stringResource(R.string.dashboard_title)) }) { padding ->
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
+                .padding(top = padding.calculateTopPadding())
                 .testTag("dashboard-list"),
             contentPadding = PaddingValues(
-                horizontal = AppSpacing.lg,
-                vertical = AppSpacing.md
+                start = AppSpacing.lg,
+                end = AppSpacing.lg,
+                top = AppSpacing.md,
+                bottom = listBottomPadding()
             ),
             verticalArrangement = Arrangement.spacedBy(AppSpacing.lg)
         ) {
@@ -217,10 +220,7 @@ private fun MonthSpendingCard(
     val receipts = month?.receipts ?: 0
     val previousMonth = selectedMonth.minusMonths(1)
     val previous = byMonth.find { it.month == previousMonth.toString() }?.spent ?: 0.0
-    Surface(
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        border = cardBorder,
+    GlassCard(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
@@ -324,11 +324,11 @@ private fun dinars(value: Double) = buildAnnotatedString {
 
 @Composable
 private fun ActiveListCard(itemCount: Int, onOpenList: () -> Unit) {
-    val hero = heroColors()
+    val hero = LocalAppColors.current
     Surface(
         shape = MaterialTheme.shapes.medium,
-        color = hero.container,
-        contentColor = hero.content,
+        color = hero.hero,
+        contentColor = hero.onHero,
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
@@ -340,8 +340,8 @@ private fun ActiveListCard(itemCount: Int, onOpenList: () -> Unit) {
             Surface(
                 onClick = onOpenList,
                 shape = RoundedCornerShape(14.dp),
-                color = hero.action,
-                contentColor = hero.onAction,
+                color = hero.heroPill,
+                contentColor = hero.onHero,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = AppSpacing.xs)
@@ -397,10 +397,7 @@ private fun weekBars(month: LocalDate, byWeek: List<WeeklySpendingDto>): List<We
 private fun WeeklyBarChart(weeks: List<WeekBar>, modifier: Modifier = Modifier) {
     val maxSpent = (weeks.maxOfOrNull { it.spent } ?: 0.0).coerceAtLeast(1.0)
     val busiest = weeks.filter { it.spent > 0 }.maxByOrNull { it.spent }
-    Surface(
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        border = cardBorder,
+    GlassCard(
         modifier = modifier.fillMaxWidth()
     ) {
         Column(
@@ -502,10 +499,7 @@ private fun AnalyticsCard(
     rows: List<DashboardRow>,
     emptyText: String
 ) {
-    Surface(
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        border = cardBorder,
+    GlassCard(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(AppSpacing.lg)) {

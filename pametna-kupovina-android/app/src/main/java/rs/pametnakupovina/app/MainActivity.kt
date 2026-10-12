@@ -10,12 +10,22 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.IntentCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import rs.pametnakupovina.app.data.preferences.ThemeStore
 import rs.pametnakupovina.app.ui.PametnaKupovinaApp
 import rs.pametnakupovina.app.ui.theme.PametnaKupovinaTheme
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    @Inject
+    lateinit var themeStore: ThemeStore
 
     /** Račun (screenshot ili PDF) podeljen iz aplikacije trgovine, dok se ne zavede. */
     private var sharedReceipt by mutableStateOf<Uri?>(null)
@@ -31,9 +41,14 @@ class MainActivity : ComponentActivity() {
             sharedReceipt = intent.sharedFile()
             openedProduct = intent.productToOpen()
         }
+        // Pročitano pre prvog crteža, da izabrana tema ne blesne kao sistemska.
+        val savedTheme = runBlocking { themeStore.choice.first() }
         setContent {
-            PametnaKupovinaTheme {
+            val theme by themeStore.choice.collectAsStateWithLifecycle(savedTheme)
+            PametnaKupovinaTheme(theme) {
                 PametnaKupovinaApp(
+                    theme = theme,
+                    onTheme = { choice -> lifecycleScope.launch { themeStore.choose(choice) } },
                     sharedReceipt = sharedReceipt,
                     onSharedReceiptTaken = { sharedReceipt = null },
                     openedProduct = openedProduct,

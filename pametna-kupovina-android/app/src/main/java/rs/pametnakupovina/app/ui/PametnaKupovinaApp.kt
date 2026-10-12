@@ -6,22 +6,60 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.navigation.NavBackStackEntry
+import rs.pametnakupovina.app.ui.components.AppBackdrop
+import rs.pametnakupovina.app.ui.components.ChoiceChip
+import rs.pametnakupovina.app.ui.components.GlassCard
+import rs.pametnakupovina.app.ui.components.LocalBottomBarInset
+import rs.pametnakupovina.app.ui.theme.LocalAppColors
+import rs.pametnakupovina.app.ui.theme.ThemeChoice
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationDrawerItem
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -100,7 +138,9 @@ fun PametnaKupovinaApp(
     sharedReceipt: Uri? = null,
     onSharedReceiptTaken: () -> Unit = {},
     openedProduct: Long? = null,
-    onOpenedProductTaken: () -> Unit = {}
+    onOpenedProductTaken: () -> Unit = {},
+    theme: ThemeChoice = ThemeChoice.SYSTEM,
+    onTheme: (ThemeChoice) -> Unit = {}
 ) {
     val navController = rememberNavController()
     val calculationSession: CalculationSessionViewModel = hiltViewModel()
@@ -158,6 +198,8 @@ fun PametnaKupovinaApp(
             containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
         ) {
             AppMenuContent(
+                theme = theme,
+                onTheme = onTheme,
                 onSales = {
                     showMenu = false
                     navController.navigate(Route.SALES)
@@ -184,38 +226,25 @@ fun PametnaKupovinaApp(
         }
     }
 
-    Scaffold(
-        // Gornji razmak daje svaki ekran sam, kroz svoju traku sa naslovom.
-        contentWindowInsets = WindowInsets(0),
-        bottomBar = {
-            if (Tab.entries.any { it.route == currentRoute }) {
-                NavigationBar {
-                    Tab.entries.forEach { tab ->
-                        NavigationBarItem(
-                            selected = tab.route == currentRoute,
-                            onClick = { navController.openTab(tab.route) },
-                            icon = { AppIcon(tab.icon, contentDescription = null) },
-                            label = { NavLabel(stringResource(tab.label)) },
-                            modifier = Modifier.testTag("tab-${tab.name.lowercase()}")
-                        )
-                    }
-                    NavigationBarItem(
-                        selected = false,
-                        onClick = { showMenu = true },
-                        icon = { AppIcon(R.drawable.ic_menu, contentDescription = null) },
-                        label = { NavLabel(stringResource(R.string.app_menu)) },
-                        modifier = Modifier.testTag("open-menu")
-                    )
-                }
-            }
-        }
-    ) { padding ->
+    val onTab = Tab.entries.any { it.route == currentRoute }
+    var barHeight by remember { mutableStateOf(0.dp) }
+    val density = LocalDensity.current
+    val systemBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    // Sadržaj tabova skroluje ispod lebdeće trake, pa sam ostavlja mesto za nju.
+    val barInset = if (onTab) barHeight + systemBottom + NavBarMargin * 2 else 0.dp
+
+    Box(Modifier.fillMaxSize()) {
+        AppBackdrop()
+        CompositionLocalProvider(LocalBottomBarInset provides barInset) {
         NavHost(
             navController = navController,
             startDestination = Route.DASHBOARD,
-            modifier = Modifier
-                .padding(padding)
-                .consumeWindowInsets(padding)
+            modifier = Modifier.fillMaxSize(),
+            // Tab ulazi sa strane na kojoj je u traci; korak u toku zdesna, povratak sleva.
+            enterTransition = { screenEnter(tabDirection() ?: 1) },
+            exitTransition = { fadeOut(tween(200)) },
+            popEnterTransition = { screenEnter(tabDirection() ?: -1) },
+            popExitTransition = { fadeOut(tween(200)) }
         ) {
             composable(Route.DASHBOARD) {
                 DashboardScreen(
@@ -322,6 +351,135 @@ fun PametnaKupovinaApp(
                 )
             }
         }
+        }
+        AnimatedVisibility(
+            visible = onTab,
+            enter = slideInVertically(tween(400, easing = ScreenEasing)) { it / 2 } + fadeIn(tween(300)),
+            exit = fadeOut(tween(150)),
+            modifier = Modifier.align(Alignment.BottomCenter)
+        ) {
+            FloatingNavBar(
+                currentRoute = currentRoute,
+                onTab = { navController.openTab(it.route) },
+                onMenu = { showMenu = true },
+                modifier = Modifier
+                    .windowInsetsPadding(WindowInsets.navigationBars)
+                    .padding(NavBarMargin)
+                    .onSizeChanged { barHeight = with(density) { it.height.toDp() } }
+            )
+        }
+    }
+}
+
+private val NavBarMargin = 12.dp
+private val ScreenEasing = CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f)
+
+private fun screenEnter(direction: Int) =
+    slideInHorizontally(tween(400, easing = ScreenEasing)) { width -> direction * width / 12 } +
+        fadeIn(tween(400, easing = ScreenEasing))
+
+/** 1 kad je ciljni tab desno od polaznog, -1 kad je levo; null ako neki od njih nije tab. */
+private fun AnimatedContentTransitionScope<NavBackStackEntry>.tabDirection(): Int? {
+    val routes = Tab.entries.map { it.route }
+    val from = routes.indexOf(initialState.destination.route)
+    val to = routes.indexOf(targetState.destination.route)
+    return if (from < 0 || to < 0) null else if (to >= from) 1 else -1
+}
+
+/** Donja traka lebdi kao staklena pilula; izabrani tab dobija pilulu iza ikonice. */
+@Composable
+private fun FloatingNavBar(
+    currentRoute: String?,
+    onTab: (Tab) -> Unit,
+    onMenu: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    GlassCard(
+        shape = RoundedCornerShape(30.dp),
+        // Bez zamućenja pozadine traka mora da bude skoro neprovidna, inače
+        // se spisak čita kroz natpise.
+        color = LocalAppColors.current.navBar,
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(start = 4.dp, end = 4.dp, top = 6.dp, bottom = 4.dp)
+                .selectableGroup()
+        ) {
+            Tab.entries.forEach { tab ->
+                NavItem(
+                    selected = tab.route == currentRoute,
+                    icon = tab.icon,
+                    label = stringResource(tab.label),
+                    onClick = { onTab(tab) },
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("tab-${tab.name.lowercase()}")
+                )
+            }
+            NavItem(
+                selected = false,
+                icon = R.drawable.ic_menu,
+                label = stringResource(R.string.app_menu),
+                onClick = onMenu,
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("open-menu")
+            )
+        }
+    }
+}
+
+@Composable
+private fun NavItem(
+    selected: Boolean,
+    @DrawableRes icon: Int,
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val scheme = MaterialTheme.colorScheme
+    // Pilula se razvuče iza ikonice kad se tab izabere.
+    val stretch by animateFloatAsState(
+        targetValue = if (selected) 1f else 0.3f,
+        animationSpec = spring(dampingRatio = 0.55f, stiffness = 380f),
+        label = "navPill"
+    )
+    val pillAlpha by animateFloatAsState(if (selected) 1f else 0f, tween(200), label = "navPillAlpha")
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(20.dp))
+            .selectable(selected = selected, role = Role.Tab, onClick = onClick)
+            .heightIn(min = 60.dp)
+            .padding(top = 6.dp, bottom = 2.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Box(modifier = Modifier.size(width = 60.dp, height = 32.dp), contentAlignment = Alignment.Center) {
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .graphicsLayer {
+                        scaleX = stretch
+                        alpha = pillAlpha
+                    }
+                    .background(scheme.primaryContainer, RoundedCornerShape(16.dp))
+            )
+            AppIcon(
+                icon,
+                contentDescription = null,
+                tint = if (selected) scheme.onPrimaryContainer else scheme.onSurfaceVariant,
+                modifier = Modifier.size(22.dp)
+            )
+        }
+        CompositionLocalProvider(
+            LocalContentColor provides if (selected) scheme.onSurface else scheme.onSurfaceVariant,
+            LocalTextStyle provides MaterialTheme.typography.labelMedium.copy(
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold
+            )
+        ) {
+            NavLabel(label)
+        }
     }
 }
 
@@ -343,6 +501,8 @@ private fun NavLabel(text: String) {
 
 @Composable
 private fun AppMenuContent(
+    theme: ThemeChoice,
+    onTheme: (ThemeChoice) -> Unit,
     onSales: () -> Unit,
     onScan: () -> Unit,
     onImportFile: () -> Unit,
@@ -367,6 +527,34 @@ private fun AppMenuContent(
                     .padding(horizontal = AppSpacing.sm)
                     .testTag(tag)
             )
+        }
+        Text(
+            stringResource(R.string.app_theme),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = AppSpacing.xl, end = AppSpacing.xl, top = AppSpacing.md, bottom = AppSpacing.sm)
+        )
+        // Vodoravno skrolovanje: sa krupnim slovima četiri čipa ne staju u red.
+        Row(
+            modifier = Modifier
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = AppSpacing.xl)
+                .selectableGroup(),
+            horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm)
+        ) {
+            listOf(
+                ThemeChoice.SYSTEM to R.string.app_theme_system,
+                ThemeChoice.LIGHT to R.string.app_theme_light,
+                ThemeChoice.DARK to R.string.app_theme_dark,
+                ThemeChoice.BLACK to R.string.app_theme_black
+            ).forEach { (choice, label) ->
+                ChoiceChip(
+                    text = stringResource(label),
+                    selected = choice == theme,
+                    onClick = { onTheme(choice) },
+                    modifier = Modifier.testTag("theme-${choice.name.lowercase()}")
+                )
+            }
         }
     }
 }
