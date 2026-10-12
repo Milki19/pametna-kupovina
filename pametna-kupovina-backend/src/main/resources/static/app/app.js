@@ -289,6 +289,9 @@ const salesShortcut = () => `<a class="card row" href="#/akcije" style="text-dec
 
 // ---------- Ekran, traka, obaveštenje ----------
 
+let enterPending = null;
+let enterTimer = null;
+
 function screen({ title, subtitle = null, back = null, html, action = '' }) {
   document.getElementById('title').textContent = title;
   const sub = document.getElementById('subtitle');
@@ -301,6 +304,20 @@ function screen({ title, subtitle = null, back = null, html, action = '' }) {
   view.innerHTML = html;
   actionBar.hidden = !action;
   actionBar.innerHTML = action ? `<div>${action}</div>` : '';
+  // Ulazak na ekran se animira jednom, kad stigne pravi sadržaj, a ne na
+  // svako ponovno iscrtavanje (kucanje, štikliranje).
+  if (enterPending && !view.querySelector('.spinner')) {
+    const motion = enterPending;
+    enterPending = null;
+    view.classList.remove('enter', 'from-r', 'from-l');
+    actionBar.classList.remove('enter');
+    void view.offsetWidth;
+    view.classList.add('enter');
+    if (motion !== 'enter') view.classList.add(motion);
+    if (action) actionBar.classList.add('enter');
+    clearTimeout(enterTimer);
+    enterTimer = setTimeout(() => { view.classList.remove('enter', 'from-r', 'from-l'); actionBar.classList.remove('enter'); }, 700);
+  }
   document.title = `${title} · Pametna kupovina`;
 }
 
@@ -465,9 +482,9 @@ function renderList() {
       (purchase ? `<a class="card row" href="#/kupovina" style="text-decoration:none;color:inherit">
           <div class="grow"><div class="name">Kupovina u toku</div>
           <div class="muted small">Kupljeno ${purchaseBought(purchase)} od ${purchase.scenario.items.length}</div></div>${icon.chevron}</a>` : '') +
-      `<div class="btn-row">
-         <button class="btn primary" data-act="add-one">${icon.add}Dodaj stavku</button>
-         <button class="btn" data-act="add-many">${icon.paste}Nalepi spisak</button>
+      `<div class="add-bar">
+         <button class="add-row" data-act="add-one">${icon.add}Dodaj stavku</button>
+         <button class="btn tonal" data-act="add-many">${icon.paste}Nalepi spisak</button>
        </div>` + form + (listState.adding ? '' : salesShortcut()) +
       (items.length
         ? `<div class="section">Stavke na spisku ${pill(items.length)}</div>` + items.map(item => item.id === listState.editing ? itemEditor(item) : `
@@ -768,7 +785,8 @@ async function showRecommendation() {
   const origin = saved.get('origin');
   const listId = saved.get('listId');
   if (!origin || !listId) { location.hash = '#/lokacija'; return; }
-  screen({ title: 'Preporuke', back: '#/lokacija', html: spinner('Računam tri scenarija…') });
+  screen({ title: 'Preporuke', back: '#/lokacija', html:
+    '<p class="center muted">Računam tri scenarija…</p>' + '<div class="skeleton" aria-hidden="true"></div>'.repeat(3) });
   try {
     const travel = saved.get('walking', false) ? '&travelMode=WALKING' : '';
     recommendation = await api('GET', `shopping-lists/${listId}/recommendations?latitude=${origin.lat}&longitude=${origin.lng}${travel}`);
@@ -901,10 +919,10 @@ function showPurchase() {
     html: `
       <div class="card">
         <div class="row top-align">
-          <div class="grow"><div class="label">Napredak kupovine</div><div class="title">Kupljeno ${bought} od ${total}</div></div>
+          <div class="grow"><div class="label">Napredak kupovine</div><div class="title" data-bought>Kupljeno ${bought} od ${total}</div></div>
           <div style="text-align:right"><div class="small muted">planirano</div><div class="price accent">${whole(s.basketCost)} ${market.currency}</div></div>
         </div>
-        <div class="progress"><span style="width:${total ? bought / total * 100 : 0}%"></span></div>
+        <div class="progress"><span data-progress style="width:${total ? bought / total * 100 : 0}%"></span></div>
         <p class="muted small">Cene u sačuvanom planu se ne osvežavaju.</p>
         <a class="card soft row" href="#/kartice" style="text-decoration:none;color:inherit;padding:10px 12px">
           <span style="color:var(--primary)">${icon.card}</span><span class="grow">Lojalti kartice za kasu — prikaži barkod</span>${icon.chevron}</a>
@@ -913,11 +931,11 @@ function showPurchase() {
       stores.map(store => {
         const items = s.items.filter(i => i.storeId === store.storeId);
         const done = items.filter(i => purchase.checked[i.itemId]).length;
-        return `<div class="card flush">
+        return `<div class="card flush" data-store>
           <div class="row" style="padding:12px 8px 12px 16px">
             <span class="badge">${store.stopOrder}</span>
             <div class="grow"><div class="name">${esc(store.retailerName)}</div><div class="muted small">${esc(storeAddress(store))}</div></div>
-            <b>${done}/${items.length}</b>
+            <b data-store-count>${done}/${items.length}</b>
             <a class="icon-action" style="color:var(--primary)" href="${esc(mapsUrl(null, [store], purchase.walking))}" target="_blank" rel="noopener" aria-label="Put do prodavnice ${esc(store.retailerName)}">${icon.route}</a>
           </div>
           ${items.map(row).join('')}
@@ -1276,6 +1294,7 @@ function showMore(_, __, loaded = false) {
         <span class="muted small">Screenshot ili PDF digitalnog računa</span></span>${icon.chevron}</a>` +
       link('#/potrosnja', 'Potrošnja', 'Koliko trošiš mesečno, po prodavnicama i kategorijama') +
       link('#/domacinstvo', 'Domaćinstvo', account.state?.household ? 'Delite spisak, račune i kartice' : 'Pozovi ukućanina da delite spisak') +
+      themeCard() +
       `<div class="card">
         <div class="title">O aplikaciji</div>
         <p>Pametna kupovina ${VERSION}, web verzija</p>
@@ -1289,6 +1308,19 @@ function showMore(_, __, loaded = false) {
         <button class="btn danger" data-act="delete-account">${account.state?.household ? 'Izađi iz domaćinstva i obriši podatke' : 'Obriši moje podatke'}</button>
       </div>`
   });
+}
+
+const themes = [[null, 'Sistemska'], ['light', 'Svetla'], ['dark', 'Tamna'], ['black', 'Crna']];
+
+function themeCard() {
+  const current = saved.get('theme', null);
+  return `<div class="card">
+    <div class="title">Tema</div>
+    <div class="theme-choice" role="group" aria-label="Tema">
+      ${themes.map(([value, label]) => `<button class="chip" data-act="theme" data-value="${value || ''}" aria-pressed="${current === value}">${label}</button>`).join('')}
+    </div>
+    <p class="muted small">Sistemska prati telefon. Crna štedi bateriju na OLED ekranima.</p>
+  </div>`;
 }
 
 async function deleteAccount() {
@@ -1328,6 +1360,7 @@ const routes = {
 // Gde je lista bila kad se otišlo na detalje, da Nazad vrati na isto mesto.
 const scrolls = {};
 let currentRoute = null;
+let currentTab = null;
 
 function route() {
   const [path, ...parts] = location.hash.replace(/^#\/?/, '').split('/');
@@ -1347,6 +1380,13 @@ function route() {
     const current = a.dataset.tab === tab;
     if (current) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
   });
+  const order = ['spisak', 'cene', 'kartice', 'vise'];
+  if (name !== currentFrom) {
+    const before = order.indexOf(currentTab);
+    const after = order.indexOf(tab);
+    enterPending = before < 0 || before === after ? 'enter' : after > before ? 'from-r' : 'from-l';
+  }
+  currentTab = tab;
   window.scrollTo(0, 0);
   const shown = handler(arg ? Number(arg) : undefined, parts);
   // Lista koja se samo ponovo iscrtava (pretraga, akcije) vraća se gde je bila.
@@ -1396,6 +1436,12 @@ const actions = {
     await showCards();
   },
   'delete-account': deleteAccount,
+  theme: el => {
+    const value = el.dataset.value || null;
+    saved.set('theme', value);
+    window.applyTheme(value);
+    document.querySelectorAll('[data-act="theme"]').forEach(b => b.setAttribute('aria-pressed', String(b === el)));
+  },
   ...accountActions,
   'sale-sort': el => { sales.sort = el.dataset.value; return loadSales(); },
   'sale-category': el => { sales.category = el.dataset.value || null; return loadSales(); },
@@ -1477,8 +1523,25 @@ document.addEventListener('change', event => {
   const purchase = saved.get('purchase');
   purchase.checked[box.dataset.check] = box.checked;
   saved.set('purchase', purchase);
-  showPurchase();
+  markPurchase(box, purchase);
 });
+
+/** Štikliranje menja samo ono što se promenilo, da kvačica i precrtavanje odigraju animaciju. */
+function markPurchase(box, purchase) {
+  box.closest('.check').querySelectorAll('.name, .price').forEach(el => el.classList.toggle('strike', box.checked));
+  const total = purchase.scenario.items.length;
+  const bought = purchaseBought(purchase);
+  const title = view.querySelector('[data-bought]');
+  if (title) title.textContent = `Kupljeno ${bought} od ${total}`;
+  const bar = view.querySelector('[data-progress]');
+  if (bar) bar.style.width = `${total ? bought / total * 100 : 0}%`;
+  const store = box.closest('[data-store]');
+  const count = store && store.querySelector('[data-store-count]');
+  if (count) {
+    const boxes = [...store.querySelectorAll('[data-check]')];
+    count.textContent = `${boxes.filter(b => b.checked).length}/${boxes.length}`;
+  }
+}
 
 document.addEventListener('submit', event => {
   const handler = forms[event.target.dataset.form];
