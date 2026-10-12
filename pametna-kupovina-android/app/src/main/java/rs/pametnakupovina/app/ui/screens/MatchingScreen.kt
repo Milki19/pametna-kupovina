@@ -24,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -39,8 +40,8 @@ import rs.pametnakupovina.app.data.network.ShoppingListMatchingDto
 import rs.pametnakupovina.app.text.asString
 import rs.pametnakupovina.app.ui.MatchingViewModel
 import rs.pametnakupovina.app.ui.components.AppIcon
-import rs.pametnakupovina.app.ui.components.cardBorder
 import rs.pametnakupovina.app.ui.components.AppSpacing
+import rs.pametnakupovina.app.ui.components.GlassCard
 import rs.pametnakupovina.app.ui.components.AppTopBar
 import rs.pametnakupovina.app.ui.components.BottomActionBar
 import rs.pametnakupovina.app.ui.components.ErrorState
@@ -63,6 +64,7 @@ fun MatchingScreen(
     val errorMessage = state.errorMessage?.asString()
 
     Scaffold(
+        containerColor = Color.Transparent,
         topBar = { AppTopBar(title = stringResource(R.string.match_title), onBack = onBack) },
         bottomBar = {
             if (result != null) {
@@ -213,10 +215,7 @@ private fun DecisionCard(
     onChoose: (ProductCandidateDto?) -> Unit,
     onUseAsFlexible: () -> Unit
 ) {
-    Surface(
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        border = cardBorder,
+    GlassCard(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
@@ -347,10 +346,7 @@ private fun CandidateRow(
 
 @Composable
 private fun SettledList(items: List<ShoppingItemMatchResultDto>) {
-    Surface(
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        border = cardBorder,
+    GlassCard(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column {

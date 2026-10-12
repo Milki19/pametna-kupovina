@@ -12,6 +12,11 @@
     <string name="app_menu_household">Domaćinstvo</string>
     <string name="app_menu_about">O aplikaciji</string>
     <string name="app_menu_sales">Akcije</string>
+    <string name="app_theme">Tema</string>
+    <string name="app_theme_system">Sistemska</string>
+    <string name="app_theme_light">Svetla</string>
+    <string name="app_theme_dark">Tamna</string>
+    <string name="app_theme_black">Crna</string>
 
     <!-- Shared components -->
     <string name="ui_back">Nazad</string>

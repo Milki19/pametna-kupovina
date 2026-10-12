@@ -1,7 +1,6 @@
 package rs.pametnakupovina.app.ui.components
 
 import androidx.annotation.DrawableRes
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,9 +20,8 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
@@ -31,12 +29,19 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.runtime.Composable
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import rs.pametnakupovina.app.ui.theme.LocalAppColors
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -57,6 +62,8 @@ object AppSpacing {
 
 enum class StatusTone {
     POSITIVE,
+    /** Ušteda: narandžasta, nikad zelena. */
+    SAVING,
     WARNING,
     ERROR,
     NEUTRAL
@@ -65,8 +72,10 @@ enum class StatusTone {
 @Composable
 private fun toneColors(tone: StatusTone): Pair<Color, Color> = when (tone) {
     StatusTone.POSITIVE ->
-        MaterialTheme.colorScheme.secondaryContainer to
-            MaterialTheme.colorScheme.onSecondaryContainer
+        MaterialTheme.colorScheme.primaryContainer to
+            MaterialTheme.colorScheme.onPrimaryContainer
+    StatusTone.SAVING ->
+        LocalAppColors.current.saveContainer to LocalAppColors.current.save
     StatusTone.WARNING ->
         MaterialTheme.colorScheme.tertiaryContainer to
             MaterialTheme.colorScheme.onTertiaryContainer
@@ -80,7 +89,7 @@ private fun toneColors(tone: StatusTone): Pair<Color, Color> = when (tone) {
 
 @DrawableRes
 private fun toneIcon(tone: StatusTone): Int = when (tone) {
-    StatusTone.POSITIVE -> R.drawable.ic_check_circle
+    StatusTone.POSITIVE, StatusTone.SAVING -> R.drawable.ic_check_circle
     StatusTone.WARNING, StatusTone.ERROR -> R.drawable.ic_warning
     StatusTone.NEUTRAL -> R.drawable.ic_info
 }
@@ -100,24 +109,6 @@ fun AppIcon(
     )
 }
 
-/** Boje tamne teal kartice iz nacrta („Aktivna lista") i dugmeta u njoj. */
-data class HeroColors(val container: Color, val content: Color, val action: Color, val onAction: Color)
-
-/** U tamnoj temi je primary svetao, pa kartica uzima prigušeni teal. */
-@Composable
-fun heroColors(): HeroColors {
-    val scheme = MaterialTheme.colorScheme
-    return if (scheme.surface.luminance() < 0.5f) {
-        HeroColors(scheme.primaryContainer, scheme.onPrimaryContainer, scheme.primary, scheme.onPrimary)
-    } else {
-        HeroColors(scheme.primary, scheme.onPrimary, scheme.secondaryContainer, scheme.onSecondaryContainer)
-    }
-}
-
-/** Tanka ivica bele kartice, da se odvoji od svetle pozadine. */
-val cardBorder: BorderStroke
-    @Composable get() = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-
 @Composable
 fun StatusPill(
     text: String,
@@ -134,6 +125,39 @@ fun StatusPill(
     }
 }
 
+/** Čip za izbor jednog od nekoliko prikaza; izabrani je boje glavnog dugmeta. */
+@Composable
+fun ChoiceChip(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = LocalAppColors.current
+    val container by animateColorAsState(if (selected) colors.button else Color.Transparent, label = "chip")
+    val content by animateColorAsState(
+        if (selected) colors.onButton else MaterialTheme.colorScheme.onSurfaceVariant,
+        label = "chipText"
+    )
+    val source = remember { MutableInteractionSource() }
+    Surface(
+        selected = selected,
+        onClick = onClick,
+        shape = CircleShape,
+        color = container,
+        contentColor = content,
+        border = if (selected) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        interactionSource = source,
+        modifier = modifier
+            .pressScale(source)
+            .heightIn(min = 40.dp)
+    ) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = AppSpacing.lg)) {
+            Text(text, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+        }
+    }
+}
+
 /**
  * One bar for every screen, with a real back arrow where there is somewhere
  * to go back to. The subtitle is for state the reader should notice, such as
@@ -141,7 +165,6 @@ fun StatusPill(
  */
 private const val MAX_TITLE_SCALE = 1.3f
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppTopBar(
     title: String,
@@ -150,11 +173,8 @@ fun AppTopBar(
     subtitle: String? = null,
     actions: @Composable RowScope.() -> Unit = {}
 ) {
-    // Traka je fiksne visine: sa pismom 2.0 ni dva reda naslova ne staju
-    // („Cene proizv…"). Naslov i podnaslov rastu najviše do 1,3×, ostatak
-    // ekrana i dalje prati podešavanje telefona. Visina reda se smanjuje
-    // zajedno sa slovima; inače je red naslova ostajao visok kao na 2.0 i
-    // podnaslov ga je u Akcijama gurao van trake.
+    // Naslov i podnaslov rastu najviše do 1,3×; ostatak ekrana i dalje prati
+    // podešavanje telefona. Visina reda se smanjuje zajedno sa slovima.
     val fontScale = LocalDensity.current.fontScale
     val capped: (TextStyle) -> TextStyle = { style ->
         if (fontScale > MAX_TITLE_SCALE) {
@@ -164,49 +184,60 @@ fun AppTopBar(
             style
         }
     }
-    val titleStyle = capped(MaterialTheme.typography.titleLarge)
-    val subtitleStyle = capped(MaterialTheme.typography.bodySmall)
-    TopAppBar(
-        title = {
-            Column {
-                // Na telefonu sa uvećanim pismom „Provera proizvoda" je bila
-                // „Provera proiz…"; naslov ekrana sme da pređe u drugi red.
-                // Sa podnaslovom u traku staje samo po jedan red od svakog.
+    // Tab ima veliki naslov levo; korak u toku ima strelicu i manji naslov.
+    val stepScreen = onBack != null || onMenu != null
+    val titleStyle = capped(
+        if (stepScreen) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineMedium
+    )
+    val subtitleStyle = capped(MaterialTheme.typography.bodyMedium)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .windowInsetsPadding(WindowInsets.statusBars)
+            .padding(
+                start = if (stepScreen) AppSpacing.xs else 20.dp,
+                end = AppSpacing.md,
+                top = if (stepScreen) AppSpacing.sm else 20.dp,
+                bottom = AppSpacing.xs
+            ),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Strelica gde ima kuda nazad, meni na ekranima do kojih se dolazi
+        // iz menija; oba istovremeno bi značila da jedno od njih laže.
+        if (onBack != null) {
+            IconButton(onClick = onBack) {
+                AppIcon(R.drawable.ic_arrow_back, contentDescription = stringResource(R.string.ui_back))
+            }
+        } else if (onMenu != null) {
+            IconButton(
+                onClick = onMenu,
+                modifier = Modifier.testTag("open-menu")
+            ) {
+                AppIcon(R.drawable.ic_menu, contentDescription = stringResource(R.string.app_menu))
+            }
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            // Na telefonu sa uvećanim pismom „Provera proizvoda" je bila
+            // „Provera proiz…"; naslov ekrana sme da pređe u drugi red.
+            Text(
+                title,
+                style = titleStyle,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.semantics { heading() }
+            )
+            subtitle?.let {
                 Text(
-                    title,
-                    style = titleStyle,
-                    maxLines = if (subtitle == null) 2 else 1,
+                    it,
+                    style = subtitleStyle,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
-                subtitle?.let {
-                    Text(
-                        it,
-                        style = subtitleStyle,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
             }
-        },
-        navigationIcon = {
-            // Strelica gde ima kuda nazad, meni na ekranima do kojih se dolazi
-            // iz menija; oba istovremeno bi značila da jedno od njih laže.
-            if (onBack != null) {
-                IconButton(onClick = onBack) {
-                    AppIcon(R.drawable.ic_arrow_back, contentDescription = stringResource(R.string.ui_back))
-                }
-            } else if (onMenu != null) {
-                IconButton(
-                    onClick = onMenu,
-                    modifier = Modifier.testTag("open-menu")
-                ) {
-                    AppIcon(R.drawable.ic_menu, contentDescription = stringResource(R.string.app_menu))
-                }
-            }
-        },
-        actions = actions
-    )
+        }
+        actions()
+    }
 }
 
 /**
@@ -219,21 +250,21 @@ fun BottomActionBar(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        modifier = modifier.fillMaxWidth()
-    ) {
-        Column {
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            Column(
-                modifier = Modifier
-                    .windowInsetsPadding(WindowInsets.navigationBars)
-                    .padding(horizontal = AppSpacing.lg, vertical = AppSpacing.md),
-                verticalArrangement = Arrangement.spacedBy(AppSpacing.sm),
-                content = content
-            )
-        }
-    }
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .windowInsetsPadding(WindowInsets.navigationBars)
+            .padding(horizontal = AppSpacing.lg, vertical = AppSpacing.md),
+        verticalArrangement = Arrangement.spacedBy(AppSpacing.sm),
+        content = content
+    )
+}
+
+/** Glavno dugme: plavo u svetloj temi, belo sa crnim tekstom u tamnim. */
+@Composable
+fun appButtonColors(): ButtonColors {
+    val colors = LocalAppColors.current
+    return ButtonDefaults.buttonColors(containerColor = colors.button, contentColor = colors.onButton)
 }
 
 @Composable
@@ -244,12 +275,16 @@ fun PrimaryActionButton(
     enabled: Boolean = true,
     @DrawableRes icon: Int? = null
 ) {
+    val source = remember { MutableInteractionSource() }
     Button(
         onClick = onClick,
         enabled = enabled,
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = appButtonColors(),
         contentPadding = PaddingValues(horizontal = AppSpacing.xl, vertical = AppSpacing.md),
+        interactionSource = source,
         modifier = modifier
+            .pressScale(source)
             .fillMaxWidth()
             .heightIn(min = 52.dp)
     ) {
@@ -262,8 +297,8 @@ fun PrimaryActionButton(
 }
 
 /**
- * Sporedna radnja iz nacrta: svetla lavanda, uglovi 12 dp. Natpis sme u drugi
- * red kad su slova krupna, dugme tada naraste.
+ * Sporedna radnja iz nacrta: tonalno dugme. Natpis sme u drugi red kad su
+ * slova krupna, dugme tada naraste.
  */
 @Composable
 fun TonalActionButton(
@@ -275,26 +310,30 @@ fun TonalActionButton(
     primary: Boolean = false
 ) {
     val colors = if (primary) {
-        ButtonDefaults.buttonColors()
+        appButtonColors()
     } else {
         ButtonDefaults.filledTonalButtonColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-            contentColor = MaterialTheme.colorScheme.onSurface
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
         )
     }
+    val source = remember { MutableInteractionSource() }
     Button(
         onClick = onClick,
         enabled = enabled,
         shape = MaterialTheme.shapes.small,
         colors = colors,
         contentPadding = PaddingValues(horizontal = AppSpacing.md, vertical = AppSpacing.sm),
-        modifier = modifier.heightIn(min = 48.dp)
+        interactionSource = source,
+        modifier = modifier
+            .pressScale(source)
+            .heightIn(min = 48.dp)
     ) {
         icon?.let {
             AppIcon(
                 it,
                 contentDescription = null,
-                tint = if (primary) LocalContentColor.current else MaterialTheme.colorScheme.primary,
+                tint = LocalContentColor.current,
                 modifier = Modifier.size(20.dp)
             )
             Spacer(Modifier.width(AppSpacing.sm))
@@ -416,13 +455,15 @@ fun SectionHeader(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(top = AppSpacing.sm),
+            .padding(horizontal = AppSpacing.xs),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             text,
             style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.weight(1f)
+            modifier = Modifier
+                .weight(1f)
+                .semantics { heading() }
         )
         trailing?.let {
             Text(

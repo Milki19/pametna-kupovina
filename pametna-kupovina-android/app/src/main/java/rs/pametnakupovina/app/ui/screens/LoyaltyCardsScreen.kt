@@ -41,8 +41,9 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import rs.pametnakupovina.app.ui.LoyaltyViewModel
 import rs.pametnakupovina.app.ui.components.AppSpacing
-import rs.pametnakupovina.app.ui.components.cardBorder
-import rs.pametnakupovina.app.ui.components.heroColors
+import rs.pametnakupovina.app.ui.components.GlassCard
+import rs.pametnakupovina.app.ui.components.listBottomPadding
+import rs.pametnakupovina.app.ui.theme.LocalAppColors
 import rs.pametnakupovina.app.ui.components.AppTopBar
 import rs.pametnakupovina.app.ui.components.Barcode
 import rs.pametnakupovina.app.ui.components.NoticeBanner
@@ -166,18 +167,19 @@ fun LoyaltyCardsScreen(
     }
 
     Scaffold(
+        containerColor = Color.Transparent,
         topBar = { AppTopBar(title = stringResource(R.string.loyalty_title), onBack = onBack) }
     ) { padding ->
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
+                .padding(top = padding.calculateTopPadding())
                 .testTag("loyalty-list"),
             contentPadding = PaddingValues(
                 start = AppSpacing.lg,
                 end = AppSpacing.lg,
                 top = AppSpacing.md,
-                bottom = AppSpacing.xl
+                bottom = listBottomPadding()
             ),
             verticalArrangement = Arrangement.spacedBy(AppSpacing.md)
         ) {
@@ -238,11 +240,8 @@ fun LoyaltyCardsScreen(
                     }
                 }
                 items(state.cards.drop(1), key = { it.id }) { card ->
-                    Surface(
+                    GlassCard(
                         onClick = { viewModel.show(card) },
-                        shape = MaterialTheme.shapes.medium,
-                        color = MaterialTheme.colorScheme.surfaceContainer,
-                        border = cardBorder,
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(
@@ -273,8 +272,8 @@ private fun FeaturedCard(card: LoyaltyCardDto, onOpen: () -> Unit) {
     Surface(
         onClick = onOpen,
         shape = MaterialTheme.shapes.large,
-        color = heroColors().container,
-        contentColor = heroColors().content,
+        color = LocalAppColors.current.hero,
+        contentColor = LocalAppColors.current.onHero,
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(

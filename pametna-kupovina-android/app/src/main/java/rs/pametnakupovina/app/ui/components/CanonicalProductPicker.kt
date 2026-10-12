@@ -253,10 +253,7 @@ private fun ProductSearchResultCard(
         )
     }
 
-    Surface(
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        border = cardBorder,
+    GlassCard(
         modifier = Modifier
             .fillMaxWidth()
             .testTag("product-result-${product.resultId()}")
@@ -325,6 +322,7 @@ private fun ProductSearchResultCard(
                     onClick = {
                         if (product.hasUsablePrice) onChoose() else confirmWithoutPrice = true
                     },
+                    colors = appButtonColors(),
                     modifier = Modifier.testTag("product-choose-${product.resultId()}")
                 ) {
                     Text(stringResource(R.string.picker_choose), maxLines = 1, softWrap = false)

@@ -43,6 +43,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
@@ -82,6 +83,7 @@ import rs.pametnakupovina.app.ui.components.cardBorder
 import androidx.annotation.StringRes
 import androidx.compose.ui.text.style.TextAlign
 import rs.pametnakupovina.app.ui.components.AppSpacing
+import rs.pametnakupovina.app.ui.components.GlassCard
 import rs.pametnakupovina.app.ui.components.AppTopBar
 import rs.pametnakupovina.app.ui.components.BottomActionBar
 import rs.pametnakupovina.app.ui.components.ErrorState
@@ -223,6 +225,7 @@ fun RecommendationScreen(
     }
 
     Scaffold(
+        containerColor = Color.Transparent,
         topBar = { AppTopBar(title = stringResource(R.string.rec_title), onBack = onBack) },
         // The pinned action bar pads itself for the navigation bar, so the
         // content only needs the top and the sides.
@@ -441,10 +444,7 @@ private fun PreviousPurchaseBanner(
     enabled: Boolean,
     onResume: (String) -> Unit
 ) {
-    Surface(
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        border = cardBorder,
+    GlassCard(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
@@ -610,10 +610,7 @@ private fun ScenarioChooser(
 /** Polazna tačka plana; „Promeni" vraća na izbor lokacije. */
 @Composable
 private fun OriginCard(origin: Pair<Double, Double>, onChange: () -> Unit) {
-    Surface(
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        border = cardBorder,
+    GlassCard(
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
@@ -649,10 +646,7 @@ private fun OriginCard(origin: Pair<Double, Double>, onChange: () -> Unit) {
 
 @Composable
 private fun ScenarioHeroCard(scenario: OptimizationScenarioDto) {
-    Surface(
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        border = cardBorder,
+    GlassCard(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column {
@@ -770,10 +764,7 @@ private fun StoreSection(
     items: List<RecommendationItemDto>,
     requestedDate: String
 ) {
-    Surface(
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        border = cardBorder,
+    GlassCard(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column {
@@ -908,10 +899,7 @@ private fun UnresolvedSection(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)) {
         SectionHeader(stringResource(R.string.rec_unresolved_header), trailing = items.size.toString())
-        Surface(
-            shape = MaterialTheme.shapes.medium,
-            color = MaterialTheme.colorScheme.surfaceContainer,
-            border = cardBorder,
+        GlassCard(
             modifier = Modifier.fillMaxWidth()
         ) {
             Column {
@@ -984,10 +972,7 @@ internal fun UnlocatedOptionsSection(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        Surface(
-            shape = MaterialTheme.shapes.medium,
-            color = MaterialTheme.colorScheme.surfaceContainer,
-            border = cardBorder,
+        GlassCard(
             modifier = Modifier.fillMaxWidth()
         ) {
             Column {
@@ -1049,11 +1034,8 @@ private fun CalculationDetails(
 ) {
     var expanded by rememberSaveable { mutableStateOf(false) }
     val assumptions = result.assumptions
-    Surface(
+    GlassCard(
         onClick = { expanded = !expanded },
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        border = cardBorder,
         modifier = Modifier.fillMaxWidth()
     ) {
         Column {

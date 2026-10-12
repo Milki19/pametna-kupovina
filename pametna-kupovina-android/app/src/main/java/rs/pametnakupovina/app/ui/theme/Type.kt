@@ -17,7 +17,7 @@ import rs.pametnakupovina.app.R
  */
 @OptIn(ExperimentalTextApi::class)
 private val AppFont = FontFamily(
-    listOf(FontWeight.Normal, FontWeight.Medium, FontWeight.SemiBold, FontWeight.Bold).map {
+    listOf(FontWeight.Normal, FontWeight.Medium, FontWeight.SemiBold, FontWeight.Bold, FontWeight.ExtraBold).map {
         Font(R.font.inter, it, variationSettings = FontVariation.Settings(FontVariation.weight(it.weight)))
     }
 )
@@ -44,6 +44,15 @@ val Typography = Typography(
         fontWeight = FontWeight.Bold,
         fontSize = 36.sp,
         lineHeight = 44.sp,
+        letterSpacing = (-0.02).em
+    ),
+    /** Naslov taba, levo na vrhu ekrana. */
+    headlineMedium = TextStyle(
+        fontFamily = AppFont,
+        fontFeatureSettings = Tabular,
+        fontWeight = FontWeight.Bold,
+        fontSize = 28.sp,
+        lineHeight = 34.sp,
         letterSpacing = (-0.02).em
     ),
     headlineSmall = TextStyle(

@@ -26,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -40,6 +41,7 @@ import rs.pametnakupovina.app.text.asString
 import rs.pametnakupovina.app.ui.SalesViewModel
 import rs.pametnakupovina.app.ui.components.AppIcon
 import rs.pametnakupovina.app.ui.components.AppSpacing
+import rs.pametnakupovina.app.ui.components.GlassCard
 import rs.pametnakupovina.app.ui.components.AppTopBar
 import rs.pametnakupovina.app.ui.components.DiscountBadge
 import rs.pametnakupovina.app.ui.components.ErrorState
@@ -48,7 +50,6 @@ import rs.pametnakupovina.app.ui.components.NoticeBanner
 import rs.pametnakupovina.app.ui.components.StatusTone
 import rs.pametnakupovina.app.ui.components.StruckPrice
 import rs.pametnakupovina.app.ui.components.TonalActionButton
-import rs.pametnakupovina.app.ui.components.cardBorder
 import rs.pametnakupovina.app.ui.components.discountColors
 import rs.pametnakupovina.app.ui.components.saleTextColor
 import rs.pametnakupovina.app.ui.distance
@@ -74,6 +75,7 @@ fun SalesScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
     Scaffold(
+        containerColor = Color.Transparent,
         topBar = {
             AppTopBar(
                 title = stringResource(R.string.sale_title),
@@ -235,10 +237,7 @@ private fun SaleCard(
     onOpen: (() -> Unit)?
 ) {
     val (stripe, _) = discountColors(item.discountPercent)
-    Surface(
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        border = cardBorder,
+    GlassCard(
         modifier = Modifier
             .fillMaxWidth()
             .testTag("sale-${item.productFamilyId}")
@@ -348,11 +347,8 @@ private fun saleDetails(item: SaleItemDto): String =
  */
 @Composable
 fun SalesShortcutCard(onOpen: () -> Unit) {
-    Surface(
+    GlassCard(
         onClick = onOpen,
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        border = cardBorder,
         modifier = Modifier
             .fillMaxWidth()
             .testTag("open-sales")

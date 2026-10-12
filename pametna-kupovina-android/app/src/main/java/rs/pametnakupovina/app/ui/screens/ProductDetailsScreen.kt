@@ -35,6 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
@@ -51,6 +52,7 @@ import rs.pametnakupovina.app.data.network.CanonicalProductPricePointDto
 import rs.pametnakupovina.app.alerts.bestPrice
 import rs.pametnakupovina.app.ui.ProductDetailsViewModel
 import rs.pametnakupovina.app.ui.components.AppSpacing
+import rs.pametnakupovina.app.ui.components.GlassCard
 import rs.pametnakupovina.app.ui.components.cardBorder
 import rs.pametnakupovina.app.ui.components.AppTopBar
 import rs.pametnakupovina.app.ui.components.ErrorState
@@ -106,6 +108,7 @@ fun ProductDetailsScreen(
     }
 
     Scaffold(
+        containerColor = Color.Transparent,
         topBar = {
             AppTopBar(
                 title = stringResource(R.string.product_title),
@@ -273,10 +276,7 @@ private fun <T> GroupedRows(
     rows: List<T>,
     content: @Composable (Int, T) -> Unit
 ) {
-    Surface(
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        border = cardBorder,
+    GlassCard(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column {
@@ -404,10 +404,7 @@ private fun ProductHeader(
     val comparable = offers.filterNot { it.priceNeedsCheck || isCaseOf(it, product) }
     // Lanci, ne prodavnice: devet METRO objekata je jedan lanac.
     val chains = comparable.map { it.retailerName }.distinct().size
-    Surface(
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        border = cardBorder,
+    GlassCard(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(

@@ -75,6 +75,7 @@ fun FullScreenDialog(
                         Button(
                             onClick = onConfirm,
                             enabled = confirmEnabled,
+                            colors = appButtonColors(),
                             modifier = confirmModifier.padding(end = AppSpacing.sm)
                         ) {
                             Text(confirmLabel)

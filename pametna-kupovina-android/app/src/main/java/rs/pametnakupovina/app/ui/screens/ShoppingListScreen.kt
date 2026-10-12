@@ -35,6 +35,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -51,12 +52,16 @@ import rs.pametnakupovina.app.ui.ProductSearchViewModel
 import rs.pametnakupovina.app.ui.ShoppingListViewModel
 import rs.pametnakupovina.app.ui.components.AppIcon
 import rs.pametnakupovina.app.ui.components.AppSpacing
+import rs.pametnakupovina.app.ui.components.GlassCard
 import rs.pametnakupovina.app.ui.components.AppTopBar
 import rs.pametnakupovina.app.ui.components.BottomActionBar
 import rs.pametnakupovina.app.ui.components.LoadingState
 import rs.pametnakupovina.app.ui.components.NoticeBanner
 import rs.pametnakupovina.app.ui.components.TonalActionButton
-import rs.pametnakupovina.app.ui.components.cardBorder
+import rs.pametnakupovina.app.ui.components.LocalBottomBarInset
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
 import rs.pametnakupovina.app.ui.components.PrimaryActionButton
 import rs.pametnakupovina.app.ui.components.StatusPill
 import rs.pametnakupovina.app.ui.components.StatusTone
@@ -83,6 +88,7 @@ fun ShoppingListScreen(
     var showPasteDialog by rememberSaveable { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    val systemBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
     // Zajednički spisak: ono što je ukućanin dodao vidi se po povratku.
     LifecycleResumeEffect(viewModel) {
@@ -128,6 +134,7 @@ fun ShoppingListScreen(
     }
 
     Scaffold(
+        containerColor = Color.Transparent,
         topBar = {
             AppTopBar(
                 title = stringResource(R.string.list_title),
@@ -141,7 +148,10 @@ fun ShoppingListScreen(
         },
         bottomBar = {
             if (!state.isInitialLoading) {
-                BottomActionBar {
+                // Iznad lebdeće donje trake, koja već računa i sistemsku.
+                BottomActionBar(
+                    modifier = Modifier.padding(bottom = (LocalBottomBarInset.current - systemBottom).coerceAtLeast(0.dp))
+                ) {
                     PrimaryActionButton(
                         text = stringResource(
                             if (state.isSyncing) R.string.list_action_sending else R.string.list_action_calculate
@@ -340,11 +350,8 @@ private fun DraftItemRow(
 
     // Sa krupnim pismom količina ide ispod naziva, da naziv ne ostane u uskoj koloni.
     val largeFont = LocalDensity.current.fontScale >= 1.5f
-    Surface(
+    GlassCard(
         onClick = onEdit,
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        border = cardBorder,
         modifier = Modifier.fillMaxWidth()
     ) {
         Column {
