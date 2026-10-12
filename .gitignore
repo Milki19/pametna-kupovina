@@ -11,3 +11,7 @@ infra/logs/
 infra/runtime/
 ficaFromSep12.md
 infra/release/
+# agent skills installed locally (npx skills add)
+.agents/
+.claude/skills/
+skills-lock.json
