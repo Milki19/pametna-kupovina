@@ -2,6 +2,7 @@ package rs.pametnakupovina.app.ui
 
 import android.content.Intent
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.DrawableRes
@@ -14,9 +15,14 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,9 +33,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -38,10 +46,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavBackStackEntry
 import dev.chrisbanes.haze.HazeState
@@ -51,8 +64,11 @@ import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import rs.pametnakupovina.app.ui.components.AppBackdrop
+import rs.pametnakupovina.app.ui.components.AppIcon
 import rs.pametnakupovina.app.ui.components.ChoiceChip
 import rs.pametnakupovina.app.ui.components.GlassCard
+import rs.pametnakupovina.app.ui.components.IconTile
+import rs.pametnakupovina.app.ui.components.pressScale
 import rs.pametnakupovina.app.ui.components.LocalBottomBarInset
 import rs.pametnakupovina.app.ui.theme.LocalAppColors
 import rs.pametnakupovina.app.ui.theme.ThemeChoice
@@ -65,8 +81,6 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -90,7 +104,6 @@ import androidx.navigation.navArgument
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import rs.pametnakupovina.app.R
-import rs.pametnakupovina.app.ui.components.AppIcon
 import rs.pametnakupovina.app.ui.components.AppSpacing
 import rs.pametnakupovina.app.ui.screens.AboutDialog
 import rs.pametnakupovina.app.ui.screens.HouseholdDialog
@@ -199,11 +212,8 @@ fun PametnaKupovinaApp(
         )
     }
 
-    if (showMenu) {
-        ModalBottomSheet(
-            onDismissRequest = { showMenu = false },
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
-        ) {
+    BackHandler(enabled = showMenu) { showMenu = false }
+    val menuContent: @Composable () -> Unit = {
             AppMenuContent(
                 theme = theme,
                 onTheme = onTheme,
@@ -230,7 +240,6 @@ fun PametnaKupovinaApp(
                     showAbout = true
                 }
             )
-        }
     }
 
     val onTab = Tab.entries.any { it.route == currentRoute }
@@ -382,10 +391,73 @@ fun PametnaKupovinaApp(
                     .onSizeChanged { barHeight = with(density) { it.height.toDp() } }
             )
         }
+        // Meni je u istom prozoru kao sadržaj, da bi mogao da ga zamuti kao traka.
+        AnimatedVisibility(visible = showMenu, enter = fadeIn(tween(200)), exit = fadeOut(tween(150))) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.32f))
+                    .clickable(
+                        interactionSource = null,
+                        indication = null,
+                        onClickLabel = stringResource(R.string.common_close),
+                        onClick = { showMenu = false }
+                    )
+            )
+        }
+        // Izrasta iz dugmeta „Meni" (dole desno) i tamo se vraća; izlazi brže nego što ulazi.
+        AnimatedVisibility(
+            visible = showMenu,
+            enter = scaleIn(tween(220, easing = ScreenEasing), initialScale = 0.94f, transformOrigin = MenuOrigin) +
+                fadeIn(tween(160)),
+            exit = scaleOut(tween(150), targetScale = 0.96f, transformOrigin = MenuOrigin) + fadeOut(tween(120)),
+            modifier = Modifier.align(Alignment.BottomCenter)
+        ) {
+            val title = stringResource(R.string.app_menu)
+            GlassCard(
+                shape = NavBarShape,
+                color = Color.Transparent,
+                // Veća površina je deblje staklo: jače zamućenje i gušća boja, da se natpisi čitaju.
+                backdrop = Modifier.navGlass(haze, NavBarShape, tintAlpha = 0.74f, blur = 32.dp),
+                modifier = Modifier
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
+                    .padding(NavBarMargin)
+                    .fillMaxWidth()
+                    .semantics { paneTitle = title }
+            ) {
+                menuContent()
+            }
+        }
     }
 }
 
 private val NavBarMargin = 12.dp
+private val NavBarShape = RoundedCornerShape(30.dp)
+private val MenuOrigin = TransformOrigin(0.9f, 1f)
+
+/**
+ * Staklo trake i menija: zamućen sadržaj ispod, preko njega boja trake malo
+ * providna. Bez zamućenja (pre Androida 12) ostaje skoro neprovidno, inače se
+ * spisak čita kroz natpise.
+ */
+@Composable
+private fun Modifier.navGlass(
+    haze: HazeState,
+    shape: Shape,
+    tintAlpha: Float = 0.6f,
+    blur: Dp = 24.dp
+): Modifier {
+    val navBar = LocalAppColors.current.navBar
+    return clip(shape).hazeEffect(
+        haze,
+        HazeStyle(
+            backgroundColor = MaterialTheme.colorScheme.background,
+            tint = HazeTint(navBar.copy(alpha = tintAlpha)),
+            blurRadius = blur,
+            fallbackTint = HazeTint(navBar)
+        )
+    )
+}
 private val ScreenEasing = CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f)
 
 private fun screenEnter(direction: Int) =
@@ -409,23 +481,10 @@ private fun FloatingNavBar(
     onMenu: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val shape = RoundedCornerShape(30.dp)
-    val navBar = LocalAppColors.current.navBar
     GlassCard(
-        shape = shape,
-        // Staklo: zamućen sadržaj ispod, preko njega boja trake malo providna.
-        // Bez zamućenja (pre Androida 12) traka ostaje skoro neprovidna, inače
-        // se spisak čita kroz natpise.
+        shape = NavBarShape,
         color = Color.Transparent,
-        backdrop = Modifier.clip(shape).hazeEffect(
-            haze,
-            HazeStyle(
-                backgroundColor = MaterialTheme.colorScheme.background,
-                tint = HazeTint(navBar.copy(alpha = 0.6f)),
-                blurRadius = 24.dp,
-                fallbackTint = HazeTint(navBar)
-            )
-        ),
+        backdrop = Modifier.navGlass(haze, NavBarShape),
         modifier = modifier.fillMaxWidth()
     ) {
         Row(
@@ -536,7 +595,11 @@ private fun AppMenuContent(
     onHousehold: () -> Unit,
     onAbout: () -> Unit
 ) {
-    Column(modifier = Modifier.padding(bottom = AppSpacing.lg)) {
+    Column(
+        modifier = Modifier
+            .verticalScroll(rememberScrollState())
+            .padding(vertical = AppSpacing.md)
+    ) {
         listOf(
             Triple(R.string.app_menu_sales, R.drawable.ic_local_offer, onSales) to "menu-sales",
             Triple(R.string.app_menu_scan_receipt, R.drawable.ic_camera, onScan) to "menu-scan",
@@ -545,10 +608,9 @@ private fun AppMenuContent(
             Triple(R.string.app_menu_about, R.drawable.ic_info, onAbout) to "menu-about"
         ).forEach { (entry, tag) ->
             val (label, icon, onClick) = entry
-            NavigationDrawerItem(
-                label = { Text(stringResource(label)) },
-                icon = { AppIcon(icon, contentDescription = null) },
-                selected = false,
+            MenuRow(
+                icon = icon,
+                label = stringResource(label),
                 onClick = onClick,
                 modifier = Modifier
                     .padding(horizontal = AppSpacing.sm)
@@ -559,7 +621,7 @@ private fun AppMenuContent(
             stringResource(R.string.app_theme),
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = AppSpacing.xl, end = AppSpacing.xl, top = AppSpacing.md, bottom = AppSpacing.sm)
+            modifier = Modifier.padding(start = AppSpacing.xl, end = AppSpacing.xl, top = AppSpacing.lg, bottom = AppSpacing.sm)
         )
         // Vodoravno skrolovanje: sa krupnim slovima četiri čipa ne staju u red.
         Row(
@@ -583,5 +645,39 @@ private fun AppMenuContent(
                 )
             }
         }
+    }
+}
+
+/** Red menija: pločica sa ikonicom kao na početnoj, na dodir blago utone. */
+@Composable
+private fun MenuRow(
+    @DrawableRes icon: Int,
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val source = remember { MutableInteractionSource() }
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .pressScale(source)
+            .clip(RoundedCornerShape(20.dp))
+            .clickable(
+                interactionSource = source,
+                indication = LocalIndication.current,
+                role = Role.Button,
+                onClick = onClick
+            )
+            .heightIn(min = 56.dp)
+            .padding(horizontal = AppSpacing.md, vertical = AppSpacing.sm),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(AppSpacing.lg)
+    ) {
+        IconTile(icon, size = 40.dp)
+        Text(
+            label,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface
+        )
     }
 }
