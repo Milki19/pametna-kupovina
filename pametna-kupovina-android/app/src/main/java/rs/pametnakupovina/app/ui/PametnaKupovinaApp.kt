@@ -37,12 +37,19 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavBackStackEntry
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.HazeStyle
+import dev.chrisbanes.haze.HazeTint
+import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.rememberHazeState
 import rs.pametnakupovina.app.ui.components.AppBackdrop
 import rs.pametnakupovina.app.ui.components.ChoiceChip
 import rs.pametnakupovina.app.ui.components.GlassCard
@@ -233,7 +240,12 @@ fun PametnaKupovinaApp(
     // Sadržaj tabova skroluje ispod lebdeće trake, pa sam ostavlja mesto za nju.
     val barInset = if (onTab) barHeight + systemBottom + NavBarMargin * 2 else 0.dp
 
+    // Traka zamućuje ono što prolazi ispod nje (Android 12+); starije verzije
+    // dobijaju skoro neprovidnu traku kao ranije.
+    val haze = rememberHazeState()
+
     Box(Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize().hazeSource(haze)) {
         AppBackdrop()
         CompositionLocalProvider(LocalBottomBarInset provides barInset) {
         NavHost(
@@ -352,6 +364,7 @@ fun PametnaKupovinaApp(
             }
         }
         }
+        }
         AnimatedVisibility(
             visible = onTab,
             enter = slideInVertically(tween(400, easing = ScreenEasing)) { it / 2 } + fadeIn(tween(300)),
@@ -359,6 +372,7 @@ fun PametnaKupovinaApp(
             modifier = Modifier.align(Alignment.BottomCenter)
         ) {
             FloatingNavBar(
+                haze = haze,
                 currentRoute = currentRoute,
                 onTab = { navController.openTab(it.route) },
                 onMenu = { showMenu = true },
@@ -389,16 +403,29 @@ private fun AnimatedContentTransitionScope<NavBackStackEntry>.tabDirection(): In
 /** Donja traka lebdi kao staklena pilula; izabrani tab dobija pilulu iza ikonice. */
 @Composable
 private fun FloatingNavBar(
+    haze: HazeState,
     currentRoute: String?,
     onTab: (Tab) -> Unit,
     onMenu: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val shape = RoundedCornerShape(30.dp)
+    val navBar = LocalAppColors.current.navBar
     GlassCard(
-        shape = RoundedCornerShape(30.dp),
-        // Bez zamućenja pozadine traka mora da bude skoro neprovidna, inače
+        shape = shape,
+        // Staklo: zamućen sadržaj ispod, preko njega boja trake malo providna.
+        // Bez zamućenja (pre Androida 12) traka ostaje skoro neprovidna, inače
         // se spisak čita kroz natpise.
-        color = LocalAppColors.current.navBar,
+        color = Color.Transparent,
+        backdrop = Modifier.clip(shape).hazeEffect(
+            haze,
+            HazeStyle(
+                backgroundColor = MaterialTheme.colorScheme.background,
+                tint = HazeTint(navBar.copy(alpha = 0.6f)),
+                blurRadius = 24.dp,
+                fallbackTint = HazeTint(navBar)
+            )
+        ),
         modifier = modifier.fillMaxWidth()
     ) {
         Row(
