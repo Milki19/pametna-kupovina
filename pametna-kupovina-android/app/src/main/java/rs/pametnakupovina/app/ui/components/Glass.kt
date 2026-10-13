@@ -115,7 +115,8 @@ val cardBorder: BorderStroke
 
 /**
  * Staklena kartica: poluprovidna površina preko pozadine, tanka ivica i, u
- * svetloj temi, meka senka. Sa [onClick] blago utone na dodir.
+ * svetloj temi, meka senka. Sa [onClick] blago utone na dodir. [backdrop] se
+ * crta ispod površine, unutar senke (npr. zamućenje sadržaja iza kartice).
  */
 @Composable
 fun GlassCard(
@@ -126,6 +127,7 @@ fun GlassCard(
     color: Color = MaterialTheme.colorScheme.surfaceContainer,
     contentColor: Color = MaterialTheme.colorScheme.onSurface,
     border: BorderStroke? = cardBorder,
+    backdrop: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
     val lifted = if (!LocalAppColors.current.dark && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -134,13 +136,13 @@ fun GlassCard(
         Modifier
     }
     if (onClick == null) {
-        Surface(modifier = modifier.then(lifted), shape = shape, color = color, contentColor = contentColor, border = border, content = content)
+        Surface(modifier = modifier.then(lifted).then(backdrop), shape = shape, color = color, contentColor = contentColor, border = border, content = content)
     } else {
         val source = remember { MutableInteractionSource() }
         Surface(
             onClick = onClick,
             enabled = enabled,
-            modifier = modifier.pressScale(source).then(lifted),
+            modifier = modifier.pressScale(source).then(lifted).then(backdrop),
             shape = shape,
             color = color,
             contentColor = contentColor,
