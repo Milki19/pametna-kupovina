@@ -15,6 +15,15 @@ public interface ChainPriceSource {
     ChainRefreshOutcome refresh(LocalDate today);
 
     /**
+     * Another step of the same cycle that carries this chain's prices too, or
+     * null. When this chain fails but that step succeeds, the chain's prices
+     * are still current, so the day only warns and is not tried again.
+     */
+    default String backup() {
+        return null;
+    }
+
+    /**
      * A chain that publishes a standard price list every day: it is required,
      * and only a list from today or yesterday counts as clean.
      */

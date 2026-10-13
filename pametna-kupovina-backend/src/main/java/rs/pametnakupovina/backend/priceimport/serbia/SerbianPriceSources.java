@@ -71,7 +71,8 @@ public class SerbianPriceSources implements MarketPriceSources {
     @Override
     public String freshnessRule() {
         return "Svih pet osnovnih lanaca bez grešaka; cenovnik od danas ili juče. "
-                + "METRO, Super Vero i Delhaize katalog idu posle njih; njihova greška je upozorenje.";
+                + "METRO, Super Vero i Delhaize katalog idu posle njih; njihova greška je upozorenje. "
+                + "Ako Maxi fajlovi po radnjama ne uspeju a Delhaize katalog uspe, dan je upozorenje.";
     }
 
     /** Chains onboarded from the portal: active, in Serbia, with the standard price list. */
@@ -108,6 +109,13 @@ public class SerbianPriceSources implements MarketPriceSources {
             @Override
             public boolean required() {
                 return true;
+            }
+
+            // Delhaize's chain-wide list carries Maxi's prices when the store
+            // files cannot be read (Maxi's service refused us on 12 and 13 October).
+            @Override
+            public String backup() {
+                return DELHAIZE_CATALOG;
             }
 
             @Override

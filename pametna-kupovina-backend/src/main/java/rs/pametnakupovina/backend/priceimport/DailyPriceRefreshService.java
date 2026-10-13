@@ -90,12 +90,13 @@ public class DailyPriceRefreshService {
                 recovery.recover();
                 LocalDate today = market.today();
                 List<ChainPriceSource> chains = marketSources.chains();
-                if (!manual && !due(market, today, requiredCodes(chains))) return Map.of("status", "NOT_DUE");
+                if (!manual && !due(market, today, requiredCodes(chains), backups(chains))) return Map.of("status", "NOT_DUE");
                 long id = jdbc.queryForObject("""
                         INSERT INTO app.price_refresh_cycle(market_id,cycle_date,status) VALUES (?,?,'RUNNING') RETURNING id
                         """, Long.class, market.id(), today);
                 boolean failed = false;
                 boolean warning = false;
+                Map<String, String> statuses = new java.util.HashMap<>();
                 try {
                     for (ChainPriceSource chain : chains) {
                         String code = chain.code();
@@ -110,10 +111,18 @@ public class DailyPriceRefreshService {
                                 INSERT INTO app.price_refresh_result(cycle_id,retailer_code,snapshot_date,rows_saved,status,detail)
                                 VALUES (?,?,?,?,?,?)
                                 """, id, code, outcome.snapshotDate(), outcome.rows(), outcome.status(), outcome.detail());
-                        failed |= ChainRefreshOutcome.failsTheDay(chain.required(), outcome.status());
-                        warning |= ChainRefreshOutcome.warnsTheDay(chain.required(), outcome.status());
+                        statuses.put(code, outcome.status());
                         log.info("Daily refresh {} ({}): {} {} date={} rows={}", id, market.code(), code,
                                 outcome.status(), outcome.snapshotDate(), outcome.rows());
+                    }
+                    for (ChainPriceSource chain : chains) {
+                        String status = statuses.get(chain.code());
+                        if (covered(status, statuses.get(chain.backup()))) {
+                            warning = true;
+                            continue;
+                        }
+                        failed |= ChainRefreshOutcome.failsTheDay(chain.required(), status);
+                        warning |= ChainRefreshOutcome.warnsTheDay(chain.required(), status);
                     }
                     String status = failed ? "FAILED" : warning ? "WARNING" : "SUCCEEDED";
                     jdbc.update("UPDATE app.price_refresh_cycle SET status=?, finished_at=now() WHERE id=?", status, id);
@@ -136,9 +145,20 @@ public class DailyPriceRefreshService {
     }
 
     /** From eight in the morning where the market is, at most three tries a day, two hours apart. */
-    private boolean due(Market market, LocalDate today, List<String> requiredCodes) {
+    private boolean due(Market market, LocalDate today, List<String> requiredCodes, List<String> backups) {
         if (ZonedDateTime.now(market.timeZone()).getHour() < 8) return false;
-        return retryWanted(market, today, requiredCodes);
+        return retryWanted(market, today, requiredCodes, backups);
+    }
+
+    /** A failed chain whose prices another step of the cycle carried. */
+    static boolean covered(String status, String backupStatus) {
+        return "FAILED".equals(status) && "SUCCEEDED".equals(backupStatus);
+    }
+
+    /** "CHAIN>BACKUP" for every chain that has a backup step. */
+    private static List<String> backups(List<ChainPriceSource> chains) {
+        return chains.stream().filter(chain -> chain.backup() != null)
+                .map(chain -> chain.code() + ">" + chain.backup()).toList();
     }
 
     /**
@@ -149,6 +169,17 @@ public class DailyPriceRefreshService {
      * so it counts as done.
      */
     public boolean retryWanted(Market market, LocalDate today, List<String> requiredCodes) {
+        return retryWanted(market, today, requiredCodes, List.of());
+    }
+
+    /**
+     * A required chain that failed while its backup step succeeded counts as
+     * done too: its prices came in, and its own source has been refusing us
+     * all day, so another try changes nothing.
+     *
+     * @param backups "CHAIN>BACKUP" pairs
+     */
+    public boolean retryWanted(Market market, LocalDate today, List<String> requiredCodes, List<String> backups) {
         return Boolean.TRUE.equals(jdbc.queryForObject("""
                 SELECT COUNT(*) < 3
                   AND COUNT(*) FILTER (WHERE cycle.status='SUCCEEDED'
@@ -156,10 +187,17 @@ public class DailyPriceRefreshService {
                           SELECT 1 FROM app.price_refresh_result AS result
                            WHERE result.cycle_id=cycle.id
                              AND result.retailer_code = ANY(string_to_array(?, ','))
-                             AND result.status<>'SUCCEEDED')))=0
+                             AND result.status<>'SUCCEEDED'
+                             AND NOT (result.status='FAILED' AND EXISTS (
+                                 SELECT 1 FROM app.price_refresh_result AS backup
+                                  WHERE backup.cycle_id=cycle.id
+                                    AND backup.status='SUCCEEDED'
+                                    AND result.retailer_code || '>' || backup.retailer_code
+                                        = ANY(string_to_array(?, ',')))))))=0
                   AND COALESCE(MAX(cycle.started_at) < now()-interval '2 hours',true)
                 FROM app.price_refresh_cycle AS cycle WHERE cycle.market_id=? AND cycle.cycle_date=?
-                """, Boolean.class, String.join(",", requiredCodes), market.id(), today));
+                """, Boolean.class, String.join(",", requiredCodes), String.join(",", backups),
+                market.id(), today));
     }
 
     private static List<String> requiredCodes(List<ChainPriceSource> chains) {
