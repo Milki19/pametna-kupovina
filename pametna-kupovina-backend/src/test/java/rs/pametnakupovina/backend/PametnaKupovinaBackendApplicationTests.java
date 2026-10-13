@@ -346,6 +346,43 @@ class PametnaKupovinaBackendApplicationTests {
     }
 
     @Test
+    void maxiStoreFilesFailingWhileDelhaizeCatalogSucceedsOnlyWarns() {
+        var importer = org.mockito.Mockito.mock(PriceImportService.class);
+        var maxi = org.mockito.Mockito.mock(rs.pametnakupovina.backend.priceimport.maxi.MaxiPriceImportCoordinator.class);
+        var serbia = new rs.pametnakupovina.backend.market.MarketRepository(jdbcClient).defaultMarket();
+        var today = serbia.today();
+        var fresh = new ImportResult(1L,today,2,2,2,0,"SUCCEEDED");
+        org.mockito.Mockito.when(importer.importPrices(org.mockito.ArgumentMatchers.anyString())).thenReturn(fresh);
+        // Maxi's service refuses the store files (AADSTS53003, 12 and 13 October).
+        org.mockito.Mockito.when(maxi.importLatest()).thenThrow(new IllegalStateException("AADSTS53003"));
+        var sources = new rs.pametnakupovina.backend.priceimport.serbia.SerbianPriceSources(importer,maxi,jdbcClient);
+        var service = new rs.pametnakupovina.backend.priceimport.DailyPriceRefreshService(
+                new org.springframework.jdbc.core.JdbcTemplate(testDataSource),testDataSource,java.util.List.of(sources),
+                new rs.pametnakupovina.backend.priceimport.ImportRunRecovery(jdbcClient),
+                new rs.pametnakupovina.backend.market.MarketRepository(jdbcClient));
+        var required = sources.chains().stream()
+                .filter(rs.pametnakupovina.backend.priceimport.ChainPriceSource::required)
+                .map(rs.pametnakupovina.backend.priceimport.ChainPriceSource::code).toList();
+        var backups = sources.chains().stream().filter(chain -> chain.backup() != null)
+                .map(chain -> chain.code() + ">" + chain.backup()).toList();
+        Runnable twoHoursLater = () -> jdbcClient.sql(
+                "UPDATE app.price_refresh_cycle SET started_at = started_at - interval '3 hours'").update();
+
+        // Delhaize's catalogue brought Maxi's prices: a warning, and no retry.
+        assertThat(service.refresh(true).get("status")).isEqualTo("WARNING");
+        twoHoursLater.run();
+        assertThat(service.retryWanted(serbia, today, required, backups)).isFalse();
+
+        // Without the catalogue Maxi has no new prices: the day fails and is tried again.
+        jdbcClient.sql("DELETE FROM app.price_refresh_result").update();
+        jdbcClient.sql("DELETE FROM app.price_refresh_cycle").update();
+        org.mockito.Mockito.when(importer.importPrices("MAXI")).thenThrow(new IllegalStateException("Test failure"));
+        assertThat(service.refresh(true).get("status")).isEqualTo("FAILED");
+        twoHoursLater.run();
+        assertThat(service.retryWanted(serbia, today, required, backups)).isTrue();
+    }
+
+    @Test
     void dailyRefreshRefusesOverlapAndRecoversInterruptedCycle() throws Exception {
         var importer = org.mockito.Mockito.mock(PriceImportService.class);
         var maxi = org.mockito.Mockito.mock(rs.pametnakupovina.backend.priceimport.maxi.MaxiPriceImportCoordinator.class);
