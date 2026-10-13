@@ -1,35 +1,58 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Korpa sa kvačicom, po vlasnikovoj skici. Sve stoji unutar kruga
-     prečnika 72 oko sredine, pa nijedna maska ne odseče ništa. Kvačica je
-     u boji pozadine, kao da je izrezana iz korpe. -->
+<!-- Korpa sa kvačicom, po vlasnikovoj skici, kao staklo: od bele prelazi u
+     svetloplavu. Umanjena je na 82% i podignuta za 1, pa ima vazduha u svakoj
+     maski i optički stoji u sredini. Kvačica je narandžasta, boja uštede. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <path
-        android:pathData="M40,50L48,30"
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="6"
-        android:strokeLineCap="round" />
-    <path
-        android:pathData="M68,50L60,30"
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="6"
-        android:strokeLineCap="round" />
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:scaleX="0.82"
+        android:scaleY="0.82"
+        android:translateY="-1">
 
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M26,48h56a5,5 0 0 1 0,10h-56a5,5 0 0 1 0,-10z" />
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M30,58h48l-5,20a4,4 0 0 1 -4,3h-30a4,4 0 0 1 -4,-3z" />
+        <path
+            android:pathData="M40,50L48,30M68,50L60,30"
+            android:strokeWidth="6"
+            android:strokeLineCap="round">
+            <aapt:attr name="android:strokeColor">
+                <gradient
+                    android:type="linear"
+                    android:startX="0"
+                    android:startY="27"
+                    android:endX="0"
+                    android:endY="81">
+                    <item android:offset="0" android:color="#FFFFFFFF" />
+                    <item android:offset="1" android:color="#FFDFE5FF" />
+                </gradient>
+            </aapt:attr>
+        </path>
 
-    <path
-        android:pathData="M42,68L49,75L66,60"
-        android:strokeColor="#005C55"
-        android:strokeWidth="6"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round" />
+        <!-- Telo počinje 1 više i preklapa obod, da između njih nema niti. -->
+        <path android:pathData="M26,48h56a5,5 0 0 1 0,10h-56a5,5 0 0 1 0,-10zM30,57h48l-5,21a4,4 0 0 1 -4,3h-30a4,4 0 0 1 -4,-3z">
+            <aapt:attr name="android:fillColor">
+                <gradient
+                    android:type="linear"
+                    android:startX="0"
+                    android:startY="27"
+                    android:endX="0"
+                    android:endY="81">
+                    <item android:offset="0" android:color="#FFFFFFFF" />
+                    <item android:offset="1" android:color="#FFDFE5FF" />
+                </gradient>
+            </aapt:attr>
+        </path>
+
+        <path
+            android:pathData="M44,69.5L50,75.5L64,63"
+            android:strokeColor="#EA580C"
+            android:strokeWidth="6"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+    </group>
 </vector>
