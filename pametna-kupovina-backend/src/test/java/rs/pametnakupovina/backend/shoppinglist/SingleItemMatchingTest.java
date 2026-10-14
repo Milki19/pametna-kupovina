@@ -51,6 +51,7 @@ class SingleItemMatchingTest {
                     .withPassword("test");
 
     private static final String TOKEN = "single-item";
+    private static final String UNKNOWN_BARCODE = "8600000000059";
 
     private static final String CATALOGUE = "KATEGORIJA;NAZIV KATEGORIJE;"
             + "Naziv proizvoda;Robna marka;Barkod proizvoda;Jedinica mere;"
@@ -121,7 +122,8 @@ class SingleItemMatchingTest {
                 new CreateShoppingListRequest("Jedna stavka"),
                 callers.account(TOKEN)
         );
-        ShoppingListItemResponse cheese = add(list.id(), "Sir Gauda Imlek 400g", "8600000000011");
+        // A barcode no shop sells: the line is matched by its name.
+        ShoppingListItemResponse cheese = add(list.id(), "Sir Gauda Imlek 400g", UNKNOWN_BARCODE);
         ShoppingListItemResponse oil = add(list.id(), "Ulje suncokretovo Dijamant 1l", "8600000000042");
 
         ShoppingListMatchingResponse whole = matchingService.match(
@@ -198,7 +200,7 @@ class SingleItemMatchingTest {
                 new CreateShoppingListRequest("Tuđi spisak"),
                 callers.account(TOKEN)
         );
-        ShoppingListItemResponse item = add(list.id(), "Sir Gauda Imlek 400g", "8600000000011");
+        ShoppingListItemResponse item = add(list.id(), "Sir Gauda Imlek 400g", UNKNOWN_BARCODE);
 
         assertThatThrownBy(() -> matchingService.matchOne(
                 list.id(),
