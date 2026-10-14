@@ -76,6 +76,33 @@ class PlaceSearchServiceTest {
     }
 
     @Test
+    void theBestKnownPlaceComesFirstWithAShortName() {
+        // Nominatim, 14.10.2026: Belgrade's street is "Kneza Mihaila" and came last.
+        answer = """
+                [{"lat":"43.7","lon":"20.6","importance":0.00006,
+                  "display_name":"10, Knez Mihailova, Cvetke, Grad Kraljevo, Raški upravni okrug, Centralna Srbija, Srbija",
+                  "address":{"house_number":"10","road":"Knez Mihailova","village":"Cvetke","municipality":"Grad Kraljevo"}},
+                 {"lat":"44.27","lon":"19.89","importance":0.00006,
+                  "display_name":"10, Knez Mihailova, Tešnjar, Valjevo, Grad Valjevo, Kolubarski upravni okrug, Srbija",
+                  "address":{"house_number":"10","road":"Knez Mihailova","suburb":"Tešnjar","city":"Valjevo"}},
+                 {"lat":"44.27","lon":"19.89","importance":0.00006,
+                  "display_name":"Flora, 10, Knez Mihailova, Tešnjar, Valjevo, Srbija",
+                  "address":{"shop":"Flora","house_number":"10","road":"Knez Mihailova","suburb":"Tešnjar","city":"Valjevo"}},
+                 {"lat":"44.816","lon":"20.459","importance":0.00008,
+                  "display_name":"10, Kneza Mihaila, Skadarlija, Dorćol, Beograd (Stari grad), Beograd, Gradska opština Stari grad, Grad Beograd, Centralna Srbija, 11000, Srbija",
+                  "address":{"house_number":"10","road":"Kneza Mihaila","neighbourhood":"Skadarlija","quarter":"Dorćol","suburb":"Beograd (Stari grad)","city":"Beograd"}}]
+                """;
+
+        var places = service.search(7L, "Knez Mihailova 10");
+
+        assertThat(places).extracting(PlaceSearchService.Place::name).containsExactly(
+                "Kneza Mihaila 10, Dorćol, Beograd",
+                "Knez Mihailova 10, Cvetke, Grad Kraljevo",
+                "Knez Mihailova 10, Tešnjar, Valjevo");
+        assertThat(asked.getFirst()).contains("addressdetails=1").contains("limit=15");
+    }
+
+    @Test
     void theSameSearchIsAnsweredFromMemory() {
         answer = "[{\"lat\":\"44.8\",\"lon\":\"20.4\",\"display_name\":\"Vračar\"}]";
 
