@@ -113,7 +113,15 @@ function accessToken() {
 
 // ---------- Server ----------
 
+// Svaka izmena spiska podiže verziju. Provera proizvoda i preporuke se
+// pamte za verziju za koju su izračunate, a najduže deset minuta, jer spisak
+// može da se menja i u aplikaciji.
+let listVersion = 0;
+const REMEMBERED_FOR = 10 * 60 * 1000;
+const remembered = (entry, key) => entry && entry.key === key && Date.now() - entry.at < REMEMBERED_FOR;
+
 async function api(method, path, body, retried = false) {
+  if (method !== 'GET' && path.startsWith('shopping-lists')) listVersion++;
   let response;
   let token;
   try {
@@ -543,6 +551,7 @@ async function deleteItem(id) {
 // ---------- Provera proizvoda (korak 1) ----------
 
 let matching = null;
+let matchingFor = null;
 
 const needsDecision = item => item.blocksOptimization ||
   item.matchingStatus === 'NEEDS_CONFIRMATION' || item.matchingStatus === 'UNMATCHED';
@@ -555,7 +564,9 @@ async function showMatching() {
   try {
     const listId = saved.get('listId');
     if (!listId) { location.hash = '#/spisak'; return; }
+    if (matching && remembered(matchingFor, `${listId}|${listVersion}`)) return renderMatching();
     matching = await api('POST', `shopping-lists/${listId}/matching?includeProductsWithoutBarcode=true`);
+    matchingFor = { key: `${listId}|${listVersion}`, at: Date.now() };
   } catch (error) {
     return failed('Provera proizvoda', error, '#/provera');
   }
@@ -622,7 +633,7 @@ async function resolve(itemId, candidate) {
     productFamilyId: candidate && !candidate.canonicalProductId ? candidate.productFamilyId : null,
     note: candidate ? 'Korisnik je potvrdio kandidata u web verziji.' : 'Korisnik je izabrao opciju neupareno u web verziji.'
   });
-  matching = await api('POST', `shopping-lists/${listId}/matching?includeProductsWithoutBarcode=true`);
+  await rematch(itemId);
   renderMatching();
 }
 
@@ -637,8 +648,28 @@ async function useAsFlexible(itemId) {
     matchingRule: 'FLEXIBLE_CATEGORY',
     flexibleConstraints: { category: item.name.trim() }
   });
-  matching = await api('POST', `shopping-lists/${listId}/matching?includeProductsWithoutBarcode=true`);
+  await rematch(itemId);
   renderMatching();
+}
+
+/** Odluka menja jednu stavku: samo ona se proverava ponovo, ostale ostaju kakve su. */
+async function rematch(itemId) {
+  const result = await api('POST', `shopping-lists/${matching.listId}/items/${itemId}/matching?includeProductsWithoutBarcode=true`);
+  const items = matching.items.map(i => i.itemId === itemId ? result : i);
+  const count = status => items.filter(i => i.matchingStatus === status).length;
+  const blockingItemIds = items.filter(i => i.blocksOptimization).map(i => i.itemId);
+  matching = {
+    ...matching,
+    items,
+    automaticallyMatchedItems: count('AUTO_MATCHED'),
+    confirmedItems: count('CONFIRMED'),
+    itemsNeedingConfirmation: count('NEEDS_CONFIRMATION'),
+    unmatchedItems: count('UNMATCHED'),
+    flexibleItems: items.filter(i => i.matchingRule === 'FLEXIBLE_CATEGORY').length,
+    readyForOptimization: !blockingItemIds.length,
+    blockingItemIds
+  };
+  matchingFor = { key: `${matching.listId}|${listVersion}`, at: matchingFor ? matchingFor.at : Date.now() };
 }
 
 // ---------- Polazna tačka (korak 2) ----------
@@ -719,6 +750,7 @@ function locate() {
 // ---------- Preporuke (korak 3) ----------
 
 let recommendation = null;
+let recommendationFor = null;
 let selectedType = 'RECOMMENDED_BALANCE';
 const scenarioTitle = { SINGLE_STORE: 'Jedna prodavnica', RECOMMENDED_BALANCE: 'Preporučeni balans', LOWEST_PRICE: 'Najniža cena' };
 const scenarioShort = { SINGLE_STORE: 'Jedna stanica', RECOMMENDED_BALANCE: 'Najbolje ukupno', LOWEST_PRICE: 'Najjeftinija korpa' };
@@ -785,11 +817,14 @@ async function showRecommendation() {
   const origin = saved.get('origin');
   const listId = saved.get('listId');
   if (!origin || !listId) { location.hash = '#/lokacija'; return; }
+  const travel = saved.get('walking', false) ? '&travelMode=WALKING' : '';
+  const key = `${listId}|${listVersion}|${origin.lat}|${origin.lng}|${travel}`;
+  if (recommendation && remembered(recommendationFor, key)) return renderRecommendation();
   screen({ title: 'Preporuke', back: '#/lokacija', html:
     '<p class="center muted">Računam tri scenarija…</p>' + '<div class="skeleton" aria-hidden="true"></div>'.repeat(3) });
   try {
-    const travel = saved.get('walking', false) ? '&travelMode=WALKING' : '';
     recommendation = await api('GET', `shopping-lists/${listId}/recommendations?latitude=${origin.lat}&longitude=${origin.lng}${travel}`);
+    recommendationFor = { key, at: Date.now() };
   } catch (error) {
     return failed('Preporuke', error, '#/preporuke');
   }
@@ -1126,6 +1161,7 @@ const saleSorts = { DISCOUNT: 'Najveći popust', SAVING: 'Najveća ušteda', PRI
 /** Lista se pamti dok se ide na detalje i nazad; nova kad se promeni mesto. */
 function showSales() {
   if (sales.page && sales.place === searchLocation()) return renderSales();
+  loadList().then(list => { listState.list = list; if (location.hash === '#/akcije' && sales.page) renderSales(); }).catch(() => {});
   return loadSales();
 }
 
@@ -1145,7 +1181,6 @@ async function loadSales(more = false) {
   const next = more ? sales.page.page + 1 : 0;
   if (!more) {
     sales.items = []; sales.page = null;
-    loadList().then(list => { listState.list = list; if (location.hash === '#/akcije' && sales.page) renderSales(); }).catch(() => {});
   }
   sales.error = null;
   sales.place = searchLocation();
