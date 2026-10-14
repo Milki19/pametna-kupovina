@@ -17,6 +17,7 @@
     <string name="product_current_offers">Current offers</string>
     <string name="product_no_offers">There are no valid prices for this product yet.</string>
     <string name="product_price_history">Recent price changes</string>
+    <string name="product_price_before">Before: %1$s</string>
     <string name="product_offer_scope_and_date">%1$s · prices from %2$s</string>
     <string name="product_offer_case">Pack of %1$d pcs · %2$s each</string>
     <string name="product_offer_suspicious">Less than half the usual price at other chains</string>

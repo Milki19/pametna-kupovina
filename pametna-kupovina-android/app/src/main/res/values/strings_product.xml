@@ -17,6 +17,7 @@
     <string name="product_current_offers">Aktuelne ponude</string>
     <string name="product_no_offers">Za ovaj proizvod još nema važećih cena.</string>
     <string name="product_price_history">Poslednje promene cena</string>
+    <string name="product_price_before">Pre: %1$s</string>
     <string name="product_offer_scope_and_date">%1$s · cene od %2$s</string>
     <string name="product_offer_case">Pakovanje od %1$d kom · %2$s po komadu</string>
     <string name="product_offer_suspicious">Manje od pola uobičajene cene u drugim lancima</string>

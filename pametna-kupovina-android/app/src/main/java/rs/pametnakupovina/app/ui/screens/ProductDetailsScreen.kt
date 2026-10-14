@@ -41,6 +41,10 @@ import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -392,6 +396,22 @@ private fun PriceHistoryRow(point: CanonicalProductPricePointDto) {
                     .joinToString(" · "),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        // Promena se čita kao staro → novo, ne samo nova cena.
+        point.previousEffectivePrice?.let { before ->
+            val description = stringResource(R.string.product_price_before, money(before))
+            Text(
+                money(before),
+                style = MaterialTheme.typography.bodySmall.copy(textDecoration = TextDecoration.LineThrough),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.semantics { contentDescription = description }
+            )
+            Text(
+                "→",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = AppSpacing.xs).clearAndSetSemantics { }
             )
         }
         Text(money(point.effectivePrice), style = MaterialTheme.typography.bodyLarge)
