@@ -1196,8 +1196,9 @@ async function showProduct(id) {
     return failed('Cene proizvoda', error, `#/proizvod/${id}`);
   }
   const offers = [...product.offers].sort((a, b) =>
-    (a.priceNeedsCheck - b.priceNeedsCheck) || (isCaseOf(a, product) - isCaseOf(b, product)) || (a.effectivePrice - b.effectivePrice));
-  const comparable = offers.filter(o => !o.priceNeedsCheck && !isCaseOf(o, product));
+    (a.priceNeedsCheck - b.priceNeedsCheck) || (!!a.priceStale - !!b.priceStale) || (isCaseOf(a, product) - isCaseOf(b, product)) || (a.effectivePrice - b.effectivePrice));
+  // Stara cena (cenovnik stariji nego što lanac inače kasni) ne ulazi u poređenje.
+  const comparable = offers.filter(o => !o.priceNeedsCheck && !o.priceStale && !isCaseOf(o, product));
   // Lanci, ne prodavnice: devet METRO objekata je jedan lanac.
   const chains = new Set(comparable.map(o => o.retailerName)).size;
   const low = comparable[0];
@@ -1222,7 +1223,7 @@ async function showProduct(id) {
       </div>
       <div class="section">Aktuelne ponude ${pill(offers.length)}</div>` +
       (offers.length ? offers.map((o, index) => {
-        const cheapest = index === 0 && offers.length > 1 && !o.priceNeedsCheck && !isCaseOf(o, product);
+        const cheapest = index === 0 && offers.length > 1 && !o.priceNeedsCheck && !o.priceStale && !isCaseOf(o, product);
         const single = product.packageCount;
         const off = o.priceNeedsCheck ? null : discountPercent(o.regularPrice, o.effectivePrice);
         return `<div class="card ${cheapest ? 'selected' : ''} ${off ? tier(off) : ''}"><div class="row top-align">
@@ -1232,6 +1233,7 @@ async function showProduct(id) {
             ${off ? saleLine(off, o.regularPrice, o.saleEndDate) : ''}
             ${isCaseOf(o, product) ? `<div class="small" style="color:var(--on-amber)">Pakovanje od ${o.packageCount / single} kom · ${money(o.effectivePrice * single / o.packageCount)} po komadu</div>` : ''}
             ${o.priceNeedsCheck ? `<div class="muted small">Manje od pola uobičajene cene u drugim lancima</div>${pill('Proveri cenu', 'warn')}` : ''}
+            ${o.priceStale ? `<div class="muted small">Lanac nije objavio noviji cenovnik</div>${pill('Stara cena', 'warn')}` : ''}
             ${cheapest ? pill('Najbolja cena', 'pos') : ''}</div>
           <div style="text-align:right"><div class="price ${off ? 'sale-price' : cheapest ? 'accent' : ''}" style="font-size:18px">${money(o.effectivePrice)}</div>
             ${unitPriceLabel(o, product) ? `<div class="muted small">${unitPriceLabel(o, product)}</div>` : ''}</div>
