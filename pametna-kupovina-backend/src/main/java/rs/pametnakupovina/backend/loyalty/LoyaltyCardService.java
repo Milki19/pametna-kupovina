@@ -3,6 +3,7 @@ package rs.pametnakupovina.backend.loyalty;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
+import rs.pametnakupovina.backend.matching.EanValidator;
 
 import java.util.List;
 import java.util.Set;
@@ -24,6 +25,8 @@ public class LoyaltyCardService {
             "EAN_13", "EAN_8", "UPC_A", "UPC_E",
             "CODE_128", "CODE_39", "ITF", "QR_CODE", "PDF417", "CODABAR"
     );
+
+    private static final EanValidator EAN = new EanValidator();
 
     private final LoyaltyCardRepository cardRepository;
 
@@ -50,11 +53,23 @@ public class LoyaltyCardService {
             );
         }
 
+        String number = validCardNumber(cardNumber);
+        String format = validFormat(barcodeFormat);
+
+        // EAN-13 sa pogrešnom kontrolnom cifrom kasa ne čita; kao i u web
+        // formi, takav broj ide kao „Crtični kod“ (Code 128).
+        if ("EAN_13".equals(format)
+                && (number.length() != 13 || !EAN.isValid(number))) {
+            throw badRequest(number.matches("\\d{13}")
+                    ? "Ovo nije ispravan EAN-13: poslednja (kontrolna) cifra se ne slaže. Proveri broj."
+                    : "EAN-13 ima tačno 13 cifara. Proveri broj ili izaberi „Crtični kod“.");
+        }
+
         return cardRepository.save(
                 accountId,
                 requiredText(name, LONGEST_NAME, "Naziv kartice"),
-                validCardNumber(cardNumber),
-                validFormat(barcodeFormat)
+                number,
+                format
         );
     }
 
