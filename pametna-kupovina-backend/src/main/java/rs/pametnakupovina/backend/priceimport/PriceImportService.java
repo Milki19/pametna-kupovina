@@ -2334,11 +2334,13 @@ public class PriceImportService {
     }
 
     /**
-     * A "cca" piece quoted per kilogram without the hint the price columns
-     * give above (a 3,3 kg edamer at 899,99) is told apart by the market:
-     * too cheap to be believed as the piece's price, but a plausible one
-     * once multiplied by its weight (V123). Only such pieces of 1,5 kg and
-     * more are asked, so the database sees few of the rows.
+     * A piece of variable weight quoted per kilogram without the hint the
+     * price columns give above (a 3,3 kg edamer at 899,99) is told apart by
+     * the market: too cheap to be believed as the piece's price, but a
+     * plausible one once multiplied by its weight (V123). Whether the piece
+     * is sold by weight is known by its family, not only by its own name:
+     * RIČ's "PALADIN EDAMER 3,3KG" is Maxi's "cca 3,3kg" (V127), so every
+     * row of 1,5 kg and more is asked and the database answers.
      *
      * @return how many units of measure the quoted price is to be multiplied
      *         by, or null when it already is the piece's price.
@@ -2348,10 +2350,7 @@ public class PriceImportService {
             PriceCsvRow row,
             BigDecimal quotedPrice
     ) {
-        if (quotedPrice == null || row.normalizedProductName() == null
-                || !VARIABLE_WEIGHT_PATTERN.matcher(
-                        row.normalizedProductName()
-                ).find()
+        if (quotedPrice == null
                 || row.quantityValue() == null
                 || !("g".equals(row.baseUnit()) || "ml".equals(row.baseUnit()))
                 || row.quantityValue().compareTo(BigDecimal.valueOf(1500)) < 0) {
