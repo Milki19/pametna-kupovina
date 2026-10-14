@@ -161,6 +161,13 @@ interface ShoppingApiService {
         @Query("includeProductsWithoutBarcode") includeProductsWithoutBarcode: Boolean = true
     ): ShoppingListMatchingDto
 
+    @POST("api/v1/shopping-lists/{listId}/items/{itemId}/matching")
+    suspend fun matchShoppingListItem(
+        @Path("listId") listId: Long,
+        @Path("itemId") itemId: Long,
+        @Query("includeProductsWithoutBarcode") includeProductsWithoutBarcode: Boolean = true
+    ): ShoppingItemMatchResultDto
+
     @PUT("api/v1/shopping-lists/{listId}/items/{itemId}/match")
     suspend fun resolveShoppingItemMatch(
         @Path("listId") listId: Long,

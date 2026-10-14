@@ -361,12 +361,13 @@ class MatchingViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isResolving = true, errorMessage = null) }
             try {
+                val current = _uiState.value.result
                 repository.resolveMatch(
-                    listId = _uiState.value.result?.listId ?: listId,
+                    listId = current?.listId ?: listId,
                     itemId = item.itemId,
                     candidate = candidate
                 )
-                val refreshed = repository.matchItems()
+                val refreshed = repository.rematchItem(current, item.itemId)
                 _uiState.value = MatchingUiState(
                     isLoading = false,
                     result = refreshed
@@ -389,6 +390,7 @@ class MatchingViewModel @Inject constructor(
             _uiState.update { it.copy(isResolving = true, errorMessage = null) }
             try {
                 val refreshed = repository.convertToFlexible(
+                    current = _uiState.value.result,
                     itemId = item.itemId,
                     category = item.requestedName
                 )
@@ -480,8 +482,19 @@ class RecommendationViewModel @Inject constructor(
         }
     }
 
+    // The screen asks again each time it comes back into view; plans already
+    // worked out for the same list, place and way of travel are shown as they are.
+    private var loadedFor: Pair<List<Any>, Long>? = null
+
     fun load(listId: Long, latitude: Double, longitude: Double) {
         viewModelScope.launch {
+            val walking = travelModes.isWalking()
+            val key = listOf(listId, latitude, longitude, walking)
+            val loaded = loadedFor
+            if (_uiState.value.result != null && loaded != null && loaded.first == key &&
+                System.currentTimeMillis() - loaded.second < REMEMBERED_FOR_MILLIS
+            ) return@launch
+            loadedFor = null
             _uiState.value = RecommendationUiState(isLoading = true)
             _uiState.value = try {
                 RecommendationUiState(
@@ -490,9 +503,9 @@ class RecommendationViewModel @Inject constructor(
                         listId = listId,
                         latitude = latitude,
                         longitude = longitude,
-                        walking = travelModes.isWalking()
+                        walking = walking
                     )
-                )
+                ).also { loadedFor = key to System.currentTimeMillis() }
             } catch (error: Exception) {
                 RecommendationUiState(
                     isLoading = false,
@@ -525,3 +538,4 @@ internal fun Throwable.toUserMessage(@StringRes fallback: Int): UiText = when (t
 }
 
 private const val RETURN_REFRESH_INTERVAL_MS = 30_000L
+private const val REMEMBERED_FOR_MILLIS = 10 * 60 * 1000L
