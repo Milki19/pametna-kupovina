@@ -523,6 +523,18 @@ async function showList() {
   renderList();
 }
 
+/** Ista stavka dva puta: samo upozorenje, spisak ostaje kakav jeste. */
+const sameName = name => String(name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .replace(/đ/gi, 'dj').toLowerCase().replace(/\s+/g, ' ').trim();
+function duplicateNotice(items) {
+  const seen = new Map();
+  items.forEach(item => seen.set(sameName(item.name), [...(seen.get(sameName(item.name)) || []), item.name]));
+  const twice = [...seen.values()].filter(names => names.length > 1);
+  if (!twice.length) return '';
+  return notice(twice.map(names => `„${names[0]}“ je na spisku ${names.length === 2 ? 'dva puta' : names.length + ' puta'}.`).join(' ')
+    + ' Ako je to greška, obriši višak.', 'warn');
+}
+
 function renderList() {
   const items = listState.list.items;
   const purchase = saved.get('purchase');
@@ -545,13 +557,13 @@ function renderList() {
     html:
       (purchase ? `<a class="card row" href="#/kupovina" style="text-decoration:none;color:inherit">
           <div class="grow"><div class="name">Kupovina u toku</div>
-          <div class="muted small">Kupljeno ${purchaseBought(purchase)} od ${purchase.scenario.items.length}</div></div>${icon.chevron}</a>` : '') +
+          <div class="muted small">Kupljeno ${purchaseBought(purchase)} od ${purchaseItems(purchase).length}</div></div>${icon.chevron}</a>` : '') +
       `<div class="add-bar">
          <button class="add-row" data-act="add-one">${icon.add}Dodaj stavku</button>
          <button class="btn tonal" data-act="add-many">${icon.paste}Nalepi spisak</button>
        </div>` + form + (listState.adding ? '' : salesShortcut()) +
       (items.length
-        ? `<div class="section">Stavke na spisku ${pill(items.length)}</div>` + items.map(item => item.id === listState.editing ? itemEditor(item) : `
+        ? `<div class="section">Stavke na spisku ${pill(items.length)}</div>` + duplicateNotice(items) + items.map(item => item.id === listState.editing ? itemEditor(item) : `
           <div class="card">
             <div class="row">
               <div class="grow" data-act="edit" data-id="${item.id}" role="button" tabindex="0" style="cursor:pointer" aria-label="Izmeni ${esc(item.name)}">
@@ -652,11 +664,16 @@ async function deleteItem(id) {
 let matching = null;
 let matchingFor = null;
 
-const needsDecision = item => item.blocksOptimization ||
-  item.matchingStatus === 'NEEDS_CONFIRMATION' || item.matchingStatus === 'UNMATCHED';
+// Jedno stanje svuda (spisak, korak 1, plan): pronađeno, treba potvrda, nije pronađeno.
+const isFound = item => item.matchingStatus === 'AUTO_MATCHED' || item.matchingStatus === 'CONFIRMED';
+const needsDecision = item => item.blocksOptimization || item.matchingStatus === 'NEEDS_CONFIRMATION';
+const notFound = item => !needsDecision(item) && !isFound(item);
 const canUseAsFlexible = item => item.matchingRule === 'EXACT_PRODUCT' && item.matchingStatus === 'UNMATCHED';
-const statusText = { PENDING: 'Čeka proveru', AUTO_MATCHED: 'Automatski', NEEDS_CONFIRMATION: 'Treba potvrda', CONFIRMED: 'Potvrđeno', UNMATCHED: 'Nije pronađeno' };
+const statusText = { PENDING: 'Čeka proveru', AUTO_MATCHED: 'Pronađeno', NEEDS_CONFIRMATION: 'Treba potvrda', CONFIRMED: 'Pronađeno', UNMATCHED: 'Nije pronađeno' };
 const statusTone = { PENDING: 'warn', AUTO_MATCHED: 'pos', NEEDS_CONFIRMATION: 'warn', CONFIRMED: 'pos', UNMATCHED: 'err' };
+
+// „Izaberi iz pretrage" za jednu stavku: prvih pet predloga ispod nje.
+let picking = null;
 
 async function showMatching() {
   screen({ title: 'Provera proizvoda', back: '#/spisak', html: spinner('Tražim odgovarajuće proizvode…') });
@@ -664,67 +681,178 @@ async function showMatching() {
     const listId = saved.get('listId');
     if (!listId) { location.hash = '#/spisak'; return; }
     await flushDelete();
-    if (matching && remembered(matchingFor, `${listId}|${listVersion}`)) return renderMatching();
-    matching = await api('POST', `shopping-lists/${listId}/matching?includeProductsWithoutBarcode=true`);
-    matchingFor = { key: `${listId}|${listVersion}`, at: Date.now() };
+    if (!(matching && remembered(matchingFor, `${listId}|${listVersion}`))) {
+      matching = await api('POST', `shopping-lists/${listId}/matching?includeProductsWithoutBarcode=true`);
+      matchingFor = { key: `${listId}|${listVersion}`, at: Date.now() };
+    }
   } catch (error) {
     return failed('Provera proizvoda', error, '#/provera');
   }
+  if (pendingPick != null && matching.items.some(i => i.itemId === pendingPick)) {
+    const itemId = pendingPick;
+    pendingPick = null;
+    return openPick(itemId);
+  }
+  pendingPick = null;
+  if (picking && !matching.items.some(i => i.itemId === picking.itemId)) picking = null;
   renderMatching();
 }
 
+function pickerCard(item) {
+  if (!picking || picking.itemId !== item.itemId) {
+    return `<button class="btn tonal" data-act="pick-open" data-item="${item.itemId}"
+      aria-label="Izaberi iz pretrage za „${esc(item.requestedName)}“">Izaberi iz pretrage</button>`;
+  }
+  return `<form class="card soft" data-form="pick-search" role="search">
+      <label class="label" for="pick-q">Traži proizvod</label>
+      <div class="row"><input id="pick-q" name="q" type="search" enterkeyhint="search" autocomplete="off"
+        value="${esc(picking.query)}" style="flex:1"><button class="btn primary">Traži</button></div>
+      ${picking.loading ? spinner('Tražim…') : ''}
+      ${picking.error ? `<p class="small" role="alert" style="color:var(--error)">${esc(picking.error)}</p>` : ''}
+      ${picking.results && !picking.results.length && !picking.loading ? `<p class="muted small">Nema proizvoda za „${esc(picking.query)}“. Probaj kraći naziv.</p>` : ''}
+      ${(picking.results || []).map((p, index) => `
+        <button type="button" class="card" style="text-align:left;cursor:pointer" data-act="pick" data-index="${index}"
+          aria-label="Izaberi ${esc(p.name)} za „${esc(item.requestedName)}“">
+          <div class="row"><div class="grow"><div style="overflow-wrap:anywhere">${esc(p.name)}</div>
+            <div class="muted small">${esc([p.brand, p.quantityValue && p.baseUnit ? amountLabel(p.quantityValue, p.baseUnit, p.packageCount) : null,
+              p.hasUsablePrice ? null : 'bez cene'].filter(Boolean).join(' · '))}</div></div>
+          <b class="label accent">Izaberi</b></div>
+        </button>`).join('')}
+      <button type="button" class="btn text" data-act="pick-cancel">Odustani</button>
+    </form>`;
+}
+
+function decisionCard(item, showExplanation) {
+  return `
+    <div class="card" data-item-card="${item.itemId}">
+      <div class="row top-align">
+        <div class="grow"><div class="label">Sa spiska</div><div class="title" style="overflow-wrap:anywhere">„${esc(item.requestedName)}“</div></div>
+        ${pill(statusText[item.matchingStatus], statusTone[item.matchingStatus])}
+      </div>
+      ${showExplanation ? `<p class="muted small">${esc(item.explanation)}</p>` : ''}
+      ${item.matchingStatus === 'NEEDS_CONFIRMATION' ? item.candidates.slice(0, 5).map((c, ci) => `
+        <button class="card soft" style="text-align:left;cursor:pointer" data-act="choose" data-item="${item.itemId}" data-candidate="${ci}"
+          aria-label="Izaberi ${esc(c.name)} za „${esc(item.requestedName)}“">
+          <div class="row"><div class="grow">
+            <div>${esc(c.name)}</div>
+            <div class="row small muted">${pill(Math.round(c.score.totalScore * 100) + '%', 'pos')}
+              ${esc([c.brand, c.quantityValue && c.baseUnit ? amountLabel(c.quantityValue, c.baseUnit, c.packageCount) : null].filter(Boolean).join(' · '))}</div>
+          </div><b class="label accent">Izaberi</b></div>
+        </button>`).join('') : ''}
+      ${canUseAsFlexible(item) ? `
+        <button class="card soft" style="text-align:left;cursor:pointer" data-act="flexible" data-item="${item.itemId}"
+          aria-label="Neka aplikacija izabere najpovoljnije za „${esc(item.requestedName)}“">
+          <div class="name" style="color:var(--primary)">Neka aplikacija izabere najpovoljnije</div>
+          <div class="muted small">Kad ti nije važan brend ni pakovanje.</div>
+        </button>` : ''}
+      ${pickerCard(item)}
+      ${item.matchingStatus === 'NEEDS_CONFIRMATION' ? `<button class="btn text" data-act="reject" data-item="${item.itemId}" aria-label="Nijedan, ostavi „${esc(item.requestedName)}“ neupareno">Nijedan, ostavi neupareno</button>` : ''}
+    </div>`;
+}
+
 function renderMatching(errorText = null) {
+  const picked = picking && matching.items.find(i => i.itemId === picking.itemId && isFound(i));
   const decide = matching.items.filter(needsDecision);
-  const settled = matching.items.filter(i => !needsDecision(i));
-  const connected = matching.automaticallyMatchedItems + (matching.confirmedItems || 0);
-  const pending = matching.blockingItemIds.length || (matching.itemsNeedingConfirmation + matching.unmatchedItems);
-  const share = matching.totalItems ? Math.round(connected / matching.totalItems * 100) : 0;
+  const missing = matching.items.filter(notFound);
+  const settled = matching.items.filter(i => isFound(i) && i !== picked);
+  const found = matching.items.filter(isFound).length;
+  const share = matching.totalItems ? Math.round(found / matching.totalItems * 100) : 0;
+  const cards = list => list.map((item, index) =>
+    decisionCard(item, index === 0 || list[index - 1].explanation !== item.explanation)).join('');
   screen({
     title: 'Provera proizvoda',
     back: '#/spisak',
     html: `
       <div class="card soft">
         <div class="label accent">Korak 1 od 3</div>
-        <div class="title">${decide.length ? `${decide.length} ${plural(decide.length, 'stavka traži', 'stavke traže', 'stavki traži')} tvoju odluku` : 'Sve stavke su prepoznate'}</div>
-        <p class="muted small">Potvrdi nejasne stavke da bismo našli najpovoljnije cene u blizini.</p>
-        <div class="row small"><span class="grow muted">Prepoznato ${connected} od ${matching.totalItems}</span>${decide.length ? `<b class="label accent">još ${decide.length}</b>` : ''}</div>
+        <div class="title">${decide.length ? `${decide.length} ${plural(decide.length, 'stavka traži', 'stavke traže', 'stavki traži')} tvoju odluku`
+          : missing.length ? `${counted(missing.length, 'stavka nije pronađena', 'stavke nisu pronađene', 'stavki nije pronađeno')}` : 'Sve stavke su pronađene'}</div>
+        <p class="muted small">${missing.length && !decide.length ? 'Nepronađene stavke ne ulaze u račun. Izaberi ih iz pretrage ili nastavi bez njih.'
+          : 'Potvrdi nejasne stavke da bismo našli najpovoljnije cene u blizini.'}</p>
+        <div class="row small"><span class="grow muted">Pronađeno ${found} od ${matching.totalItems}</span>${decide.length ? `<b class="label accent">još ${decide.length}</b>` : ''}</div>
         <div class="progress"><span style="width:${share}%"></span></div>
       </div>` +
       (errorText ? notice(errorText, 'err') : '') +
-      (decide.length ? `<div class="section">Treba tvoja odluka ${pill(decide.length)}</div>` : '') +
-      decide.map((item, index) => `
-        <div class="card">
-          <div class="row top-align">
-            <div class="grow"><div class="label">Sa spiska</div><div class="title">„${esc(item.requestedName)}“</div></div>
-            ${pill(statusText[item.matchingStatus], statusTone[item.matchingStatus])}
-          </div>
-          ${index === 0 || decide[index - 1].explanation !== item.explanation ? `<p class="muted small">${esc(item.explanation)}</p>` : ''}
-          ${item.matchingStatus === 'NEEDS_CONFIRMATION' ? item.candidates.slice(0, 5).map((c, ci) => `
-            <button class="card soft" style="text-align:left;cursor:pointer" data-act="choose" data-item="${item.itemId}" data-candidate="${ci}"
-              aria-label="Izaberi ${esc(c.name)} za „${esc(item.requestedName)}“">
-              <div class="row"><div class="grow">
-                <div>${esc(c.name)}</div>
-                <div class="row small muted">${pill(Math.round(c.score.totalScore * 100) + '%', 'pos')}
-                  ${esc([c.brand, c.quantityValue && c.baseUnit ? amountLabel(c.quantityValue, c.baseUnit, c.packageCount) : null].filter(Boolean).join(' · '))}</div>
-              </div><b class="label accent">Izaberi</b></div>
-            </button>`).join('') : ''}
-          ${canUseAsFlexible(item) ? `
-            <button class="card soft" style="text-align:left;cursor:pointer" data-act="flexible" data-item="${item.itemId}"
-              aria-label="Neka aplikacija izabere najpovoljnije za „${esc(item.requestedName)}“">
-              <div class="name" style="color:var(--primary)">Neka aplikacija izabere najpovoljnije</div>
-              <div class="muted small">Kad ti nije važan brend ni pakovanje.</div>
-            </button>` : ''}
-          ${item.matchingStatus === 'NEEDS_CONFIRMATION' ? `<button class="btn text" data-act="reject" data-item="${item.itemId}" aria-label="Nijedan, ostavi „${esc(item.requestedName)}“ neupareno">Nijedan, ostavi neupareno</button>` : ''}
-        </div>`).join('') +
-      (settled.length ? `<div class="section">Prepoznato ${pill(settled.length)}</div>
+      (picked ? `<div class="section">Izaberi drugi proizvod</div>` + decisionCard(picked, false) : '') +
+      (decide.length ? `<div class="section">Treba tvoja odluka ${pill(decide.length)}</div>` + cards(decide) : '') +
+      (missing.length ? `<div class="section">Nije pronađeno ${pill(missing.length)}</div>` + cards(missing) : '') +
+      (settled.length ? `<div class="section">Pronađeno ${pill(settled.length)}</div>
         <div class="card flush">${settled.map(item => `
-          <div class="list-row"><div class="name">✓ ${esc(item.requestedName)}</div>
-          ${item.matchingStatus === 'AUTO_MATCHED' ? `<div class="muted small">${esc(item.explanation)}</div>` : ''}</div>`).join('')}
+          <div class="list-row row top-align"><div class="grow"><div class="name">✓ ${esc(item.requestedName)}</div>
+          ${item.matchingStatus === 'AUTO_MATCHED' ? `<div class="muted small">${esc(item.explanation)}</div>` : ''}</div>
+          <button class="btn text small" data-act="pick-open" data-item="${item.itemId}"
+            aria-label="Izaberi drugi proizvod za „${esc(item.requestedName)}“">Promeni</button></div>`).join('')}
         </div>` : ''),
     action: `<button class="btn primary main" data-act="to-location" ${matching.readyForOptimization ? '' : 'disabled'}>${
       matching.readyForOptimization ? 'Nastavi na lokaciju'
-        : pending > 0 ? 'Odluči još za ' + counted(pending, 'stavku', 'stavke', 'stavki') : 'Potvrdi označene stavke'}</button>`
+        : 'Odluči još za ' + counted(decide.length || matching.blockingItemIds.length, 'stavku', 'stavke', 'stavki')}</button>`
   });
+  const field = view.querySelector('#pick-q');
+  if (field) {
+    field.closest('[data-item-card]')?.scrollIntoView({ block: 'nearest' });
+    if (!picking.results && !picking.loading) field.focus();
+  }
+}
+
+function openPick(itemId) {
+  const item = matching.items.find(i => i.itemId === itemId);
+  picking = { itemId, query: item.requestedName, results: null, loading: false, error: null };
+  return runPick(item.requestedName);
+}
+
+async function runPick(query) {
+  const current = picking;
+  current.query = query.trim();
+  current.error = null;
+  if (current.query.length < 2) {
+    current.results = [];
+    current.error = 'Upiši bar 2 slova.';
+    return renderMatching();
+  }
+  current.loading = true;
+  renderMatching();
+  try {
+    const page = await api('GET', `products/search?query=${encodeURIComponent(current.query)}&page=0&limit=5${searchLocation()}`);
+    current.results = page.items.slice(0, 5);
+  } catch (error) {
+    current.results = [];
+    current.error = error.message;
+  }
+  current.loading = false;
+  if (picking === current) renderMatching();
+}
+
+/** Izabrani proizvod iz pretrage postaje stavka: naziv sa spiska ostaje, proizvod je tačan. */
+async function pickProduct(product) {
+  const listId = matching.listId;
+  const itemId = picking.itemId;
+  const list = await api('GET', `shopping-lists/${listId}`);
+  const item = list.items.find(i => i.id === itemId);
+  if (!item) throw new Error('Stavke više nema na spisku.');
+  await api('PUT', `shopping-lists/${listId}/items/${itemId}`, {
+    name: item.name,
+    rawInput: item.rawInput,
+    canonicalProductId: product.productFamilyId ? null : product.canonicalProductId,
+    productFamilyId: product.productFamilyId || null,
+    quantity: item.matchingRule === 'FLEXIBLE_CATEGORY' ? 1 : item.quantity,
+    matchingRule: product.productFamilyId ? 'PRODUCT_FAMILY' : 'EXACT_PRODUCT'
+  });
+  picking = null;
+  await rematch(itemId);
+  renderMatching();
+  toast(`Izabrano: ${product.name}`);
+}
+
+// Lanci koji ne objavljuju adrese prodavnica (za upozorenje u Akcijama).
+let unlocatedChains = null;
+async function chainWithoutAddresses(code) {
+  try {
+    if (!unlocatedChains) {
+      const retailers = await api('GET', 'retailers');
+      unlocatedChains = new Set(retailers.filter(r => r.storeLocationsKnown === false).map(r => r.code));
+    }
+    return unlocatedChains.has(code);
+  } catch { return false; }
 }
 
 async function resolve(itemId, candidate) {
@@ -740,16 +868,9 @@ async function resolve(itemId, candidate) {
 }
 
 async function useAsFlexible(itemId) {
-  const listId = matching.listId;
-  const list = await api('GET', `shopping-lists/${listId}`);
-  const item = list.items.find(i => i.id === itemId);
-  await api('PUT', `shopping-lists/${listId}/items/${itemId}`, {
-    name: item.name,
-    rawInput: item.rawInput,
-    quantity: item.quantity,
-    matchingRule: 'FLEXIBLE_CATEGORY',
-    flexibleConstraints: { category: item.name.trim() }
-  });
+  // Server zadržava vrstu i količinu iz naziva, a reči koje ne razume ne odbijaju izmenu.
+  await api('PUT', `shopping-lists/${matching.listId}/items/${itemId}/any-of-kind`);
+  if (picking && picking.itemId === itemId) picking = null;
   await rematch(itemId);
   renderMatching();
 }
@@ -965,7 +1086,8 @@ function renderRecommendation() {
           <span class="small muted">${scenarioShort[x.type]}</span>
           <span class="price">${x.available && x.totalCost != null ? whole(x.totalCost) : 'nema'}</span>
           <span class="small muted">ukupno</span>
-          ${x.available ? `<span class="small muted">korpa ${whole(x.basketCost)}</span>` : ''}
+          ${x.available ? `<span class="small muted">korpa ${whole(x.basketCost)}</span>
+            <span class="small"><b>${x.coveredItems} od ${x.items.length}</b> ${plural(x.items.length, 'stavke', 'stavke', 'stavki')}</span>` : ''}
         </button>`).join('')}
       </div>
       <div class="card stripe">
@@ -1002,18 +1124,16 @@ function renderRecommendation() {
               ${item.productName && item.productName.toLowerCase() !== item.requestedName.toLowerCase() ? `<div class="muted small">${esc(item.productName)}</div>` : ''}
               ${quantityLine(item) ? `<div class="muted small">${esc(quantityLine(item))}</div>` : ''}
               ${stalePrice(item.priceDate, result.requestedDate) ? `<div class="muted small">Cena od ${date(item.priceDate)}</div>` : ''}
-              ${manySmallPacks(item) ? pill('Mnogo malih pakovanja', 'warn') : ''}</div>
+              ${manySmallPacks(item) ? pill('Mnogo malih pakovanja', 'warn') : ''}
+              <button class="btn text small" style="padding:8px 0" data-act="wrong-product" data-item="${item.itemId}"
+                aria-label="Pogrešan proizvod za „${esc(item.requestedName)}“">Pogrešan proizvod</button></div>
             <span class="price">${item.lineTotal != null ? money(item.lineTotal) : 'nema'}</span></div>`).join('')}
         </div>`;
       }).join('') +
       (unresolved.length ? `<div class="section">Bez ponude ${pill(unresolved.length)}</div>` + unresolved.map(item => `
         <div class="card"><div class="row top-align"><div class="grow name">${esc(item.requestedName)}</div>${pill(unresolvedStatus[item.resultStatus], 'warn')}</div>
         <p class="muted small">${esc(item.explanation)}</p></div>`).join('') : '') +
-      (result.unlocatedPriceOptions.length ? `<div class="section">Lanci bez poznate adrese</div>` +
-        notice('Ne znamo u kojoj prodavnici važi ova cena, pa ovi lanci nisu u planu.', 'warn') +
-        result.unlocatedPriceOptions.map(o => `<div class="card"><div class="row"><div class="grow name">${esc(o.retailerName)}</div>
-          <span class="price">${Math.abs(o.highestBasketCost - o.lowestBasketCost) < 0.005 ? money(o.lowestBasketCost) : `${number(o.lowestBasketCost, 2)} – ${money(o.highestBasketCost)}`}</span></div>
-          <p class="muted small">${o.coveredItems} od ${o.totalItems} stavki · ${esc(o.caveat)}</p></div>`).join('') : '') +
+      unlocatedSummary(result.unlocatedPriceOptions) +
       `<details class="card"><summary>Kako je računato</summary>
         ${[
           s.dataAsOf ? `Cene su iz cenovnika od ${date(s.dataAsOf)}; cenovnik ne govori da li je artikal na polici.` : 'Za ovaj scenario nema važećih cena.',
@@ -1028,9 +1148,49 @@ function renderRecommendation() {
   });
 }
 
+// Lanci bez adresa: jedna rečenica za sve, prva tri (najveća pokrivenost) i ostalo na zahtev.
+let unlocatedOpen = false;
+function unlocatedSummary(options) {
+  if (!options.length) return '';
+  const shown = unlocatedOpen ? options : options.slice(0, 3);
+  return `<div class="section">Lanci bez poznate adrese ${pill(options.length)}</div>` +
+    notice('Ovi lanci ne objavljuju adrese prodavnica, pa nisu u planu. Cene su samo za poređenje.', 'warn') +
+    `<div class="card flush">${shown.map(o => `<div class="list-row"><div class="row"><div class="grow name">${esc(o.retailerName)}</div>
+      <span class="price">${Math.abs(o.highestBasketCost - o.lowestBasketCost) < 0.005 ? money(o.lowestBasketCost) : `${number(o.lowestBasketCost, 2)} – ${money(o.highestBasketCost)}`}</span></div>
+      <div class="muted small">${o.coveredItems} od ${o.totalItems} ${plural(o.totalItems, 'stavke', 'stavke', 'stavki')}${o.priceListCount > 1
+        ? ` · ${o.priceListCount} cenovnika, ne znamo koji važi kod tebe` : ''}</div></div>`).join('')}</div>` +
+    (options.length > 3 ? `<button class="btn" data-act="unlocated-more" aria-expanded="${unlocatedOpen}">${unlocatedOpen
+      ? 'Prikaži manje' : `Prikaži još ${options.length - 3}`}</button>` : '');
+}
+
+/** „Pogrešan proizvod" u planu: odluka se pamti kao odbijena, a zamena se bira u koraku 1. */
+let pendingPick = null;
+async function wrongProduct(itemId) {
+  const planItem = recommendation && recommendation.recommendedBalance.items.find(i => i.itemId === itemId);
+  const name = planItem ? planItem.requestedName : '';
+  if (!confirm(`Označi proizvod za „${name}“ kao pogrešan i izaberi drugi?`)) return;
+  const listId = saved.get('listId');
+  const list = await api('GET', `shopping-lists/${listId}`);
+  const item = list.items.find(i => i.id === itemId);
+  if (!item) throw new Error('Stavke više nema na spisku.');
+  // Vrsta proizvoda nema odluku o jednom proizvodu; njoj se samo bira drugi.
+  if (item.matchingDecisionId && item.matchingRule !== 'FLEXIBLE_CATEGORY') {
+    const shown = (distinctScenarios(recommendation).find(x => x.type === selectedType) || recommendation.recommendedBalance)
+      .items.find(i => i.itemId === itemId);
+    await api('PUT', `shopping-lists/${listId}/items/${itemId}/match`, {
+      action: 'REJECT',
+      note: `Pogrešan proizvod u planu (web)${shown?.productName ? ': ' + shown.productName : ''}.`.slice(0, 500)
+    });
+  }
+  pendingPick = itemId;
+  location.hash = '#/provera';
+}
+
 // ---------- Kupovina ----------
 
-const purchaseBought = purchase => Object.values(purchase.checked).filter(Boolean).length;
+/** Kupuje se samo ono što ima prodavnicu u planu; stavke bez nje se ne broje. */
+const purchaseItems = purchase => purchase.scenario.items.filter(i => i.storeId != null);
+const purchaseBought = purchase => purchaseItems(purchase).filter(i => purchase.checked[i.itemId]).length;
 
 function startPurchase() {
   const s = distinctScenarios(recommendation).find(x => x.type === selectedType) || recommendation.recommendedBalance;
@@ -1044,11 +1204,14 @@ function showPurchase() {
   const purchase = saved.get('purchase');
   if (!purchase) { location.hash = '#/spisak'; return; }
   const s = purchase.scenario;
-  const total = s.items.length;
+  const total = purchaseItems(purchase).length;
   const bought = purchaseBought(purchase);
   const stores = [...s.stores].sort((a, b) => a.stopOrder - b.stopOrder);
   const row = item => {
     const done = Boolean(purchase.checked[item.itemId]);
+    // Bez prodavnice nema šta da se štiklira: stavka samo kaže zašto je nema.
+    if (item.storeId == null) return `<div class="list-row"><span class="name" style="display:block">${esc(item.requestedName)}</span>
+      <span class="small" style="display:block;color:var(--error)">${esc(item.explanation)}</span></div>`;
     return `<label class="check">
       <input type="checkbox" data-check="${item.itemId}" ${done ? 'checked' : ''} aria-label="Kupljeno: ${esc(item.requestedName)}">
       <span class="grow"><span class="name ${done ? 'strike' : ''}" style="display:block">${esc(item.requestedName)}</span>
@@ -1588,6 +1751,11 @@ const actions = {
   'use-place': el => { const p = places.results[Number(el.dataset.index)]; useOrigin(p.latitude, p.longitude, p.name); },
   scenario: el => { selectedType = el.dataset.type; renderRecommendation(); },
   'start-purchase': startPurchase,
+  'wrong-product': el => wrongProduct(Number(el.dataset.item)),
+  'unlocated-more': () => { unlocatedOpen = !unlocatedOpen; renderRecommendation(); },
+  'pick-open': el => openPick(Number(el.dataset.item)),
+  'pick-cancel': () => { picking = null; renderMatching(); },
+  pick: el => pickProduct(picking.results[Number(el.dataset.index)]),
   'finish-purchase': () => {
     if (!confirm('Završi kupovinu? Napredak se briše, a spisak ostaje.')) return;
     saved.set('purchase', null);
@@ -1618,15 +1786,19 @@ const actions = {
   'sale-category': el => { sales.category = el.dataset.value || null; return loadSales(); },
   'sales-more': () => loadSales(true),
   'sales-locate': salesLocate,
-  'add-sale': el => {
+  'add-sale': async el => {
     const p = sales.items[Number(el.dataset.index)];
-    return addProduct({ name: p.name, productFamilyId: p.productFamilyId, canonicalProductId: p.canonicalProductId })
-        .then(() => renderSales());
+    await addProduct({ name: p.name, productFamilyId: p.productFamilyId, canonicalProductId: p.canonicalProductId });
+    renderSales();
+    if (await chainWithoutAddresses(p.retailerCode)) {
+      toast(`Na spisku: ${p.name}. ${p.retailerName} ne objavljuje adrese prodavnica, pa ova cena neće ući u plan.`);
+    }
   }
 };
 
 const forms = {
   ...accountForms,
+  'pick-search': data => runPick(String(data.get('q') || '')),
   'add-one': data => addText(data.get('text')),
   'add-many': data => addText(data.get('text')),
   'edit-item': (data, form) => saveItem(Number(form.dataset.id), data),
@@ -1707,7 +1879,7 @@ document.addEventListener('change', event => {
 /** Štikliranje menja samo ono što se promenilo, da kvačica i precrtavanje odigraju animaciju. */
 function markPurchase(box, purchase) {
   box.closest('.check').querySelectorAll('.name, .price').forEach(el => el.classList.toggle('strike', box.checked));
-  const total = purchase.scenario.items.length;
+  const total = purchaseItems(purchase).length;
   const bought = purchaseBought(purchase);
   const title = view.querySelector('[data-bought]');
   if (title) title.textContent = `Kupljeno ${bought} od ${total}`;
