@@ -39,7 +39,8 @@ public class CanonicalProductDetailsRepository {
                     resultSet.getString("price_scope"),
                     resultSet.getBoolean("price_needs_check"),
                     resultSet.getInt("package_count"),
-                    resultSet.getObject("sale_end_date", LocalDate.class)
+                    resultSet.getObject("sale_end_date", LocalDate.class),
+                    resultSet.getBoolean("price_stale")
             );
 
     private static final RowMapper<CanonicalProductPricePoint> HISTORY_MAPPER =
@@ -141,6 +142,13 @@ public class CanonicalProductDetailsRepository {
                                        observation.discounted_price,
                                        typical_price.typical_price
                                    ) AS price_needs_check,
+                                   -- Older than the chain's lists usually
+                                   -- get (V124).
+                                   app.price_is_stale(
+                                       retailer_product.retailer_id,
+                                       observation.price_date,
+                                       :asOfDate
+                                   ) AS price_stale,
                                    CASE
                                        WHEN observation.store_id IS NOT NULL
                                            THEN 'STORE'
@@ -295,12 +303,15 @@ public class CanonicalProductDetailsRepository {
                                price_scope,
                                price_needs_check,
                                package_count,
-                               sale_end_date
+                               sale_end_date,
+                               price_stale
                         FROM ranked
                         WHERE rank_number = 1
                           AND effective_price > 0
-                        -- A price to be checked is never the cheapest.
+                        -- A price to be checked, or an old one, is never
+                        -- the cheapest.
                         ORDER BY price_needs_check ASC,
+                                 price_stale ASC,
                                  effective_price ASC,
                                  retailer_name ASC,
                                  price_scope ASC

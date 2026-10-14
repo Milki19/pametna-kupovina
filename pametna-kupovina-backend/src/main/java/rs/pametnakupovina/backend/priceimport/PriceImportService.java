@@ -1224,9 +1224,10 @@ public class PriceImportService {
             Long importRunId,
             PriceCsvRow row
     ) {
+        String productName = DisplayNames.productName(row.productName());
         Long canonicalProductId = exactEanMatcher.matchOrCreate(
                 row.barcode(),
-                row.productName(),
+                productName,
                 row.normalizedProductName(),
                 row.brand(),
                 row.quantityValue(),
@@ -1238,7 +1239,7 @@ public class PriceImportService {
                 row.sourceProductKey(),
                 row.categoryCode(),
                 row.categoryName(),
-                row.productName(),
+                productName,
                 row.normalizedProductName(),
                 row.brand(),
                 row.barcode(),

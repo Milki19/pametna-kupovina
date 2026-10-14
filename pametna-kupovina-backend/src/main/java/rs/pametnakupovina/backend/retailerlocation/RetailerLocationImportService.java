@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
+import rs.pametnakupovina.backend.priceimport.DisplayNames;
 import rs.pametnakupovina.backend.priceimport.RetailerDataSourceRepository;
 import rs.pametnakupovina.backend.retailer.Retailer;
 import rs.pametnakupovina.backend.retailer.RetailerRepository;
@@ -218,7 +219,9 @@ public class RetailerLocationImportService {
                         location.externalCode(),
                         "externalCode"
                 );
-                String name = requiredText(location.name(), "name");
+                String name = DisplayNames.storeName(
+                        requiredText(location.name(), "name")
+                );
                 String address = requiredText(
                         location.address(),
                         "address"
@@ -338,10 +341,10 @@ public class RetailerLocationImportService {
                 "external_code"
         );
 
-        String name = requiredText(
+        String name = DisplayNames.storeName(requiredText(
                 record,
                 "name"
-        );
+        ));
 
         String address = requiredText(
                 record,

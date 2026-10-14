@@ -120,7 +120,8 @@ class ComposedNameTest {
                         FROM app.retailer_product AS product
                         JOIN app.product_family AS family
                           ON family.id = product.product_family_id
-                        WHERE product.name = ?
+                        -- Imported without the stock code in front (V124).
+                        WHERE product.name = app.clean_retailer_product_name(?)
                         """)
                 .param(productName)
                 .query(String.class)
