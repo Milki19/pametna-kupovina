@@ -427,6 +427,21 @@ public class ShoppingListMatchingService {
             case UNMATCHED -> ShoppingItemMatchingStatus.UNMATCHED;
         };
 
+        // A kind nobody taught us is priced by name alone, so it is found
+        // exactly when the plan can price it: one state here and in the plan.
+        if (item.matchingRule() == ShoppingItemRule.FLEXIBLE_CATEGORY) {
+            status = shoppingListRepository.hasProductsNamed(
+                    listId,
+                    item.flexibleConstraints() == null
+                            || item.flexibleConstraints().category() == null
+                            ? productNameNormalizer.normalize(item.name())
+                            : productNameNormalizer.normalize(
+                                    item.flexibleConstraints().category())
+            )
+                    ? ShoppingItemMatchingStatus.AUTO_MATCHED
+                    : ShoppingItemMatchingStatus.UNMATCHED;
+        }
+
         ShoppingListItemResponse updated = updateResult(
                 listId,
                 item.id(),
@@ -593,11 +608,13 @@ public class ShoppingListMatchingService {
                     ? item.name()
                     : item.flexibleConstraints().category();
 
-            return item.matchingStatus() == ShoppingItemMatchingStatus.CONFIRMED
-                    ? "Biramo najpovoljniju ponudu u prodavnicama u blizini."
-                    : "„" + category + "“ ne prepoznajemo kao vrstu proizvoda. "
-                    + "Tražimo proizvode čiji naziv tako počinje, a sigurnije "
-                    + "je da izabereš proizvod iz pretrage.";
+            return switch (item.matchingStatus()) {
+                case CONFIRMED -> "Biramo najpovoljniju ponudu u prodavnicama u blizini.";
+                case AUTO_MATCHED -> "Biramo najpovoljniji proizvod čiji naziv počinje sa „"
+                        + category + "“.";
+                default -> "„" + category + "“ ne prepoznajemo kao vrstu proizvoda, "
+                        + "pa neće ući u račun. Izaberi proizvod iz pretrage.";
+            };
         }
 
         return switch (item.matchingStatus()) {
