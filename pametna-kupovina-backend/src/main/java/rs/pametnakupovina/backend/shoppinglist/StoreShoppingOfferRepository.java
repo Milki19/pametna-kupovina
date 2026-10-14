@@ -1232,6 +1232,24 @@ public class StoreShoppingOfferRepository {
                                                  IS NOT NULL
                                          )
                                              THEN 0
+                                         -- "Toalet papir 10/1" is ten rolls; an
+                                         -- intent counted in pieces reads the
+                                         -- count from the name (V126).
+                                         WHEN pack.one_size IS NULL
+                                          AND requested_intent.default_base_unit IS NULL
+                                          AND requested_intent.default_max_package_quantity < 100
+                                          AND SUBSTRING(product.name FROM '(?:^|\\D)(\\d{1,3}) ?/ ?1(?:\\D|$)')
+                                              IS NOT NULL
+                                             THEN CASE
+                                                      WHEN SUBSTRING(product.name FROM '(?:^|\\D)(\\d{1,3}) ?/ ?1(?:\\D|$)')::NUMERIC
+                                                           BETWEEN requested_intent.default_min_package_quantity
+                                                               AND requested_intent.default_max_package_quantity
+                                                          THEN 0
+                                                      ELSE 2
+                                                  END
+                                         -- A size we cannot read comes before one
+                                         -- we know is wrong: one roll of toilet
+                                         -- paper is not the usual pack (V126).
                                          WHEN pack.one_size IS NULL
                                              THEN 1
                                          WHEN (
@@ -1250,7 +1268,7 @@ public class StoreShoppingOfferRepository {
                                              OR pack.one_unit =
                                                 requested_intent.default_base_unit
                                          ) THEN 0
-                                         ELSE 1
+                                         ELSE 2
                                      END ASC,
                                      -- Thirteen 16 g sachets for "kafa 200 g" cost more
                                      -- than the shelf price says: every pack beyond
