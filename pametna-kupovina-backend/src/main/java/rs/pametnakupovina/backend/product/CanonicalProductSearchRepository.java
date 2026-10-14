@@ -332,7 +332,13 @@ public class CanonicalProductSearchRepository {
                             LIMIT 1
                         ) AS best ON TRUE
                         WHERE presence.product_family_id IN (:familyIds)
+                        -- Cheapest chain first; a price to be checked goes
+                        -- last however cheap it looks, as does no price.
                         ORDER BY presence.product_family_id,
+                                 COALESCE(best.needs_check, FALSE),
+                                 COALESCE(best.price,
+                                          presence.minimum_effective_price)
+                                     NULLS LAST,
                                  retailer.name,
                                  retailer.code
                         """)

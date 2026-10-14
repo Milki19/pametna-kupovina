@@ -216,13 +216,19 @@ class PriceCheckTest {
                 .extracting(CanonicalProductOffer::priceNeedsCheck)
                 .containsExactly(false, false, false, true);
 
-        assertThat(searchService.search("secer kristal", 0, 10)
+        List<ProductRetailerAvailability> availability = searchService
+                .search("secer kristal", 0, 10)
                 .items()
                 .getFirst()
-                .availability())
+                .availability();
+        assertThat(availability)
                 .filteredOn(ProductRetailerAvailability::priceNeedsCheck)
                 .extracting(ProductRetailerAvailability::retailerCode)
                 .containsExactly("CHECK_D");
+        // The search shows the cheapest chains first, not the first names.
+        assertThat(availability)
+                .extracting(ProductRetailerAvailability::retailerCode)
+                .containsExactly("CHECK_B", "CHECK_A", "CHECK_C", "CHECK_D");
 
         var list = shoppingListService.create(
                 new CreateShoppingListRequest("Šećer"),
