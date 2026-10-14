@@ -127,7 +127,8 @@ public class StoreShoppingOfferRepository {
                                    intent.default_min_package_quantity,
                                    intent.default_max_package_quantity,
                                    intent.default_base_unit,
-                                   alias.required_name_pattern
+                                   alias.required_name_pattern,
+                                   alias.uncommon_name_pattern
                             FROM app.shopping_intent AS intent
                             LEFT JOIN app.shopping_intent_alias AS alias
                               ON alias.shopping_intent_id = intent.id
@@ -193,6 +194,10 @@ public class StoreShoppingOfferRepository {
                             ) pack
                             CROSS JOIN LATERAL (
                                 SELECT CASE WHEN item.target_quantity IS NULL THEN item.quantity
+                                    -- Loose goods are weighed out: "banane 1,5 kg"
+                                    -- is 1,5 kg at the price of one (V125).
+                                    WHEN pack.by_the_kilogram
+                                    THEN ROUND(item.target_quantity * item.quantity / NULLIF(pack.size, 0), 3)
                                     ELSE CEIL(item.target_quantity * item.quantity / NULLIF(pack.size, 0))
                                 END AS packages
                             ) need
@@ -205,9 +210,16 @@ public class StoreShoppingOfferRepository {
                                   -- from a shop with only cartons of ten are two
                                   -- cartons, not no price. Up to twice what was
                                   -- asked; the cheaper total still wins.
-                                  AND need.packages * pack.size <= item.target_quantity * item.quantity
-                                      * CASE WHEN requested_intent.default_base_unit = 'piece'
-                                             THEN 2 ELSE 1.25 END
+                                  AND (
+                                      need.packages * pack.size <= item.target_quantity * item.quantity
+                                          * CASE WHEN requested_intent.default_base_unit = 'piece'
+                                                 THEN 2 ELSE 1.25 END
+                                      -- One pack of up to twice the amount: "šećer 500 g"
+                                      -- in a shop with only a kilogram of white sugar.
+                                      -- It comes after every pack that fits (V125).
+                                      OR (need.packages = 1
+                                          AND pack.size <= item.target_quantity * item.quantity * 2)
+                                  )
                               ))
                               AND (
                                   (
@@ -380,7 +392,8 @@ public class StoreShoppingOfferRepository {
                                    intent.default_min_package_quantity,
                                    intent.default_max_package_quantity,
                                    intent.default_base_unit,
-                                   alias.required_name_pattern
+                                   alias.required_name_pattern,
+                                   alias.uncommon_name_pattern
                             FROM app.shopping_intent AS intent
                             LEFT JOIN app.shopping_intent_alias AS alias
                               ON alias.shopping_intent_id = intent.id
@@ -438,6 +451,10 @@ public class StoreShoppingOfferRepository {
                             ) pack
                             CROSS JOIN LATERAL (
                                 SELECT CASE WHEN item.target_quantity IS NULL THEN item.quantity
+                                    -- Loose goods are weighed out: "banane 1,5 kg"
+                                    -- is 1,5 kg at the price of one (V125).
+                                    WHEN pack.by_the_kilogram
+                                    THEN ROUND(item.target_quantity * item.quantity / NULLIF(pack.size, 0), 3)
                                     ELSE CEIL(item.target_quantity * item.quantity / NULLIF(pack.size, 0))
                                 END AS packages
                             ) need
@@ -452,9 +469,16 @@ public class StoreShoppingOfferRepository {
                                   -- from a shop with only cartons of ten are two
                                   -- cartons, not no price. Up to twice what was
                                   -- asked; the cheaper total still wins.
-                                  AND need.packages * pack.size <= item.target_quantity * item.quantity
-                                      * CASE WHEN requested_intent.default_base_unit = 'piece'
-                                             THEN 2 ELSE 1.25 END
+                                  AND (
+                                      need.packages * pack.size <= item.target_quantity * item.quantity
+                                          * CASE WHEN requested_intent.default_base_unit = 'piece'
+                                                 THEN 2 ELSE 1.25 END
+                                      -- One pack of up to twice the amount: "šećer 500 g"
+                                      -- in a shop with only a kilogram of white sugar.
+                                      -- It comes after every pack that fits (V125).
+                                      OR (need.packages = 1
+                                          AND pack.size <= item.target_quantity * item.quantity * 2)
+                                  )
                               ))
                               AND (
                                   (
@@ -667,7 +691,8 @@ public class StoreShoppingOfferRepository {
                                    intent.default_min_package_quantity,
                                    intent.default_max_package_quantity,
                                    intent.default_base_unit,
-                                   alias.required_name_pattern
+                                   alias.required_name_pattern,
+                                   alias.uncommon_name_pattern
                             FROM app.shopping_intent AS intent
                             LEFT JOIN app.shopping_intent_alias AS alias
                               ON alias.shopping_intent_id = intent.id
@@ -758,6 +783,10 @@ public class StoreShoppingOfferRepository {
                             ) pack
                             CROSS JOIN LATERAL (
                                 SELECT CASE WHEN item.target_quantity IS NULL THEN item.quantity
+                                    -- Loose goods are weighed out: "banane 1,5 kg"
+                                    -- is 1,5 kg at the price of one (V125).
+                                    WHEN pack.by_the_kilogram
+                                    THEN ROUND(item.target_quantity * item.quantity / NULLIF(pack.size, 0), 3)
                                     ELSE CEIL(item.target_quantity * item.quantity / NULLIF(pack.size, 0))
                                 END AS packages
                             ) need
@@ -989,9 +1018,16 @@ public class StoreShoppingOfferRepository {
                                   -- from a shop with only cartons of ten are two
                                   -- cartons, not no price. Up to twice what was
                                   -- asked; the cheaper total still wins.
-                                  AND need.packages * pack.size <= item.target_quantity * item.quantity
-                                      * CASE WHEN requested_intent.default_base_unit = 'piece'
-                                             THEN 2 ELSE 1.25 END
+                                  AND (
+                                      need.packages * pack.size <= item.target_quantity * item.quantity
+                                          * CASE WHEN requested_intent.default_base_unit = 'piece'
+                                                 THEN 2 ELSE 1.25 END
+                                      -- One pack of up to twice the amount: "šećer 500 g"
+                                      -- in a shop with only a kilogram of white sugar.
+                                      -- It comes after every pack that fits (V125).
+                                      OR (need.packages = 1
+                                          AND pack.size <= item.target_quantity * item.quantity * 2)
+                                  )
                               ))
                               AND (
                                   (
@@ -1153,6 +1189,27 @@ public class StoreShoppingOfferRepository {
                                          ), 32767)
                                          ELSE 0
                                      END ASC,
+                                     -- The usual kind before an unusual one: white
+                                     -- sugar before powdered, plain bananas before
+                                     -- red ones. Ranked, not filtered: a shop that
+                                     -- has only the unusual kind still offers it
+                                     -- (V125).
+                                     CASE
+                                         WHEN requested_intent.uncommon_name_pattern IS NOT NULL
+                                          AND product.normalized_name ~ requested_intent.uncommon_name_pattern
+                                             THEN 1
+                                         ELSE 0
+                                     END ASC,
+                                     -- A pack bigger than a quarter over the amount
+                                     -- only where nothing fits better.
+                                     CASE
+                                         WHEN item.target_quantity IS NOT NULL
+                                          AND need.packages * pack.size > item.target_quantity * item.quantity
+                                              * CASE WHEN requested_intent.default_base_unit = 'piece'
+                                                     THEN 2 ELSE 1.25 END
+                                             THEN 1
+                                         ELSE 0
+                                     END ASC,
                                      -- Someone who writes only "mleko" means a
                                      -- litre of it, not the cheapest 200ml cup.
                                      -- Ranked, not filtered: a store that only
@@ -1195,7 +1252,22 @@ public class StoreShoppingOfferRepository {
                                          ) THEN 0
                                          ELSE 1
                                      END ASC,
-                                     selected_price.effective_price * need.packages ASC,
+                                     -- Thirteen 16 g sachets for "kafa 200 g" cost more
+                                     -- than the shelf price says: every pack beyond
+                                     -- three, or beyond the count asked for, weighs 5%
+                                     -- more. Relative, so it reads the same in any
+                                     -- currency (V125).
+                                     selected_price.effective_price * need.packages
+                                         * CASE
+                                               WHEN item.target_quantity IS NULL
+                                                 OR pack.by_piece
+                                                 OR pack.by_the_kilogram
+                                                   THEN 1
+                                               ELSE 1 + 0.05 * GREATEST(
+                                                   0,
+                                                   need.packages - GREATEST(3, item.quantity)
+                                               )
+                                           END ASC,
                                      -- Dve ponude koje koštaju isto: bira se
                                      -- ona koju kupac zaista kupuje, po
                                      -- skeniranim računima. Stoji tek posle
