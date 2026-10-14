@@ -96,7 +96,8 @@
 
     <!-- Checks on an item before it is saved -->
     <string name="list_error_name_required">Naziv stavke je obavezan.</string>
-    <string name="list_error_quantity_positive">Količina mora biti veća od nule.</string>
+    <string name="list_error_quantity_range">Količina mora biti od 0,01 do 999.</string>
+    <string name="list_error_name_too_long">Naziv može imati najviše 80 znakova.</string>
     <string name="list_error_target_quantity">Ukupna količina mora biti pozitivna i imati jedinicu g, ml ili piece.</string>
     <string name="list_error_exact_no_family">Tačna stavka ne može imati porodicu proizvoda.</string>
     <string name="list_error_family_required">Za isti proizvod izaberi porodicu proizvoda.</string>

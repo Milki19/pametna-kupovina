@@ -44,7 +44,10 @@ import java.math.BigDecimal
 import kotlinx.coroutines.launch
 import rs.pametnakupovina.app.R
 import rs.pametnakupovina.app.data.DraftItemInput
+import rs.pametnakupovina.app.data.MAX_ITEM_QUANTITY
+import rs.pametnakupovina.app.data.MAX_TYPED_NAME_LENGTH
 import rs.pametnakupovina.app.data.amountLabel
+import rs.pametnakupovina.app.data.isAllowedQuantity
 import rs.pametnakupovina.app.data.local.DraftItemEntity
 import rs.pametnakupovina.app.data.network.CanonicalProductSearchItemDto
 import rs.pametnakupovina.app.data.network.ShoppingItemRuleDto
@@ -194,8 +197,9 @@ internal fun ItemEditorDialog(
     val packageError = packageSizeError(minPackage, maxPackage, chosenUnit)
     val exactSelection = resolveDraftCanonicalProductId(item, name, rule, selectedProduct)
     val familySelection = resolveDraftProductFamilyId(item, name, rule, selectedProduct)
-    val valid = name.isNotBlank() &&
-        parsedQuantity != null && parsedQuantity > 0 &&
+    val nameTooLong = isFlexible && name.trim().length > MAX_TYPED_NAME_LENGTH
+    val valid = name.isNotBlank() && !nameTooLong &&
+        parsedQuantity != null && isAllowedQuantity(parsedQuantity) &&
         (!isAmountMode || (parsedTarget != null && parsedTarget > 0)) &&
         when (rule) {
             ShoppingItemRuleDto.EXACT_PRODUCT -> exactSelection != null
@@ -384,6 +388,12 @@ internal fun ItemEditorDialog(
                         },
                         label = { Text(stringResource(R.string.list_editor_what_label)) },
                         placeholder = { Text(stringResource(R.string.list_editor_what_placeholder)) },
+                        isError = nameTooLong,
+                        supportingText = if (nameTooLong) {
+                            { Text(stringResource(R.string.list_error_name_too_long)) }
+                        } else {
+                            null
+                        },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -569,6 +579,8 @@ private fun QuantityStepper(
     onValueChange: (String) -> Unit
 ) {
     val current = value.toDecimalOrNull()
+    // Saving stays off while the count is wrong, so the field says why.
+    val wrong = current == null || !isAllowedQuantity(current)
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm)
@@ -585,12 +597,18 @@ private fun QuantityStepper(
             value = value,
             onValueChange = onValueChange,
             label = { Text(label) },
-            isError = current == null || current <= 0,
+            isError = wrong,
+            supportingText = if (wrong) {
+                { Text(stringResource(R.string.list_error_quantity_range)) }
+            } else {
+                null
+            },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             singleLine = true,
             modifier = Modifier.weight(1f)
         )
         FilledTonalIconButton(
+            enabled = current == null || current + 1 <= MAX_ITEM_QUANTITY,
             onClick = { onValueChange(inputNumber((current ?: 0.0) + 1)) }
         ) {
             AppIcon(R.drawable.ic_add, contentDescription = stringResource(R.string.list_cd_more))

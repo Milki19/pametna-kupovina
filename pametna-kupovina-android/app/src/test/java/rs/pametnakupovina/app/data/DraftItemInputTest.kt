@@ -37,4 +37,34 @@ class DraftItemInputTest {
         val cevapi = PastedListParser.parse("Ćevapi 3kg").single().toFlexibleDraftInput()
         assertEquals(3000.0, cevapi.targetQuantity!!, 0.0)
     }
+
+    private fun hleb(quantity: Double, name: String = "hleb") = DraftItemInput(
+        name = name,
+        quantity = quantity,
+        matchingRule = ShoppingItemRuleDto.FLEXIBLE_CATEGORY,
+        category = name
+    )
+
+    @Test
+    fun `kolicina mora biti od jedne stotine do 999`() {
+        listOf(0.0, -5.0, 0.009, 999.01, 999999.0).forEach { quantity ->
+            val error = assertThrows(UserFacingException::class.java) { hleb(quantity).validated() }
+            assertEquals(uiText(R.string.list_error_quantity_range), error.text)
+        }
+        assertEquals(0.01, hleb(0.01).validated().quantity, 0.0)
+        assertEquals(999.0, hleb(999.0).validated().quantity, 0.0)
+    }
+
+    @Test
+    fun `naziv koji se kuca ima najvise 80 znakova, a proizvod iz kataloga svoj`() {
+        val error = assertThrows(UserFacingException::class.java) { hleb(1.0, "a".repeat(81)).validated() }
+        assertEquals(uiText(R.string.list_error_name_too_long), error.text)
+        hleb(1.0, "a".repeat(80)).validated()
+        DraftItemInput(
+            name = "Proizvod iz kataloga sa dugim nazivom ".repeat(3),
+            canonicalProductId = 42L,
+            quantity = 1.0,
+            matchingRule = ShoppingItemRuleDto.EXACT_PRODUCT
+        ).validated()
+    }
 }

@@ -63,4 +63,12 @@ class PastedListParserTest {
         assertEquals("hleb", input.category)
         assertEquals(2.0, input.quantity, 0.0)
     }
+
+    @Test
+    fun `nula ostaje nula da bi server oznacio taj red`() {
+        val result = PastedListParser.parse("0x hleb\nmleko")
+
+        assertEquals(listOf("hleb", "mleko"), result.map { it.name })
+        assertEquals(0.0, result[0].quantity, 0.0)
+    }
 }
