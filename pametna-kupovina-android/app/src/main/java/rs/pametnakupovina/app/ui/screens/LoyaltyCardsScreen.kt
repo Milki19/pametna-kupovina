@@ -63,6 +63,7 @@ import rs.pametnakupovina.app.ui.components.GlassCard
 import rs.pametnakupovina.app.ui.components.listBottomPadding
 import rs.pametnakupovina.app.ui.components.AppTopBar
 import rs.pametnakupovina.app.ui.components.Barcode
+import rs.pametnakupovina.app.ui.components.isValidEan13
 import rs.pametnakupovina.app.ui.components.NoticeBanner
 import rs.pametnakupovina.app.ui.components.StatusTone
 
@@ -98,7 +99,12 @@ fun LoyaltyCardsScreen(
                     )
                     OutlinedTextField(
                         value = number,
-                        onValueChange = { number = it },
+                        onValueChange = {
+                            number = it
+                            // Skeniran EAN-13 koji je posle ručno izmenjen više nije EAN-13:
+                            // oblik se vraća na crtični kod koji prima bilo koji broj.
+                            if (format == "EAN_13" && !isValidEan13(it.trim())) format = "CODE_128"
+                        },
                         label = { Text(stringResource(R.string.loyalty_number)) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth().testTag("card-number")

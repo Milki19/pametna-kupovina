@@ -37,6 +37,14 @@ fun Barcode(
     )
 }
 
+/** 13 cifara i poslednja se slaže sa kontrolnim zbirom, kao na webu. */
+internal fun isValidEan13(value: String): Boolean {
+    if (value.length != 13 || !value.all { it in '0'..'9' }) return false
+    val digits = value.map { it - '0' }
+    val sum = (0 until 12).sumOf { i -> digits[i] * if (i % 2 == 1) 3 else 1 }
+    return (10 - sum % 10) % 10 == digits[12]
+}
+
 internal fun renderBarcode(value: String, format: String): Bitmap? {
     val barcodeFormat = runCatching { BarcodeFormat.valueOf(format) }
         .getOrElse { return null }

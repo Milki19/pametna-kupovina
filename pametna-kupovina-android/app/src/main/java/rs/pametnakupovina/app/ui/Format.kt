@@ -60,8 +60,9 @@ fun distance(kilometres: Double): String =
         "${decimal(kilometres, maxDecimals = 1)} km"
     }
 
+/** Kratak put je „1 min“, ne „0 min“. */
 fun duration(seconds: Long): String {
-    val totalMinutes = (seconds + 30) / 60
+    val totalMinutes = if (seconds > 0) maxOf(1L, (seconds + 30) / 60) else 0L
     val hours = totalMinutes / 60
     val minutes = totalMinutes % 60
     return if (hours > 0) "$hours h $minutes min" else "$minutes min"

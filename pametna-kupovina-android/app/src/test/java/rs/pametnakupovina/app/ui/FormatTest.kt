@@ -31,6 +31,14 @@ class FormatTest {
     }
 
     @Test
+    fun `kratak put traje najmanje jedan minut`() {
+        assertEquals("1 min", duration(12))
+        assertEquals("0 min", duration(0))
+        assertEquals("2 min", duration(95))
+        assertEquals("1 h 2 min", duration(3700))
+    }
+
+    @Test
     fun `datum je u srpskom obliku`() {
         assertEquals("13.09.2026.", date("2026-09-13"))
         assertEquals("nije datum", date("nije datum"))
