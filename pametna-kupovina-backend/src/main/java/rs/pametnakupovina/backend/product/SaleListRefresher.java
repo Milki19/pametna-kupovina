@@ -11,12 +11,16 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.util.Collection;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Keeps app.current_sale_list (V117) in step with the prices: after a
- * chain's prices change, and at least every hour so that a sale stops
- * counting soon after its last day.
+ * chain's prices change, as soon as a new day starts in any market (a sale
+ * ends at midnight there and another one starts), and at least every hour.
  */
 @Component
 public class SaleListRefresher {
@@ -48,10 +52,42 @@ public class SaleListRefresher {
         }
     }
 
-    @Scheduled(fixedDelay = 300_000, initialDelay = 60_000)
+    // Every minute, so a market's new day reaches the list right after its
+    // midnight; most checks only read the markets' time zones.
+    @Scheduled(fixedDelay = 60_000, initialDelay = 60_000)
     void refreshWhenDue() {
-        if (stale.get() || refreshedAt.plus(MAX_AGE).isBefore(Instant.now())) {
+        if (stale.get() || due(refreshedAt, Instant.now(), marketTimeZones())) {
             refresh();
+        }
+    }
+
+    /**
+     * Due when the list is older than MAX_AGE or was read on an earlier day
+     * than today somewhere a market is.
+     */
+    static boolean due(Instant refreshedAt, Instant now, Collection<ZoneId> timeZones) {
+        if (refreshedAt.plus(MAX_AGE).isBefore(now)) {
+            return true;
+        }
+        for (ZoneId zone : timeZones) {
+            if (LocalDate.ofInstant(refreshedAt, zone).isBefore(LocalDate.ofInstant(now, zone))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private List<ZoneId> marketTimeZones() {
+        try {
+            return jdbcClient.sql("SELECT DISTINCT time_zone FROM app.market WHERE active")
+                    .query(String.class)
+                    .list()
+                    .stream()
+                    .map(ZoneId::of)
+                    .toList();
+        } catch (DataAccessException failed) {
+            log.warn("Vremenske zone tržišta nisu pročitane: {}", failed.getMessage());
+            return List.of();
         }
     }
 
@@ -59,9 +95,12 @@ public class SaleListRefresher {
     public void refresh() {
         stale.set(false);
         long started = System.nanoTime();
+        // The day the list is read on: taken before the read, so a midnight
+        // during it brings another one.
+        Instant reading = Instant.now();
         try {
             jdbcClient.sql("REFRESH MATERIALIZED VIEW CONCURRENTLY app.current_sale_list").update();
-            refreshedAt = Instant.now();
+            refreshedAt = reading;
             log.info("Lista akcija osvežena za {} ms", (System.nanoTime() - started) / 1_000_000);
         } catch (DataAccessException failed) {
             stale.set(true);

@@ -202,6 +202,64 @@ class SaleTest {
                 });
     }
 
+    /**
+     * The list of sales is read ahead, so right after midnight it still has
+     * yesterday's last day of a sale until it is read again. The list drops
+     * it at the midnight of the chain's own market: here the market moves
+     * from the last time zone of the day to the first one, which is always a
+     * later day.
+     */
+    @Test
+    void aSaleDropsOffAtItsMarketsMidnightBeforeTheListIsReadAgain() {
+        String belgrade = jdbcClient.sql("SELECT time_zone FROM app.market WHERE is_default")
+                .query(String.class)
+                .single();
+        LocalDate lastDay = LocalDate.now(ZoneId.of("Etc/GMT+12"));
+        jdbcClient.sql("""
+                        INSERT INTO app.retailer (code, name, dataset_url)
+                        VALUES ('PONOC', 'Ponoc', ?)
+                        """)
+                .param("http://127.0.0.1:" + csvServer.getAddress().getPort() + "/sale.csv")
+                .update();
+        catalogue = HEADER
+                + row("SOK PONOCNI 1L", "8601234500148", "200,00", "150,00",
+                        lastDay, lastDay.minusDays(2), lastDay);
+        assertThat(priceImportService.importPrices("PONOC").status()).isEqualTo("SUCCEEDED");
+
+        try {
+            // Read while the last day still lasts in the market.
+            setDefaultTimeZone("Etc/GMT+12");
+            saleListRefresher.refresh();
+            assertThat(saleService.find(null, null, "PONOC", null, 1, SaleSort.DISCOUNT, 0, 20).items())
+                    .singleElement()
+                    .satisfies(sale -> assertThat(sale.saleEndDate()).isEqualTo(lastDay));
+
+            // The market's next day, with the list not read again yet.
+            setDefaultTimeZone("Etc/GMT-14");
+            assertThat(saleService.find(null, null, "PONOC", null, 1, SaleSort.DISCOUNT, 0, 20).items())
+                    .isEmpty();
+        } finally {
+            setDefaultTimeZone(belgrade);
+            jdbcClient.sql("""
+                            UPDATE app.current_price_offer AS offer
+                            SET discounted_price = NULL
+                            FROM app.retailer_product AS product
+                            JOIN app.retailer AS retailer
+                              ON retailer.id = product.retailer_id
+                            WHERE product.id = offer.retailer_product_id
+                              AND retailer.code = 'PONOC'
+                            """)
+                    .update();
+            saleListRefresher.refresh();
+        }
+    }
+
+    private void setDefaultTimeZone(String timeZone) {
+        jdbcClient.sql("UPDATE app.market SET time_zone = ? WHERE is_default")
+                .param(timeZone)
+                .update();
+    }
+
     private long familyId(String name) {
         return jdbcClient.sql("SELECT product_family_id FROM app.retailer_product WHERE name = ?")
                 .param(name)
