@@ -929,6 +929,11 @@ public class ProductCatalogMaintenanceService {
         jdbcClient.sql("SELECT app.refresh_price_list_snapshots()")
                 .query((resultSet, rowNumber) -> true)
                 .single();
+        // How old each chain's lists usually get, so an older one is
+        // marked on the product screen (V124).
+        jdbcClient.sql("SELECT app.refresh_price_list_rhythm()")
+                .query((resultSet, rowNumber) -> true)
+                .single();
 
         jdbcClient.sql("""
                     DELETE FROM app.product_retailer_presence

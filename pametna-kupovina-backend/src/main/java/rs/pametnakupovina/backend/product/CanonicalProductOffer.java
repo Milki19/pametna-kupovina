@@ -25,8 +25,35 @@ public record CanonicalProductOffer(
         int packageCount,
         // The last day of the sale the effective price is; null when the
         // price is not a sale or the chain does not say (V115).
-        LocalDate saleEndDate
+        LocalDate saleEndDate,
+        // From a list older than the chain's lists usually get (V124): shown
+        // marked and never the best price.
+        boolean priceStale
 ) {
+
+    public CanonicalProductOffer(
+            Long retailerProductId,
+            String retailerCode,
+            String retailerName,
+            Long storeId,
+            String storeName,
+            String storeFormatCode,
+            String storeFormatName,
+            LocalDate priceDate,
+            BigDecimal regularPrice,
+            BigDecimal discountedPrice,
+            BigDecimal effectivePrice,
+            BigDecimal unitPrice,
+            String priceScope,
+            boolean priceNeedsCheck,
+            int packageCount,
+            LocalDate saleEndDate
+    ) {
+        this(retailerProductId, retailerCode, retailerName, storeId, storeName,
+                storeFormatCode, storeFormatName, priceDate, regularPrice,
+                discountedPrice, effectivePrice, unitPrice, priceScope,
+                priceNeedsCheck, packageCount, saleEndDate, false);
+    }
 
     public CanonicalProductOffer(
             Long retailerProductId,
