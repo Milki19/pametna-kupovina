@@ -90,7 +90,7 @@ class ProductSearchViewModel @Inject constructor(
         // word. ShoppingRepository trims only the outgoing API query.
         val include = _uiState.value.includeWithoutPrice
         val onSale = _uiState.value.onlyOnSale
-        if (query.trim().length < MIN_QUERY_LENGTH) {
+        if (!isSearchable(query)) {
             _uiState.value = ProductSearchUiState(query = query, includeWithoutPrice = include, onlyOnSale = onSale)
             return
         }
@@ -111,7 +111,7 @@ class ProductSearchViewModel @Inject constructor(
 
     fun retry() {
         val query = _uiState.value.query
-        if (query.trim().length < MIN_QUERY_LENGTH) return
+        if (!isSearchable(query)) return
 
         searchJob?.cancel()
         _uiState.value = _uiState.value.copy(
@@ -206,6 +206,11 @@ class ProductSearchViewModel @Inject constructor(
 
     private fun stillAsked(query: String, include: Boolean, onSale: Boolean): Boolean =
         _uiState.value.let { it.query == query && it.includeWithoutPrice == include && it.onlyOnSale == onSale }
+
+    // Two letters or digits, as the server asks: "m." alone matched nearly
+    // the whole catalogue.
+    private fun isSearchable(query: String): Boolean =
+        query.count(Char::isLetterOrDigit) >= MIN_QUERY_LENGTH
 
     private companion object {
         const val MIN_QUERY_LENGTH = 2

@@ -59,9 +59,11 @@ object PastedListParser {
                 )
             }
         }
-        .filter { it.name.isNotBlank() && it.quantity > 0 }
+        .filter { it.name.isNotBlank() }
         .toList()
 
+    // "0x hleb" stays 0, so the server refuses that row with its reason and
+    // the row is marked, instead of quietly becoming one loaf.
     private fun String.toQuantity(): Double =
-        parseSerbianDecimal()?.takeIf { it > 0 } ?: 1.0
+        parseSerbianDecimal() ?: 1.0
 }
