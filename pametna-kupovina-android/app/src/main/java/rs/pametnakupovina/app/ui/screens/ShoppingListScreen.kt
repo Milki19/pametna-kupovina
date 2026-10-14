@@ -254,6 +254,16 @@ fun ShoppingListScreen(
                 if (state.items.isEmpty()) {
                     item(key = "empty") { EmptyList(Modifier.enter(entrance, 1)) }
                 }
+                // Ista stavka dva puta: samo upozorenje, spisak ostaje kakav jeste.
+                duplicateNames(state.items.map { it.name }).takeIf { it.isNotEmpty() }?.let { names ->
+                    item(key = "duplicates") {
+                        NoticeBanner(
+                            text = names.map { stringResource(R.string.list_duplicate_warning, it) }.joinToString(" "),
+                            tone = StatusTone.WARNING,
+                            modifier = Modifier.padding(bottom = AppSpacing.lg)
+                        )
+                    }
+                }
                 itemsIndexed(state.items, key = { _, item -> item.localId }) { index, item ->
                     val isNew = remember { settled && item.localId !in seen }
                     val visibility = remember { MutableTransitionState(!isNew) }
@@ -624,3 +634,14 @@ private fun draftAttention(status: String): Pair<Int, StatusTone>? = when (statu
     "UNMATCHED" -> R.string.list_status_not_found to StatusTone.ERROR
     else -> null
 }
+
+/** Nazivi koji su na spisku više puta, bez obzira na velika slova, razmake i kvačice. */
+internal fun duplicateNames(names: List<String>): List<String> =
+    names.groupBy { sameName(it) }.values.filter { it.size > 1 }.map { it.first() }
+
+private fun sameName(name: String): String =
+    java.text.Normalizer.normalize(name.replace("đ", "dj").replace("Đ", "Dj"), java.text.Normalizer.Form.NFD)
+        .replace(Regex("\\p{Mn}+"), "")
+        .lowercase()
+        .replace(Regex("\\s+"), " ")
+        .trim()

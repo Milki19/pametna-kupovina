@@ -53,6 +53,25 @@ class MatchingScreenTest {
         )
     }
 
+    @Test
+    fun `jedno stanje - samo potvrda zadrzava korak, nepronadjeno ne`() {
+        val auto = matchResult(ShoppingItemRuleDto.FLEXIBLE_CATEGORY, ShoppingItemMatchingStatusDto.AUTO_MATCHED)
+        val unmatched = matchResult(ShoppingItemRuleDto.EXACT_PRODUCT, ShoppingItemMatchingStatusDto.UNMATCHED)
+        val unclear = matchResult(ShoppingItemRuleDto.EXACT_PRODUCT, ShoppingItemMatchingStatusDto.NEEDS_CONFIRMATION)
+
+        assertTrue(isFound(auto))
+        assertFalse(needsDecision(unmatched))
+        assertTrue(notFound(unmatched))
+        assertTrue(needsDecision(unclear))
+        assertFalse(notFound(unclear))
+    }
+
+    @Test
+    fun `ista stavka dva puta se prepoznaje bez obzira na kvacice i velika slova`() {
+        assertEquals(listOf("mleko", "Šećer"), duplicateNames(listOf("mleko", "hleb", "Mleko ", "Šećer", "secer")))
+        assertEquals(emptyList<String>(), duplicateNames(listOf("mleko", "hleb")))
+    }
+
     private fun matchResult(
         rule: ShoppingItemRuleDto,
         status: ShoppingItemMatchingStatusDto

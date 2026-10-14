@@ -362,33 +362,59 @@ class ShoppingRepository @Inject constructor(
         return parsed.size
     }
 
+    /**
+     * „Neka aplikacija izabere najpovoljnije": the server keeps the kind and
+     * the amount the words give, and words it cannot read ("T-400") no longer
+     * refuse the change.
+     */
     suspend fun convertToFlexible(
         current: ShoppingListMatchingDto?,
-        itemId: Long,
-        category: String
+        itemId: Long
     ): ShoppingListMatchingDto {
-        var local = dao.findByRemoteId(itemId)
-        if (local == null) {
-            synchronizeAndRefresh()
-            local = dao.findByRemoteId(itemId)
-        }
-        val item = requireUserNotNull(local) {
-            uiText(R.string.list_error_item_not_local)
-        }
-        val flexibleCategory = category.trim().ifBlank { item.name.trim() }
-
-        updateItem(
-            item = item,
-            input = DraftItemInput(
-                name = item.name,
-                rawInput = item.rawInput,
-                quantity = item.quantity,
-                matchingRule = ShoppingItemRuleDto.FLEXIBLE_CATEGORY,
-                category = flexibleCategory
-            )
-        )
+        val listId = synchronizePending(allowRejected = true)
+        val response = api.useAnyOfTheKind(listId, itemId)
+        val local = dao.findByRemoteId(itemId)
+        dao.insert(response.toEntity(localId = local?.localId ?: 0))
         return rematchItem(current, itemId)
     }
+
+    /**
+     * „Izaberi iz pretrage" u koraku 1: stavka postaje izabrani proizvod i
+     * samo ona se proverava ponovo.
+     */
+    suspend fun pickFromSearch(
+        current: ShoppingListMatchingDto?,
+        itemId: Long,
+        product: rs.pametnakupovina.app.data.network.CanonicalProductSearchItemDto,
+        packages: Double
+    ): ShoppingListMatchingDto {
+        if (dao.findByRemoteId(itemId) == null) synchronizeAndRefresh()
+        replaceWithAlternative(itemId, product, packages)
+        return rematchItem(current, itemId)
+    }
+
+    /**
+     * „Pogrešan proizvod" u planu: odluka o proizvodu se pamti kao odbijena,
+     * pa se zamena bira iz pretrage. Vrsta proizvoda nema takvu odluku.
+     */
+    suspend fun rejectPlannedProduct(listId: Long, itemId: Long, productName: String?) {
+        val item = api.getShoppingList(listId).items.firstOrNull { it.id == itemId } ?: return
+        if (item.matchingDecisionId == null || item.matchingRule == ShoppingItemRuleDto.FLEXIBLE_CATEGORY) return
+        val response = api.resolveShoppingItemMatch(
+            listId = listId,
+            itemId = itemId,
+            request = ResolveShoppingItemMatchRequestDto(
+                action = ShoppingItemMatchActionDto.REJECT,
+                note = ("Pogrešan proizvod u planu (Android)" + (productName?.let { ": $it" } ?: "") + ".").take(500)
+            )
+        )
+        val local = dao.findByRemoteId(itemId)
+        dao.insert(response.toEntity(localId = local?.localId ?: 0))
+    }
+
+    /** Chains that publish prices but no shop addresses, by code. */
+    suspend fun chainsWithoutAddresses(): Set<String> =
+        api.getRetailers().filterNot { it.storeLocationsKnown }.map { it.code }.toSet()
 
     suspend fun updateItem(
         item: DraftItemEntity,

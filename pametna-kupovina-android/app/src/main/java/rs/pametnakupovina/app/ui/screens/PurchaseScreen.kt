@@ -618,7 +618,7 @@ private fun PurchaseInProgress(
                     stringResource(
                         R.string.purchase_finish_confirm_text,
                         session.purchasedCount,
-                        session.snapshot.scenario.items.size
+                        session.shoppableCount
                     )
                 )
             },
@@ -667,7 +667,7 @@ private fun PurchaseInProgress(
 @Composable
 private fun PurchaseProgressHeader(session: PurchaseSession, onOpenCards: () -> Unit, modifier: Modifier = Modifier) {
     val scenario = session.snapshot.scenario
-    val total = scenario.items.size
+    val total = session.shoppableCount
     val recorded = session.progress.values.mapNotNull { it.actualLineTotal?.toBigDecimalOrNull() }
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     GlassCard(modifier = modifier.fillMaxWidth()) {

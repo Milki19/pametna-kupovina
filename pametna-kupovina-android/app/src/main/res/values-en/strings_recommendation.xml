@@ -116,4 +116,10 @@
     </plurals>
     <string name="rec_warning_small_packs">Made of many small packages: %1$s. Check whether that suits you or choose a bigger package.</string>
     <string name="rec_warning_old_prices">Prices come from the price list of %1$s, not today\'s. Check them before shopping.</string>
+    <string name="rec_wrong_product">Wrong product</string>
+    <string name="rec_wrong_product_question">Mark the product for “%1$s” as wrong and pick another?</string>
+    <string name="rec_wrong_product_confirm">Pick another</string>
+    <string name="rec_unlocated_price_lists">%1$d price lists, we don\'t know which applies near you</string>
+    <string name="rec_unlocated_more">Show %1$d more</string>
+    <string name="rec_unlocated_less">Show less</string>
 </resources>

@@ -32,4 +32,5 @@
     <string name="sale_all_prices">Cene u lancima</string>
     <string name="sale_add_to_list">Na spisak</string>
     <string name="sale_added">Na spisku</string>
+    <string name="sale_added_chain_without_addresses">Dodato: %1$s. %2$s ne objavljuje adrese prodavnica, pa ova cena neće ući u plan.</string>
 </resources>
