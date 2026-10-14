@@ -13,6 +13,7 @@ import rs.pametnakupovina.backend.market.MarketRepository;
 import java.net.http.HttpClient;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -31,6 +32,13 @@ import java.util.Map;
 public class PlaceSearchService {
 
     static final int MAX_RESULTS = 5;
+    /**
+     * Nominatim matches words, not fame: "Knez Mihailova 10" returns the
+     * village streets of that name before Belgrade's "Kneza Mihaila", whose
+     * importance is the highest. More answers are asked for and the most
+     * important come first.
+     */
+    private static final int ASKED_RESULTS = 15;
     private static final int CACHE_SIZE = 500;
 
     private final RestClient restClient;
@@ -108,7 +116,8 @@ public class PlaceSearchService {
                     .uri(searchUrl, builder -> builder
                             .queryParam("q", text)
                             .queryParam("format", "jsonv2")
-                            .queryParam("limit", MAX_RESULTS)
+                            .queryParam("limit", ASKED_RESULTS)
+                            .queryParam("addressdetails", 1)
                             .queryParam("countrycodes", market.code().toLowerCase(Locale.ROOT))
                             .queryParam("accept-language", market.defaultLanguage())
                             .build())
@@ -119,18 +128,68 @@ public class PlaceSearchService {
                     "Pretraga adrese trenutno ne radi. Probaj ponovo za koji trenutak.");
         }
 
-        List<Place> places = new ArrayList<>();
+        List<JsonNode> nodes = new ArrayList<>();
         if (answer != null && answer.isArray()) {
-            for (JsonNode node : answer) {
-                double latitude = node.path("lat").asDouble(Double.NaN);
-                double longitude = node.path("lon").asDouble(Double.NaN);
-                String name = node.path("display_name").asText("").strip();
-                if (!Double.isNaN(latitude) && !Double.isNaN(longitude) && !name.isEmpty()) {
-                    places.add(new Place(name, latitude, longitude));
-                }
+            answer.forEach(nodes::add);
+        }
+        // Stable: equal importance keeps Nominatim's own order.
+        nodes.sort(Comparator.comparingDouble(
+                (JsonNode node) -> node.path("importance").asDouble(0)).reversed());
+
+        Map<String, Place> places = new LinkedHashMap<>();
+        for (JsonNode node : nodes) {
+            double latitude = node.path("lat").asDouble(Double.NaN);
+            double longitude = node.path("lon").asDouble(Double.NaN);
+            String name = shortName(node);
+            if (!Double.isNaN(latitude) && !Double.isNaN(longitude) && !name.isEmpty()) {
+                // A shop and its building at one address are one choice.
+                places.putIfAbsent(name.toLowerCase(Locale.ROOT), new Place(name, latitude, longitude));
+            }
+            if (places.size() == MAX_RESULTS) {
+                break;
             }
         }
-        return List.copyOf(places);
+        return List.copyOf(places.values());
+    }
+
+    /**
+     * "Kneza Mihaila 10, Dorćol, Beograd" instead of a 140-character line of
+     * every district, county and province the map knows.
+     */
+    static String shortName(JsonNode node) {
+        String full = node.path("display_name").asText("").strip();
+        JsonNode address = node.path("address");
+        String road = text(address, "road", "pedestrian", "street");
+        if (road == null) {
+            String[] parts = full.split(",");
+            return parts.length <= 3 ? full
+                    : String.join(",", java.util.Arrays.copyOf(parts, 3)).strip();
+        }
+        String number = text(address, "house_number");
+        String street = number == null ? road : road + " " + number;
+        String part = text(address, "quarter", "suburb", "village", "neighbourhood", "hamlet");
+        String town = text(address, "city", "town", "municipality");
+
+        List<String> parts = new ArrayList<>();
+        parts.add(street);
+        if (part != null) {
+            parts.add(part);
+        }
+        if (town != null && (part == null
+                || !part.toLowerCase(Locale.ROOT).contains(town.toLowerCase(Locale.ROOT)))) {
+            parts.add(town);
+        }
+        return String.join(", ", parts);
+    }
+
+    private static String text(JsonNode address, String... keys) {
+        for (String key : keys) {
+            String value = address.path(key).asText("").strip();
+            if (!value.isEmpty()) {
+                return value;
+            }
+        }
+        return null;
     }
 
     private void waitForTurn() {
