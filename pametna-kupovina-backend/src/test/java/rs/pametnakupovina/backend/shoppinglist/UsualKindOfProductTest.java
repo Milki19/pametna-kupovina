@@ -69,6 +69,7 @@ class UsualKindOfProductTest {
     private static final String COLA = "Coca Cola 2l";
     private static final String SMALL_COLA = "Coca Cola 0,5l";
     private static final String PEPSI = "Pepsi 2l";
+    private static final String COLA_ZERO = "Coca Cola Zero 2l";
     private static final String FLOUR_400 = "Brasno T-400 1kg";
     private static final String FLOUR_500 = "Brasno T-500 1kg";
 
@@ -93,6 +94,7 @@ class UsualKindOfProductTest {
             + row("", COLA, "KOM", "189,99")
             + row("", SMALL_COLA, "KOM", "99,99")
             + row("", PEPSI, "KOM", "149,99")
+            + row("", COLA_ZERO, "KOM", "159,99")
             + row("", FLOUR_400, "KOM", "79,99")
             + row("", FLOUR_500, "KOM", "69,99");
 
@@ -244,7 +246,7 @@ class UsualKindOfProductTest {
         assertThat(offers.get(3).productName()).isEqualTo(DETERGENT);
         assertThat(offers.get(4).productName()).isEqualTo(SHAMPOO);
         assertThat(offers.get(5).productName()).isEqualTo(TOILET_PAPER);
-        // Two litres of Coca-Cola, not the cheaper Pepsi.
+        // Two litres of Coca-Cola, not the cheaper Pepsi or Coca-Cola Zero.
         assertThat(offers.get(6)).satisfies(cola -> {
             assertThat(cola.productName()).isEqualTo(COLA);
             assertThat(cola.purchaseQuantity().packages()).isEqualByComparingTo("1");
