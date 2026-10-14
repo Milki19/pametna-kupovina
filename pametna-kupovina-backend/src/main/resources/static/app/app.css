@@ -424,6 +424,25 @@ details.list-row > .row { padding: 2px 0; gap: 8px; }
 .theme-choice { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
 .theme-choice .chip { min-height: 44px; justify-content: center; }
 
+/* Telefon od 390 px uvećan na 200% ostavlja oko 195 px: ništa ne izlazi van
+ * ekrana i ništa se ne lomi slovo po slovo, nego prelazi u novi red. */
+.top h1 { overflow-wrap: break-word; }
+@media (max-width: 320px) {
+  main { padding-left: 12px; padding-right: 12px; }
+  .chips { margin: 0 -12px; padding: 2px 12px; }
+  .card { padding: 12px; }
+  .top { padding-left: 12px; padding-right: 12px; }
+  .top h1 { font-size: 22px; }
+  .row { flex-wrap: wrap; gap: 8px; }
+  .row > .grow { flex: 1 1 6em; }
+  .row > input { flex: 1 1 6em !important; min-width: 0; }
+  .btn-row { flex-wrap: wrap; }
+  .btn-row > .btn { flex: 1 1 auto; }
+  .theme-choice { grid-template-columns: 1fr; }
+}
+@media (max-width: 240px) {
+  .letter { display: none; }
+}
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
   .spinner { animation-duration: 3s !important; animation-iteration-count: infinite !important; }
