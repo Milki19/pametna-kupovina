@@ -126,6 +126,35 @@ public class ShoppingListMatchingService {
         );
     }
 
+    /**
+     * One item read and matched again, as {@link #match} does for each item.
+     * A decision in step 1 changes only that item, so the client replaces it
+     * in what it shows instead of matching the whole list again.
+     */
+    @Transactional
+    public ShoppingItemMatchResult matchOne(
+            Long listId,
+            Long itemId,
+            DeviceCaller caller,
+            boolean includeProductsWithoutBarcode
+    ) {
+        shoppingListService.requireOwnedList(listId, caller.accountId());
+
+        ShoppingListItemResponse stored = shoppingListRepository
+                .findItemById(listId, itemId)
+                .orElseThrow(() -> itemNotFound(itemId));
+
+        ShoppingItemMatchResult result = matchItem(
+                listId,
+                readAgain(listId, stored),
+                caller,
+                includeProductsWithoutBarcode
+        );
+
+        shoppingListRepository.touch(listId);
+        return result;
+    }
+
     static int countItemsWithStatus(
             List<ShoppingItemMatchResult> results,
             ShoppingItemMatchingStatus status
