@@ -58,10 +58,10 @@ class SingleItemMatchingTest {
             + "Datum cenovnika;Cena po jedinici mere;Datum početka sniženja;"
             + "Datum kraja sniženja;Stopa PDV\n"
             + """
-            SIR;Sir;Sir Gauda Imlek 400g;Imlek;8600000000017;KOM;Test format;459,99;;13-09-2026;1149,98;;;10
-            SIR;Sir;Sir Gauda Imlek 250g;Imlek;8600000000024;KOM;Test format;319,99;;13-09-2026;1279,96;;;10
-            SIR;Sir;Sir Gauda Dukat 400g;Dukat;8600000000031;KOM;Test format;479,99;;13-09-2026;1199,98;;;10
-            ULJE;Ulje;Ulje suncokretovo Dijamant 1l;Dijamant;8600000000048;KOM;Test format;174,99;;13-09-2026;174,99;;;20
+            SIR;Sir;Sir Gauda Imlek 400g;Imlek;8600000000011;KOM;Test format;459,99;;13-09-2026;1149,98;;;10
+            SIR;Sir;Sir Gauda Imlek 250g;Imlek;8600000000028;KOM;Test format;319,99;;13-09-2026;1279,96;;;10
+            SIR;Sir;Sir Gauda Dukat 400g;Dukat;8600000000035;KOM;Test format;479,99;;13-09-2026;1199,98;;;10
+            ULJE;Ulje;Ulje suncokretovo Dijamant 1l;Dijamant;8600000000042;KOM;Test format;174,99;;13-09-2026;174,99;;;20
             """;
 
     private static HttpServer csvServer;
@@ -121,8 +121,8 @@ class SingleItemMatchingTest {
                 new CreateShoppingListRequest("Jedna stavka"),
                 callers.account(TOKEN)
         );
-        ShoppingListItemResponse cheese = add(list.id(), "Sir Gauda");
-        ShoppingListItemResponse oil = add(list.id(), "Ulje suncokretovo Dijamant 1l");
+        ShoppingListItemResponse cheese = add(list.id(), "Sir Gauda Imlek 400g", "8600000000011");
+        ShoppingListItemResponse oil = add(list.id(), "Ulje suncokretovo Dijamant 1l", "8600000000042");
 
         ShoppingListMatchingResponse whole = matchingService.match(
                 list.id(),
@@ -137,8 +137,6 @@ class SingleItemMatchingTest {
                 .filter(item -> item.itemId().equals(oil.id()))
                 .findFirst()
                 .orElseThrow();
-        assertThat(before.candidates()).isNotEmpty();
-
         // Matching the line again on its own gives what the whole list gave.
         ShoppingItemMatchResult again = matchingService.matchOne(
                 list.id(),
@@ -146,24 +144,28 @@ class SingleItemMatchingTest {
                 callers.caller(TOKEN),
                 true
         );
+        assertThat(again.itemId()).isEqualTo(cheese.id());
         assertThat(again.matchingStatus()).isEqualTo(before.matchingStatus());
         assertThat(again.candidates()).extracting(c -> c.name())
                 .containsExactlyElementsOf(
                         before.candidates().stream().map(c -> c.name()).toList()
                 );
 
-        var chosen = before.candidates().getFirst();
+        long chosen = jdbcClient.sql("""
+                        SELECT id FROM app.canonical_product
+                        WHERE barcode = '8600000000011'
+                        """)
+                .query(Long.class)
+                .single();
         matchingService.resolve(
                 list.id(),
                 cheese.id(),
                 callers.caller(TOKEN),
                 new ResolveShoppingItemMatchRequest(
                         ShoppingItemMatchAction.CONFIRM,
-                        chosen.canonicalProductId(),
+                        chosen,
                         null,
-                        chosen.canonicalProductId() == null
-                                ? chosen.productFamilyId()
-                                : null
+                        null
                 )
         );
 
@@ -196,7 +198,7 @@ class SingleItemMatchingTest {
                 new CreateShoppingListRequest("Tuđi spisak"),
                 callers.account(TOKEN)
         );
-        ShoppingListItemResponse item = add(list.id(), "Sir Gauda");
+        ShoppingListItemResponse item = add(list.id(), "Sir Gauda Imlek 400g", "8600000000011");
 
         assertThatThrownBy(() -> matchingService.matchOne(
                 list.id(),
@@ -218,14 +220,15 @@ class SingleItemMatchingTest {
                 .hasMessageContaining("Stavka nije pronađena");
     }
 
-    private ShoppingListItemResponse add(Long listId, String name) {
+    // Scanned lines, so matching does not read the words again.
+    private ShoppingListItemResponse add(Long listId, String name, String barcode) {
         return shoppingListService.addItem(
                 listId,
                 callers.account(TOKEN),
                 new AddShoppingListItemRequest(
                         name,
                         name,
-                        null,
+                        barcode,
                         BigDecimal.ONE,
                         ShoppingItemRule.EXACT_PRODUCT
                 )
