@@ -118,6 +118,24 @@ public class ShoppingListController {
         );
     }
 
+    @PostMapping("/{listId}/items/{itemId}/matching")
+    public ShoppingItemMatchResult matchItem(
+            @PathVariable("listId") Long listId,
+            @PathVariable("itemId") Long itemId,
+            DeviceCaller caller,
+            @RequestParam(
+                    name = "includeProductsWithoutBarcode",
+                    defaultValue = "false"
+            ) boolean includeProductsWithoutBarcode
+    ) {
+        return matchingService.matchOne(
+                listId,
+                itemId,
+                caller,
+                includeProductsWithoutBarcode
+        );
+    }
+
     @PutMapping("/{listId}/items/{itemId}/match")
     public ShoppingListItemResponse resolveItemMatch(
             @PathVariable("listId") Long listId,
