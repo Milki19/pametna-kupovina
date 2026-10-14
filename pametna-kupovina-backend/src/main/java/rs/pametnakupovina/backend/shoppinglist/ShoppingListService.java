@@ -451,6 +451,63 @@ public class ShoppingListService {
         return updatedItem;
     }
 
+    /**
+     * "Neka aplikacija izabere najpovoljnije" from the product check: the
+     * line becomes any product of the kind its words name, with the amount
+     * they give. Unlike an edit, words the reading cannot place (a flour
+     * type, a pack code) never refuse the change.
+     */
+    @Transactional
+    public ShoppingListItemResponse useAnyOfTheKind(
+            Long listId,
+            Long itemId,
+            long accountId
+    ) {
+        requireList(listId, accountId);
+
+        ShoppingListItemResponse item = repository.findItemById(listId, itemId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Stavka nije pronađena: " + itemId
+                ));
+
+        String name = item.name().trim();
+        ValidatedFlexibleConstraints flexible = validateFlexibleConstraints(
+                name,
+                null,
+                ShoppingItemRule.FLEXIBLE_CATEGORY,
+                new FlexibleItemConstraints(name, null, null, null, null, null),
+                true
+        );
+
+        ShoppingListItemResponse updatedItem = repository.updateItem(
+                listId,
+                itemId,
+                name,
+                item.rawInput() == null || item.rawInput().isBlank() ? name : item.rawInput(),
+                null,
+                null,
+                null,
+                item.quantity(),
+                ShoppingItemRule.FLEXIBLE_CATEGORY,
+                flexible.category(),
+                flexible.normalizedCategory(),
+                flexible.shoppingIntentId(),
+                flexible.requiredBrand(),
+                flexible.minPackageQuantity(),
+                flexible.maxPackageQuantity(),
+                flexible.requiredBaseUnit(),
+                flexible.targetQuantity()
+        ).orElseThrow(() -> new ResponseStatusException(
+                HttpStatus.NOT_FOUND,
+                "Stavka nije pronađena: " + itemId
+        ));
+
+        repository.touch(listId);
+
+        return updatedItem;
+    }
+
     private void requireList(Long listId, long accountId) {
 
         if (!repository.existsByIdAndAccount(
@@ -544,6 +601,21 @@ public class ShoppingListService {
             ShoppingItemRule matchingRule,
             FlexibleItemConstraints constraints
     ) {
+        return validateFlexibleConstraints(itemName, barcode, matchingRule, constraints, false);
+    }
+
+    /**
+     * @param anyOfTheKind the shopper asked for any product of the kind the
+     *                     words name, so words beyond the kind are dropped
+     *                     instead of refused
+     */
+    private ValidatedFlexibleConstraints validateFlexibleConstraints(
+            String itemName,
+            String barcode,
+            ShoppingItemRule matchingRule,
+            FlexibleItemConstraints constraints,
+            boolean anyOfTheKind
+    ) {
         if (matchingRule == ShoppingItemRule.EXACT_PRODUCT
                 || matchingRule == ShoppingItemRule.PRODUCT_FAMILY) {
             if (hasConstraintValue(constraints)) {
@@ -613,16 +685,29 @@ public class ShoppingListService {
                                 .filter(ShoppingIntentResolver.ResolvedShoppingIntent::exactAlias)
                                 .orElse(null)
                         : null;
-                if (reread == null) {
+                if (reread == null && !anyOfTheKind) {
                     throw badRequest("„" + category + "“ nije samo vrsta proizvoda. "
                             + "Izaberi proizvod iz pretrage, ili upiši vrstu (npr. „pivo“), "
                             + "a brend i količinu posebno.");
                 }
-                category = line.category();
-                resolvedIntent = reread;
-                inlineBrand = line.requiredBrand();
-                inlineTarget = line.targetQuantity();
-                inlineUnit = line.baseUnit();
+                if (reread == null) {
+                    // "Neka aplikacija izabere" on "BRAŠNO T-400 1 kg": any
+                    // flour, a kilogram of it. The words we cannot read are
+                    // what the shopper just said does not matter.
+                    var amount = new rs.pametnakupovina.backend.matching.ProductQuantityParser()
+                            .parse(category).orElse(null);
+                    if (amount != null && (resolvedIntent.defaultBaseUnit() == null
+                            || resolvedIntent.defaultBaseUnit().equals(amount.unit().databaseValue()))) {
+                        inlineTarget = amount.value();
+                        inlineUnit = amount.unit().databaseValue();
+                    }
+                } else {
+                    category = line.category();
+                    resolvedIntent = reread;
+                    inlineBrand = line.requiredBrand();
+                    inlineTarget = line.targetQuantity();
+                    inlineUnit = line.baseUnit();
+                }
             }
         }
 

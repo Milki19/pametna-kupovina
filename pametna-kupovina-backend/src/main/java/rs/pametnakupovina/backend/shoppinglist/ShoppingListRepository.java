@@ -602,6 +602,45 @@ public class ShoppingListRepository {
                 .optional();
     }
 
+    /**
+     * Whether the plan could price a kind of product nobody taught us: the
+     * same rule the store offers use, a product of no known type whose name
+     * is the words or starts with them, in a chain of the list's market.
+     */
+    public boolean hasProductsNamed(Long listId, String normalizedCategory) {
+        if (normalizedCategory == null || normalizedCategory.isBlank()) {
+            return false;
+        }
+        return jdbcClient.sql("""
+                        SELECT EXISTS (
+                            SELECT 1
+                            FROM app.shopping_list AS list
+                            JOIN app.account AS account
+                              ON account.id = list.account_id
+                            JOIN app.retailer AS retailer
+                              ON retailer.market_id = account.market_id
+                            JOIN app.retailer_product AS product
+                              ON product.retailer_id = retailer.id
+                            WHERE list.id = :listId
+                              AND NOT EXISTS (
+                                  SELECT 1
+                                  FROM app.retailer_product_type AS known_type
+                                  WHERE known_type.retailer_product_id = product.id
+                              )
+                              AND (
+                                  COALESCE(product.normalized_name, LOWER(product.name))
+                                      = :category
+                                  OR COALESCE(product.normalized_name, LOWER(product.name))
+                                      LIKE :category || ' %'
+                              )
+                        )
+                        """)
+                .param("listId", listId)
+                .param("category", normalizedCategory)
+                .query(Boolean.class)
+                .single();
+    }
+
     public Optional<ShoppingListItemResponse> findItemById(
             Long listId,
             Long itemId

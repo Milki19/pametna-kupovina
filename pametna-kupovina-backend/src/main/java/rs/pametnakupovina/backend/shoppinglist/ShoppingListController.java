@@ -151,6 +151,20 @@ public class ShoppingListController {
         );
     }
 
+    /** „Neka aplikacija izabere najpovoljnije": bilo koji proizvod te vrste. */
+    @PutMapping("/{listId}/items/{itemId}/any-of-kind")
+    public ShoppingListItemResponse useAnyOfTheKind(
+            @PathVariable("listId") Long listId,
+            @PathVariable("itemId") Long itemId,
+            DeviceCaller caller
+    ) {
+        return service.useAnyOfTheKind(
+                listId,
+                itemId,
+                caller.accountId()
+        );
+    }
+
     @GetMapping("/{listId}/optimization")
     public ShoppingListOptimizationResponse optimize(
             @PathVariable("listId") Long listId,

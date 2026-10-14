@@ -506,9 +506,11 @@ public class ShoppingRecommendationService {
             ));
         }
 
-        options.sort(Comparator.comparing(
-                UnlocatedPriceOption::lowestBasketCost
-        ));
+        // A cheap basket of three items is no answer for a list of twenty:
+        // the chains that cover the most come first, then the cheaper one.
+        options.sort(Comparator
+                .comparingInt(UnlocatedPriceOption::coveredItems).reversed()
+                .thenComparing(UnlocatedPriceOption::lowestBasketCost));
 
         return List.copyOf(options);
     }
@@ -892,11 +894,12 @@ public class ShoppingRecommendationService {
 
             boolean flexible = item.matchingRule()
                     == ShoppingItemRule.FLEXIBLE_CATEGORY;
-            // A kind of product the words name is stored as confirmed; any
-            // other status means the words were not recognised.
+            // A kind of product the words name is stored as confirmed. One
+            // nobody taught us is found when products start with its name;
+            // the product check said "not found" when none do.
             boolean unknownKind = flexible
                     && item.matchingStatus()
-                    != ShoppingItemMatchingStatus.CONFIRMED
+                    == ShoppingItemMatchingStatus.UNMATCHED
                     && !itemsWithAnyNearbyOffer.contains(item.id());
             String unknownKindText = "Ne prepoznajemo „" + item.name()
                     + "“ kao vrstu proizvoda. Izmeni stavku i izaberi"
@@ -919,11 +922,14 @@ public class ShoppingRecommendationService {
                 explanation = "Ne nalazimo ovaj proizvod u cenovnicima, "
                         + "pa nije u računu.";
                 unmatchedItems++;
+            } else if (unknownKind) {
+                // The same "not found" the list and the product check show.
+                status = RecommendationItemStatus.UNMATCHED;
+                explanation = unknownKindText;
+                unmatchedItems++;
             } else {
                 status = RecommendationItemStatus.NO_VALID_PRICE;
-                if (unknownKind) {
-                    explanation = unknownKindText;
-                } else if (itemsWithAnyNearbyOffer.contains(item.id())) {
+                if (itemsWithAnyNearbyOffer.contains(item.id())) {
                     explanation = "U prodavnicama ovog plana nema cene, "
                             + "a ima je u drugom planu.";
                 } else if (item.flexibleConstraints() != null
