@@ -207,6 +207,8 @@ a.card:active, button.card:active { transform: scale(0.98); }
 .row { display: flex; flex-direction: row; align-items: center; gap: 12px; }
 .row.top-align { align-items: flex-start; }
 .grow { flex: 1; min-width: 0; }
+/* Dug naziv bez razmaka se lomi umesto da pređe preko dugmadi. */
+.name, .title, .grow, .notice, .toast span { overflow-wrap: anywhere; }
 .list-row { padding: 14px 16px; border-top: 1px solid var(--line); }
 .list-row:first-child { border-top: 0; }
 .muted { color: var(--muted); }
@@ -273,6 +275,8 @@ a.card:active, button.card:active { transform: scale(0.98); }
 .notice { display: flex; gap: 12px; padding: 12px 16px; border-radius: 18px; background: var(--high); }
 .notice.warn { background: var(--amber); color: var(--on-amber); }
 .notice.err { background: var(--error-soft); color: var(--on-error-soft); }
+.field-error { margin: 0; color: var(--error); font-size: 14px; font-weight: 600; }
+[aria-invalid="true"] { border-color: var(--error) !important; }
 .notice.pos { background: var(--mint); color: var(--on-mint); }
 
 /* Polja */
