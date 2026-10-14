@@ -149,4 +149,38 @@ class ShoppingListTextParserTest {
         assertThat(parseOne("3kg").name()).isEqualTo("3kg");
         assertThat(parseOne("3kg").targetQuantity()).isNull();
     }
+
+    @Test
+    void amountsSaidInWordsAreAmounts() {
+        ParsedShoppingListLine half = parseOne("pola kile sira");
+        assertThat(half.name()).isEqualTo("sira");
+        assertThat(half.targetQuantity()).isEqualByComparingTo("500");
+        assertThat(half.baseUnit()).isEqualTo("g");
+        assertThat(half.rawInput()).isEqualTo("pola kile sira");
+
+        assertThat(parseOne("kila jabuka").targetQuantity()).isEqualByComparingTo("1000");
+        assertThat(parseOne("sir kilo").targetQuantity()).isEqualByComparingTo("1000");
+        assertThat(parseOne("2 kile krompira").targetQuantity()).isEqualByComparingTo("2000");
+        assertThat(parseOne("vrat kilo i po").targetQuantity()).isEqualByComparingTo("1500");
+        assertThat(parseOne("pola litre pavlake").targetQuantity()).isEqualByComparingTo("500");
+        assertThat(parseOne("pola litre pavlake").baseUnit()).isEqualTo("ml");
+        assertThat(parseOne("litar mleka").targetQuantity()).isEqualByComparingTo("1000");
+        assertThat(parseOne("пола кила сира").targetQuantity()).isEqualByComparingTo("500");
+        // "pola" without a kilogram or a litre stays part of the name.
+        assertThat(parseOne("pola hleba").name()).isEqualTo("pola hleba");
+        assertThat(parseOne("pola hleba").targetQuantity()).isNull();
+    }
+
+    @Test
+    void aSizeAtTheEndOfAProductNameIsItsAmount() {
+        ParsedShoppingListLine cola = parseOne("coca cola 2l");
+        assertThat(cola.name()).isEqualTo("coca cola");
+        assertThat(cola.targetQuantity()).isEqualByComparingTo("2000");
+        assertThat(cola.baseUnit()).isEqualTo("ml");
+
+        ParsedShoppingListLine flour = parseOne("BRAŠNO T-400 1 kg");
+        assertThat(flour.name()).isEqualTo("BRAŠNO T-400");
+        assertThat(flour.targetQuantity()).isEqualByComparingTo("1000");
+        assertThat(flour.quantity()).isEqualByComparingTo("1");
+    }
 }
