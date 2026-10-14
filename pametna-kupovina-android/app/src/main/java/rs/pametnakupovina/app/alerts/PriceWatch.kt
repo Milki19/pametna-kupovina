@@ -82,7 +82,7 @@ class Nearby(stores: List<NearbyStoreDto>) {
  * [nearby] samo iz prodavnica u kraju, da alarm ne javlja radnju u drugom gradu.
  */
 fun bestPrice(product: CanonicalProductDetailsDto, nearby: Nearby? = null) = product.offers
-    .filter { !it.priceNeedsCheck && !isCaseOf(it, product) }
+    .filter { !it.priceNeedsCheck && !it.priceStale && !isCaseOf(it, product) }
     .filter { nearby == null || nearby.reaches(it) }
     .minByOrNull { it.effectivePrice }
 

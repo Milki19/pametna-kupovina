@@ -21,6 +21,8 @@
     <string name="product_offer_case">Pack of %1$d pcs · %2$s each</string>
     <string name="product_offer_suspicious">Less than half the usual price at other chains</string>
     <string name="product_check_price">Check price</string>
+    <string name="product_offer_stale">The chain has not published a newer price list</string>
+    <string name="product_stale_price">Old price</string>
     <string name="product_best_price">Best price</string>
     <string name="product_prices_for_date">Prices for %1$s</string>
     <string name="product_stat_lowest">Lowest</string>

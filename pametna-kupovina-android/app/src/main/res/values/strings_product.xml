@@ -21,6 +21,8 @@
     <string name="product_offer_case">Pakovanje od %1$d kom · %2$s po komadu</string>
     <string name="product_offer_suspicious">Manje od pola uobičajene cene u drugim lancima</string>
     <string name="product_check_price">Proveri cenu</string>
+    <string name="product_offer_stale">Lanac nije objavio noviji cenovnik</string>
+    <string name="product_stale_price">Stara cena</string>
     <string name="product_best_price">Najbolja cena</string>
     <string name="product_prices_for_date">Cene za %1$s</string>
     <string name="product_stat_lowest">Najniža</string>

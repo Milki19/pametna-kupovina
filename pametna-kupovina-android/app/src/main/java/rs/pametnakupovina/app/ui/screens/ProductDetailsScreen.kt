@@ -219,7 +219,7 @@ private fun ProductDetailsContent(
     onWatch: (Boolean) -> Unit
 ) {
     val offers = product.offers.sortedWith(
-        compareBy({ it.priceNeedsCheck }, { isCaseOf(it, product) }, { it.effectivePrice })
+        compareBy({ it.priceNeedsCheck }, { it.priceStale }, { isCaseOf(it, product) }, { it.effectivePrice })
     )
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -245,7 +245,7 @@ private fun ProductDetailsContent(
         } else {
             itemsIndexed(offers) { index, offer ->
                 val cheapest = index == 0 && offers.size > 1 && !offer.priceNeedsCheck &&
-                    !isCaseOf(offer, product)
+                    !offer.priceStale && !isCaseOf(offer, product)
                 Surface(
                     shape = MaterialTheme.shapes.medium,
                     color = MaterialTheme.colorScheme.surfaceContainer,
@@ -360,6 +360,14 @@ private fun OfferRow(
                 )
                 StatusPill(stringResource(R.string.product_check_price), StatusTone.WARNING)
             }
+            if (offer.priceStale) {
+                Text(
+                    stringResource(R.string.product_offer_stale),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                StatusPill(stringResource(R.string.product_stale_price), StatusTone.WARNING)
+            }
             if (cheapest) {
                 StatusPill(stringResource(R.string.product_best_price), StatusTone.POSITIVE)
             }
@@ -392,7 +400,7 @@ private fun PriceHistoryRow(point: CanonicalProductPricePointDto) {
 
 /**
  * Ime, pakovanje i barkod, pa najniža, prosečna i najviša cena među lancima
- * (bez cena za proveru i gajbi), i praćenje cene — sve u jednoj kartici.
+ * (bez cena za proveru, starih cena i gajbi), i praćenje cene — sve u jednoj kartici.
  */
 @Composable
 private fun ProductHeader(
@@ -401,7 +409,7 @@ private fun ProductHeader(
     watching: Boolean,
     onWatch: (Boolean) -> Unit
 ) {
-    val comparable = offers.filterNot { it.priceNeedsCheck || isCaseOf(it, product) }
+    val comparable = offers.filterNot { it.priceNeedsCheck || it.priceStale || isCaseOf(it, product) }
     // Lanci, ne prodavnice: devet METRO objekata je jedan lanac.
     val chains = comparable.map { it.retailerName }.distinct().size
     GlassCard(
