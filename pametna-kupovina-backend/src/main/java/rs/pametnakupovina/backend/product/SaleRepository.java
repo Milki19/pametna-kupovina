@@ -9,7 +9,8 @@ import java.util.List;
 
 /**
  * Products on sale today, read from app.current_sale_list (V117): one row per
- * product with the chain where it comes off the most.
+ * product with the chain where it comes off the most. A sale counts until
+ * its last day ends in the chain's market, even when the list is older.
  */
 @Repository
 public class SaleRepository {
@@ -78,11 +79,18 @@ public class SaleRepository {
                 FROM app.current_sale_list AS sale
                 JOIN app.retailer AS retailer
                   ON retailer.id = sale.retailer_id
+                JOIN app.market AS market
+                  ON market.id = sale.market_id
                 LEFT JOIN nearby_store
                   ON nearby_store.id = sale.store_id
                 LEFT JOIN nearby_chain
                   ON nearby_chain.retailer_id = sale.retailer_id
                 WHERE sale.discount_percent >= :minDiscount
+                  -- The list is read ahead (V117); a sale that ended before
+                  -- today in the chain's market drops off at its midnight,
+                  -- not at the next refresh.
+                  AND (sale.discount_end IS NULL
+                       OR sale.discount_end >= (NOW() AT TIME ZONE market.time_zone)::DATE)
                   AND (CAST(:retailer AS TEXT) IS NULL
                        OR retailer.code = CAST(:retailer AS TEXT))
                   AND (
