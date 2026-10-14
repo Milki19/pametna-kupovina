@@ -28,7 +28,8 @@ public class RetailerRepository {
                 WHERE store.retailer_id = app.retailer.id
                   AND store.location IS NOT NULL
                   AND store.pricing_eligible
-            ) AS store_locations_known""";
+            ) AS store_locations_known
+            """;
 
     private final JdbcClient jdbcClient;
 
