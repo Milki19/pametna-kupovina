@@ -55,6 +55,7 @@ public class CanonicalProductDetailsRepository {
                     resultSet.getBigDecimal("regular_price"),
                     resultSet.getBigDecimal("discounted_price"),
                     resultSet.getBigDecimal("effective_price"),
+                    resultSet.getBigDecimal("previous_effective_price"),
                     resultSet.getString("price_scope")
             );
 
@@ -327,8 +328,13 @@ public class CanonicalProductDetailsRepository {
             LocalDate asOfDate,
             int limit
     ) {
+        // A change is a price that differs from the previous one in the same
+        // store (format, chain); the first row is the price the product
+        // appeared with. The same price in every daily list is no change.
         return jdbcClient.sql("""
-                        SELECT retailer_product.id AS retailer_product_id,
+                        WITH history AS (
+                        SELECT observation.id AS observation_id,
+                               retailer_product.id AS retailer_product_id,
                                retailer.code AS retailer_code,
                                retailer.name AS retailer_name,
                                observation.store_id,
@@ -400,8 +406,24 @@ public class CanonicalProductDetailsRepository {
                               observation.discounted_price > 0
                               OR observation.regular_price > 0
                           )
-                        ORDER BY observation.price_date DESC,
-                                 observation.id DESC
+                        ),
+                        changes AS (
+                        SELECT history.*,
+                               LAG(history.effective_price) OVER (
+                                   PARTITION BY history.retailer_product_id,
+                                                history.store_id,
+                                                history.store_format_name
+                                   ORDER BY history.price_date,
+                                            history.observation_id
+                               ) AS previous_effective_price
+                        FROM history
+                        )
+                        SELECT *
+                        FROM changes
+                        WHERE previous_effective_price IS NULL
+                           OR previous_effective_price <> effective_price
+                        ORDER BY price_date DESC,
+                                 observation_id DESC
                         LIMIT :historyLimit
                         """)
                 .param("productId", productId)

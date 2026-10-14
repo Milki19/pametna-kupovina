@@ -1435,6 +1435,7 @@ async function showProduct(id) {
       (product.priceHistory.length ? `<div class="section">Poslednje promene cena</div><div class="card flush">${product.priceHistory.map(p => `
         <div class="list-row row"><div class="grow"><div>${esc(p.retailerName)}</div>
         <div class="muted small">${esc([date(p.priceDate), p.storeName, p.storeFormatName].filter(Boolean).join(' · '))}</div></div>
+        ${p.previousEffectivePrice != null ? `<span class="strike muted small" aria-label="Pre: ${money(p.previousEffectivePrice)}">${money(p.previousEffectivePrice)}</span><span class="muted" aria-hidden="true">→</span>` : ''}
         <span class="price">${money(p.effectivePrice)}</span></div>`).join('')}</div>` : '')
   });
 }

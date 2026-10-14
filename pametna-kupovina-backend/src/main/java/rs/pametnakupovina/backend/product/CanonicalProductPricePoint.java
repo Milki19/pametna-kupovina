@@ -14,6 +14,8 @@ public record CanonicalProductPricePoint(
         BigDecimal regularPrice,
         BigDecimal discountedPrice,
         BigDecimal effectivePrice,
+        // The price before this change; null for the first known price.
+        BigDecimal previousEffectivePrice,
         String priceScope
 ) {
 }

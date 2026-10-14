@@ -421,6 +421,8 @@ data class CanonicalProductPricePointDto(
     val regularPrice: Double? = null,
     val discountedPrice: Double? = null,
     val effectivePrice: Double,
+    /** Cena pre ove promene; nema je kad je ovo prva poznata cena. */
+    val previousEffectivePrice: Double? = null,
     val priceScope: String
 )
 
