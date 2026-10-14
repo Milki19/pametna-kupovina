@@ -47,10 +47,10 @@ public class ShoppingListTextParser {
      * ("sitan sir 400grama").
      */
     private static final String AMOUNT_UNIT =
-            "(?<unit>kg|kilogram(?:a)?|g|gr|grama|gram"
-                    + "|l|lit(?:ar|ra|ara)?|ml|mililitar(?:a)?"
-                    + "|кг|килограм(?:а)?|г|гр|грама|грам"
-                    + "|л|лит(?:ар|ра|ара)?|мл|милилитар(?:а)?)";
+            "(?<unit>kg|kilogram(?:a)?|kil[aeou]|g|gr|grama|gram"
+                    + "|l|lit(?:ar|ra|re|ara)?|ml|mililitar(?:a)?"
+                    + "|кг|килограм(?:а)?|кил[аеоу]|г|гр|грама|грам"
+                    + "|л|лит(?:ар|ра|ре|ара)?|мл|милилитар(?:а)?)";
 
     private static final List<Pattern> AMOUNT_PATTERNS = List.of(
             Pattern.compile(
@@ -59,6 +59,23 @@ public class ShoppingListTextParser {
             Pattern.compile(
                     "^" + QUANTITY + "\\s*" + AMOUNT_UNIT
                             + "\\s+(?<name>.+)$", FLAGS)
+    );
+
+    /** "pola kile sira": half of a kilogram or a litre, said in words. */
+    private static final Pattern HALF = Pattern.compile(
+            "(?<![\\p{L}0-9])(?:pola|пола)\\s+(?=(?:kil|kg|lit|кил|кг|лит))", FLAGS
+    );
+
+    /** "kilo i po", "litar i po": one and a half. */
+    private static final Pattern AND_A_HALF = Pattern.compile(
+            "(?<![\\p{L}0-9])(?<unit>kil[aeou]|litar|litr[ae]|кил[аеоу]|литар|литр[ае])\\s+(?:i|и)\\s+(?:po|по)(?![\\p{L}0-9])",
+            FLAGS
+    );
+
+    /** "kila sira", "sir kilo", "litar mleka": one, when no number is written. */
+    private static final Pattern UNIT_WITHOUT_NUMBER = Pattern.compile(
+            "(?<![\\p{L}0-9]|[0-9]\\s)(?<unit>kil[aeou]|litar|litr[ae]|кил[аеоу]|литар|литр[ае])(?![\\p{L}0-9])",
+            FLAGS
     );
 
     /**
@@ -137,6 +154,8 @@ public class ShoppingListTextParser {
             line = rawLine.trim();
         }
 
+        line = amountInWords(line);
+
         BigDecimal quantity = BigDecimal.ONE;
         String rest = line;
 
@@ -175,6 +194,17 @@ public class ShoppingListTextParser {
         return new ParsedShoppingListLine(
                 rest, rawLine, quantity, null, null, rest, null
         );
+    }
+
+    /**
+     * Amounts said the way people say them: "pola kile" is 0,5 kg, "kilo i
+     * po" 1,5 kg and "kila sira" one kilogram. Only next to a word for a
+     * kilogram or a litre, so "pola" elsewhere stays part of the name.
+     */
+    private static String amountInWords(String line) {
+        String half = HALF.matcher(line).replaceAll("0,5 ");
+        String andAHalf = AND_A_HALF.matcher(half).replaceAll("1,5 ${unit}");
+        return UNIT_WITHOUT_NUMBER.matcher(andAHalf).replaceAll("1 ${unit}");
     }
 
     private ParsedShoppingListLine amountLine(
