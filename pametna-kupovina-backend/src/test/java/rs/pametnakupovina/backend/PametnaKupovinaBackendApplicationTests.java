@@ -3798,11 +3798,11 @@ class PametnaKupovinaBackendApplicationTests {
                         shoppingList.id(),
                         callers.account(ownerToken),
                         new PasteShoppingListItemsRequest(
-                                "Mleko\n0 x Hleb"
+                                "0 x Hleb"
                         )
                 )
         ).isInstanceOf(ResponseStatusException.class)
-                .hasMessageContaining("veća od nule");
+                .hasMessageContaining("od 0,01 do 999");
 
         assertThatThrownBy(() ->
                 shoppingListService.addPastedItems(
@@ -3819,6 +3819,46 @@ class PametnaKupovinaBackendApplicationTests {
                 shoppingList.id(),
                 callers.account(ownerToken)
         ).items()).isEmpty();
+    }
+
+    @Test
+    void pastedShoppingListAddsTheGoodLinesAndReturnsTheBadOnesWithTheirReason() {
+        String clientToken = "pk-validation-paste";
+
+        ShoppingListSummary shoppingList = shoppingListService.create(
+                new CreateShoppingListRequest("Delimično dobar spisak"),
+                callers.account(clientToken)
+        );
+
+        PasteShoppingListItemsResponse result =
+                shoppingListService.addPastedItems(
+                        shoppingList.id(),
+                        callers.account(clientToken),
+                        new PasteShoppingListItemsRequest(
+                                "Mleko\n0 x Hleb\n\n999999x jaja\nJogurt"
+                        )
+                );
+
+        assertThat(result.createdCount()).isEqualTo(2);
+        assertThat(result.items())
+                .extracting(ShoppingListItemResponse::name)
+                .containsExactly("Mleko", "Jogurt");
+        assertThat(result.rejectedLines())
+                .extracting(
+                        PasteShoppingListItemsResponse.RejectedLine::lineNumber,
+                        PasteShoppingListItemsResponse.RejectedLine::text,
+                        PasteShoppingListItemsResponse.RejectedLine::field
+                )
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple(2, "0 x Hleb", "quantity"),
+                        org.assertj.core.groups.Tuple.tuple(4, "999999x jaja", "quantity")
+                );
+        assertThat(result.rejectedLines().getFirst().message())
+                .contains("od 0,01 do 999");
+        assertThat(shoppingListService.findById(
+                shoppingList.id(),
+                callers.account(clientToken)
+        ).items()).hasSize(2);
     }
 
     @Test
