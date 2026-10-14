@@ -1,0 +1,69 @@
+# Test skup za izbor proizvoda: tržište RS, jezik sr. Jedan red = jedna linija spiska, kako je korisnik nalepi.
+# prihvatljivo i nije su regex nad normalizovanim nazivom proizvoda (mala slova, bez kvačica, đ=dj, broj i jedinica razdvojeni: "secer u prahu 500 g").
+# max_pakovanja: najviše pakovanja koje bi čovek kupio za tu liniju (prazno = bez provere). izvor: IZVESTAJ, CESTO, KVACICE, SLENG, KOLICINA.
+id	tekst	izvor	prihvatljivo	nije	max_pakovanja	opis
+S01	kafa 200 g	IZVESTAJ	\b(kafa|kafe|mlevena|espresso|doncafe|don cafe|grand|bonito|minas|zlatna dzezva|c kafa)\b	instant|\bice\b|ledena|freeze|na bazi|cappuccino|kapucino|3 u 1|3in 1|frape|latte|\bmix\b|nescafe|zamena	2	Mlevena (turska) kafa ili kafa u zrnu, 200 g ili blizu. Nije instant, ledena ni proizvod na bazi kafe.
+S02	banane 1,5 kg	IZVESTAJ	\bbanan[ae]?\b	crven|baby|mini|cips|\bsok\b|jogurt|cokolad|susen|desert|pire|kasic|keks|bombon|bananica		Obične banane na kg (rinfuz) ili pakovane. Nisu crvene ni mini banane.
+S03	secer 500 g	IZVESTAJ	\bsecer\b	prah|vanil|smedj|kock|trsk|braon|zelir|fruktoz|stevi|dekor|glazur|ukras	2	Beli kristal šećer. Nije u prahu, vanilin, smeđi ni u kockama.
+S04	prasak za ves	IZVESTAJ	deterdzent|prasak za (ves|pranje)|\b(ariel|persil|merix|duel|bonux|tide|rubel|faks)\b	pecivo|puding|sladoled|kakao|mleko u prahu|omeksiv|sudov|kapsul		Prašak (deterdžent) za veš. Nije prašak za pecivo ni omekšivač.
+S05	sampon za kosu	IZVESTAJ	\bsampon\b	\bpas\b|\bpse|macke|ljubim|tepih|\bauto		Šampon za kosu, bilo koji.
+S06	toalet papir	IZVESTAJ	toalet(ni)? papir|\bwc papir|toaletni	vlazn|maramic|kuhinjsk|ubrus		Toalet papir, bilo koji broj rolni. Nisu vlažne maramice ni ubrus.
+S07	pola kile sira	IZVESTAJ	\bsir\b|\bsira\b|trapist|gauda|edamer|\bfeta\b|tilzit|tilsiter|kackavalj	sirup|sirce|smoki|cips|kokice|kroket|\bpica\b|burek|\bpita\b|grickal|namaz|topljen		Sir oko 0,5 kg (beli, trapist, gauda...). Količina 500 g. Nije sirni namaz ni topljeni sir.
+S08	coca cola 2l	IZVESTAJ	coca ?cola|cocacola|\bcoke\b	zero|light|bez secera|limenk	3	Coca-Cola, oko 2 l ukupno (jedna flaša od 2 l ili dve od 1 l). Nije Zero.
+S09	BRAŠNO T-400 1 kg	IZVESTAJ	brasno.*\b400\b|\b400\b.*brasno	kukuruz|integral|heljd|razen|ovsen|pirin|bez glutena|palacink|kokos|badem	2	Pšenično brašno T-400, 1 kg.
+S10	2x pivo	IZVESTAJ	\bpiv[oa]\b|lager|\bjelen\b|\blav\b|zajecarsko|niksicko|heineken|tuborg|carlsberg|staropramen|amstel	bezalkohol|radler|\b0 0\b|limun	4	Pivo, dva komada (flaša ili limenka). Nije bezalkoholno ni radler.
+S11	ćevapi 1kg	IZVESTAJ	cevap	protein|posn|vegan|\bsoj|zacin|kecap|ajvar		Ćevapi (juneći, svinjski ili mešani), oko 1 kg. Nisu posni ni proteinski.
+S12	- jaja 10	IZVESTAJ	\bjaj[ae]\b|\bjaja\b	prepelic|cokolad|kinder|uskrs|testenin|nudl|majonez|liker|boj[ae]	2	Kokošja jaja, 10 komada.
+S13	• jogurt	IZVESTAJ	jogurt	vocn|jagod|visnj|breskv|sumsk|grck|protein|cokolad|vanil|musli|zitar|kokos|smoothie|ovsen|biljn|\bsoj|kafa|bebe		Običan tečni jogurt. Nije voćni ni grčki.
+S14	ulje 1l	IZVESTAJ	\bulje\b	maslin|bundev|susam|kokos|ricin|motor|masin|bebi|baby|kozmet|za tel|\blan|repic|palm|tartuf|sprej|ribl	2	Suncokretovo ulje, 1 l.
+S15	so	IZVESTAJ	\bso\b|\bsol\b|kuhinjska so|morska so	\bsoja|\bsos\b|soda|kupanj|kupk|vegeta|zacin|masin|sudov|pranje		Kuhinjska ili morska so.
+S16	brasno 2kg	IZVESTAJ	brasno	kukuruz|integral|heljd|razen|ovsen|pirin|bez glutena|palacink|kokos|badem|krompir|leblebij|prezl	3	Pšenično brašno (T-400 ili T-500), 2 kg.
+S17	3 jogurta	IZVESTAJ	jogurt	vocn|jagod|visnj|breskv|sumsk|grck|protein|cokolad|vanil|musli|zitar|kokos|smoothie|ovsen|biljn|\bsoj|kafa|bebe	4	Običan jogurt, 3 komada.
+S18	mleko	IZVESTAJ	\bmleko\b	cokolad|kakao|kokos|badem|\bsoj|ovsen|pirin|u prahu|kondenz|kiselo|jogurt|kafa|sladoled|bebe|formula|kozje|biljn|keks|desert|puding|cimet|vanil|jagod|banan	2	Kravlje mleko (sveže ili dugotrajno). Nije čokoladno, biljno ni kiselo.
+S19	hleb	IZVESTAJ	\bhleb\b|\bvekn	mrvic|prezl|\btost|integral|razen|kukuruz|bez glutena|\bcrni\b|semenk|ovsen|heljd|tortilj|lepinj|hlebcic|dvopek		Beli hleb (vekna ili sečeni).
+S20	secer 0,5kg	IZVESTAJ	\bsecer\b	prah|vanil|smedj|kock|trsk|braon|zelir|fruktoz|stevi|dekor|glazur|ukras	2	Beli kristal šećer, 500 g.
+S21	Mleko 1L	IZVESTAJ	\bmleko\b	cokolad|kakao|kokos|badem|\bsoj|ovsen|pirin|u prahu|kondenz|kiselo|jogurt|kafa|sladoled|bebe|formula|kozje|biljn|keks|desert|puding|cimet|vanil|jagod|banan	2	Kravlje mleko, 1 l.
+C01	kiselo mleko	CESTO	kiselo mleko|kis mleko	vocn|jagod|biljn|\bsoj		Kiselo mleko.
+C02	pavlaka	CESTO	pavlak	biljn|cips|smoki|\bsos\b|dresing		Kisela pavlaka.
+C03	beli sir 500 g	CESTO	\b(beli|mladi|sitni|kravlji|sjenicki|zlatiborski|feta|krem)\b.*\bsir|\bsir\b.*\b(beli|mladi|sitni|kravlji|sjenicki|zlatiborski|feta)\b	topljen|namaz|\btost	2	Beli (mladi, kravlji, feta) sir, 500 g.
+C04	kackavalj 300g	CESTO	kackav	namaz|topljen|ukus	2	Kačkavalj.
+C05	piletina 1kg	CESTO	\bpil(e|ec|eci|ece|etina|eca|eca)\b|batak|karabatak|krilc	pastet|virsl|kobasic|parizer|salam|\bsupa|kock|naresk|hrenovk|nuget|konzerv|pohovan|gotov		Sveže pileće meso (file, batak, celo pile).
+C06	mleveno meso 500 g	CESTO	mleven	kafa|biber|paprik|orah|zacin|mak\b	2	Mleveno meso (juneće, svinjsko ili mešano).
+C07	paradajz 1kg	CESTO	paradajz	\bsok|pire|pelat|kecap|\bsos|pasta|susen|konzerv|koncentrat|ajvar|cips|passata|zacin|\bsupa		Svež paradajz.
+C08	krompir 2kg	CESTO	krompir	cips|pomfrit|pire|prz|smoki|kroket|flips|brasno|salat|zamrznut|wedges|grickal		Svež krompir.
+C09	crni luk 1kg	CESTO	crni luk|luk crni|\bluk\b	beli luk|praziluk|mladi luk|susen|u prahu|granul|cips|krem|ljutik|zacin|pire|kolut|przen|kreker|kokice		Crni luk.
+C10	beli luk	CESTO	beli luk|luk beli|cesno	u prahu|granul|susen|zacin|pasta|\bsos|majonez|ulje|kecap|pire|krem|\bsir\b|hleb|kobasic|kriska		Svež beli luk.
+C11	jabuke 1kg	CESTO	jabuk	\bsok|cips|susen|pire|kompot|sirce|pita|strudl|kasic|desert|jogurt|\bcaj|dzem|marmelad|nektar|cider|rakij|kolac|keks		Sveže jabuke.
+C12	limun 3 kom	CESTO	limun	\bsok|sirce|\bcaj|sladoled|limunad|aroma|\bkora|\bvod|pivo|radler|kolac|keks|bombon|sapun|deterdz|kiselin|tonik|tonic|liker		Svež limun.
+C13	testenina 500g	CESTO	testenin|spaget|makaron|\bpenn?e\b|fusil|tagliatel|spiral|rezanci|masn|\bpipe\b|tortiglion|farfal	instant|\bcup\b|nudl|kesica|\bsupa|gotov|\bsos\b|bez glutena|integral	2	Suva testenina (špagete, makarone, pene...).
+C14	pirinac 1kg	CESTO	pirin(ac|c)|\briza\b|\brice\b	mleko|kreker|galet|brasno|pahulj|napitak|sirup|ulje|vino|sake|kuvan|instant|kesic|gotov|cips|desert|puding	2	Pirinač.
+C15	caj kamilica	CESTO	kamilic	sapun|sampon|krem|losion|mleko|kupk|vlazn|maramic|sprej|\bgel|pena		Čaj od kamilice.
+C16	cokolada 100g	KVACICE	cokolad	mleko|napitak|kakao|namaz|krem|keks|sladoled|puding|kolac|bombon|pralin|\bjaje|kinder|tortic|kroasan|musli|zitar|preliv|sirup|jogurt|desert|stapic|kornet|vafl|napolitank|biskvit|protein|bananic	2	Tabla čokolade, 100 g. Isto kao C17, bez kvačica.
+C17	čokolada 100g	KVACICE	cokolad	mleko|napitak|kakao|namaz|krem|keks|sladoled|puding|kolac|bombon|pralin|\bjaje|kinder|tortic|kroasan|musli|zitar|preliv|sirup|jogurt|desert|stapic|kornet|vafl|napolitank|biskvit|protein|bananic	2	Tabla čokolade, 100 g. Isto kao C16, sa kvačicama.
+C18	šećer 1kg	KVACICE	\bsecer\b	prah|vanil|smedj|kock|trsk|braon|zelir|fruktoz|stevi|dekor|glazur|ukras	2	Beli kristal šećer, 1 kg. Par sa S03 (bez kvačica).
+C19	šampon za kosu	KVACICE	\bsampon\b	\bpas\b|\bpse|macke|ljubim|tepih|\bauto		Šampon za kosu. Par sa S05 (bez kvačica).
+C20	prašak za veš	KVACICE	deterdzent|prasak za (ves|pranje)|\b(ariel|persil|merix|duel|bonux|tide|rubel|faks)\b	pecivo|puding|sladoled|kakao|mleko u prahu|omeksiv|sudov|kapsul		Prašak za veš. Par sa S04 (bez kvačica).
+C21	ćevapi	KVACICE	cevap	protein|posn|vegan|\bsoj|zacin|kecap|ajvar		Ćevapi. Par sa C22 (bez kvačica).
+C22	cevapi	KVACICE	cevap	protein|posn|vegan|\bsoj|zacin|kecap|ajvar		Ćevapi bez kvačica. Par sa C21.
+C23	deterdžent za sudove	KVACICE	sudov|fairy|\bpur\b|morning fresh	masin|tablet|kapsul|\bso za|sjaj|ispiranj|sundjer|krpa|rukavic		Tečni deterdžent za ručno pranje sudova.
+C24	omeksivac	KVACICE	omeksiv|lenor|silan|ornel	\bkos[aeu]\b|regenerator		Omekšivač za veš, bez kvačica.
+C25	sapun	CESTO	sapun	za ves|pahulj		Sapun za ruke (čvrst ili tečni).
+C26	pasta za zube	CESTO	pasta za zube|zubna pasta|colgate|signal|aquafresh|sensodyne|blend a med|elmex|parodontax	cetkic|vodica|konac|\bdec|kids		Pasta za zube za odrasle.
+C27	kisela voda 1,5l	CESTO	kisel|gaziran|mineraln|knjaz|heba|vrnjc|prolom|\bvoda\b	negazir|bez gas|aroma|ukus|\bsok|tonik|destil|demineral	2	Gazirana mineralna voda, 1,5 l.
+C28	negazirana voda 1,5l	CESTO	\bvoda\b|aqua|\brosa\b	\bgaziran|kisel|aroma|ukus|\bsok|tonik|destil|demineral	2	Negazirana voda, 1,5 l.
+C29	sok od pomorandže 1l	CESTO	(sok|nektar|juice|napitak).*(pomorandz|narandz|orange)|(pomorandz|narandz|orange).*(sok|nektar|juice|napitak)	sirup|sladoled|cokolad|\bcaj|keks|bombon|\bzele	2	Sok ili nektar od pomorandže, 1 l.
+C30	kečap	CESTO	kecap	cips|smoki|grickal|flips|\bljut|\bhot\b|sos za		Blagi kečap.
+C31	majonez	CESTO	majonez	posn|lagan|light|\bsos\b|salat|tartar|vegan|\bren\b|beli luk		Majonez.
+C32	tunjevina	CESTO	tunjevin|\btuna\b|\btunj	pastet|namaz|salat|hrana za|sendvic		Tunjevina u konzervi.
+C33	puter 250g	CESTO	\bputer\b|maslac|butter	kikiriki|kakao|biljn|namaz|margarin|keks|kroasan|popkorn|kokice|aroma|ukus	2	Puter (maslac), 250 g.
+K01	pola kile mlevenog mesa	SLENG	mleven	kafa|biber|paprik|orah|zacin|mak\b	2	Mleveno meso, 500 g („pola kile“).
+K02	kila krompira	SLENG	krompir	cips|pomfrit|pire|prz|smoki|kroket|flips|brasno|salat|zamrznut|wedges|grickal		Krompir, 1 kg („kila“).
+K03	2 kile brasna	SLENG	brasno	kukuruz|integral|heljd|razen|ovsen|pirin|bez glutena|palacink|kokos|badem|krompir|leblebij|prezl	3	Pšenično brašno, 2 kg („kile“).
+K04	litar mleka	SLENG	\bmleko\b	cokolad|kakao|kokos|badem|\bsoj|ovsen|pirin|u prahu|kondenz|kiselo|jogurt|kafa|sladoled|bebe|formula|kozje|biljn|keks|desert|puding|cimet|vanil|jagod|banan	2	Kravlje mleko, 1 l („litar“).
+K05	zejtin	SLENG	\bulje\b	maslin|bundev|susam|kokos|ricin|motor|masin|bebi|baby|kozmet|za tel|\blan|repic|palm|tartuf|sprej|ribl	2	Suncokretovo ulje („zejtin“).
+K06	pola kile kafe	SLENG	\b(kafa|kafe|mlevena|espresso|doncafe|don cafe|grand|bonito|minas|zlatna dzezva|c kafa)\b	instant|\bice\b|ledena|freeze|na bazi|cappuccino|kapucino|3 u 1|3in 1|frape|latte|\bmix\b|nescafe|zamena	3	Mlevena kafa, 500 g („pola kile“).
+K07	jogurt 1,5l	KOLICINA	jogurt	vocn|jagod|visnj|breskv|sumsk|grck|protein|cokolad|vanil|musli|zitar|kokos|smoothie|ovsen|biljn|\bsoj|kafa|bebe	2	Običan jogurt, 1,5 l.
+K08	jaja 30 kom	KOLICINA	\bjaj[ae]\b|\bjaja\b	prepelic|cokolad|kinder|uskrs|testenin|nudl|majonez|liker|boj[ae]	3	Kokošja jaja, 30 komada.
+K09	hleb x2	KOLICINA	\bhleb\b|\bvekn	mrvic|prezl|\btost|integral|razen|kukuruz|bez glutena|\bcrni\b|semenk|ovsen|heljd|tortilj|lepinj|hlebcic|dvopek	3	Beli hleb, 2 komada.
+K10	pivo 6x0,5l	KOLICINA	\bpiv[oa]\b|lager|\bjelen\b|\blav\b|zajecarsko|niksicko|heineken|tuborg|carlsberg|staropramen|amstel	bezalkohol|radler|\b0 0\b|limun	7	Pivo, šest flaša ili limenki od 0,5 l.
+K11	mleko 0,5l	KOLICINA	\bmleko\b	cokolad|kakao|kokos|badem|\bsoj|ovsen|pirin|u prahu|kondenz|kiselo|jogurt|kafa|sladoled|bebe|formula|kozje|biljn|keks|desert|puding|cimet|vanil|jagod|banan	2	Kravlje mleko, 0,5 l.
