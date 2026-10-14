@@ -6,6 +6,7 @@ import rs.pametnakupovina.backend.FieldRefusal;
 import rs.pametnakupovina.backend.matching.ProductNameNormalizer;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -24,16 +25,22 @@ class ShoppingListItemValidationTest {
     private final ShoppingListRepository repository =
             mock(ShoppingListRepository.class);
 
+    private final ShoppingListTextParser parser =
+            mock(ShoppingListTextParser.class);
+
+    private final ShoppingLineInterpreter interpreter =
+            mock(ShoppingLineInterpreter.class);
+
     private ShoppingListService service;
 
     @BeforeEach
     void setUp() {
         service = new ShoppingListService(
                 repository,
-                mock(ShoppingListTextParser.class),
+                parser,
                 mock(ProductNameNormalizer.class),
                 mock(ShoppingIntentResolver.class),
-                mock(ShoppingLineInterpreter.class)
+                interpreter
         );
         when(repository.existsByIdAndAccount(7L, ACCOUNT)).thenReturn(true);
     }
@@ -86,6 +93,35 @@ class ShoppingListItemValidationTest {
                 ShoppingItemRule.EXACT_PRODUCT,
                 null
         ))).doesNotThrowAnyException();
+    }
+
+    @Test
+    void aPastedTotalAboveNineHundredNinetyNineIsRefusedLikeACount() {
+        // "mleko 999999" reads as 999999 l of milk.
+        assertThatThrownBy(() -> paste("mleko 999999", new BigDecimal("999999000"), "ml"))
+                .isInstanceOf(FieldRefusal.class)
+                .hasMessageContaining("od 0,01 do 999");
+        assertThatThrownBy(() -> paste("jaja 5000 kom", new BigDecimal("5000"), "piece"))
+                .isInstanceOf(FieldRefusal.class)
+                .hasMessageContaining("od 0,01 do 999");
+    }
+
+    @Test
+    void aPastedTotalOfNineHundredNinetyNineIsAccepted() {
+        assertThatCode(() -> paste("mleko 999 l", new BigDecimal("999000"), "ml"))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> paste("jaja 999 kom", new BigDecimal("999"), "piece"))
+                .doesNotThrowAnyException();
+    }
+
+    private void paste(String text, BigDecimal target, String unit) {
+        ParsedShoppingListLine line = new ParsedShoppingListLine(
+                "mleko", text, BigDecimal.ONE, target, unit);
+        when(parser.parse(text)).thenReturn(new ParsedShoppingListText(List.of(line), 0));
+        when(interpreter.interpret(line)).thenReturn(new ShoppingLineInterpreter.InterpretedLine(
+                "mleko", BigDecimal.ONE, ShoppingItemRule.FLEXIBLE_CATEGORY, "mleko", "mleko",
+                1L, null, target, unit));
+        service.addPastedItems(7L, ACCOUNT, new PasteShoppingListItemsRequest(text));
     }
 
     private static AddShoppingListItemRequest typed(String name, String quantity) {
