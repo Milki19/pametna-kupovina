@@ -4990,14 +4990,14 @@ class PametnaKupovinaBackendApplicationTests {
     @Test
     void aLoyaltyCardIsKeptForTheTillAndNeverShownToAnotherPhone() {
         var card = loyaltyCardService.add(
-                callers.account("telefon-kartica"), "Super Kartica", "6108560008584550", "EAN_13");
+                callers.account("telefon-kartica"), "Super Kartica", "6108560008581", "EAN_13");
 
-        assertThat(card.cardNumber()).isEqualTo("6108560008584550");
+        assertThat(card.cardNumber()).isEqualTo("6108560008581");
         assertThat(card.barcodeFormat()).isEqualTo("EAN_13");
 
         // Ista kartica dodata dvaput je i dalje jedna, samo osveženog naziva.
         var again = loyaltyCardService.add(
-                callers.account("telefon-kartica"), "Super kartica (žena)", "6108560008584550", "EAN_13");
+                callers.account("telefon-kartica"), "Super kartica (žena)", "6108560008581", "EAN_13");
         assertThat(again.id()).isEqualTo(card.id());
         assertThat(loyaltyCardService.cards(callers.account("telefon-kartica")))
                 .singleElement()
@@ -5016,6 +5016,13 @@ class PametnaKupovinaBackendApplicationTests {
         assertThatThrownBy(() ->
                 loyaltyCardService.add(callers.account("telefon-kartica"), "Čudna", "123456", "MAGIJA"))
                 .hasMessageContaining("Nepoznat oblik");
+        // EAN-13 sa slovima ili pogrešnom kontrolnom cifrom kasa ne bi pročitala.
+        assertThatThrownBy(() ->
+                loyaltyCardService.add(callers.account("telefon-kartica"), "Slova", "12345abc", "EAN_13"))
+                .hasMessageContaining("tačno 13 cifara");
+        assertThatThrownBy(() ->
+                loyaltyCardService.add(callers.account("telefon-kartica"), "Cifra", "1234567890123", "EAN_13"))
+                .hasMessageContaining("kontrolna");
 
         loyaltyCardService.remove(callers.account("telefon-kartica"), card.id());
         assertThat(loyaltyCardService.cards(callers.account("telefon-kartica"))).isEmpty();
