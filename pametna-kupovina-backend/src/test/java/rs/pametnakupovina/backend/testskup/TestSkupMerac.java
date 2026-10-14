@@ -8,6 +8,7 @@ import rs.pametnakupovina.backend.security.DeviceCaller;
 import rs.pametnakupovina.backend.shoppinglist.CreateShoppingListRequest;
 import rs.pametnakupovina.backend.shoppinglist.OptimizationScenarioResponse;
 import rs.pametnakupovina.backend.shoppinglist.PasteShoppingListItemsRequest;
+import rs.pametnakupovina.backend.shoppinglist.PasteShoppingListItemsResponse;
 import rs.pametnakupovina.backend.shoppinglist.RecommendationItemResponse;
 import rs.pametnakupovina.backend.shoppinglist.RecommendationItemStatus;
 import rs.pametnakupovina.backend.shoppinglist.ResolveShoppingItemMatchRequest;
@@ -152,10 +153,14 @@ public class TestSkupMerac {
         Map<String, String> korak1 = new LinkedHashMap<>();
         for (Stavka stavka : skup.stavke()) {
             try {
-                List<ShoppingListItemResponse> items = shoppingListService
-                        .addPastedItems(listId, caller.accountId(), new PasteShoppingListItemsRequest(stavka.tekst()))
-                        .items();
-                stavkaByItem.put(items.getFirst().id(), stavka);
+                PasteShoppingListItemsResponse pasted = shoppingListService
+                        .addPastedItems(listId, caller.accountId(), new PasteShoppingListItemsRequest(stavka.tekst()));
+                if (pasted.items().isEmpty()) {
+                    korak1.put(stavka.id(), "spisak odbio: " + pasted.rejectedLines().stream()
+                            .map(PasteShoppingListItemsResponse.RejectedLine::message).collect(Collectors.joining("; ")));
+                    continue;
+                }
+                stavkaByItem.put(pasted.items().getFirst().id(), stavka);
             } catch (RuntimeException e) {
                 korak1.put(stavka.id(), "spisak odbio: " + e.getMessage());
             }
