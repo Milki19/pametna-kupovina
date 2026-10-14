@@ -125,7 +125,7 @@ class ProductCheckStateTest {
         ShoppingListItemResponse flour = shoppingListService.addItem(
                 list.id(),
                 callers.account(TOKEN),
-                new AddShoppingListItemRequest("BRAŠNO T-400 1 kg", "BRAŠNO T-400 1 kg", null,
+                new AddShoppingListItemRequest("BRAŠNO OSTRO 1 kg", "BRAŠNO OSTRO 1 kg", null,
                         BigDecimal.ONE, ShoppingItemRule.EXACT_PRODUCT)
         );
 
@@ -140,7 +140,7 @@ class ProductCheckStateTest {
         ShoppingListItemResponse any = shoppingListService.useAnyOfTheKind(
                 list.id(), flour.id(), callers.account(TOKEN));
 
-        assertThat(any.name()).isEqualTo("BRAŠNO T-400 1 kg");
+        assertThat(any.name()).isEqualTo("BRAŠNO OSTRO 1 kg");
         assertThat(any.matchingRule()).isEqualTo(ShoppingItemRule.FLEXIBLE_CATEGORY);
         assertThat(any.matchingStatus()).isEqualTo(ShoppingItemMatchingStatus.CONFIRMED);
         assertThat(any.flexibleConstraints().requiredBaseUnit()).isEqualTo("g");

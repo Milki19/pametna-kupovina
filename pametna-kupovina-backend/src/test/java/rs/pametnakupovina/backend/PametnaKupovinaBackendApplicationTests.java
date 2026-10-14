@@ -5620,6 +5620,14 @@ class PametnaKupovinaBackendApplicationTests {
                 UPDATE app.price_observation SET regular_price=120 WHERE retailer_product_id IN
                 (SELECT id FROM app.retailer_product WHERE retailer_id=? AND source_product_key='big')
                 """).param(retailer).update();
+        // Five cups for 115 are not worth it against one tub for 120: every
+        // pack beyond three weighs 5% more (V125).
+        best = storeShoppingOfferRepository.findOffers(list.id(),List.of(store),LocalDate.of(2026,9,6)).getFirst();
+        assertThat(best.productName()).isEqualTo("Jogurt 1kg");
+        jdbcClient.sql("""
+                UPDATE app.price_observation SET regular_price=130 WHERE retailer_product_id IN
+                (SELECT id FROM app.retailer_product WHERE retailer_id=? AND source_product_key='big')
+                """).param(retailer).update();
         best = storeShoppingOfferRepository.findOffers(list.id(),List.of(store),LocalDate.of(2026,9,6)).getFirst();
         assertThat(best.productName()).startsWith("JOGURT 2.8%");
         assertThat(best.purchaseQuantity().packages()).isEqualByComparingTo("5");

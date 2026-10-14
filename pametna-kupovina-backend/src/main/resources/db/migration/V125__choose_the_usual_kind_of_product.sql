@@ -176,7 +176,7 @@ JOIN app.product_type AS type
 ON CONFLICT (shopping_intent_id, product_type_id) DO NOTHING;
 
 -- "coca cola 2l" je dva litra Coca-Cole, kako god je radnja pakuje; ne
--- Pepsi. Bez marke ("gazirani sok") važi bilo koji.
+-- Pepsi ni Coca-Cola Zero (ko nju hoće, napiše je). Bez marke ("gazirani sok") važi bilo koji.
 INSERT INTO app.shopping_intent_alias (
     shopping_intent_id,
     normalized_alias,
@@ -200,9 +200,9 @@ FROM (
         ('TOILET_PAPER', 'wc papir', NULL),
         ('SOFT_DRINK', 'gazirani sok', NULL),
         ('SOFT_DRINK', 'gazirano pice', NULL),
-        ('SOFT_DRINK', 'coca cola', '\mcoca\M'),
-        ('SOFT_DRINK', 'koka kola', '\mcoca\M'),
-        ('SOFT_DRINK', 'pepsi', '\mpepsi\M'),
+        ('SOFT_DRINK', 'coca cola', '^(?!.*\m(zero|light|bez secera)\M).*\mcoca\M'),
+        ('SOFT_DRINK', 'koka kola', '^(?!.*\m(zero|light|bez secera)\M).*\mcoca\M'),
+        ('SOFT_DRINK', 'pepsi', '^(?!.*\m(max|zero|light)\M).*\mpepsi\M'),
         ('SOFT_DRINK', 'fanta', '\mfanta\M'),
         ('SOFT_DRINK', 'sprite', '\msprite\M'),
         ('SOFT_DRINK', 'cockta', '\mcockta\M')
@@ -260,7 +260,9 @@ FROM (
         ('mlevena kafa', '\m(kapsul[a-z]*|caps|pods?|jastucic[a-z]*|decaf|kofein[a-z]*)\M'),
         ('kafa mlevena', '\m(kapsul[a-z]*|caps|pods?|jastucic[a-z]*|decaf|kofein[a-z]*)\M'),
         ('domaca kafa', '\m(zrn[a-z]*|zrno|beans?|kapsul[a-z]*|caps|pods?|decaf|kofein[a-z]*)\M'),
-        ('secer', '\m(prah[a-z]*|smedj[a-z]*|trsk[a-z]*|kock[a-z]*|demerara|muscovado|kandis|kokos[a-z]*|bio|organsk[a-z]*)\M'),
+        ('secer', '\m(prah[a-z]*|smedj[a-z]*|braon|trsk[a-z]*|kock[a-z]*|demerara|muscovado|kandis|kokos[a-z]*|bio|organsk[a-z]*)\M'),
+        ('prasak za ves', '\m(kapsul[a-z]*|caps|gel|tecn[a-z]*|tablet[a-z]*|maramic[a-z]*)\M'),
+        ('prasak za pranje vesa', '\m(kapsul[a-z]*|caps|gel|tecn[a-z]*|tablet[a-z]*|maramic[a-z]*)\M'),
         ('banana', '\m(crven[a-z]*|baby|mini|bio|organsk[a-z]*|platan[a-z]*|plantain)\M'),
         ('banane', '\m(crven[a-z]*|baby|mini|bio|organsk[a-z]*|platan[a-z]*|plantain)\M'),
         ('bananu', '\m(crven[a-z]*|baby|mini|bio|organsk[a-z]*|platan[a-z]*|plantain)\M'),
