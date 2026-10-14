@@ -186,7 +186,7 @@ function showJoin(code, listId) {
     html: `<div class="card">
         <div class="title">Pridruži se domaćinstvu?</div>
         <p>Ovaj telefon ulazi u zajednički nalog. Ono što je na tvom spisku dodaje se zajedničkom, a računi i kartice postaju zajednički.</p>
-        ${standaloneApp() ? '' : `<p class="muted small">Ako Pametnu kupovinu otvaraš sa početnog ekrana, kopiraj ovaj link i nalepi ga tamo u Više → Domaćinstvo. Safari i aplikacija sa početnog ekrana ne dele podatke.</p>`}
+        ${standaloneApp() ? '' : `<p class="muted small">Ako Pametnu kupovinu otvaraš sa početnog ekrana, kopiraj ovaj link i nalepi ga tamo u Više → Domaćinstvo. ${browserName} i aplikacija sa početnog ekrana ne dele podatke.</p>`}
         <div class="btn-row"><a class="btn" href="#/spisak">Odustani</a>
           <button class="btn primary" data-act="household-join" data-code="${esc(code)}" data-list="${listId}">Pridruži se</button></div>
       </div>`

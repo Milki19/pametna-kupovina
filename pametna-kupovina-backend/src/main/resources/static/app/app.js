@@ -62,6 +62,14 @@ async function sessionCall(path, body) {
   return session.accessToken;
 }
 
+// Safari se pominje samo na iPhone-u i iPad-u (iPad se predstavlja kao Mac sa ekranom na dodir).
+const appleMobile = /iPhone|iPad|iPod/.test(navigator.userAgent)
+  || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+const browserName = appleMobile ? 'Safari' : 'Pregledač';
+const locationDenied = () => appleMobile
+  ? 'Safari nema dozvolu za lokaciju. Dozvoli je za ovaj sajt (Podešavanja → Aplikacije → Safari → Lokacija) ili upiši koordinate ručno.'
+  : 'Pregledač nema dozvolu za lokaciju. Dozvoli je u podešavanjima sajta (ikonica pored adrese) ili upiši koordinate ručno.';
+
 /** Da se u spisku telefona na nalogu vidi koji je koji. */
 function webDeviceName() {
   const ua = navigator.userAgent;
@@ -170,6 +178,7 @@ function loadList() {
 }
 
 async function loadListOnce() {
+  await flushDelete();
   const id = saved.get('listId');
   if (id) {
     try {
@@ -254,24 +263,26 @@ function distance(km) {
   return km < 1 ? `${Math.round(km * 100) * 10} m` : `${decimal(km, 1)} km`;
 }
 function duration(seconds) {
-  const minutes = Math.floor((seconds + 30) / 60);
+  // Kratak put je „1 min“, ne „0 min“.
+  const minutes = seconds > 0 ? Math.max(1, Math.floor((seconds + 30) / 60)) : 0;
   return minutes >= 60 ? `${Math.floor(minutes / 60)} h ${minutes % 60} min` : `${minutes} min`;
 }
 const perUnit = unit => unit === 'g' ? 'kg' : unit === 'ml' ? 'l' : 'kom';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
 const pill = (text, tone = '') => `<span class="pill ${tone}">${esc(text)}</span>`;
-const notice = (text, tone = '') => `<div class="notice ${tone}">${esc(text)}</div>`;
+const notice = (text, tone = '') => `<div class="notice ${tone}" ${tone === 'err' ? 'role="alert"' : ''}>${esc(text)}</div>`;
 const spinner = text => `<div class="spinner"></div><p class="center muted">${esc(text)}</p>`;
+// Ikonice su ukras; ime dugmeta nosi tekst ili aria-label.
 const icon = {
-  add: '<svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>',
-  paste: '<svg viewBox="0 0 24 24"><path d="M19 2h-4.18C14.4.84 13.3 0 12 0S9.6.84 9.18 2H5c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm7 18H5V4h2v3h10V4h2v16z"/></svg>',
-  trash: '<svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>',
-  pin: '<svg viewBox="0 0 24 24"><path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.99 8.99 0 0 0 13 3.06V1h-2v2.06A8.99 8.99 0 0 0 3.06 11H1v2h2.06A8.99 8.99 0 0 0 11 20.94V23h2v-2.06A8.99 8.99 0 0 0 20.94 13H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/></svg>',
-  route: '<svg viewBox="0 0 24 24"><path d="M21.71 11.29l-9-9a1 1 0 0 0-1.42 0l-9 9a1 1 0 0 0 0 1.42l9 9a1 1 0 0 0 1.42 0l9-9a1 1 0 0 0 0-1.42zM14 14.5V12h-4v3H8v-4c0-.55.45-1 1-1h5V7.5l3.5 3.5-3.5 3.5z"/></svg>',
-  card: '<svg viewBox="0 0 24 24"><path d="M20 4H4c-1.11 0-1.99.89-1.99 2L2 18c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V6c0-1.11-.89-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z"/></svg>',
-  tag: '<svg viewBox="0 0 24 24"><path d="M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58.55 0 1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.41 0-.55-.23-1.06-.59-1.42zM5.5 7C4.67 7 4 6.33 4 5.5S4.67 4 5.5 4 7 4.67 7 5.5 6.33 7 5.5 7z"/></svg>',
-  chevron: '<svg viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>'
+  add: '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>',
+  paste: '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M19 2h-4.18C14.4.84 13.3 0 12 0S9.6.84 9.18 2H5c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm7 18H5V4h2v3h10V4h2v16z"/></svg>',
+  trash: '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>',
+  pin: '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.99 8.99 0 0 0 13 3.06V1h-2v2.06A8.99 8.99 0 0 0 3.06 11H1v2h2.06A8.99 8.99 0 0 0 11 20.94V23h2v-2.06A8.99 8.99 0 0 0 20.94 13H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/></svg>',
+  route: '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M21.71 11.29l-9-9a1 1 0 0 0-1.42 0l-9 9a1 1 0 0 0 0 1.42l9 9a1 1 0 0 0 1.42 0l9-9a1 1 0 0 0 0-1.42zM14 14.5V12h-4v3H8v-4c0-.55.45-1 1-1h5V7.5l3.5 3.5-3.5 3.5z"/></svg>',
+  card: '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20 4H4c-1.11 0-1.99.89-1.99 2L2 18c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V6c0-1.11-.89-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z"/></svg>',
+  tag: '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58.55 0 1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.41 0-.55-.23-1.06-.59-1.42zM5.5 7C4.67 7 4 6.33 4 5.5S4.67 4 5.5 4 7 4.67 7 5.5 6.33 7 5.5 7z"/></svg>',
+  chevron: '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>'
 };
 
 // ---------- Akcije: popust, boja i red ispod cene ----------
@@ -330,13 +341,48 @@ function screen({ title, subtitle = null, back = null, html, action = '' }) {
 }
 
 let toastTimer = null;
-function toast(text, undoLabel = null, onUndo = null) {
+/** Kratko obaveštenje; greška se čita odmah (role="alert") i ostaje duže. */
+function toast(text, undoLabel = null, onUndo = null, error = false) {
   const box = document.getElementById('toast');
+  box.setAttribute('role', error ? 'alert' : 'status');
   box.innerHTML = `<span>${esc(text)}</span>` + (undoLabel ? `<button type="button">${esc(undoLabel)}</button>` : '');
   box.hidden = false;
   if (onUndo) box.querySelector('button').onclick = () => { box.hidden = true; onUndo(); };
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { box.hidden = true; }, 5000);
+  toastTimer = setTimeout(() => { box.hidden = true; }, error ? 8000 : 5000);
+}
+
+/**
+ * Greška iz forme ostaje u formi, uz polje na koje se odnosi (error.field je
+ * ime polja), dok se forma ne pošalje ponovo. Čitač ekrana je čita odmah.
+ */
+function formError(form, error) {
+  clearFormError(form);
+  const field = error.field && form.elements.namedItem(error.field);
+  const box = document.createElement('p');
+  box.className = 'field-error';
+  box.id = 'err-' + (form.dataset.form || 'form');
+  box.setAttribute('role', 'alert');
+  box.textContent = error.message;
+  if (field && field.nodeType === 1) {
+    field.setAttribute('aria-invalid', 'true');
+    field.setAttribute('aria-describedby', box.id);
+    const row = field.closest('.row');
+    (row && form.contains(row) ? row : field).after(box);
+    field.focus();
+  } else {
+    (form.querySelector('.btn-row') || form.lastElementChild).before(box);
+  }
+}
+function clearFormError(form) {
+  form.querySelectorAll('.field-error').forEach(el => el.remove());
+  form.querySelectorAll('[aria-invalid]').forEach(el => { el.removeAttribute('aria-invalid'); el.removeAttribute('aria-describedby'); });
+}
+/** Greška vezana za jedno polje forme. */
+function fieldError(field, message) {
+  const error = new Error(message);
+  error.field = field;
+  return error;
 }
 
 function failed(title, error, retryHash) {
@@ -391,7 +437,8 @@ const parseNumber = text => {
 function itemEditor(item) {
   const flexible = item.matchingRule === 'FLEXIBLE_CATEGORY';
   const c = item.flexibleConstraints || {};
-  const unit = storedUnit(c.requiredBaseUnit, c.targetQuantity) || 'kg';
+  // Bez upisane količine („mleko, 1 kom“) nudi se komad, ne kilogram.
+  const unit = storedUnit(c.requiredBaseUnit, c.targetQuantity) || 'kom';
   const amount = c.targetQuantity ? inputNumber(c.targetQuantity / editUnits[unit][1]) : '';
   return `<form class="card" data-form="edit-item" data-id="${item.id}">
     <div class="label accent">Izmeni stavku</div>
@@ -416,17 +463,17 @@ async function saveItem(id, data) {
   const listId = listState.list.id;
   const item = listState.list.items.find(i => i.id === id);
   const quantity = parseNumber(data.get('quantity'));
-  if (!(quantity > 0)) throw new Error('Upiši broj veći od nule.');
+  if (!(quantity > 0)) throw fieldError('quantity', 'Upiši broj veći od nule.');
   const flexible = item.matchingRule === 'FLEXIBLE_CATEGORY';
   let name = item.name;
   let constraints = item.flexibleConstraints;
   if (flexible) {
     name = String(data.get('name') || '').trim();
-    if (!name) throw new Error('Upiši šta kupuješ.');
+    if (!name) throw fieldError('name', 'Upiši šta kupuješ.');
     const c = item.flexibleConstraints || {};
     const amountText = String(data.get('amount') || '').trim();
     const amount = parseNumber(amountText);
-    if (amountText && !(amount > 0)) throw new Error('Količina nije ispravna. Primer: 1,5.');
+    if (amountText && !(amount > 0)) throw fieldError('amount', 'Količina nije ispravna. Primer: 1,5.');
     const [baseUnit, factor] = editUnits[data.get('unit')] || editUnits.kg;
     // Kategorija prati naziv kad je bila isto što i naziv, kao u aplikaciji.
     const sameCategory = !c.category || c.category.trim().toLowerCase() === item.name.trim().toLowerCase();
@@ -526,13 +573,42 @@ async function addText(text) {
   toast(result.createdCount === 1 ? 'Dodato.' : `Dodato: ${counted(result.createdCount, 'stavka', 'stavke', 'stavki')}.`);
 }
 
+// Brisanje se šalje serveru tek kad prođe vreme za „Vrati“, pa vraćena stavka
+// zadržava svoje mesto i oznaku („Nije pronađeno“) umesto da postane nova.
+let pendingDelete = null;
+let deleting = Promise.resolve();
+
+/** Šalje brisanje koje čeka; ekrani koji čitaju spisak sa servera prvo čekaju ovo. */
+function flushDelete() {
+  if (pendingDelete) {
+    const { listId, item, timer } = pendingDelete;
+    clearTimeout(timer);
+    pendingDelete = null;
+    deleting = api('DELETE', `shopping-lists/${listId}/items/${item.id}`)
+      .catch(error => { if (error.status !== 404) toast(`Nije obrisano: ${item.name}. ${error.message}`, null, null, true); });
+  }
+  return deleting;
+}
+document.addEventListener('visibilitychange', () => { if (document.hidden) flushDelete(); });
+
 async function deleteItem(id) {
+  await flushDelete();
   const listId = listState.list.id;
-  const item = listState.list.items.find(i => i.id === id);
-  await api('DELETE', `shopping-lists/${listId}/items/${id}`);
+  const index = listState.list.items.findIndex(i => i.id === id);
+  const item = listState.list.items[index];
   listState.list.items = listState.list.items.filter(i => i.id !== id);
   renderList();
+  pendingDelete = { listId, item, timer: setTimeout(flushDelete, 5000) };
   toast(`Obrisano: ${item.name}`, 'Vrati', async () => {
+    if (pendingDelete?.item === item) {
+      clearTimeout(pendingDelete.timer);
+      pendingDelete = null;
+      if (listState.list?.id === listId) {
+        listState.list.items.splice(Math.min(index, listState.list.items.length), 0, item);
+        renderList();
+      }
+      return;
+    }
     await api('POST', `shopping-lists/${listId}/items`, {
       name: item.name,
       rawInput: item.rawInput,
@@ -564,6 +640,7 @@ async function showMatching() {
   try {
     const listId = saved.get('listId');
     if (!listId) { location.hash = '#/spisak'; return; }
+    await flushDelete();
     if (matching && remembered(matchingFor, `${listId}|${listVersion}`)) return renderMatching();
     matching = await api('POST', `shopping-lists/${listId}/matching?includeProductsWithoutBarcode=true`);
     matchingFor = { key: `${listId}|${listVersion}`, at: Date.now() };
@@ -600,7 +677,8 @@ function renderMatching(errorText = null) {
           </div>
           ${index === 0 || decide[index - 1].explanation !== item.explanation ? `<p class="muted small">${esc(item.explanation)}</p>` : ''}
           ${item.matchingStatus === 'NEEDS_CONFIRMATION' ? item.candidates.slice(0, 5).map((c, ci) => `
-            <button class="card soft" style="text-align:left;cursor:pointer" data-act="choose" data-item="${item.itemId}" data-candidate="${ci}">
+            <button class="card soft" style="text-align:left;cursor:pointer" data-act="choose" data-item="${item.itemId}" data-candidate="${ci}"
+              aria-label="Izaberi ${esc(c.name)} za „${esc(item.requestedName)}“">
               <div class="row"><div class="grow">
                 <div>${esc(c.name)}</div>
                 <div class="row small muted">${pill(Math.round(c.score.totalScore * 100) + '%', 'pos')}
@@ -608,11 +686,12 @@ function renderMatching(errorText = null) {
               </div><b class="label accent">Izaberi</b></div>
             </button>`).join('') : ''}
           ${canUseAsFlexible(item) ? `
-            <button class="card soft" style="text-align:left;cursor:pointer" data-act="flexible" data-item="${item.itemId}">
+            <button class="card soft" style="text-align:left;cursor:pointer" data-act="flexible" data-item="${item.itemId}"
+              aria-label="Neka aplikacija izabere najpovoljnije za „${esc(item.requestedName)}“">
               <div class="name" style="color:var(--primary)">Neka aplikacija izabere najpovoljnije</div>
               <div class="muted small">Kad ti nije važan brend ni pakovanje.</div>
             </button>` : ''}
-          ${item.matchingStatus === 'NEEDS_CONFIRMATION' ? `<button class="btn text" data-act="reject" data-item="${item.itemId}">Nijedan, ostavi neupareno</button>` : ''}
+          ${item.matchingStatus === 'NEEDS_CONFIRMATION' ? `<button class="btn text" data-act="reject" data-item="${item.itemId}" aria-label="Nijedan, ostavi „${esc(item.requestedName)}“ neupareno">Nijedan, ostavi neupareno</button>` : ''}
         </div>`).join('') +
       (settled.length ? `<div class="section">Prepoznato ${pill(settled.length)}</div>
         <div class="card flush">${settled.map(item => `
@@ -679,9 +758,15 @@ const originLabel = origin => origin.label || coordinates(origin.lat, origin.lng
 
 // Adrese iz pretrage ostaju na ekranu dok se ne izabere jedna.
 let places = { query: '', results: null };
+// Ručno upisane koordinate ostaju kad se ekran ponovo iscrta (Kolima/Peške, greška).
+let manual = { lat: '', lng: '', open: false };
 
 function showLocation(message = null, tone = 'err') {
   const last = saved.get('origin');
+  const typed = view.querySelector('[data-form=coordinates]');
+  if (typed) manual = { lat: typed.elements.lat.value, lng: typed.elements.lng.value, open: typed.closest('details').open };
+  const placeField = view.querySelector('[data-form=place] input[name=q]');
+  if (placeField) places.query = placeField.value;
   screen({
     title: 'Odakle krećeš',
     back: '#/provera',
@@ -704,24 +789,26 @@ function showLocation(message = null, tone = 'err') {
       </div>
       ${saved.get('walking', false) ? '<p class="muted small">Peške: radnje do 3 km, put ne košta gorivo, a vreme se računa hodom.</p>' : ''}
       ${places.results ? (places.results.length ? `<div class="card flush">${places.results.map((p, index) => `
-        <button class="list-row row" style="width:100%;text-align:left;cursor:pointer;background:none;border:0" data-act="use-place" data-index="${index}">
+        <button class="list-row row" style="width:100%;text-align:left;cursor:pointer;background:none;border:0" data-act="use-place" data-index="${index}" aria-label="Polazna tačka: ${esc(p.name)}">
           <span style="color:var(--primary)">${icon.pin}</span><span class="grow">${esc(p.name)}</span>${icon.chevron}</button>`).join('')}</div>`
         : notice('Ne nalazimo tu adresu. Dodaj grad ili probaj sa nazivom kraja.', 'warn')) : ''}
       <button class="card row" style="text-align:left;cursor:pointer" data-act="locate">
         <span class="letter" style="border-radius:50%;background:var(--mint);color:var(--on-mint)">${icon.pin}</span>
         <span class="grow"><span class="name" style="display:block">Koristi trenutnu lokaciju</span>
-        <span class="muted small">Safari će pitati za dozvolu</span></span>${icon.chevron}
+        <span class="muted small">${browserName} će pitati za dozvolu</span></span>${icon.chevron}
       </button>
       ${last ? `<button class="card row" style="text-align:left;cursor:pointer" data-act="use-last">
         <span class="grow"><span class="label">Poslednja polazna tačka</span><span style="display:block">${esc(originLabel(last))}</span></span>
         <span class="btn">Koristi</span></button>` : ''}
       ${message ? notice(message, tone) : ''}
       <p class="muted small">Lokacija služi samo za ovo računanje i za redosled pretrage. Ne prati se u pozadini, a server je ne čuva. Adresu server traži preko OpenStreetMap-a i ne upisuje je.</p>
-      <details class="card">
+      <details class="card" ${manual.open ? 'open' : ''}>
         <summary>Unesi koordinate ručno</summary>
         <form data-form="coordinates">
-          <input name="lat" inputmode="decimal" placeholder="Geografska širina, npr. 44.8170" required>
-          <input name="lng" inputmode="decimal" placeholder="Geografska dužina, npr. 20.4930" required>
+          <label class="label" for="lat">Geografska širina</label>
+          <input id="lat" name="lat" inputmode="decimal" placeholder="npr. 44.8170" value="${esc(manual.lat)}" required>
+          <label class="label" for="lng">Geografska dužina</label>
+          <input id="lng" name="lng" inputmode="decimal" placeholder="npr. 20.4930" value="${esc(manual.lng)}" required>
           <p class="muted small">Koordinate dobijaš u Google mapama kad dugo pritisneš tačku na mapi.</p>
           <button class="btn primary">Prikaži preporuke</button>
         </form>
@@ -741,7 +828,7 @@ function locate() {
   navigator.geolocation.getCurrentPosition(
     position => useOrigin(position.coords.latitude, position.coords.longitude),
     error => showLocation(error.code === 1
-      ? 'Safari nema dozvolu za lokaciju. Dozvoli je za ovaj sajt (Podešavanja → Aplikacije → Safari → Lokacija) ili upiši koordinate ručno.'
+      ? locationDenied()
       : 'Lokacija trenutno nije dostupna. Probaj ponovo ili upiši koordinate ručno.'),
     { enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 }
   );
@@ -817,6 +904,8 @@ async function showRecommendation() {
   const origin = saved.get('origin');
   const listId = saved.get('listId');
   if (!origin || !listId) { location.hash = '#/lokacija'; return; }
+  // Obrisana stavka koja još čeka „Vrati“ prvo stiže do servera.
+  await flushDelete();
   const travel = saved.get('walking', false) ? '&travelMode=WALKING' : '';
   const key = `${listId}|${listVersion}|${origin.lat}|${origin.lng}|${travel}`;
   if (recommendation && remembered(recommendationFor, key)) return renderRecommendation();
@@ -1012,7 +1101,9 @@ function renderSearch(loading = false) {
     title: 'Cene',
     html: `
       <form data-form="search" role="search">
-        <input name="q" type="search" enterkeyhint="search" placeholder="Naziv ili barkod, npr. kravica mleko" value="${esc(search.query)}" autocomplete="off">
+        <input name="q" type="search" enterkeyhint="search" placeholder="Naziv ili barkod, npr. kravica mleko" value="${esc(search.query)}" autocomplete="off"
+          aria-label="Pretraga proizvoda" aria-describedby="search-hint">
+        <p class="muted small" id="search-hint">Upiši naziv pa pritisni Enter (na telefonu Traži).</p>
       </form>
       <label class="toggle"><input type="checkbox" data-sale-filter ${search.onSale ? 'checked' : ''}>Samo proizvodi na akciji</label>
       <p class="muted small">Cena u cenovniku nije potvrda da proizvoda ima na stanju.</p>` +
@@ -1229,7 +1320,7 @@ function renderSales(loading = false) {
       (!saved.get('origin') ? `<button class="card soft row" style="text-align:left;cursor:pointer" data-act="sales-locate">
         <span class="letter" style="border-radius:50%;background:var(--mint);color:var(--on-mint)">${icon.pin}</span>
         <span class="grow"><span class="name" style="display:block">Samo radnje blizu mene</span>
-        <span class="muted small">Safari će pitati za dozvolu</span></span>${icon.chevron}</button>` : '') +
+        <span class="muted small">${browserName} će pitati za dozvolu</span></span>${icon.chevron}</button>` : '') +
       `<div class="chips" role="group" aria-label="Redosled">${Object.entries(saleSorts).map(([key, label]) =>
         chip('sale-sort', key, label, key === sales.sort)).join('')}</div>` +
       (sales.categories.length ? `<div class="chips" role="group" aria-label="Kategorija">${chip('sale-category', '', 'Sve', !sales.category)}${
@@ -1243,13 +1334,18 @@ function renderSales(loading = false) {
       (page && page.hasNext && !loading ? `<button class="btn" data-act="sales-more">Prikaži još</button>` : '') +
       `<p class="muted small">Cene su iz zvaničnih cenovnika. Merodavna je cena u prodavnici.</p>`
   });
+  // Izabrana kategorija ostaje u vidnom polju trake sa čipovima.
+  view.querySelectorAll('.chips').forEach(row => {
+    const active = row.querySelector('[aria-pressed="true"]');
+    if (active) row.scrollLeft = active.offsetLeft - row.offsetLeft - (row.clientWidth - active.offsetWidth) / 2;
+  });
 }
 
 function salesLocate() {
   if (!navigator.geolocation) return toast('Ovaj pregledač ne daje lokaciju.');
   navigator.geolocation.getCurrentPosition(
     position => { saved.set('origin', { lat: position.coords.latitude, lng: position.coords.longitude }); loadSales(); },
-    error => toast(error.code === 1 ? 'Safari nema dozvolu za lokaciju.' : 'Lokacija trenutno nije dostupna.'),
+    error => toast(error.code === 1 ? `${browserName} nema dozvolu za lokaciju.` : 'Lokacija trenutno nije dostupna.', null, null, true),
     { enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 }
   );
 }
@@ -1285,8 +1381,10 @@ function renderCards() {
       `<div class="row"><span class="grow muted">Barkodovi za kasu</span>
         <button class="btn primary" data-act="add-card">${icon.add}Dodaj karticu</button></div>` +
       (cards.adding ? `<form class="card" data-form="card">
-          <input name="name" type="text" placeholder="Naziv, npr. Moj Maxi" required>
-          <input name="number" inputmode="text" placeholder="Broj sa kartice" required>
+          <label class="label" for="card-name">Naziv</label>
+          <input id="card-name" name="name" type="text" placeholder="npr. Moj Maxi" required>
+          <label class="label" for="card-number">Broj sa kartice</label>
+          <input id="card-number" name="number" inputmode="text" required>
           <select name="format" aria-label="Oblik koda">
             <option value="CODE_128">Crtični kod (najčešće)</option>
             <option value="EAN_13">EAN-13 (13 cifara)</option>
@@ -1325,7 +1423,7 @@ function showMore(_, __, loaded = false) {
   screen({
     title: 'Više',
     html:
-      (standalone ? '' : `<div class="card hero">
+      (standalone || !appleMobile ? '' : `<div class="card hero">
         <div class="title">Dodaj na početni ekran</div>
         <p>U Safari-ju dodirni <b>Podeli</b> pa <b>Dodaj na početni ekran</b>. Otvara se kao aplikacija, a spisak i kartice ostaju i kad Safari čisti stare podatke sajtova.</p>
       </div>`) +
@@ -1414,7 +1512,7 @@ function route() {
   if (name === 'cene' || name === 'akcije') productFrom = '#/' + name;
   if (name === 'akcije' && (currentFrom === 'spisak' || currentFrom === 'cene')) salesFrom = '#/' + currentFrom;
   // Obaveštenje pripada ekranu na kome je nastalo.
-  if (name !== currentFrom) document.getElementById('toast').hidden = true;
+  if (name !== currentFrom) { document.getElementById('toast').hidden = true; flushDelete(); }
   const tab = name === 'akcije' || name === 'proizvod' ? 'cene'
     : name === 'racun' || name === 'domacinstvo' || name === 'potrosnja' ? 'vise' : routes[name] ? name : 'spisak';
   document.querySelectorAll('.tabs a').forEach(a => {
@@ -1503,9 +1601,8 @@ const forms = {
   coordinates: data => {
     const lat = Number(String(data.get('lat')).replace(',', '.'));
     const lng = Number(String(data.get('lng')).replace(',', '.'));
-    if (!(Math.abs(lat) <= 90 && Math.abs(lng) <= 180) || Number.isNaN(lat) || Number.isNaN(lng)) {
-      return showLocation('Koordinate nisu ispravne. Primer: 44.8170 i 20.4930.');
-    }
+    if (!(Math.abs(lat) <= 90) || Number.isNaN(lat)) throw fieldError('lat', 'Širina nije ispravna. Primer: 44.8170.');
+    if (!(Math.abs(lng) <= 180) || Number.isNaN(lng)) throw fieldError('lng', 'Dužina nije ispravna. Primer: 20.4930.');
     useOrigin(lat, lng);
   },
   place: async data => {
@@ -1522,9 +1619,15 @@ const forms = {
   },
   search: data => { search.query = String(data.get('q') || ''); document.activeElement.blur(); return runSearch(); },
   card: async data => {
+    const cardNumber = String(data.get('number')).trim();
+    if (data.get('format') === 'EAN_13' && !ean13Valid(cardNumber)) {
+      throw fieldError('number', /^\d{13}$/.test(cardNumber)
+        ? 'Ovo nije ispravan EAN-13: poslednja (kontrolna) cifra se ne slaže. Proveri broj.'
+        : 'EAN-13 ima tačno 13 cifara. Proveri broj ili izaberi „Crtični kod“.');
+    }
     await api('POST', 'loyalty-cards', {
       name: String(data.get('name')).trim(),
-      cardNumber: String(data.get('number')).trim(),
+      cardNumber,
       barcodeFormat: data.get('format')
     });
     cards.adding = false;
@@ -1532,13 +1635,15 @@ const forms = {
   }
 };
 
-/** Greška iz radnje ide u obaveštenje, dugme se ponovo pušta. */
-async function run(button, work) {
+/** Greška iz radnje ide u obaveštenje (iz forme u samu formu), dugme se ponovo pušta. */
+async function run(button, work, form = null) {
   if (button) button.disabled = true;
+  if (form) clearFormError(form);
   try {
     await work();
   } catch (error) {
-    toast(error.message);
+    if (form && form.isConnected) formError(form, error);
+    else toast(error.message, null, null, true);
   } finally {
     if (button && button.isConnected) button.disabled = false;
   }
@@ -1588,7 +1693,7 @@ document.addEventListener('submit', event => {
   const handler = forms[event.target.dataset.form];
   if (!handler) return;
   event.preventDefault();
-  run(event.target.querySelector('button:not([type=button])'), () => handler(new FormData(event.target), event.target));
+  run(event.target.querySelector('button:not([type=button])'), () => handler(new FormData(event.target), event.target), event.target);
 });
 
 window.addEventListener('hashchange', route);
