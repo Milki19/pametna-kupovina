@@ -348,6 +348,7 @@ class ShoppingRepository @Inject constructor(
     }
 
     suspend fun convertToFlexible(
+        current: ShoppingListMatchingDto?,
         itemId: Long,
         category: String
     ): ShoppingListMatchingDto {
@@ -371,7 +372,7 @@ class ShoppingRepository @Inject constructor(
                 category = flexibleCategory
             )
         )
-        return matchItems()
+        return rematchItem(current, itemId)
     }
 
     suspend fun updateItem(
@@ -450,6 +451,28 @@ class ShoppingRepository @Inject constructor(
     suspend fun matchItems(): ShoppingListMatchingDto {
         val listId = synchronizePending(allowRejected = true)
         return api.matchShoppingList(listId)
+    }
+
+    /**
+     * After a decision on one item only that item is matched again. A list
+     * the server had to make anew, or a server without the single-item
+     * call, gets the whole list matched as before.
+     */
+    suspend fun rematchItem(
+        current: ShoppingListMatchingDto?,
+        itemId: Long
+    ): ShoppingListMatchingDto {
+        val listId = synchronizePending(allowRejected = true)
+        if (current == null || listId != current.listId || current.items.none { it.itemId == itemId }) {
+            return api.matchShoppingList(listId)
+        }
+        val result = try {
+            api.matchShoppingListItem(listId, itemId)
+        } catch (error: HttpException) {
+            if (error.code() != 404 && error.code() != 405) throw error
+            return api.matchShoppingList(listId)
+        }
+        return current.withItem(result)
     }
 
     suspend fun resolveMatch(
