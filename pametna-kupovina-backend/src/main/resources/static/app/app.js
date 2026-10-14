@@ -154,11 +154,13 @@ async function api(method, path, body, retried = false) {
   }
   if (!response.ok) {
     let message = null;
-    try { message = (await response.json()).message; } catch { /* nije JSON */ }
+    let field = null;
+    try { ({ message, field } = await response.json()); } catch { /* nije JSON */ }
     const error = new Error(message || (response.status === 429
       ? 'Previše zahteva odjednom. Sačekaj minut pa probaj ponovo.'
       : 'Server trenutno ne odgovara. Probaj ponovo.'));
     error.status = response.status;
+    if (field) error.field = field;
     throw error;
   }
   const text = await response.text();
@@ -418,7 +420,13 @@ function itemAttention(item) {
   return '';
 }
 
-let listState = { list: null, adding: null, editing: null };
+let listState = { list: null, adding: null, editing: null, rejected: null };
+
+// Iste granice kao na serveru: količina 0,01–999, naziv koji se kuca do 80 znakova.
+const MIN_QUANTITY = 0.01;
+const MAX_QUANTITY = 999;
+const MAX_NAME = 80;
+const quantityProblem = 'Količina mora biti od 0,01 do 999.';
 
 // Jedinice kao u Android uređivaču: kilogram mesa, ali 400 grama sira.
 const editUnits = { kg: ['g', 1000], g: ['g', 1], l: ['ml', 1000], ml: ['ml', 1], kom: ['piece', 1] };
@@ -444,7 +452,7 @@ function itemEditor(item) {
     <div class="label accent">Izmeni stavku</div>
     ${flexible ? `
       <label class="label" for="edit-name">Šta kupuješ</label>
-      <input id="edit-name" name="name" type="text" value="${esc(item.name)}" autocomplete="off" required>
+      <input id="edit-name" name="name" type="text" value="${esc(item.name)}" autocomplete="off" maxlength="${MAX_NAME}" required>
       <label class="label" for="edit-amount">Koliko ti ukupno treba (opciono)</label>
       <div class="row"><input id="edit-amount" name="amount" inputmode="decimal" value="${esc(amount)}" placeholder="npr. 1,5" style="flex:1">
         <select name="unit" aria-label="Jedinica" style="width:96px">${Object.keys(editUnits).map(u =>
@@ -463,13 +471,14 @@ async function saveItem(id, data) {
   const listId = listState.list.id;
   const item = listState.list.items.find(i => i.id === id);
   const quantity = parseNumber(data.get('quantity'));
-  if (!(quantity > 0)) throw fieldError('quantity', 'Upiši broj veći od nule.');
+  if (!(quantity >= MIN_QUANTITY && quantity <= MAX_QUANTITY)) throw fieldError('quantity', quantityProblem);
   const flexible = item.matchingRule === 'FLEXIBLE_CATEGORY';
   let name = item.name;
   let constraints = item.flexibleConstraints;
   if (flexible) {
     name = String(data.get('name') || '').trim();
     if (!name) throw fieldError('name', 'Upiši šta kupuješ.');
+    if (name.length > MAX_NAME) throw fieldError('name', `Naziv može imati najviše ${MAX_NAME} znakova.`);
     const c = item.flexibleConstraints || {};
     const amountText = String(data.get('amount') || '').trim();
     const amount = parseNumber(amountText);
@@ -520,13 +529,13 @@ function renderList() {
   const form = listState.adding === 'one'
     ? `<form class="card" data-form="add-one">
          <label class="label" for="one">Šta kupuješ</label>
-         <input id="one" name="text" type="text" autocomplete="off" enterkeyhint="done" placeholder="npr. mleko 2l ili jaja 10 kom" required>
+         <input id="one" name="text" type="text" autocomplete="off" enterkeyhint="done" placeholder="npr. mleko 2l ili jaja 10 kom" value="${esc(listState.rejected?.text || '')}" ${rejectedMark('one')}required>${rejectedNote()}
          <div class="btn-row"><button type="button" class="btn" data-act="cancel-add">Odustani</button><button class="btn primary">Dodaj</button></div>
        </form>`
     : listState.adding === 'paste'
       ? `<form class="card" data-form="add-many">
            <label class="label" for="many">Nalepi spisak iz poruke ili beleške</label>
-           <textarea id="many" name="text" placeholder="mleko&#10;hleb&#10;ćevapi 3kg&#10;2x pivo" required></textarea>
+           <textarea id="many" name="text" placeholder="mleko&#10;hleb&#10;ćevapi 3kg&#10;2x pivo" ${rejectedMark('many')}required>${esc(listState.rejected?.text || '')}</textarea>${rejectedNote()}
            <div class="btn-row"><button type="button" class="btn" data-act="cancel-add">Odustani</button><button class="btn primary">Dodaj sve</button></div>
          </form>`
       : '';
@@ -564,13 +573,27 @@ function renderList() {
   if (editing) editing.scrollIntoView({ block: 'nearest' });
 }
 
+const rejectedMark = id => listState.rejected ? `aria-invalid="true" aria-describedby="${id}-error" ` : '';
+
+/** Redovi koje server nije dodao ostaju u polju, a razlog svakog piše ispod njega. */
+function rejectedNote() {
+  const lines = listState.rejected?.lines;
+  if (!lines?.length) return '';
+  const field = listState.adding === 'paste' ? 'many' : 'one';
+  return `<p class="field-error" id="${field}-error" role="alert">${
+    lines.map(line => esc(`„${line.text}“: ${line.message}`)).join('<br>')}</p>`;
+}
+
 async function addText(text) {
   const listId = listState.list.id;
   const result = await api('POST', `shopping-lists/${listId}/items/paste`, { text });
-  listState.adding = null;
+  const rejected = result.rejectedLines || [];
+  listState.rejected = rejected.length ? { text: rejected.map(line => line.text).join('\n'), lines: rejected } : null;
+  if (!rejected.length) listState.adding = null;
   listState.list = await api('GET', `shopping-lists/${listId}`);
   renderList();
-  toast(result.createdCount === 1 ? 'Dodato.' : `Dodato: ${counted(result.createdCount, 'stavka', 'stavke', 'stavki')}.`);
+  const added = result.createdCount === 1 ? 'Dodato.' : `Dodato: ${counted(result.createdCount, 'stavka', 'stavke', 'stavki')}.`;
+  toast(rejected.length ? `${added} Nije dodato: ${rejected.length}, razlog je ispod polja.` : added);
 }
 
 // Brisanje se šalje serveru tek kad prođe vreme za „Vrati“, pa vraćena stavka
@@ -1136,6 +1159,13 @@ function renderSearch(loading = false) {
 
 async function runSearch(more = false) {
   if (!search.query.trim()) return renderSearch();
+  // Jedno slovo nađe skoro ceo katalog i traje sekundama; server ga isto odbija.
+  if ((search.query.match(/[\p{L}\p{N}]/gu) || []).length < 2) {
+    search.page = null;
+    search.items = [];
+    search.error = 'Upiši bar 2 slova ili broja.';
+    return renderSearch();
+  }
   const next = more ? search.page.page + 1 : 0;
   if (!more) search.items = [];
   search.error = null;
@@ -1538,9 +1568,9 @@ function route() {
 
 const actions = {
   retry: () => route(),
-  'add-one': () => { listState.adding = 'one'; listState.editing = null; renderList(); },
-  'add-many': () => { listState.adding = 'paste'; listState.editing = null; renderList(); },
-  'cancel-add': () => { listState.adding = null; renderList(); },
+  'add-one': () => { listState.adding = 'one'; listState.editing = null; listState.rejected = null; renderList(); },
+  'add-many': () => { listState.adding = 'paste'; listState.editing = null; listState.rejected = null; renderList(); },
+  'cancel-add': () => { listState.adding = null; listState.rejected = null; renderList(); },
   edit: el => { listState.editing = Number(el.dataset.id); listState.adding = null; renderList(); },
   'cancel-edit': () => { listState.editing = null; renderList(); },
   delete: el => deleteItem(Number(el.dataset.id)),
