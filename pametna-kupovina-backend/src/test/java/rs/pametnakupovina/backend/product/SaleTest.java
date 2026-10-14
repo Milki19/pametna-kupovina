@@ -254,6 +254,61 @@ class SaleTest {
         }
     }
 
+    /** A product on sale in two chains is listed once, where it comes off the most. */
+    @Test
+    void aProductOnSaleInTwoChainsIsListedOnceWithTheOtherChainCounted() {
+        LocalDate today = LocalDate.now(ZoneId.of("Europe/Belgrade"));
+        try {
+            for (String[] chain : new String[][]{{"DVAA", "180,00"}, {"DVAB", "140,00"}}) {
+                jdbcClient.sql("""
+                                INSERT INTO app.retailer (code, name, dataset_url)
+                                VALUES (?, ?, ?)
+                                """)
+                        .param(chain[0])
+                        .param(chain[0])
+                        .param("http://127.0.0.1:" + csvServer.getAddress().getPort() + "/sale.csv")
+                        .update();
+                catalogue = HEADER
+                        + row("KEKS DVOLANCANI 200G", "8601234500155", "200,00", chain[1],
+                                today, today.minusDays(2), today.plusDays(5));
+                assertThat(priceImportService.importPrices(chain[0]).status()).isEqualTo("SUCCEEDED");
+            }
+            saleListRefresher.refresh();
+
+            assertThat(saleService.find(null, null, null, "dvolancani", 1, SaleSort.DISCOUNT, 0, 20).items())
+                    .singleElement()
+                    .satisfies(sale -> {
+                        assertThat(sale.retailerCode()).isEqualTo("DVAB");
+                        assertThat(sale.salePrice()).isEqualByComparingTo("140.00");
+                        assertThat(sale.discountPercent()).isEqualTo(30);
+                        assertThat(sale.otherChainCount()).isEqualTo(1);
+                    });
+            assertThat(saleService.find(null, null, "DVAA", "dvolancani", 1, SaleSort.DISCOUNT, 0, 20).items())
+                    .singleElement()
+                    .satisfies(sale -> {
+                        assertThat(sale.retailerCode()).isEqualTo("DVAA");
+                        assertThat(sale.otherChainCount()).isZero();
+                    });
+            // Only the deeper sale is 25% off or more, so the other chain no
+            // longer counts.
+            assertThat(saleService.find(null, null, null, "dvolancani", 25, SaleSort.DISCOUNT, 0, 20).items())
+                    .singleElement()
+                    .satisfies(sale -> assertThat(sale.otherChainCount()).isZero());
+        } finally {
+            jdbcClient.sql("""
+                            UPDATE app.current_price_offer AS offer
+                            SET discounted_price = NULL
+                            FROM app.retailer_product AS product
+                            JOIN app.retailer AS retailer
+                              ON retailer.id = product.retailer_id
+                            WHERE product.id = offer.retailer_product_id
+                              AND retailer.code IN ('DVAA', 'DVAB')
+                            """)
+                    .update();
+            saleListRefresher.refresh();
+        }
+    }
+
     private void setDefaultTimeZone(String timeZone) {
         jdbcClient.sql("UPDATE app.market SET time_zone = ? WHERE is_default")
                 .param(timeZone)

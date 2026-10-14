@@ -101,30 +101,37 @@ public class SaleRepository {
                           AND nearby_chain.retailer_id IS NOT NULL)
                   )
             ),
-            chain_count AS (
-                SELECT product_family_id,
-                       COUNT(DISTINCT retailer_id)::INTEGER AS chains
-                FROM sale
-                GROUP BY product_family_id
-            ),
-            best AS (
-                SELECT DISTINCT ON (sale.product_family_id) sale.*
+            -- The best sale of each chain, then of each product. The
+            -- chains are counted on the way instead of joined back by
+            -- product: the planner cannot tell how many sales are left after
+            -- the market's day, guessed a handful and matched every product
+            -- with every other one, about a minute on production.
+            chain_best AS (
+                SELECT DISTINCT ON (sale.product_family_id, sale.retailer_id) sale.*
                 FROM sale
                 ORDER BY sale.product_family_id,
+                         sale.retailer_id,
                          sale.discount_percent DESC,
                          sale.sale_price ASC,
                          sale.meters ASC NULLS LAST
             ),
+            best AS (
+                SELECT DISTINCT ON (chain_best.product_family_id)
+                       chain_best.*,
+                       COUNT(*) OVER (PARTITION BY chain_best.product_family_id)::INTEGER AS chains
+                FROM chain_best
+                ORDER BY chain_best.product_family_id,
+                         chain_best.discount_percent DESC,
+                         chain_best.sale_price ASC,
+                         chain_best.meters ASC NULLS LAST
+            ),
             listed AS (
                 SELECT best.*,
-                       chain_count.chains,
                        family.id AS family_id,
                        family.normalized_name,
                        category.code AS category_code,
                        category.name AS category_name
                 FROM best
-                JOIN chain_count
-                  ON chain_count.product_family_id = best.product_family_id
                 JOIN app.product_family AS family
                   ON family.id = best.product_family_id
                 LEFT JOIN app.product_category AS category
