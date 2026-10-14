@@ -801,6 +801,7 @@ public class ShoppingListService {
         if (targetQuantity != null && requiredBaseUnit == null) {
             throw badRequest("Ukupna količina zahteva jedinicu g, ml ili piece");
         }
+        validateTargetQuantity(targetQuantity, requiredBaseUnit);
 
         return new ValidatedFlexibleConstraints(
                 category,
@@ -897,6 +898,7 @@ public class ShoppingListService {
 
         validateTypedName(line.name());
         validateQuantity(line.quantity());
+        validateTargetQuantity(line.targetQuantity(), line.baseUnit());
 
         return new ValidatedShoppingListItem(
                 line.name(),
@@ -915,6 +917,23 @@ public class ShoppingListService {
     private void validateQuantity(BigDecimal quantity) {
         if (quantity.compareTo(MIN_QUANTITY) < 0
                 || quantity.compareTo(MAX_QUANTITY) > 0) {
+            throw new FieldRefusal(
+                    "quantity",
+                    "Količina mora biti od 0,01 do 999."
+            );
+        }
+    }
+
+    // "mleko 999999" in a pasted list reads as 999999 l of milk; a total is
+    // held to the same 999 as a count, in kilograms, litres or pieces.
+    private void validateTargetQuantity(BigDecimal target, String baseUnit) {
+        if (target == null || baseUnit == null) {
+            return;
+        }
+        BigDecimal limit = "piece".equals(baseUnit)
+                ? MAX_QUANTITY
+                : MAX_QUANTITY.multiply(BigDecimal.valueOf(1000));
+        if (target.compareTo(limit) > 0) {
             throw new FieldRefusal(
                     "quantity",
                     "Količina mora biti od 0,01 do 999."
