@@ -404,7 +404,9 @@ data class CanonicalProductOfferDto(
     val priceNeedsCheck: Boolean = false,
     val packageCount: Int = 1,
     // Poslednji dan akcije kad je cena akcijska i lanac ga navodi.
-    val saleEndDate: String? = null
+    val saleEndDate: String? = null,
+    // Cenovnik stariji nego što lanac inače kasni (V124): nikad najbolja cena.
+    val priceStale: Boolean = false
 )
 
 @Serializable
