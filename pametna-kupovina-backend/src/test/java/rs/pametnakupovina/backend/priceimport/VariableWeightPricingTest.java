@@ -181,4 +181,80 @@ class VariableWeightPricingTest {
         assertThat(factor("sir cca 3kg", "24.90", "3000", "2400"))
                 .isNull();
     }
+
+    private long chainWithProduct(String code, long family, String name, int grams, String price) {
+        long chain = jdbcClient.sql("INSERT INTO app.retailer (code, name) VALUES (?, ?) RETURNING id")
+                .params(code, code)
+                .query(Long.class).single();
+        long run = jdbcClient.sql("""
+                        INSERT INTO app.import_run (retailer_id, source_url, status)
+                        VALUES (?, 'https://example.test/family', 'SUCCEEDED') RETURNING id
+                        """)
+                .param(chain)
+                .query(Long.class).single();
+        long product = jdbcClient.sql("""
+                        INSERT INTO app.retailer_product (
+                            retailer_id, source_product_key, name, normalized_name,
+                            quantity_value, base_unit, product_family_id
+                        )
+                        VALUES (?, ?, ?, ?, ?, 'g', ?) RETURNING id
+                        """)
+                .params(chain, name, name, name, grams, family)
+                .query(Long.class).single();
+        jdbcClient.sql("""
+                        INSERT INTO app.current_price_offer (
+                            retailer_product_id, import_run_id, scope_type,
+                            retailer_format_name, price_date, first_seen_date,
+                            last_seen_date, regular_price
+                        )
+                        VALUES (?, ?, 'STORE_FORMAT', 'Test', CURRENT_DATE, CURRENT_DATE, CURRENT_DATE, ?::NUMERIC)
+                        """)
+                .params(product, run, price)
+                .update();
+        return product;
+    }
+
+    private long family(String key) {
+        return jdbcClient.sql("""
+                        INSERT INTO app.product_family (family_key, display_name, normalized_name)
+                        VALUES (?, ?, ?) RETURNING id
+                        """)
+                .params(key, key, key)
+                .query(Long.class).single();
+    }
+
+    private BigDecimal factorOf(long retailerProductId, String price) {
+        return jdbcClient.sql("SELECT app.price_per_unit_factor(?, ?::NUMERIC)")
+                .params(retailerProductId, price)
+                .query(BigDecimal.class)
+                .list()
+                .getFirst();
+    }
+
+    /**
+     * RIČ's "PALADIN EDAMER 3,3KG" at 899,99 is the price of a kilogram:
+     * Maxi sells the same cheese as "cca 3,3kg" for 4.616,70, and no third
+     * chain is needed to see it (V127).
+     */
+    @Test
+    void aPieceIsKnownToBeSoldByWeightFromItsFamily() {
+        long edamer = family("TEST:paladin edamer 3300g");
+        chainWithProduct("FAM-MAXI", edamer, "paladin edamer cca 3 3kg", 3300, "4616.70");
+        long ric = chainWithProduct("FAM-RIC", edamer, "paladin edamer 3 3kg", 3300, "899.99");
+
+        assertThat(factorOf(ric, "899.99")).isEqualByComparingTo("3.3");
+        // Its own price, once scaled, is not read again.
+        assertThat(factorOf(ric, "2969.97")).isNull();
+
+        // A bag of fixed weight in two chains is not guessed at.
+        long sugar = family("TEST:secer 25000g");
+        chainWithProduct("FAM-SUGAR-A", sugar, "secer kristal 25kg", 25000, "2414.50");
+        long perKilogram = chainWithProduct("FAM-SUGAR-B", sugar, "secer kristal 25kg", 25000, "89.90");
+        assertThat(factorOf(perKilogram, "89.90")).isNull();
+
+        // With no other chain there is nothing to read it against.
+        long alone = family("TEST:gauda 3000g");
+        long only = chainWithProduct("FAM-ALONE", alone, "gauda cca 3kg", 3000, "899.99");
+        assertThat(factorOf(only, "899.99")).isNull();
+    }
 }
