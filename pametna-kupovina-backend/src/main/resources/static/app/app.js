@@ -959,9 +959,15 @@ function searchLocation() {
 
 /** Tri najjeftinija lanca, a lanac na akciji uvek među njima, kao u aplikaciji. */
 function shortList(offers) {
-  const first = offers.slice(0, 3);
+  // Lanac čiju cenu treba proveriti ide na kraj, ma koliko izgledala niska.
+  const rank = a => [a.priceNeedsCheck ? 1 : 0, a.minimumEffectivePrice ?? Number.MAX_VALUE];
+  const sorted = [...offers].sort((a, b) => {
+    const [x, y] = [rank(a), rank(b)];
+    return x[0] - y[0] || x[1] - y[1];
+  });
+  const first = sorted.slice(0, 3);
   const onSale = a => a.discountPercent && !a.priceNeedsCheck;
-  const sale = offers.find(onSale);
+  const sale = sorted.find(onSale);
   return first.some(onSale) || !sale ? first : [...first.slice(0, 2), sale];
 }
 
