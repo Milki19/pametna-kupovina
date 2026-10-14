@@ -126,15 +126,15 @@
     <string name="match_loading">Finding matching products…</string>
     <string name="match_error_title">The check didn\'t work</string>
     <string name="match_section_decide">Needs your decision</string>
-    <string name="match_section_settled">Recognized</string>
+    <string name="match_section_settled">Found</string>
     <string name="match_step">STEP 1 OF 3</string>
-    <string name="match_all_recognized">All items are recognized</string>
+    <string name="match_all_recognized">All items are found</string>
     <plurals name="match_pending_title">
         <item quantity="one">%d item needs your decision</item>
         <item quantity="other">%d items need your decision</item>
     </plurals>
     <string name="match_summary_text">Confirm the unclear items so we can find the best prices nearby.</string>
-    <string name="match_recognized_of">Recognized %1$d of %2$d</string>
+    <string name="match_recognized_of">Found %1$d of %2$d</string>
     <string name="match_remaining">%1$d left</string>
     <string name="match_from_list">From your list</string>
     <string name="match_requested_name">“%1$s”</string>
@@ -143,11 +143,20 @@
     <string name="match_none_leave_unmatched">None, leave unmatched</string>
     <string name="match_choose">Choose</string>
     <string name="match_status_pending">Awaiting check</string>
-    <string name="match_status_auto">Automatic</string>
+    <string name="match_status_auto">Found</string>
     <string name="match_status_needs_confirmation">Needs confirmation</string>
-    <string name="match_status_confirmed">Confirmed</string>
+    <string name="match_status_confirmed">Found</string>
     <string name="match_status_unmatched">Not found</string>
     <string name="match_error_load_failed">The product check failed.</string>
     <string name="match_error_confirm_not_saved">Your confirmation wasn\'t saved.</string>
     <string name="match_error_flexible_failed">Couldn\'t switch the item to any product.</string>
+    <string name="match_section_not_found">Not found</string>
+    <plurals name="match_not_found_title">
+        <item quantity="one">%d item was not found</item>
+        <item quantity="other">%d items were not found</item>
+    </plurals>
+    <string name="match_not_found_text">Items not found aren\'t in the total. Pick them from search or continue without them.</string>
+    <string name="match_pick_from_search">Pick from search</string>
+    <string name="match_change">Change</string>
+    <string name="list_duplicate_warning">“%1$s” is on the list more than once. If that\'s a mistake, delete the extra one.</string>
 </resources>

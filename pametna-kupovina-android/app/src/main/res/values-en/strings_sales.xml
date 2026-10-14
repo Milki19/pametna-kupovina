@@ -30,4 +30,5 @@
     <string name="sale_all_prices">Prices by chain</string>
     <string name="sale_add_to_list">Add to list</string>
     <string name="sale_added">On the list</string>
+    <string name="sale_added_chain_without_addresses">Added: %1$s. %2$s doesn\'t publish shop addresses, so this price won\'t be in the plan.</string>
 </resources>

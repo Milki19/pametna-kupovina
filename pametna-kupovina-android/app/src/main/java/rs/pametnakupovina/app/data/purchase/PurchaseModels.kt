@@ -49,8 +49,10 @@ data class PurchaseSession(
     val snapshot: PurchaseSnapshot,
     val progress: Map<Long, PurchaseItemProgress>
 ) {
+    // Stavke bez prodavnice u planu nema gde da se kupe, pa se ne broje.
+    val shoppableCount get() = snapshot.scenario.items.count { it.storeId != null }
     val purchasedCount get() = snapshot.scenario.items.count {
-        progress[it.itemId]?.status == PurchaseStatus.PURCHASED
+        it.storeId != null && progress[it.itemId]?.status == PurchaseStatus.PURCHASED
     }
     val resolvedCount get() = snapshot.scenario.items.count {
         (progress[it.itemId]?.status ?: PurchaseStatus.TO_BUY) != PurchaseStatus.TO_BUY

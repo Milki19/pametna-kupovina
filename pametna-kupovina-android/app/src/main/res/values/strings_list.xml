@@ -129,16 +129,16 @@
     <string name="match_loading">Tražim odgovarajuće proizvode…</string>
     <string name="match_error_title">Provera nije uspela</string>
     <string name="match_section_decide">Treba tvoja odluka</string>
-    <string name="match_section_settled">Prepoznato</string>
+    <string name="match_section_settled">Pronađeno</string>
     <string name="match_step">KORAK 1 OD 3</string>
-    <string name="match_all_recognized">Sve stavke su prepoznate</string>
+    <string name="match_all_recognized">Sve stavke su pronađene</string>
     <plurals name="match_pending_title">
         <item quantity="one">%d stavka traži tvoju odluku</item>
         <item quantity="few">%d stavke traže tvoju odluku</item>
         <item quantity="other">%d stavki traži tvoju odluku</item>
     </plurals>
     <string name="match_summary_text">Potvrdi nejasne stavke da bismo našli najpovoljnije cene u blizini.</string>
-    <string name="match_recognized_of">Prepoznato %1$d od %2$d</string>
+    <string name="match_recognized_of">Pronađeno %1$d od %2$d</string>
     <string name="match_remaining">još %1$d</string>
     <string name="match_from_list">Sa spiska</string>
     <string name="match_requested_name">„%1$s“</string>
@@ -147,11 +147,21 @@
     <string name="match_none_leave_unmatched">Nijedan, ostavi neupareno</string>
     <string name="match_choose">Izaberi</string>
     <string name="match_status_pending">Čeka proveru</string>
-    <string name="match_status_auto">Automatski</string>
+    <string name="match_status_auto">Pronađeno</string>
     <string name="match_status_needs_confirmation">Treba potvrda</string>
-    <string name="match_status_confirmed">Potvrđeno</string>
+    <string name="match_status_confirmed">Pronađeno</string>
     <string name="match_status_unmatched">Nije pronađeno</string>
     <string name="match_error_load_failed">Provera proizvoda nije uspela.</string>
     <string name="match_error_confirm_not_saved">Potvrda nije sačuvana.</string>
     <string name="match_error_flexible_failed">Stavka nije pretvorena u fleksibilnu.</string>
+    <string name="match_section_not_found">Nije pronađeno</string>
+    <plurals name="match_not_found_title">
+        <item quantity="one">%d stavka nije pronađena</item>
+        <item quantity="few">%d stavke nisu pronađene</item>
+        <item quantity="other">%d stavki nije pronađeno</item>
+    </plurals>
+    <string name="match_not_found_text">Nepronađene stavke ne ulaze u račun. Izaberi ih iz pretrage ili nastavi bez njih.</string>
+    <string name="match_pick_from_search">Izaberi iz pretrage</string>
+    <string name="match_change">Promeni</string>
+    <string name="list_duplicate_warning">„%1$s“ je na spisku više puta. Ako je to greška, obriši višak.</string>
 </resources>

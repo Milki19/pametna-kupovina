@@ -141,6 +141,28 @@ fun RecommendationScreen(
     var replacing by remember { mutableStateOf(false) }
     var replacementError by remember { mutableStateOf<UiText?>(null) }
     var similarFor by remember { mutableStateOf<RecommendationItemDto?>(null) }
+    var wrongFor by remember { mutableStateOf<RecommendationItemDto?>(null) }
+    wrongFor?.let { item ->
+        AlertDialog(
+            onDismissRequest = { wrongFor = null },
+            title = { Text(stringResource(R.string.rec_wrong_product)) },
+            text = { Text(stringResource(R.string.rec_wrong_product_question, item.requestedName)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        wrongFor = null
+                        // Odbijanje se pamti, pa se zamena bira kao „Pogledaj zamene".
+                        viewModel.rejectPlannedProduct(listId, item) { error ->
+                            replacementError = error
+                            alternativeItem = item
+                        }
+                    },
+                    modifier = Modifier.testTag("confirm-wrong-product")
+                ) { Text(stringResource(R.string.rec_wrong_product_confirm)) }
+            },
+            dismissButton = { TextButton(onClick = { wrongFor = null }) { Text(stringResource(R.string.common_cancel)) } }
+        )
+    }
     similarFor?.let { item ->
         // Predlog vrste se pokaže pre zamene: imena u katalogu su neujednačena.
         var kind by remember(item.itemId) { mutableStateOf(similarKind(item.requestedName, item.productBrand)) }
@@ -282,7 +304,8 @@ fun RecommendationScreen(
                         purchaseViewModel.start(requireNotNull(state.result), scenario, createNew)
                     },
                     onChangeOrigin = onBack,
-                    onSimilar = { item -> similarFor = item }
+                    onSimilar = { item -> similarFor = item },
+                    onWrongProduct = { item -> wrongFor = item }
                 )
             }
         }
@@ -301,7 +324,8 @@ internal fun RecommendationContent(
     onStart: (OptimizationScenarioDto, Boolean) -> Unit,
     onAlternative: (RecommendationItemDto) -> Unit = {},
     onChangeOrigin: () -> Unit = {},
-    onSimilar: (RecommendationItemDto) -> Unit = {}
+    onSimilar: (RecommendationItemDto) -> Unit = {},
+    onWrongProduct: (RecommendationItemDto) -> Unit = {}
 ) {
     val context = LocalContext.current
     var selectedTypeName by rememberSaveable {
@@ -411,7 +435,8 @@ internal fun RecommendationContent(
                     StoreSection(
                         store = store,
                         items = selected.items.filter { it.storeId == store.storeId },
-                        requestedDate = result.requestedDate
+                        requestedDate = result.requestedDate,
+                        onWrongProduct = onWrongProduct
                     )
                 }
             }
@@ -481,7 +506,7 @@ private fun PreviousPurchaseBanner(
                             R.string.rec_previous_progress,
                             date(purchase.snapshot.calculationDate),
                             purchase.purchasedCount,
-                            purchase.snapshot.scenario.items.size
+                            purchase.shoppableCount
                         ),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -642,6 +667,17 @@ private fun ScenarioCard(
                 ) {
                     StatusPill(stringResource(scenarioBadge(scenario.type)), scenarioTone(scenario.type))
                     if (scenario.available) {
+                        // Skuplji plan često pokriva više stavki: pokrivenost stoji uz cenu.
+                        Text(
+                            pluralStringResource(
+                                R.plurals.rec_covered_of,
+                                scenario.items.size,
+                                scenario.coveredItems,
+                                scenario.items.size
+                            ),
+                            style = MaterialTheme.typography.labelLarge,
+                            modifier = Modifier.testTag("coverage-${scenario.type.name}")
+                        )
                         Text(
                             stringResource(
                                 R.string.rec_scenario_route,
@@ -780,7 +816,8 @@ private fun RadioDot(selected: Boolean) {
 private fun StoreSection(
     store: RecommendationStoreDto,
     items: List<RecommendationItemDto>,
-    requestedDate: String
+    requestedDate: String,
+    onWrongProduct: (RecommendationItemDto) -> Unit
 ) {
     GlassCard(
         modifier = Modifier.fillMaxWidth()
@@ -823,7 +860,7 @@ private fun StoreSection(
                 )
             }
             items.forEachIndexed { index, item ->
-                PlanItemRow(item, requestedDate)
+                PlanItemRow(item, requestedDate, onWrongProduct = { onWrongProduct(item) })
                 if (index < items.lastIndex) {
                     HorizontalDivider(
                         modifier = Modifier.padding(start = AppSpacing.lg),
@@ -850,7 +887,7 @@ internal fun StopBadge(number: Int) {
 
 /** What was asked for, what it became, and the line's price on the right. */
 @Composable
-private fun PlanItemRow(item: RecommendationItemDto, requestedDate: String) {
+private fun PlanItemRow(item: RecommendationItemDto, requestedDate: String, onWrongProduct: () -> Unit) {
     Row(
         modifier = Modifier.padding(horizontal = AppSpacing.lg, vertical = AppSpacing.md),
         verticalAlignment = Alignment.Top
@@ -886,6 +923,11 @@ private fun PlanItemRow(item: RecommendationItemDto, requestedDate: String) {
             if (manySmallPacks(item)) {
                 StatusPill(stringResource(R.string.rec_many_small_packs), StatusTone.WARNING)
             }
+            TextButton(
+                onClick = onWrongProduct,
+                contentPadding = PaddingValues(horizontal = 0.dp, vertical = AppSpacing.xs),
+                modifier = Modifier.testTag("wrong-product-${item.itemId}")
+            ) { Text(stringResource(R.string.rec_wrong_product)) }
         }
         Text(
             item.lineTotal?.let(::money) ?: stringResource(R.string.rec_no_price_short),
@@ -908,6 +950,7 @@ internal fun stalePriceDate(priceDate: String?, requestedDate: String): String? 
 }
 
 private const val STALE_PRICE_DAYS = 3L
+private const val UNLOCATED_SHOWN = 3
 
 @Composable
 private fun UnresolvedSection(
@@ -990,11 +1033,13 @@ internal fun UnlocatedOptionsSection(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+        var showAll by rememberSaveable { mutableStateOf(false) }
+        val shown = if (showAll) options else options.take(UNLOCATED_SHOWN)
         GlassCard(
             modifier = Modifier.fillMaxWidth()
         ) {
             Column {
-                options.forEachIndexed { index, option ->
+                shown.forEachIndexed { index, option ->
                     val cheaper = selected.available &&
                         option.coveredItems == option.totalItems &&
                         option.lowestBasketCost < selected.basketCost
@@ -1029,16 +1074,33 @@ internal fun UnlocatedOptionsSection(
                                 StatusPill(stringResource(R.string.rec_cheaper_basket), StatusTone.SAVING)
                             }
                         }
-                        Text(
-                            option.caveat,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        // Ista rečenica za svaki lanac stoji jednom, gore; ovde samo ono što je samo njegovo.
+                        if (option.priceListCount > 1) {
+                            Text(
+                                stringResource(R.string.rec_unlocated_price_lists, option.priceListCount),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
-                    if (index < options.lastIndex) {
+                    if (index < shown.lastIndex) {
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     }
                 }
+            }
+        }
+        if (options.size > UNLOCATED_SHOWN) {
+            TextButton(
+                onClick = { showAll = !showAll },
+                modifier = Modifier.testTag("unlocated-more")
+            ) {
+                Text(
+                    if (showAll) {
+                        stringResource(R.string.rec_unlocated_less)
+                    } else {
+                        stringResource(R.string.rec_unlocated_more, options.size - UNLOCATED_SHOWN)
+                    }
+                )
             }
         }
     }

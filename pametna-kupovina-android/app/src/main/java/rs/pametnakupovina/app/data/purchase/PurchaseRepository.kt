@@ -48,7 +48,7 @@ class PurchaseRepository @Inject constructor(
             calculationDate = result.requestedDate, scenario = scenario,
             walking = result.assumptions.walking)
         dao.insert(PurchaseSessionEntity(id, System.currentTimeMillis(),
-            listName = result.listName, itemCount = scenario.items.size,
+            listName = result.listName, itemCount = scenario.items.count { it.storeId != null },
             snapshotJson = json.encodeToString(snapshot)))
         id
     }

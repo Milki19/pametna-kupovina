@@ -21,6 +21,7 @@ import rs.pametnakupovina.app.data.ItemSyncValidationException
 import kotlinx.coroutines.CancellationException
 import rs.pametnakupovina.app.data.local.DraftItemEntity
 import rs.pametnakupovina.app.data.network.ProductCandidateDto
+import rs.pametnakupovina.app.data.network.RecommendationItemDto
 import rs.pametnakupovina.app.data.network.ShoppingItemMatchResultDto
 import rs.pametnakupovina.app.data.network.ShoppingItemRuleDto
 import rs.pametnakupovina.app.data.network.ShoppingListMatchingDto
@@ -385,14 +386,35 @@ class MatchingViewModel @Inject constructor(
         }
     }
 
+    /** „Izaberi iz pretrage": [onDone] dobija grešku ili null kad je sačuvano. */
+    fun pickFromSearch(
+        item: ShoppingItemMatchResultDto,
+        product: rs.pametnakupovina.app.data.network.CanonicalProductSearchItemDto,
+        packages: Double,
+        onDone: (UiText?) -> Unit
+    ) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isResolving = true, errorMessage = null) }
+            try {
+                val refreshed = repository.pickFromSearch(_uiState.value.result, item.itemId, product, packages)
+                _uiState.value = MatchingUiState(isLoading = false, result = refreshed)
+                onDone(null)
+            } catch (error: kotlinx.coroutines.CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                _uiState.update { it.copy(isResolving = false) }
+                onDone(error.toUserMessage(R.string.match_error_confirm_not_saved))
+            }
+        }
+    }
+
     fun useAsFlexible(item: ShoppingItemMatchResultDto) {
         viewModelScope.launch {
             _uiState.update { it.copy(isResolving = true, errorMessage = null) }
             try {
                 val refreshed = repository.convertToFlexible(
                     current = _uiState.value.result,
-                    itemId = item.itemId,
-                    category = item.requestedName
+                    itemId = item.itemId
                 )
                 _uiState.value = MatchingUiState(
                     isLoading = false,
@@ -437,6 +459,20 @@ class RecommendationViewModel @Inject constructor(
     val uiState: StateFlow<RecommendationUiState> = _uiState.asStateFlow()
 
     suspend fun alternativeQuery(itemId: Long) = repository.alternativeQuery(itemId)
+
+    /** „Pogrešan proizvod": odbijanje se pamti, a [onRejected] otvara izbor zamene. */
+    fun rejectPlannedProduct(listId: Long, item: RecommendationItemDto, onRejected: (UiText?) -> Unit) {
+        viewModelScope.launch {
+            try {
+                repository.rejectPlannedProduct(listId, item.itemId, item.productName)
+                onRejected(null)
+            } catch (error: kotlinx.coroutines.CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                onRejected(error.toUserMessage(R.string.list_error_replacement_not_saved))
+            }
+        }
+    }
 
     /** „Uzmi slično": stavka postaje „bilo koji brend" i plan se računa ponovo. */
     fun useSimilar(listId: Long, itemId: Long, kind: String, latitude: Double, longitude: Double) {

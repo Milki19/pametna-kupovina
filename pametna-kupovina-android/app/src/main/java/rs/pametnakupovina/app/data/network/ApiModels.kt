@@ -597,6 +597,14 @@ data class OptimizationScenarioDto(
  * A chain that publishes prices but not where its shops are. It never enters
  * a plan; it only answers whether somewhere else would have been cheaper.
  */
+/** Lanac; bez poznatih adresa prodavnica nikad ne ulazi u plan. */
+@Serializable
+data class RetailerDto(
+    val code: String,
+    val name: String,
+    val storeLocationsKnown: Boolean = true
+)
+
 @Serializable
 data class UnlocatedPriceOptionDto(
     val retailerCode: String,

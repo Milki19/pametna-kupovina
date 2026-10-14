@@ -123,4 +123,10 @@
     </plurals>
     <string name="rec_warning_small_packs">Od mnogo malih pakovanja: %1$s. Proveri da li ti tako odgovara ili izaberi veće pakovanje.</string>
     <string name="rec_warning_old_prices">Cene su iz cenovnika od %1$s, ne od danas. Proveri ih pre kupovine.</string>
+    <string name="rec_wrong_product">Pogrešan proizvod</string>
+    <string name="rec_wrong_product_question">Označi proizvod za „%1$s“ kao pogrešan i izaberi drugi?</string>
+    <string name="rec_wrong_product_confirm">Izaberi drugi</string>
+    <string name="rec_unlocated_price_lists">%1$d cenovnika, ne znamo koji važi kod tebe</string>
+    <string name="rec_unlocated_more">Prikaži još %1$d</string>
+    <string name="rec_unlocated_less">Prikaži manje</string>
 </resources>

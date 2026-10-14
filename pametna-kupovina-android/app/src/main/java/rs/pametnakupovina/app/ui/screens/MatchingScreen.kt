@@ -19,9 +19,15 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -38,7 +44,9 @@ import rs.pametnakupovina.app.data.network.ShoppingItemMatchingStatusDto
 import rs.pametnakupovina.app.data.network.ShoppingItemRuleDto
 import rs.pametnakupovina.app.data.network.ShoppingListMatchingDto
 import rs.pametnakupovina.app.text.asString
+import rs.pametnakupovina.app.text.UiText
 import rs.pametnakupovina.app.ui.MatchingViewModel
+import rs.pametnakupovina.app.ui.ProductSearchViewModel
 import rs.pametnakupovina.app.ui.components.AppIcon
 import rs.pametnakupovina.app.ui.components.AppSpacing
 import rs.pametnakupovina.app.ui.components.GlassCard
@@ -57,18 +65,56 @@ import rs.pametnakupovina.app.ui.components.StatusTone
 fun MatchingScreen(
     onBack: () -> Unit,
     onContinue: (Long) -> Unit,
-    viewModel: MatchingViewModel = hiltViewModel()
+    viewModel: MatchingViewModel = hiltViewModel(),
+    productSearchViewModel: ProductSearchViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val result = state.result
     val errorMessage = state.errorMessage?.asString()
+    val searchState by productSearchViewModel.uiState.collectAsStateWithLifecycle()
+    // „Izaberi iz pretrage": isti izbor proizvoda kao zamena u planu.
+    var pickFor by remember { mutableStateOf<ShoppingItemMatchResultDto?>(null) }
+    var pickError by remember { mutableStateOf<UiText?>(null) }
+    LaunchedEffect(pickFor?.itemId) {
+        pickFor?.let { item ->
+            productSearchViewModel.clear()
+            productSearchViewModel.updateQuery(item.requestedName)
+        }
+    }
+    pickFor?.let { item ->
+        AlternativePickerDialog(
+            name = item.requestedName,
+            state = searchState,
+            saving = state.isResolving,
+            error = pickError?.asString(),
+            onQuery = productSearchViewModel::updateQuery,
+            onRetry = productSearchViewModel::retry,
+            onMore = productSearchViewModel::loadNextPage,
+            onDismiss = {
+                if (!state.isResolving) {
+                    pickFor = null
+                    productSearchViewModel.clear()
+                }
+            },
+            onSave = { product, packages ->
+                pickError = null
+                viewModel.pickFromSearch(item, product, packages) { error ->
+                    pickError = error
+                    if (error == null) {
+                        pickFor = null
+                        productSearchViewModel.clear()
+                    }
+                }
+            }
+        )
+    }
 
     Scaffold(
         containerColor = Color.Transparent,
         topBar = { AppTopBar(title = stringResource(R.string.match_title), onBack = onBack) },
         bottomBar = {
             if (result != null) {
-                val pending = pendingDecisions(result)
+                val pending = result.items.count(::needsDecision)
                 BottomActionBar {
                     PrimaryActionButton(
                         text = when {
@@ -101,7 +147,11 @@ fun MatchingScreen(
                     errorMessage = errorMessage,
                     enabled = !state.isResolving,
                     onChoose = viewModel::confirm,
-                    onUseAsFlexible = viewModel::useAsFlexible
+                    onUseAsFlexible = viewModel::useAsFlexible,
+                    onPick = {
+                        pickError = null
+                        pickFor = it
+                    }
                 )
             }
         }
@@ -119,9 +169,13 @@ private fun MatchingContent(
     errorMessage: String?,
     enabled: Boolean,
     onChoose: (ShoppingItemMatchResultDto, ProductCandidateDto?) -> Unit,
-    onUseAsFlexible: (ShoppingItemMatchResultDto) -> Unit
+    onUseAsFlexible: (ShoppingItemMatchResultDto) -> Unit,
+    onPick: (ShoppingItemMatchResultDto) -> Unit
 ) {
-    val (needsDecision, settled) = result.items.partition(::needsDecision)
+    // Jedno stanje kao na spisku i u planu: treba odluka, nije pronađeno, pronađeno.
+    val decide = result.items.filter { needsDecision(it) }
+    val missing = result.items.filter { notFound(it) }
+    val settled = result.items.filter { isFound(it) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -129,7 +183,7 @@ private fun MatchingContent(
         verticalArrangement = Arrangement.spacedBy(AppSpacing.md)
     ) {
         item(key = "summary") {
-            MatchingSummary(result, pending = needsDecision.size)
+            MatchingSummary(result, pending = decide.size, missing = missing.size)
         }
 
         errorMessage?.let { message ->
@@ -138,20 +192,38 @@ private fun MatchingContent(
             }
         }
 
-        if (needsDecision.isNotEmpty()) {
+        if (decide.isNotEmpty()) {
             item(key = "decide-header") {
-                SectionHeader(stringResource(R.string.match_section_decide), trailing = needsDecision.size.toString())
+                SectionHeader(stringResource(R.string.match_section_decide), trailing = decide.size.toString())
             }
-            itemsIndexed(needsDecision, key = { _, item -> item.itemId }) { index, item ->
+            itemsIndexed(decide, key = { _, item -> item.itemId }) { index, item ->
                 DecisionCard(
                     item = item,
                     // Isti razlog na deset kartica je deset puta isti pasus.
                     // Piše se samo kad se promeni u odnosu na karticu iznad.
                     showExplanation = index == 0 ||
-                        needsDecision[index - 1].explanation != item.explanation,
+                        decide[index - 1].explanation != item.explanation,
                     enabled = enabled,
                     onChoose = { candidate -> onChoose(item, candidate) },
-                    onUseAsFlexible = { onUseAsFlexible(item) }
+                    onUseAsFlexible = { onUseAsFlexible(item) },
+                    onPick = { onPick(item) }
+                )
+            }
+        }
+
+        if (missing.isNotEmpty()) {
+            item(key = "not-found-header") {
+                SectionHeader(stringResource(R.string.match_section_not_found), trailing = missing.size.toString())
+            }
+            itemsIndexed(missing, key = { _, item -> "nf-${item.itemId}" }) { index, item ->
+                DecisionCard(
+                    item = item,
+                    showExplanation = index == 0 ||
+                        missing[index - 1].explanation != item.explanation,
+                    enabled = enabled,
+                    onChoose = { candidate -> onChoose(item, candidate) },
+                    onUseAsFlexible = { onUseAsFlexible(item) },
+                    onPick = { onPick(item) }
                 )
             }
         }
@@ -161,7 +233,7 @@ private fun MatchingContent(
                 SectionHeader(stringResource(R.string.match_section_settled), trailing = settled.size.toString())
             }
             item(key = "settled") {
-                SettledList(settled)
+                SettledList(settled, enabled = enabled, onPick = onPick)
             }
         }
     }
@@ -169,16 +241,18 @@ private fun MatchingContent(
 
 /** Korak u toku izračunavanja i koliko je stavki već prepoznato. */
 @Composable
-private fun MatchingSummary(result: ShoppingListMatchingDto, pending: Int) {
+private fun MatchingSummary(result: ShoppingListMatchingDto, pending: Int, missing: Int) {
     val connected = connectedItems(result)
     StepCard(
         step = stringResource(R.string.match_step),
-        title = if (pending == 0) {
-            stringResource(R.string.match_all_recognized)
-        } else {
-            pluralStringResource(R.plurals.match_pending_title, pending, pending)
+        title = when {
+            pending > 0 -> pluralStringResource(R.plurals.match_pending_title, pending, pending)
+            missing > 0 -> pluralStringResource(R.plurals.match_not_found_title, missing, missing)
+            else -> stringResource(R.string.match_all_recognized)
         },
-        text = stringResource(R.string.match_summary_text)
+        text = stringResource(
+            if (pending == 0 && missing > 0) R.string.match_not_found_text else R.string.match_summary_text
+        )
     ) {
         Row {
             Text(
@@ -213,7 +287,8 @@ private fun DecisionCard(
     showExplanation: Boolean,
     enabled: Boolean,
     onChoose: (ProductCandidateDto?) -> Unit,
-    onUseAsFlexible: () -> Unit
+    onUseAsFlexible: () -> Unit,
+    onPick: () -> Unit
 ) {
     GlassCard(
         modifier = Modifier.fillMaxWidth()
@@ -275,6 +350,16 @@ private fun DecisionCard(
                         )
                     }
                 }
+            }
+
+            FilledTonalButton(
+                onClick = onPick,
+                enabled = enabled,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("pick-from-search-${item.itemId}")
+            ) {
+                Text(stringResource(R.string.match_pick_from_search))
             }
 
             if (item.matchingStatus == ShoppingItemMatchingStatusDto.NEEDS_CONFIRMATION) {
@@ -345,7 +430,11 @@ private fun CandidateRow(
 }
 
 @Composable
-private fun SettledList(items: List<ShoppingItemMatchResultDto>) {
+private fun SettledList(
+    items: List<ShoppingItemMatchResultDto>,
+    enabled: Boolean,
+    onPick: (ShoppingItemMatchResultDto) -> Unit
+) {
     GlassCard(
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -374,6 +463,9 @@ private fun SettledList(items: List<ShoppingItemMatchResultDto>) {
                             )
                         }
                     }
+                    TextButton(enabled = enabled, onClick = { onPick(item) }) {
+                        Text(stringResource(R.string.match_change))
+                    }
                 }
                 if (index < items.lastIndex) {
                     HorizontalDivider(
@@ -386,14 +478,17 @@ private fun SettledList(items: List<ShoppingItemMatchResultDto>) {
     }
 }
 
-private fun needsDecision(item: ShoppingItemMatchResultDto): Boolean =
-    item.blocksOptimization ||
-        item.matchingStatus == ShoppingItemMatchingStatusDto.NEEDS_CONFIRMATION ||
-        item.matchingStatus == ShoppingItemMatchingStatusDto.UNMATCHED
+internal fun isFound(item: ShoppingItemMatchResultDto): Boolean =
+    item.matchingStatus == ShoppingItemMatchingStatusDto.AUTO_MATCHED ||
+        item.matchingStatus == ShoppingItemMatchingStatusDto.CONFIRMED
 
-private fun pendingDecisions(result: ShoppingListMatchingDto): Int =
-    result.blockingItemIds.size.takeIf { it > 0 }
-        ?: (result.itemsNeedingConfirmation + result.unmatchedItems)
+/** Samo ovo zadržava korak: nepronađena stavka ne ulazi u račun, ali ne blokira. */
+internal fun needsDecision(item: ShoppingItemMatchResultDto): Boolean =
+    item.blocksOptimization ||
+        item.matchingStatus == ShoppingItemMatchingStatusDto.NEEDS_CONFIRMATION
+
+internal fun notFound(item: ShoppingItemMatchResultDto): Boolean =
+    !needsDecision(item) && !isFound(item)
 
 @StringRes
 private fun statusText(status: ShoppingItemMatchingStatusDto): Int = when (status) {

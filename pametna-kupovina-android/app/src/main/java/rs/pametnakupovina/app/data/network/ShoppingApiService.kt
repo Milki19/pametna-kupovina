@@ -168,6 +168,16 @@ interface ShoppingApiService {
         @Query("includeProductsWithoutBarcode") includeProductsWithoutBarcode: Boolean = true
     ): ShoppingItemMatchResultDto
 
+    /** „Neka aplikacija izabere": vrsta i količina iz naziva, ostale reči ne smetaju. */
+    @PUT("api/v1/shopping-lists/{listId}/items/{itemId}/any-of-kind")
+    suspend fun useAnyOfTheKind(
+        @Path("listId") listId: Long,
+        @Path("itemId") itemId: Long
+    ): ShoppingListItemDto
+
+    @GET("api/v1/retailers")
+    suspend fun getRetailers(): List<RetailerDto>
+
     @PUT("api/v1/shopping-lists/{listId}/items/{itemId}/match")
     suspend fun resolveShoppingItemMatch(
         @Path("listId") listId: Long,

@@ -55,6 +55,16 @@ class SalesViewModel @Inject constructor(
     private var near: Coordinates? = null
     private var nearAsked = false
     private var loadJob: Job? = null
+    private var unlocatedChains: Set<String>? = null
+
+    private suspend fun chainsWithoutAddresses(): Set<String> =
+        unlocatedChains ?: try {
+            repository.chainsWithoutAddresses().also { unlocatedChains = it }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            emptySet()
+        }
 
     init {
         load()
@@ -103,10 +113,16 @@ class SalesViewModel @Inject constructor(
                     )
                 )
                 syncScheduler.enqueue()
+                // Lanac bez adresa prodavnica nikad nije u planu: to se kaže odmah.
+                val withoutAddresses = item.retailerCode in chainsWithoutAddresses()
                 _uiState.update {
                     it.copy(
                         added = it.added + item.productFamilyId,
-                        notice = uiText(R.string.list_notice_added, item.name)
+                        notice = if (withoutAddresses) {
+                            uiText(R.string.sale_added_chain_without_addresses, item.name, item.retailerName)
+                        } else {
+                            uiText(R.string.list_notice_added, item.name)
+                        }
                     )
                 }
             } catch (error: CancellationException) {
