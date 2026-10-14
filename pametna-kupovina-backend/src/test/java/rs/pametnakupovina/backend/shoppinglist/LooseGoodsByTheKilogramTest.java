@@ -27,8 +27,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Apples and ćevapi from the counter have no size: the chain prices them by
- * the kilogram. With an amount on the list each kilogram counts as a pack, so
- * "jabuke 2kg" can be two kilograms of loose apples. A piece the chain also
+ * the kilogram. With an amount on the list they are weighed out, so
+ * "jabuke 2kg" can be two kilograms of loose apples and "ćevapi 1,5kg" one
+ * and a half. A piece the chain also
  * writes in kilograms is not: its price list gives another price per
  * kilogram, or its name says "komad".
  */
@@ -204,8 +205,13 @@ class LooseGoodsByTheKilogramTest {
             assertThat(cevapi.lineTotal()).isEqualByComparingTo("2099.97");
         });
         assertThat(offers.get(2).available()).isFalse();
-        // Whole kilograms only: two would be a third more than 1,5 kg.
-        assertThat(offers.get(3).available()).isFalse();
+        // Loose goods are weighed out: 1,5 kg is 1,5 kg (V125).
+        assertThat(offers.get(3)).satisfies(cevapi -> {
+            assertThat(cevapi.productName()).isEqualTo(CEVAPI);
+            assertThat(cevapi.purchaseQuantity().packages()).isEqualByComparingTo("1.5");
+            assertThat(cevapi.purchaseQuantity().extraAmount()).isEqualByComparingTo("0");
+            assertThat(cevapi.lineTotal()).isEqualByComparingTo("1049.99");
+        });
         // Without an amount nothing changes: the bag with a size comes first.
         assertThat(offers.get(4).productName()).isEqualTo(APPLE_BAG);
     }
