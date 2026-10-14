@@ -1,6 +1,7 @@
 package rs.pametnakupovina.backend.product;
 
 import org.springframework.stereotype.Service;
+import rs.pametnakupovina.backend.FieldRefusal;
 import rs.pametnakupovina.backend.matching.EanValidator;
 import rs.pametnakupovina.backend.matching.ParsedQuantity;
 import rs.pametnakupovina.backend.matching.ProductMatchScorer;
@@ -23,6 +24,7 @@ public class CanonicalProductSearchService {
 
     private static final int MAX_QUERY_LENGTH = 500;
     private static final int MAX_LIMIT = 100;
+    private static final int MIN_SEARCH_LETTERS = 2;
     private static final BigDecimal EXACT_EAN_SCORE =
             new BigDecimal("1.0000");
     private static final int FAR_AWAY = 4;
@@ -90,6 +92,7 @@ public class CanonicalProductSearchService {
             boolean onSale
     ) {
         validate(query, page, limit);
+        requireSearchableLength(query);
 
         String strippedQuery = query.strip();
         RankedQuery ranked = rank(query, includeWithoutPrice, near);
@@ -309,6 +312,24 @@ public class CanonicalProductSearchService {
                         || row.hasUsablePrice()
                         || row.exactEanMatch())
                 .toList();
+    }
+
+    /**
+     * One letter matched nearly the whole catalogue and took seven seconds,
+     * so a search asks for two letters or digits. Matching a list item
+     * (`candidates`) keeps working on whatever the item is called.
+     */
+    private static void requireSearchableLength(String query) {
+        long letters = query.codePoints()
+                .filter(Character::isLetterOrDigit)
+                .limit(MIN_SEARCH_LETTERS)
+                .count();
+        if (letters < MIN_SEARCH_LETTERS) {
+            throw new FieldRefusal(
+                    "query",
+                    "Upiši bar " + MIN_SEARCH_LETTERS + " slova ili broja."
+            );
+        }
     }
 
     private void validate(String query, int page, int limit) {

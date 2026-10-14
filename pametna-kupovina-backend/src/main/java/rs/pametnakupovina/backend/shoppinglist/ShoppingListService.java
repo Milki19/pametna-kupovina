@@ -4,9 +4,11 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import rs.pametnakupovina.backend.FieldRefusal;
 import rs.pametnakupovina.backend.matching.ProductNameNormalizer;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -16,6 +18,13 @@ public class ShoppingListService {
 
     private static final int MAX_PASTED_TEXT_LENGTH = 50_000;
     private static final int MAX_PASTED_ITEM_COUNT = 200;
+    // "999999x hleb" priced a list at 39 million; nobody buys a thousand
+    // of one thing in a shop, and a hundredth is the smallest amount typed.
+    private static final BigDecimal MIN_QUANTITY = new BigDecimal("0.01");
+    private static final BigDecimal MAX_QUANTITY = new BigDecimal("999");
+    // What a person types fits a line; a product picked from the catalogue
+    // keeps its own, sometimes longer, name.
+    private static final int MAX_TYPED_NAME_LENGTH = 80;
     private static final Set<String> SUPPORTED_BASE_UNITS =
             Set.of("g", "ml", "piece");
 
@@ -108,9 +117,8 @@ public class ShoppingListService {
     ) {
         requireList(listId, accountId);
 
-        String name = requiredText(
-                request == null ? null : request.name(),
-                "Naziv artikla"
+        String name = requiredItemName(
+                request == null ? null : request.name()
         );
 
         if (name.length() > 500) {
@@ -147,16 +155,18 @@ public class ShoppingListService {
             );
         }
 
+        if (barcode == null
+                && canonicalProductId == null
+                && productFamilyId == null) {
+            validateTypedName(name);
+        }
+
         BigDecimal quantity =
                 request == null || request.quantity() == null
                         ? BigDecimal.ONE
                         : request.quantity();
 
-        if (quantity.compareTo(BigDecimal.ZERO) <= 0) {
-            throw badRequest(
-                    "Količina mora biti veća od nule"
-            );
-        }
+        validateQuantity(quantity);
 
         ShoppingItemRule matchingRule =
                 request == null || request.matchingRule() == null
@@ -244,10 +254,31 @@ public class ShoppingListService {
             );
         }
 
-        List<ValidatedShoppingListItem> validatedItems =
-                parsedText.items().stream()
-                        .map(this::validateParsedItem)
-                        .toList();
+        List<ValidatedShoppingListItem> validatedItems = new ArrayList<>();
+        List<PasteShoppingListItemsResponse.RejectedLine> rejectedLines =
+                new ArrayList<>();
+
+        for (int index = 0; index < parsedText.items().size(); index++) {
+            ParsedShoppingListLine line = parsedText.items().get(index);
+            try {
+                validatedItems.add(validateParsedItem(line));
+            } catch (ResponseStatusException refusal) {
+                rejectedLines.add(new PasteShoppingListItemsResponse.RejectedLine(
+                        parsedText.lineNumber(index),
+                        line.rawInput() == null ? "" : line.rawInput().trim(),
+                        refusal instanceof FieldRefusal field
+                                ? field.getField()
+                                : null,
+                        refusal.getReason()
+                ));
+            }
+        }
+
+        // Nothing to add: the refusal carries the reason, so a client that
+        // only knows how to show an error still says what is wrong.
+        if (validatedItems.isEmpty()) {
+            throw new FieldRefusal("text", nothingAdded(rejectedLines));
+        }
 
         List<ShoppingListItemResponse> createdItems =
                 validatedItems.stream()
@@ -276,7 +307,8 @@ public class ShoppingListService {
         return new PasteShoppingListItemsResponse(
                 createdItems.size(),
                 parsedText.ignoredBlankLineCount(),
-                createdItems
+                createdItems,
+                List.copyOf(rejectedLines)
         );
     }
 
@@ -315,9 +347,8 @@ public class ShoppingListService {
     ) {
         requireList(listId, accountId);
 
-        String name = requiredText(
-                request == null ? null : request.name(),
-                "Naziv artikla"
+        String name = requiredItemName(
+                request == null ? null : request.name()
         );
 
         if (name.length() > 500) {
@@ -354,16 +385,18 @@ public class ShoppingListService {
             );
         }
 
+        if (barcode == null
+                && canonicalProductId == null
+                && productFamilyId == null) {
+            validateTypedName(name);
+        }
+
         BigDecimal quantity =
                 request == null || request.quantity() == null
                         ? BigDecimal.ONE
                         : request.quantity();
 
-        if (quantity.compareTo(BigDecimal.ZERO) <= 0) {
-            throw badRequest(
-                    "Količina mora biti veća od nule"
-            );
-        }
+        validateQuantity(quantity);
 
         ShoppingItemRule matchingRule =
                 request == null || request.matchingRule() == null
@@ -738,7 +771,7 @@ public class ShoppingListService {
     private ValidatedShoppingListItem validateParsedItem(
             ParsedShoppingListLine item
     ) {
-        String name = requiredText(item.name(), "Naziv artikla");
+        String name = requiredItemName(item.name());
 
         if (name.length() > 500) {
             throw badRequest(
@@ -757,11 +790,7 @@ public class ShoppingListService {
             );
         }
 
-        if (item.quantity().compareTo(BigDecimal.ZERO) <= 0) {
-            throw badRequest(
-                    "Količina mora biti veća od nule"
-            );
-        }
+        validateQuantity(item.quantity());
 
         BigDecimal normalizedQuantity =
                 item.quantity().stripTrailingZeros();
@@ -781,11 +810,8 @@ public class ShoppingListService {
         ShoppingLineInterpreter.InterpretedLine line =
                 lineInterpreter.interpret(item);
 
-        if (line.name().length() > 500) {
-            throw badRequest(
-                    "Naziv artikla može imati najviše 500 karaktera"
-            );
-        }
+        validateTypedName(line.name());
+        validateQuantity(line.quantity());
 
         return new ValidatedShoppingListItem(
                 line.name(),
@@ -799,6 +825,53 @@ public class ShoppingListService {
                 line.baseUnit(),
                 line.requiredBrand()
         );
+    }
+
+    private void validateQuantity(BigDecimal quantity) {
+        if (quantity.compareTo(MIN_QUANTITY) < 0
+                || quantity.compareTo(MAX_QUANTITY) > 0) {
+            throw new FieldRefusal(
+                    "quantity",
+                    "Količina mora biti od 0,01 do 999."
+            );
+        }
+    }
+
+    private void validateTypedName(String name) {
+        if (name.length() > MAX_TYPED_NAME_LENGTH) {
+            throw new FieldRefusal(
+                    "name",
+                    "Naziv može imati najviše "
+                            + MAX_TYPED_NAME_LENGTH
+                            + " znakova."
+            );
+        }
+    }
+
+    private String requiredItemName(String value) {
+        String name = nullableText(value);
+
+        if (name == null) {
+            throw new FieldRefusal(
+                    "name",
+                    "Naziv artikla ne sme biti prazan"
+            );
+        }
+
+        return name;
+    }
+
+    private static String nothingAdded(
+            List<PasteShoppingListItemsResponse.RejectedLine> rejectedLines
+    ) {
+        PasteShoppingListItemsResponse.RejectedLine first =
+                rejectedLines.getFirst();
+        if (rejectedLines.size() == 1) {
+            return first.message();
+        }
+        return "Nijedan red nije dodat. Red " + first.lineNumber()
+                + " („" + first.text() + "“): " + first.message()
+                + " Neispravnih redova: " + rejectedLines.size() + ".";
     }
 
     private ResponseStatusException listNotFound(Long listId) {

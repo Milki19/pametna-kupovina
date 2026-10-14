@@ -85,9 +85,12 @@ public class ShoppingListTextParser {
         }
 
         List<ParsedShoppingListLine> items = new ArrayList<>();
+        List<Integer> lineNumbers = new ArrayList<>();
         int blankLineCount = 0;
+        int lineNumber = 0;
 
         for (String rawLine : text.split("\\R", -1)) {
+            lineNumber++;
             if (rawLine.isBlank()) {
                 blankLineCount++;
                 continue;
@@ -95,12 +98,14 @@ public class ShoppingListTextParser {
 
             for (String part : itemsOnLine(rawLine)) {
                 items.add(parseLine(part));
+                lineNumbers.add(lineNumber);
             }
         }
 
         return new ParsedShoppingListText(
                 List.copyOf(items),
-                blankLineCount
+                blankLineCount,
+                List.copyOf(lineNumbers)
         );
     }
 

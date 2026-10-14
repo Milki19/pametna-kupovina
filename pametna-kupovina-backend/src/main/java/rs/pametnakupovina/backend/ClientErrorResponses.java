@@ -31,6 +31,9 @@ public class ClientErrorResponses {
         if (status.is4xxClientError() && exception.getReason() != null) {
             body.put("message", exception.getReason());
         }
+        if (exception instanceof FieldRefusal refusal) {
+            body.put("field", refusal.getField());
+        }
 
         return ResponseEntity.status(status)
                 .headers(exception.getHeaders())
