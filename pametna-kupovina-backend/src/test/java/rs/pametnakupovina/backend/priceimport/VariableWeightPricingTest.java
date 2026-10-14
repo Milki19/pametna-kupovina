@@ -18,6 +18,7 @@ import java.io.OutputStream;
 import java.math.BigDecimal;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.sql.Types;
 import java.util.concurrent.Executors;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -126,5 +127,58 @@ class VariableWeightPricingTest {
         // Exactly one unit of measure: nothing to scale either way.
         assertThat(priceOf("2604065701014"))
                 .isEqualByComparingTo("99.99");
+    }
+
+    private Boolean needsCheck(String regular, String discounted, String typical) {
+        return jdbcClient.sql("SELECT app.price_needs_check(?::NUMERIC, ?::NUMERIC, ?::NUMERIC)")
+                .param(1, regular, Types.VARCHAR)
+                .param(2, discounted, Types.VARCHAR)
+                .param(3, typical, Types.VARCHAR)
+                .query(Boolean.class)
+                .single();
+    }
+
+    private BigDecimal factor(String name, String price, String grams, String typical) {
+        return jdbcClient.sql("""
+                        SELECT app.price_per_unit_factor(
+                            ?, ?::NUMERIC, ?::NUMERIC, 'g', ?::NUMERIC
+                        )
+                        """)
+                .param(1, name, Types.VARCHAR)
+                .param(2, price, Types.VARCHAR)
+                .param(3, grams, Types.VARCHAR)
+                .param(4, typical, Types.VARCHAR)
+                .query(BigDecimal.class)
+                .list()
+                .getFirst();
+    }
+
+    @Test
+    void aSaleTooDeepToBelieveIsCheckedFirst() {
+        // Soap 96 -> 10: over 80% off.
+        assertThat(needsCheck("96", "10", null)).isTrue();
+        // Under half of what it typically costs.
+        assertThat(needsCheck("100", "40", "100")).isTrue();
+        // A real sale.
+        assertThat(needsCheck("100", "55", "100")).isFalse();
+        assertThat(needsCheck("100", "25", null)).isFalse();
+        // Under a tenth the sale is a typo and the regular price stands (V115).
+        assertThat(needsCheck("96", "9", null)).isFalse();
+    }
+
+    @Test
+    void aCcaPieceQuotedPerKilogramIsReadAgainstTheMarket() {
+        // 899,99 a kilogram of a 3,3 kg cheese whose piece typically costs 4.500.
+        assertThat(factor("paladin edamer cca 3 3kg", "899.99", "3300", "4500"))
+                .isEqualByComparingTo("3.3");
+        // Already the piece's price.
+        assertThat(factor("paladin edamer cca 3 3kg", "2969.97", "3300", "4500"))
+                .isNull();
+        // A bag of fixed weight is not guessed at; it stays doubted (V72).
+        assertThat(factor("secer kristal 25kg", "89.90", "25000", "2414.50"))
+                .isNull();
+        // A price per tablet or bottle is far off either way.
+        assertThat(factor("sir cca 3kg", "24.90", "3000", "2400"))
+                .isNull();
     }
 }

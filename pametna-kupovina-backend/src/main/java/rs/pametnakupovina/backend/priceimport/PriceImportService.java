@@ -677,6 +677,22 @@ public class PriceImportService {
                 )
         );
 
+        // A shop's list quotes goods of variable weight per kilogram just as
+        // the chain's list does, so both read the same piece price.
+        BigDecimal packageFactor = pricedPerUnitOfMeasureFactor(
+                normalizedProductName,
+                unitOfMeasure,
+                quantityValue,
+                baseUnit,
+                regularPrice,
+                unitPrice
+        );
+
+        if (packageFactor != null) {
+            regularPrice = scalePrice(regularPrice, packageFactor);
+            discountedPrice = scalePrice(discountedPrice, packageFactor);
+        }
+
         return new PriceCsvRow(
                 sourceProductKey,
                 null,
@@ -1234,15 +1250,28 @@ public class PriceImportService {
 
         assignControlledCategory(retailerProductId);
 
+        BigDecimal regularPrice = row.regularPrice();
+        BigDecimal discountedPrice = row.discountedPrice();
+        BigDecimal marketFactor = pricedPerUnitAgainstMarketFactor(
+                retailerProductId,
+                row,
+                regularPrice != null ? regularPrice : discountedPrice
+        );
+
+        if (marketFactor != null) {
+            regularPrice = scalePrice(regularPrice, marketFactor);
+            discountedPrice = scalePrice(discountedPrice, marketFactor);
+        }
+
         savePriceSnapshot(
                 retailerProductId,
                 importRunId,
                 row.retailerFormatName(),
                 row.storeId(),
                 row.priceDate(),
-                row.regularPrice(),
+                regularPrice,
                 row.unitPrice(),
-                row.discountedPrice(),
+                discountedPrice,
                 row.discountStartDate(),
                 row.discountEndDate(),
                 row.vatRate()
@@ -2301,6 +2330,42 @@ public class PriceImportService {
         return packageUnits.compareTo(BigDecimal.ONE) == 0
                 ? null
                 : packageUnits;
+    }
+
+    /**
+     * A "cca" piece quoted per kilogram without the hint the price columns
+     * give above (a 3,3 kg edamer at 899,99) is told apart by the market:
+     * too cheap to be believed as the piece's price, but a plausible one
+     * once multiplied by its weight (V123). Only such pieces of 1,5 kg and
+     * more are asked, so the database sees few of the rows.
+     *
+     * @return how many units of measure the quoted price is to be multiplied
+     *         by, or null when it already is the piece's price.
+     */
+    private BigDecimal pricedPerUnitAgainstMarketFactor(
+            Long retailerProductId,
+            PriceCsvRow row,
+            BigDecimal quotedPrice
+    ) {
+        if (quotedPrice == null || row.normalizedProductName() == null
+                || !VARIABLE_WEIGHT_PATTERN.matcher(
+                        row.normalizedProductName()
+                ).find()
+                || row.quantityValue() == null
+                || !("g".equals(row.baseUnit()) || "ml".equals(row.baseUnit()))
+                || row.quantityValue().compareTo(BigDecimal.valueOf(1500)) < 0) {
+            return null;
+        }
+
+        List<BigDecimal> factor = jdbcClient.sql(
+                        "SELECT app.price_per_unit_factor(?, ?)"
+                )
+                .param(1, retailerProductId)
+                .param(2, quotedPrice, Types.NUMERIC)
+                .query(BigDecimal.class)
+                .list();
+
+        return factor.isEmpty() ? null : factor.get(0);
     }
 
     private BigDecimal scalePrice(BigDecimal price, BigDecimal factor) {
