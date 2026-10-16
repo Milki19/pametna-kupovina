@@ -79,6 +79,15 @@ public class PriceImportService {
                             + "pecenica|kulen|kobasica|salama|mortadela|panceta|"
                             + "prsuta|meso|file|vrat|kare|but|plecka|rebra)\\b"
             );
+    // Hard cheese is cut from the block and sold by the kilogram; the chains
+    // that write no "cca" quote its block per kilogram too (V128, as
+    // app.per_kilogram_factor).
+    private static final java.util.regex.Pattern BLOCK_CHEESE_PATTERN =
+            java.util.regex.Pattern.compile(
+                    "\\b(gauda|edamer|edam|trapist|tilsiter|kackavalj|ementaler|"
+                            + "emmentaler|parmezan|parmigiano|grana|gorgonzola|"
+                            + "pecorino|cheddar)\\b"
+            );
     private static final java.util.regex.Pattern PET_FOOD_PATTERN =
             java.util.regex.Pattern.compile(
                     "\\b(hrana|pas|psa|pse|macke|macka|granule|briketi)\\b"
@@ -2330,7 +2339,9 @@ public class PriceImportService {
      * price columns tell how it was quoted: the unit price repeating the
      * price (per kilogram), or, for a "cca" piece, the price being the unit
      * price times the weight (the piece). A name with "cca" and no unit price
-     * is per kilogram. Anything else is left as the chain wrote it (V127).
+     * is per kilogram, and so is a block of hard cheese without "cca" whose
+     * unit price is missing or the price over the weight (V128). Anything
+     * else is left as the chain wrote it (V127).
      *
      * @return what the quoted prices are multiplied by to be prices of one
      *         kilogram, or null when the product is not such a piece.
@@ -2353,9 +2364,11 @@ public class PriceImportService {
         }
 
         boolean cca = VARIABLE_WEIGHT_PATTERN.matcher(normalizedProductName).find();
+        boolean blockCheese = !cca
+                && BLOCK_CHEESE_PATTERN.matcher(normalizedProductName).find();
 
         if (unitPrice == null || unitPrice.signum() <= 0) {
-            return cca ? BigDecimal.ONE : null;
+            return cca || blockCheese ? BigDecimal.ONE : null;
         }
 
         String unit = unitOfMeasure == null
@@ -2367,18 +2380,28 @@ public class PriceImportService {
             return BigDecimal.ONE;
         }
 
+        BigDecimal piecePrice = unitPrice.multiply(quantityValue)
+                .divide(ONE_KILOGRAM, 2, RoundingMode.HALF_UP);
+        BigDecimal tolerance = quotedPrice.multiply(new BigDecimal("0.01"))
+                .max(BigDecimal.ONE);
+        boolean unitPriceIsPriceOverWeight =
+                piecePrice.subtract(quotedPrice).abs().compareTo(tolerance) <= 0;
+
+        // A block of hard cheese without "cca" is quoted per kilogram: the
+        // unit price is the chain's own price over the weight (V128).
+        if (blockCheese) {
+            return unitPriceIsPriceOverWeight || unitPrice.compareTo(quotedPrice) == 0
+                    ? BigDecimal.ONE
+                    : null;
+        }
+
         // Without "cca" a unit price of the price over the weight is how
         // most chains fill the column, whatever the price means.
         if (!cca) {
             return null;
         }
 
-        BigDecimal piecePrice = unitPrice.multiply(quantityValue)
-                .divide(ONE_KILOGRAM, 2, RoundingMode.HALF_UP);
-        BigDecimal tolerance = quotedPrice.multiply(new BigDecimal("0.01"))
-                .max(BigDecimal.ONE);
-
-        return piecePrice.subtract(quotedPrice).abs().compareTo(tolerance) <= 0
+        return unitPriceIsPriceOverWeight
                 ? ONE_KILOGRAM.divide(quantityValue, 6, RoundingMode.HALF_UP)
                 : null;
     }

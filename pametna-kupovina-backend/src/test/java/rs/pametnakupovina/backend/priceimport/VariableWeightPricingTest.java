@@ -178,9 +178,19 @@ class VariableWeightPricingTest {
         // Columns that say neither are left as written.
         assertThat(perKilogram("sir gauda blok 3 3 kg", "3300", "4500.00", "900.00"))
                 .isNull();
-        // Without "cca" a unit price of the price over the weight proves
-        // nothing: most chains fill the column that way.
+        // A block of hard cheese without "cca" is quoted per kilogram: RIČ
+        // writes no unit price, others the price over the weight (V128).
+        assertThat(perKilogram("paladin gauda blok48 3 3kg silbo", "3300", "1569.99", null))
+                .isEqualByComparingTo("1");
+        assertThat(perKilogram("paladin tilsiter blok 45 mm 3 3kg", "3300", "1749.99", "0"))
+                .isEqualByComparingTo("1");
         assertThat(perKilogram("kackavalj paladin tilsiter 3 3 kg", "3300", "1599.99", "484.84"))
+                .isEqualByComparingTo("1");
+        // White cheese and meat without "cca": a unit price of the price over
+        // the weight proves nothing, most chains fill the column that way.
+        assertThat(perKilogram("sir beli kravlji kanta 4 5 kg", "4500", "1899.99", "422.22"))
+                .isNull();
+        assertThat(perKilogram("sunka praska 3 kg", "3000", "2400.00", "800.00"))
                 .isNull();
         // Pet food is not cut by weight.
         assertThat(perKilogram("aro hrana pas sunka cca 10 kg", "10000", "120.00", "120.00"))
