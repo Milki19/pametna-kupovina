@@ -439,7 +439,9 @@ details.list-row > .row { padding: 2px 0; gap: 8px; }
   .btn-row { flex-wrap: wrap; }
   .btn-row > .btn { flex: 1 1 auto; }
   .theme-choice { grid-template-columns: 1fr; }
-  /* Prodavnice, razdaljina i vreme jedno ispod drugog: tri kolone ne staju. */
+  /* Tri plana (jedna stanica, najbolje ukupno, najjeftinija korpa) i
+   * prodavnice, razdaljina i vreme idu jedno ispod drugog: tri kolone ne staju. */
+  .scenarios { flex-direction: column; }
   .stats { flex-direction: column; padding: 4px 12px; }
   .stats > div { min-width: 0; flex-direction: row; gap: 8px; padding: 6px 0; text-align: left; }
   .stats b { white-space: nowrap; }
