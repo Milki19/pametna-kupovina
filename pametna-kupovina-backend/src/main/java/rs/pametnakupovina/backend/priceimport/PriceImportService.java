@@ -89,6 +89,12 @@ public class PriceImportService {
                             + "parmezan|parmigiano|grana|gorgonzola|pecorino|"
                             + "cheddar)\\b"
             );
+    // Food made with cheese is not a block of it (V128).
+    private static final java.util.regex.Pattern MADE_WITH_CHEESE_PATTERN =
+            java.util.regex.Pattern.compile(
+                    "\\b(rolnice|rolnica|burek|pita|pite|kroasan|sendvic|lisnato|"
+                            + "pogaca|kiflice|pljeskavica|pohovan|pohovani)\\b"
+            );
     private static final java.util.regex.Pattern PET_FOOD_PATTERN =
             java.util.regex.Pattern.compile(
                     "\\b(hrana|pas|psa|pse|macke|macka|granule|briketi)\\b"
@@ -2368,7 +2374,8 @@ public class PriceImportService {
 
         boolean cca = VARIABLE_WEIGHT_PATTERN.matcher(normalizedProductName).find();
         boolean blockCheese = !cca
-                && BLOCK_CHEESE_PATTERN.matcher(normalizedProductName).find();
+                && BLOCK_CHEESE_PATTERN.matcher(normalizedProductName).find()
+                && !MADE_WITH_CHEESE_PATTERN.matcher(normalizedProductName).find();
 
         if (unitPrice == null || unitPrice.signum() <= 0) {
             return cca || blockCheese ? BigDecimal.ONE : null;
