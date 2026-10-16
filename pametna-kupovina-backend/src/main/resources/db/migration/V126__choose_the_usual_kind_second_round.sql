@@ -3,7 +3,9 @@
 -- * "kafa 200 g" je u IDEA-i postala „KAFA CAR 100G ALL CAFFE“. U drugim
 --   lancima se isti proizvod zove „proizvod na bazi kafe“; All Caffe nije kafa.
 -- * "prašak za veš" je postao „OM DUEL SUNKISSED 1.6L“, omekšivač. „OM“ je
---   omekšivač, a prašak koji se meri u litrima je tečni deterdžent.
+--   omekšivač, a prašak koji se meri u litrima je tečni deterdžent. Lenor,
+--   Silan i Ornel ostaju: „Ariel Touch of Lenor“ i „Persil Expert Silan“ su
+--   prašak sa mirisom tog omekšivača (proba na kopiji 15.10.).
 -- * "toalet papir" je postao jedna rolna („1/1“) ili vlažni papir („VL“).
 --   Broj rolni iz „10/1“ čita StoreShoppingOfferRepository.
 -- * "sir 500 g" je postao urda, "maslac" margarin.
@@ -24,7 +26,7 @@ WHERE type.id = rule.product_type_id
 -- Prašak za veš -------------------------------------------------------------
 
 UPDATE app.product_type_rule AS rule
-SET exclude_pattern = rule.exclude_pattern || '|\m(om|omek[a-z]*|softener|lenor|silan|ornel)\M',
+SET exclude_pattern = rule.exclude_pattern || '|\m(om|omek[a-z]*|softener)\M',
     updated_at = NOW()
 FROM app.product_type AS type
 WHERE type.id = rule.product_type_id
