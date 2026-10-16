@@ -157,6 +157,31 @@ class ProductCheckStateTest {
         assertThat(again.flexibleConstraints().targetQuantity()).isEqualByComparingTo("1000");
     }
 
+    /**
+     * Uživo 16.10.: „1 kg” iz teksta mora u količinu i kad stavka stigne kao
+     * „Bilo koji” sa Androida, ne samo preko „Nalepi spisak”.
+     */
+    @Test
+    void theAmountInTheTextIsReadOnEveryWayAnItemIsAdded() {
+        var list = shoppingListService.create(new CreateShoppingListRequest("Količina"), callers.account(TOKEN));
+        ShoppingListItemResponse pasted = shoppingListService.addPastedItems(
+                list.id(), callers.account(TOKEN),
+                new PasteShoppingListItemsRequest("BRAŠNO T-400 1 kg")
+        ).items().getFirst();
+        ShoppingListItemResponse added = shoppingListService.addItem(
+                list.id(), callers.account(TOKEN),
+                new AddShoppingListItemRequest("BRAŠNO T-400 1 kg", "BRAŠNO T-400 1 kg", null, BigDecimal.ONE,
+                        ShoppingItemRule.FLEXIBLE_CATEGORY,
+                        new FlexibleItemConstraints("BRAŠNO T-400 1 kg", null, null, null, null)));
+
+        for (ShoppingListItemResponse flour : java.util.List.of(pasted, added)) {
+            assertThat(flour.matchingRule()).isEqualTo(ShoppingItemRule.FLEXIBLE_CATEGORY);
+            assertThat(flour.quantity()).isEqualByComparingTo("1");
+            assertThat(flour.flexibleConstraints().requiredBaseUnit()).isEqualTo("g");
+            assertThat(flour.flexibleConstraints().targetQuantity()).isEqualByComparingTo("1000");
+        }
+    }
+
     @Test
     void anUnknownKindIsFoundExactlyWhenThePlanCanPriceIt() {
         chainWithoutAddresses();
