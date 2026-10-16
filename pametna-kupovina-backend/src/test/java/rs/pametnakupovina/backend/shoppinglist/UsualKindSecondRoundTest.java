@@ -59,6 +59,9 @@ class UsualKindSecondRoundTest {
     private static final String SOFTENER = "OM DUEL SUNKISSED 1.6L";
     private static final String LIQUID_DETERGENT = "Merix 2l";
     private static final String POWDER = "Duel prasak za ves 3kg";
+    private static final String LENOR_SCENTED = "ARIEL TOUCH OF LENOR 70PRANJA 5,25KG";
+    private static final String SILAN_SCENTED = "DET PERSIL POW EXP SILAN 72WL 5.4KG";
+    private static final String ORNEL_DETERGENT = "DETERDŽENT ZA VEŠ CALMING ORNEL 4KG";
     private static final String ONE_ROLL = "Toalet papir 1/1";
     private static final String WET_PAPER = "TOALET PAPIR VL KIDS 60/1";
     private static final String TEN_ROLLS = "Toalet papir Perfex 10/1";
@@ -79,6 +82,9 @@ class UsualKindSecondRoundTest {
             + row(SOFTENER, "299,99")
             + row(LIQUID_DETERGENT, "499,99")
             + row(POWDER, "899,99")
+            + row(LENOR_SCENTED, "1999,99")
+            + row(SILAN_SCENTED, "1899,99")
+            + row(ORNEL_DETERGENT, "1199,99")
             + row(ONE_ROLL, "39,99")
             + row(WET_PAPER, "129,99")
             + row(TEN_ROLLS, "349,99")
@@ -196,6 +202,10 @@ class UsualKindSecondRoundTest {
         assertThat(typeOf(WET_PAPER)).isNull();
         assertThat(typeOf(MARGARINE)).isNull();
         assertThat(typeOf(POWDER)).isEqualTo("LAUNDRY_DETERGENT");
+        // Powder that smells of a softener is still powder.
+        assertThat(typeOf(LENOR_SCENTED)).isEqualTo("LAUNDRY_DETERGENT");
+        assertThat(typeOf(SILAN_SCENTED)).isEqualTo("LAUNDRY_DETERGENT");
+        assertThat(typeOf(ORNEL_DETERGENT)).isEqualTo("LAUNDRY_DETERGENT");
         assertThat(typeOf(TEN_ROLLS)).isEqualTo("TOILET_PAPER");
         assertThat(typeOf(BUTTER)).isEqualTo("BUTTER");
         assertThat(typeOf(DOG_FOOD)).isNull();
