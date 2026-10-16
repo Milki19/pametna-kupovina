@@ -819,6 +819,15 @@ private fun StoreSection(
     requestedDate: String,
     onWrongProduct: (RecommendationItemDto) -> Unit
 ) {
+    // Sa krupnim slovima iznos ide ispod naziva prodavnice, kao kod scenarija.
+    val largeFont = LocalDensity.current.fontScale >= 1.5f
+    val storeTotal: @Composable () -> Unit = {
+        Text(
+            money(items.sumOf { it.lineTotal ?: 0.0 }),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary
+        )
+    }
     GlassCard(
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -830,6 +839,7 @@ private fun StoreSection(
                 StopBadge(store.stopOrder)
                 Column(modifier = Modifier.weight(1f)) {
                     Text(store.retailerName, style = MaterialTheme.typography.titleMedium)
+                    if (largeFont) storeTotal()
                     Text(
                         storeAddress(store),
                         style = MaterialTheme.typography.bodyMedium,
@@ -845,11 +855,7 @@ private fun StoreSection(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Text(
-                    money(items.sumOf { it.lineTotal ?: 0.0 }),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
+                if (!largeFont) storeTotal()
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             if (items.isEmpty()) {
@@ -1035,6 +1041,7 @@ internal fun UnlocatedOptionsSection(
         }
         var showAll by rememberSaveable { mutableStateOf(false) }
         val shown = if (showAll) options else options.take(UNLOCATED_SHOWN)
+        val largeFont = LocalDensity.current.fontScale >= 1.5f
         GlassCard(
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -1047,17 +1054,24 @@ internal fun UnlocatedOptionsSection(
                         modifier = Modifier.padding(AppSpacing.lg),
                         verticalArrangement = Arrangement.spacedBy(AppSpacing.xs)
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                option.retailerName,
-                                style = MaterialTheme.typography.titleMedium,
-                                modifier = Modifier.weight(1f)
-                            )
+                        // Sa krupnim slovima raspon cene ide ispod naziva, da se naziv ne lomi slovo po slovo.
+                        if (largeFont) {
+                            Text(option.retailerName, style = MaterialTheme.typography.titleMedium)
                             Text(basketRange(option), style = MaterialTheme.typography.titleMedium)
+                        } else {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    option.retailerName,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Text(basketRange(option), style = MaterialTheme.typography.titleMedium)
+                            }
                         }
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm)
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm),
+                            verticalArrangement = Arrangement.spacedBy(AppSpacing.xs),
+                            itemVerticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
                                 pluralStringResource(
