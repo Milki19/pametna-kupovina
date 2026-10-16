@@ -1039,6 +1039,11 @@ public class ProductCatalogMaintenanceService {
         jdbcClient.sql("SELECT app.refresh_product_merge_suggestions()")
                 .query((resultSet, rowNumber) -> true)
                 .single();
+        // A block of one brand, kind and fat of hard cheese is one product
+        // under any name; the next import of a chain applies it (V130).
+        jdbcClient.sql("SELECT app.join_blocks_of_one_cheese()")
+                .query((resultSet, rowNumber) -> true)
+                .single();
     }
 
     private ProductCatalogRefreshResult readResult(
