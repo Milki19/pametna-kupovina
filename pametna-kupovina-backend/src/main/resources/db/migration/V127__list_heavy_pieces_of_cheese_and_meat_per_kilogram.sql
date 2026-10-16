@@ -11,10 +11,15 @@
 -- A piece of 2,5 kg and more whose name says cheese, meat or "cca" is now one
 -- kilogram, wherever the chain's own columns tell how it was quoted:
 --   * the unit price repeats the price, by the kilogram: per kilogram;
---   * the price is the unit price times the weight: the piece, divided by it
---     (this also undoes the import's "cca" multiplication);
+--   * a "cca" piece whose price is the unit price times the weight: the
+--     piece, divided by it (this also undoes the import's "cca"
+--     multiplication);
 --   * "cca" and no unit price: per kilogram.
--- A product whose prices do not say either way is left as the chain wrote it.
+-- Without "cca", a unit price that is the price divided by the weight proves
+-- nothing: most chains compute it that way whatever the price means (a
+-- tilsiter block at 1.599,99 a kilogram with 484,84 "per kilogram", METRO's
+-- 4,5 kg tub of white cheese). Pet food is never cut by weight. A product
+-- whose prices do not say either way is left as the chain wrote it.
 -- The import reads new rows the same way (PriceImportService).
 --
 -- Nothing here is about one country: the weight, the words and the price
@@ -39,8 +44,9 @@ AS $$
                WHEN unit_price = quoted_price
                     AND UPPER(BTRIM(unit)) IN ('KG', 'KGR')
                    THEN 1
-               WHEN ABS(ROUND(unit_price * quantity_value / 1000, 2) - quoted_price)
-                    <= GREATEST(quoted_price * 0.01, 1)
+               WHEN normalized_name ~ '\mcca\M'
+                    AND ABS(ROUND(unit_price * quantity_value / 1000, 2) - quoted_price)
+                        <= GREATEST(quoted_price * 0.01, 1)
                    THEN ROUND(1000 / quantity_value, 6)
            END
     WHERE quoted_price > 0
@@ -51,6 +57,7 @@ AS $$
                              '|camembert|gorgonzola|pecorino|cheddar|sunka|slanina'
                              '|pecenica|kulen|kobasica|salama|mortadela|panceta'
                              '|prsuta|meso|file|vrat|kare|but|plecka|rebra)\M')
+      AND normalized_name !~ '\m(hrana|pas|psa|pse|macke|macka|granule|briketi)\M'
 $$;
 
 -- Every current price of a heavy piece, read by its own columns.

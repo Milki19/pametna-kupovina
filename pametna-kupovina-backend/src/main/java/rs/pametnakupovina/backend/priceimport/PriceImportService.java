@@ -79,6 +79,10 @@ public class PriceImportService {
                             + "pecenica|kulen|kobasica|salama|mortadela|panceta|"
                             + "prsuta|meso|file|vrat|kare|but|plecka|rebra)\\b"
             );
+    private static final java.util.regex.Pattern PET_FOOD_PATTERN =
+            java.util.regex.Pattern.compile(
+                    "\\b(hrana|pas|psa|pse|macke|macka|granule|briketi)\\b"
+            );
     private static final BigDecimal HEAVY_PIECE_GRAMS = BigDecimal.valueOf(2500);
     private static final BigDecimal ONE_KILOGRAM = BigDecimal.valueOf(1000);
     private static final DateTimeFormatter MAXI_PROMOTION_DATE_FORMAT =
@@ -2324,9 +2328,9 @@ public class PriceImportService {
      * "best price" of the piece. A heavy piece of cheese or meat is therefore
      * listed as one kilogram at the price of one kilogram, wherever the
      * price columns tell how it was quoted: the unit price repeating the
-     * price (per kilogram), or the price being the unit price times the
-     * weight (the piece). A name with "cca" and no unit price is per
-     * kilogram. Anything else is left as the chain wrote it (V127).
+     * price (per kilogram), or, for a "cca" piece, the price being the unit
+     * price times the weight (the piece). A name with "cca" and no unit price
+     * is per kilogram. Anything else is left as the chain wrote it (V127).
      *
      * @return what the quoted prices are multiplied by to be prices of one
      *         kilogram, or null when the product is not such a piece.
@@ -2343,14 +2347,15 @@ public class PriceImportService {
                 || quotedPrice == null || quotedPrice.signum() <= 0
                 || !"g".equals(baseUnit)
                 || quantityValue.compareTo(HEAVY_PIECE_GRAMS) < 0
-                || !WEIGHED_GOODS_PATTERN.matcher(normalizedProductName).find()) {
+                || !WEIGHED_GOODS_PATTERN.matcher(normalizedProductName).find()
+                || PET_FOOD_PATTERN.matcher(normalizedProductName).find()) {
             return null;
         }
 
+        boolean cca = VARIABLE_WEIGHT_PATTERN.matcher(normalizedProductName).find();
+
         if (unitPrice == null || unitPrice.signum() <= 0) {
-            return VARIABLE_WEIGHT_PATTERN.matcher(normalizedProductName).find()
-                    ? BigDecimal.ONE
-                    : null;
+            return cca ? BigDecimal.ONE : null;
         }
 
         String unit = unitOfMeasure == null
@@ -2360,6 +2365,12 @@ public class PriceImportService {
         if (unitPrice.compareTo(quotedPrice) == 0
                 && (unit.equals("KG") || unit.equals("KGR"))) {
             return BigDecimal.ONE;
+        }
+
+        // Without "cca" a unit price of the price over the weight is how
+        // most chains fill the column, whatever the price means.
+        if (!cca) {
+            return null;
         }
 
         BigDecimal piecePrice = unitPrice.multiply(quantityValue)
