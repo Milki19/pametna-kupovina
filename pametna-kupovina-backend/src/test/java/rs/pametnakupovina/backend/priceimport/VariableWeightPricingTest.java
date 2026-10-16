@@ -114,11 +114,16 @@ class VariableWeightPricingTest {
         ImportResult result = priceImportService.importPrices("VARWEIGHT");
         assertThat(result.status()).isEqualTo("SUCCEEDED");
 
-        // 571,99 a kilo over roughly 15kg, not 571,99 for the whole box.
+        // A heavy piece of meat is listed as one kilogram at 571,99, not as
+        // the 15 kg box at 571,99 (V127).
         assertThat(priceOf("2604065701011"))
-                .isEqualByComparingTo("8579.85");
+                .isEqualByComparingTo("571.99");
+        assertThat(quantityOf("2604065701011"))
+                .isEqualByComparingTo("1000");
         assertThat(priceOf("2604065701012"))
-                .isEqualByComparingTo("2095.47");
+                .isEqualByComparingTo("698.49");
+        assertThat(quantityOf("2604065701012"))
+                .isEqualByComparingTo("1000");
 
         // No "cca": the row already states what the package costs.
         assertThat(priceOf("2604065701013"))
@@ -127,6 +132,57 @@ class VariableWeightPricingTest {
         // Exactly one unit of measure: nothing to scale either way.
         assertThat(priceOf("2604065701014"))
                 .isEqualByComparingTo("99.99");
+    }
+
+    private BigDecimal quantityOf(String barcode) {
+        return jdbcClient.sql("""
+                        SELECT quantity_value
+                        FROM app.retailer_product
+                        WHERE barcode = ?
+                        """)
+                .param(barcode)
+                .query(BigDecimal.class)
+                .single();
+    }
+
+    private BigDecimal perKilogram(String name, String grams, String price, String unitPrice) {
+        return jdbcClient.sql("""
+                        SELECT app.per_kilogram_factor(
+                            ?, 'KG', ?::NUMERIC, 'g', ?::NUMERIC, ?::NUMERIC
+                        )
+                        """)
+                .param(1, name, Types.VARCHAR)
+                .param(2, grams, Types.VARCHAR)
+                .param(3, price, Types.VARCHAR)
+                .param(4, unitPrice, Types.VARCHAR)
+                .query(BigDecimal.class)
+                .list()
+                .getFirst();
+    }
+
+    /**
+     * Twenty chains quote a 3,3 kg block of gauda per kilogram, a few the
+     * piece; both become one kilogram so they compare (V127).
+     */
+    @Test
+    void aHeavyPieceOfCheeseIsListedPerKilogram() {
+        // RIČ: the unit price repeats the price, so it is per kilogram.
+        assertThat(perKilogram("paladin gauda blok 48 3 3 kg silbo", "3300", "1569.99", "1569.99"))
+                .isEqualByComparingTo("1");
+        // The piece at 3,3 times the unit price: divided by the weight.
+        assertThat(perKilogram("sir tilsiter paladin cca 3 3 kg", "3300", "6596.70", "1999.00"))
+                .isEqualByComparingTo("0.30303");
+        // "cca" and no unit price: per kilogram.
+        assertThat(perKilogram("sir gauda cca 3 kg", "3000", "1299.00", null))
+                .isEqualByComparingTo("1");
+        // Columns that say neither are left as written.
+        assertThat(perKilogram("sir gauda blok 3 3 kg", "3300", "4500.00", "900.00"))
+                .isNull();
+        // Not cheese or meat, or too light to be a piece.
+        assertThat(perKilogram("secer kristal 25 kg", "25000", "89.90", "89.90"))
+                .isNull();
+        assertThat(perKilogram("sir gauda 1 kg", "1000", "999.00", "999.00"))
+                .isNull();
     }
 
     private Boolean needsCheck(String regular, String discounted, String typical) {

@@ -69,6 +69,18 @@ public class PriceImportService {
             DateTimeFormatter.ofPattern("uuuu-MM-dd");
     private static final java.util.regex.Pattern VARIABLE_WEIGHT_PATTERN =
             java.util.regex.Pattern.compile("\\bcca\\b");
+    // Cheese and meat cut from a block or a carcass (V127, as
+    // app.per_kilogram_factor).
+    private static final java.util.regex.Pattern WEIGHED_GOODS_PATTERN =
+            java.util.regex.Pattern.compile(
+                    "\\b(cca|sir|gauda|edamer|edam|trapist|tilsiter|kackavalj|"
+                            + "ementaler|emmentaler|parmezan|parmigiano|grana|brie|"
+                            + "camembert|gorgonzola|pecorino|cheddar|sunka|slanina|"
+                            + "pecenica|kulen|kobasica|salama|mortadela|panceta|"
+                            + "prsuta|meso|file|vrat|kare|but|plecka|rebra)\\b"
+            );
+    private static final BigDecimal HEAVY_PIECE_GRAMS = BigDecimal.valueOf(2500);
+    private static final BigDecimal ONE_KILOGRAM = BigDecimal.valueOf(1000);
     private static final DateTimeFormatter MAXI_PROMOTION_DATE_FORMAT =
             new DateTimeFormatterBuilder()
                     .parseCaseInsensitive()
@@ -676,6 +688,23 @@ public class PriceImportService {
                         "DATUM KRAJA PROMOCIJE"
                 )
         );
+
+        // A heavy piece of cheese or meat is sold by weight: one kilogram at
+        // the price of one kilogram, in every chain (V127).
+        BigDecimal kilogramFactor = perKilogramFactor(
+                normalizedProductName,
+                unitOfMeasure,
+                quantityValue,
+                baseUnit,
+                regularPrice != null ? regularPrice : discountedPrice,
+                unitPrice
+        );
+
+        if (kilogramFactor != null) {
+            regularPrice = scalePrice(regularPrice, kilogramFactor);
+            discountedPrice = scalePrice(discountedPrice, kilogramFactor);
+            quantityValue = ONE_KILOGRAM;
+        }
 
         // A shop's list quotes goods of variable weight per kilogram just as
         // the chain's list does, so both read the same piece price.
@@ -2236,6 +2265,21 @@ public class PriceImportService {
                 categoryCode
         );
 
+        BigDecimal kilogramFactor = perKilogramFactor(
+                normalizedProductName,
+                unitOfMeasure,
+                quantityValue,
+                baseUnit,
+                regularPrice != null ? regularPrice : discountedPrice,
+                unitPrice
+        );
+
+        if (kilogramFactor != null) {
+            regularPrice = scalePrice(regularPrice, kilogramFactor);
+            discountedPrice = scalePrice(discountedPrice, kilogramFactor);
+            quantityValue = ONE_KILOGRAM;
+        }
+
         BigDecimal packageFactor = pricedPerUnitOfMeasureFactor(
                 normalizedProductName,
                 unitOfMeasure,
@@ -2271,6 +2315,61 @@ public class PriceImportService {
                 vatRate,
                 null
         );
+    }
+
+    /**
+     * Most chains quote a 3,3 kg block of cheese per kilogram (1.300-1.900),
+     * a few the whole piece (4.000-6.600), and the two read side by side as
+     * a threefold difference: RIČ's gauda at 899,99 a kilogram became the
+     * "best price" of the piece. A heavy piece of cheese or meat is therefore
+     * listed as one kilogram at the price of one kilogram, wherever the
+     * price columns tell how it was quoted: the unit price repeating the
+     * price (per kilogram), or the price being the unit price times the
+     * weight (the piece). A name with "cca" and no unit price is per
+     * kilogram. Anything else is left as the chain wrote it (V127).
+     *
+     * @return what the quoted prices are multiplied by to be prices of one
+     *         kilogram, or null when the product is not such a piece.
+     */
+    private BigDecimal perKilogramFactor(
+            String normalizedProductName,
+            String unitOfMeasure,
+            BigDecimal quantityValue,
+            String baseUnit,
+            BigDecimal quotedPrice,
+            BigDecimal unitPrice
+    ) {
+        if (normalizedProductName == null || quantityValue == null
+                || quotedPrice == null || quotedPrice.signum() <= 0
+                || !"g".equals(baseUnit)
+                || quantityValue.compareTo(HEAVY_PIECE_GRAMS) < 0
+                || !WEIGHED_GOODS_PATTERN.matcher(normalizedProductName).find()) {
+            return null;
+        }
+
+        if (unitPrice == null || unitPrice.signum() <= 0) {
+            return VARIABLE_WEIGHT_PATTERN.matcher(normalizedProductName).find()
+                    ? BigDecimal.ONE
+                    : null;
+        }
+
+        String unit = unitOfMeasure == null
+                ? ""
+                : unitOfMeasure.strip().toUpperCase(Locale.ROOT);
+
+        if (unitPrice.compareTo(quotedPrice) == 0
+                && (unit.equals("KG") || unit.equals("KGR"))) {
+            return BigDecimal.ONE;
+        }
+
+        BigDecimal piecePrice = unitPrice.multiply(quantityValue)
+                .divide(ONE_KILOGRAM, 2, RoundingMode.HALF_UP);
+        BigDecimal tolerance = quotedPrice.multiply(new BigDecimal("0.01"))
+                .max(BigDecimal.ONE);
+
+        return piecePrice.subtract(quotedPrice).abs().compareTo(tolerance) <= 0
+                ? ONE_KILOGRAM.divide(quantityValue, 6, RoundingMode.HALF_UP)
+                : null;
     }
 
     /**
