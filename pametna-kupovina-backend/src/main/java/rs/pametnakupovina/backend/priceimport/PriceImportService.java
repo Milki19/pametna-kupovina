@@ -84,9 +84,10 @@ public class PriceImportService {
     // app.per_kilogram_factor).
     private static final java.util.regex.Pattern BLOCK_CHEESE_PATTERN =
             java.util.regex.Pattern.compile(
-                    "\\b(gauda|edamer|edam|trapist|tilsiter|kackavalj|ementaler|"
-                            + "emmentaler|parmezan|parmigiano|grana|gorgonzola|"
-                            + "pecorino|cheddar)\\b"
+                    "\\b(gauda|edamer|edam|trapist|trapis|tilsiter|kackavalj|"
+                            + "ementaler|emmentaler|emental|maasdamer|maasdam|"
+                            + "parmezan|parmigiano|grana|gorgonzola|pecorino|"
+                            + "cheddar)\\b"
             );
     private static final java.util.regex.Pattern PET_FOOD_PATTERN =
             java.util.regex.Pattern.compile(
@@ -717,6 +718,7 @@ public class PriceImportService {
             regularPrice = scalePrice(regularPrice, kilogramFactor);
             discountedPrice = scalePrice(discountedPrice, kilogramFactor);
             quantityValue = ONE_KILOGRAM;
+            unitPrice = regularPrice != null ? regularPrice : discountedPrice;
         }
 
         // A shop's list quotes goods of variable weight per kilogram just as
@@ -2291,6 +2293,7 @@ public class PriceImportService {
             regularPrice = scalePrice(regularPrice, kilogramFactor);
             discountedPrice = scalePrice(discountedPrice, kilogramFactor);
             quantityValue = ONE_KILOGRAM;
+            unitPrice = regularPrice != null ? regularPrice : discountedPrice;
         }
 
         BigDecimal packageFactor = pricedPerUnitOfMeasureFactor(
@@ -2390,9 +2393,7 @@ public class PriceImportService {
         // A block of hard cheese without "cca" is quoted per kilogram: the
         // unit price is the chain's own price over the weight (V128).
         if (blockCheese) {
-            return unitPriceIsPriceOverWeight || unitPrice.compareTo(quotedPrice) == 0
-                    ? BigDecimal.ONE
-                    : null;
+            return unitPriceIsPriceOverWeight ? BigDecimal.ONE : null;
         }
 
         // Without "cca" a unit price of the price over the weight is how

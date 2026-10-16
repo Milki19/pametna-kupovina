@@ -45,6 +45,8 @@ class ProductQuantityParserTest {
     private static Stream<Arguments> quantityExamples() {
         return Stream.of(
                 Arguments.of("JOGURT 2.8% 180G+20G MEGGLE", "200", BaseUnit.GRAM),
+                Arguments.of("Paladin Gauda Blok48%3.3kgSilbo000128", "3300", BaseUnit.GRAM),
+                Arguments.of("Bajuval-Emental.48%mm3.3kgPaladin00149", "3300", BaseUnit.GRAM),
                 Arguments.of("Jogurt 180+20 g", "200", BaseUnit.GRAM),
                 Arguments.of("Jogurt 0.9 kg + 100 g", "1000", BaseUnit.GRAM),
                 Arguments.of("JAJA KOKOŠIJA 10/1", "10", BaseUnit.PIECE),

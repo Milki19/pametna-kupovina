@@ -10,6 +10,9 @@
 -- price is the price of a kilogram when there is no unit price, or when the
 -- unit price is that price over the weight.
 --
+-- RIČ's weights glued to the next word are read as well, and a converted
+-- price's unit price is the price of the kilogram.
+--
 -- White cheese, meat and anything else without "cca" stay as V127 left them
 -- (METRO's 4,5 kg tub of white cheese is the tub). "cca" pieces are read as
 -- in V127. The import reads new rows the same way (PriceImportService).
@@ -33,17 +36,17 @@ AS $$
                WHEN unit_price = quoted_price
                     AND UPPER(BTRIM(unit)) IN ('KG', 'KGR')
                    THEN 1
-               WHEN block_cheese
-                    AND (unit_price = quoted_price OR price_over_weight)
+               WHEN block_cheese AND price_over_weight
                    THEN 1
                WHEN normalized_name ~ '\mcca\M' AND price_over_weight
                    THEN ROUND(1000 / quantity_value, 6)
            END
     FROM (
         SELECT normalized_name !~ '\mcca\M'
-                   AND normalized_name ~ ('\m(gauda|edamer|edam|trapist|tilsiter|kackavalj'
-                                          '|ementaler|emmentaler|parmezan|parmigiano|grana'
-                                          '|gorgonzola|pecorino|cheddar)\M') AS block_cheese,
+                   AND normalized_name ~ ('\m(gauda|edamer|edam|trapist|trapis|tilsiter'
+                                          '|kackavalj|ementaler|emmentaler|emental|maasdamer'
+                                          '|maasdam|parmezan|parmigiano|grana|gorgonzola'
+                                          '|pecorino|cheddar)\M') AS block_cheese,
                COALESCE(
                    ABS(ROUND(unit_price * quantity_value / 1000, 2) - quoted_price)
                        <= GREATEST(quoted_price * 0.01, 1),
@@ -53,13 +56,37 @@ AS $$
     WHERE quoted_price > 0
       AND base_unit = 'g'
       AND quantity_value >= 2500
-      AND normalized_name ~ ('\m(cca|sir|gauda|edamer|edam|trapist|tilsiter|kackavalj'
-                             '|ementaler|emmentaler|parmezan|parmigiano|grana|brie'
+      AND normalized_name ~ ('\m(cca|sir|gauda|edamer|edam|trapist|trapis|tilsiter|kackavalj'
+                             '|ementaler|emmentaler|emental|maasdamer|maasdam|parmezan'
+                             '|parmigiano|grana|brie'
                              '|camembert|gorgonzola|pecorino|cheddar|sunka|slanina'
                              '|pecenica|kulen|kobasica|salama|mortadela|panceta'
                              '|prsuta|meso|file|vrat|kare|but|plecka|rebra)\M')
       AND normalized_name !~ '\m(hrana|pas|psa|pse|macke|macka|granule|briketi)\M'
 $$;
+
+-- RIČ glues the weight to the next word ("Blok48%3.3kgSilbo000128",
+-- "mm3.3kgPaladin"), so those names had no quantity and their blocks on sale
+-- (899,99) stood beside nothing. The import now reads such a weight
+-- (ProductQuantityParser); the names already here are read the same way.
+UPDATE app.retailer_product AS product
+SET quantity_value = glued.amount * CASE WHEN glued.unit IN ('kg', 'l') THEN 1000 ELSE 1 END,
+    base_unit = CASE WHEN glued.unit IN ('ml', 'l') THEN 'ml' ELSE 'g' END
+FROM (
+    SELECT id,
+           REPLACE(match[1], ',', '.')::NUMERIC AS amount,
+           match[2] AS unit
+    FROM (
+        SELECT id,
+               REGEXP_MATCH(name, '([0-9]+(?:[.,][0-9]+)?)(kg|gr|g|ml|l)(?=[A-Z])') AS match
+        FROM app.retailer_product
+        WHERE quantity_value IS NULL
+    ) AS found
+    WHERE match IS NOT NULL
+) AS glued
+WHERE product.id = glued.id
+  AND glued.amount > 0
+  AND product.package_count = 1;
 
 -- Every current price of a heavy piece, read by its own columns.
 CREATE TEMP TABLE heavy_offer ON COMMIT DROP AS
@@ -98,6 +125,15 @@ JOIN per_kilogram_product AS product
 WHERE offer.id = heavy.id
   AND heavy.factor <> 1;
 
+-- The price of a kilogram is now the price itself, also in the unit price
+-- the product page shows (a tilsiter block at 1.599,99 kept 484,84).
+UPDATE app.current_price_offer AS offer
+SET unit_price = COALESCE(offer.regular_price, offer.discounted_price),
+    updated_at = NOW()
+FROM per_kilogram_product AS product
+WHERE offer.retailer_product_id = product.id
+  AND offer.unit_price IS DISTINCT FROM COALESCE(offer.regular_price, offer.discounted_price);
+
 -- The history of those products the same way, row by row; a row whose
 -- columns do not say stays as it was written.
 UPDATE app.price_observation AS observation
@@ -125,6 +161,13 @@ FROM (
 WHERE observation.id = scaled.id
   AND scaled.factor IS NOT NULL
   AND scaled.factor <> 1;
+
+UPDATE app.price_observation AS observation
+SET unit_price = COALESCE(observation.regular_price, observation.discounted_price)
+FROM per_kilogram_product AS product
+WHERE observation.retailer_product_id = product.id
+  AND observation.unit_price
+      IS DISTINCT FROM COALESCE(observation.regular_price, observation.discounted_price);
 
 -- The product, and the product its barcode stands for, are one kilogram.
 UPDATE app.canonical_product AS canonical

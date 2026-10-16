@@ -40,6 +40,11 @@ public class ProductQuantityParser {
             + ")?\\s*\\+\\s*(?<second>" + NUMBER_PATTERN + ")\\s*(?<unit2>" + UNIT_PATTERN + ")(?![a-z])");
     private static final Pattern EGG_COUNT = Pattern.compile("\\b(?:jaja|jaje)\\b.*?\\b([1-9][0-9]*)\\s*/\\s*1\\b");
 
+    // "3.3kgSilbo", "mm3.3kgPaladin": a quantity glued to the words around
+    // it, the next one starting with a capital (V128).
+    private static final Pattern GLUED_QUANTITY = Pattern.compile(
+            "([0-9]+(?:[.,][0-9]+)?)(kg|gr|g|ml|l)(?=[A-Z])");
+
     private static final BigDecimal ONE_THOUSAND =
             BigDecimal.valueOf(1000);
 
@@ -49,7 +54,8 @@ public class ProductQuantityParser {
         }
 
         String normalizedValue =
-                SerbianTextTransliterator.toLatinAsciiLowercase(value)
+                SerbianTextTransliterator.toLatinAsciiLowercase(
+                                GLUED_QUANTITY.matcher(value).replaceAll(" $1$2 "))
                         .replace('×', 'x')
                         .replace('\u00A0', ' ')
                         .replaceAll("\\s+", " ");
