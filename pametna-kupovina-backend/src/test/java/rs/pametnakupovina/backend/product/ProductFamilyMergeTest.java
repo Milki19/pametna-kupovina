@@ -75,10 +75,26 @@ class ProductFamilyMergeTest {
             7;Voce;Mango komad;;;kg;Test format;219,99;;13-09-2026;219,99;;;10
             """;
 
+    // RIČ glues the weight to the next word and puts the maker in the brand
+    // column; the other chain writes the same blocks of cheese plainly.
+    private static final String GLUED_BLOCKS = HEADER + """
+            1;Sir;Paladin Gauda Blok48%3.3kgSilbo000128;Silbo;;KOM;Test format;1569,99;;13-09-2026;;;;10
+            2;Sir;Paladin Tilsiter Blok 45%mm 3.3kg BMI 09/23048;Silbo;;KOM;Test format;1749,99;;13-09-2026;;;;10
+            """;
+
+    private static final String PLAIN_BLOCKS = HEADER + """
+            1;Sir;PALADIN GAUDA BLOK 48%MM 3,3KG;Paladin;;KG;Test format;1638,00;;13-09-2026;1638,00;;;10
+            2;Sir;SIR TILSITER 45%MM 3.3KG PALADIN;Paladin;;KG;Test format;1594,99;;13-09-2026;1594,99;;;10
+            3;Sir;PALADIN EDAM BLOK 40%MM 3,3KG;Paladin;;KG;Test format;1599,00;;13-09-2026;1599,00;;;10
+            """;
+
     private static HttpServer csvServer;
 
     @Autowired
     private PriceImportService priceImportService;
+
+    @Autowired
+    private ProductCatalogMaintenanceService catalogMaintenanceService;
 
     @Autowired
     private JdbcClient jdbcClient;
@@ -88,6 +104,8 @@ class ProductFamilyMergeTest {
         csvServer = HttpServer.create(new InetSocketAddress(0), 0);
         serve("/first.csv", FIRST_CHAIN);
         serve("/second.csv", SECOND_CHAIN);
+        serve("/glued-blocks.csv", GLUED_BLOCKS);
+        serve("/plain-blocks.csv", PLAIN_BLOCKS);
         csvServer.setExecutor(Executors.newSingleThreadExecutor());
         csvServer.start();
     }
@@ -180,5 +198,34 @@ class ProductFamilyMergeTest {
                 .isNotEqualTo(familyOf("MERGE_ONE", "CELER"));
         assertThat(familyOf("MERGE_TWO", "Mango komad"))
                 .isEqualTo(familyOf("MERGE_ONE", "MANGO KOMAD"));
+    }
+
+    @Test
+    void aBlockOfOneCheeseIsOneProductWhateverAChainCallsIt() {
+        addRetailer("BLOCKS_GLUED", "/glued-blocks.csv");
+        addRetailer("BLOCKS_PLAIN", "/plain-blocks.csv");
+
+        assertThat(priceImportService.importPrices("BLOCKS_GLUED").status())
+                .isEqualTo("SUCCEEDED");
+        assertThat(priceImportService.importPrices("BLOCKS_PLAIN").status())
+                .isEqualTo("SUCCEEDED");
+        // The decision is taken with the second chain's list and applied as
+        // each chain's catalogue is refreshed (V130).
+        catalogMaintenanceService.refreshAll();
+
+        long gauda = familyOf("BLOCKS_PLAIN", "PALADIN GAUDA BLOK 48%MM 3,3KG");
+        assertThat(familyOf("BLOCKS_GLUED", "Paladin Gauda Blok48%3.3kgSilbo000128"))
+                .isEqualTo(gauda);
+        assertThat(chainsWithPrice(gauda)).isEqualTo(2);
+
+        long tilsiter = familyOf("BLOCKS_PLAIN", "SIR TILSITER 45%MM 3.3KG PALADIN");
+        assertThat(familyOf("BLOCKS_GLUED", "Paladin Tilsiter Blok 45%mm 3.3kg BMI 09/23048"))
+                .isEqualTo(tilsiter);
+        assertThat(chainsWithPrice(tilsiter)).isEqualTo(2);
+
+        // Another kind of cheese of the same brand stays another product.
+        assertThat(familyOf("BLOCKS_PLAIN", "PALADIN EDAM BLOK 40%MM 3,3KG"))
+                .isNotEqualTo(gauda)
+                .isNotEqualTo(tilsiter);
     }
 }
