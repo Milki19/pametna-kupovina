@@ -145,6 +145,16 @@ class ProductCheckStateTest {
         assertThat(any.matchingStatus()).isEqualTo(ShoppingItemMatchingStatus.CONFIRMED);
         assertThat(any.flexibleConstraints().requiredBaseUnit()).isEqualTo("g");
         assertThat(any.flexibleConstraints().targetQuantity()).isEqualByComparingTo("1000");
+
+        // Uživo 16.10.: posle čitanja reda naziv više nema „1 kg”, a količina ostaje.
+        jdbcClient.sql("UPDATE app.shopping_list_item SET name = 'BRAŠNO OSTRO' WHERE id = ?")
+                .param(flour.id())
+                .update();
+        ShoppingListItemResponse again = shoppingListService.useAnyOfTheKind(
+                list.id(), flour.id(), callers.account(TOKEN));
+
+        assertThat(again.flexibleConstraints().requiredBaseUnit()).isEqualTo("g");
+        assertThat(again.flexibleConstraints().targetQuantity()).isEqualByComparingTo("1000");
     }
 
     @Test
