@@ -146,15 +146,21 @@ class VariableWeightPricingTest {
     }
 
     private BigDecimal perKilogram(String name, String grams, String price, String unitPrice) {
+        return perKilogram(name, "KG", grams, price, unitPrice);
+    }
+
+    private BigDecimal perKilogram(String name, String unit, String grams, String price,
+            String unitPrice) {
         return jdbcClient.sql("""
                         SELECT app.per_kilogram_factor(
-                            ?, 'KG', ?::NUMERIC, 'g', ?::NUMERIC, ?::NUMERIC
+                            ?, ?, ?::NUMERIC, 'g', ?::NUMERIC, ?::NUMERIC
                         )
                         """)
                 .param(1, name, Types.VARCHAR)
-                .param(2, grams, Types.VARCHAR)
-                .param(3, price, Types.VARCHAR)
-                .param(4, unitPrice, Types.VARCHAR)
+                .param(2, unit, Types.VARCHAR)
+                .param(3, grams, Types.VARCHAR)
+                .param(4, price, Types.VARCHAR)
+                .param(5, unitPrice, Types.VARCHAR)
                 .query(BigDecimal.class)
                 .list()
                 .getFirst();
@@ -186,6 +192,14 @@ class VariableWeightPricingTest {
                 .isEqualByComparingTo("1");
         assertThat(perKilogram("kackavalj paladin tilsiter 3 3 kg", "3300", "1599.99", "484.84"))
                 .isEqualByComparingTo("1");
+        assertThat(perKilogram("paladin trapis blok 45 3 3kg silbo0484", "3300", "1569.99", "0"))
+                .isEqualByComparingTo("1");
+        assertThat(perKilogram("bajuval emental 48 mm 3 3kg paladin00149", "3300", "1549.99", "0"))
+                .isEqualByComparingTo("1");
+        // A box of rolls with ham and cheese is the box.
+        assertThat(perKilogram("2 5kg mc rolnice sun kackavalj stand var", "KOM", "2500",
+                "1015.99", "1015.99"))
+                .isNull();
         // White cheese and meat without "cca": a unit price of the price over
         // the weight proves nothing, most chains fill the column that way.
         assertThat(perKilogram("sir beli kravlji kanta 4 5 kg", "4500", "1899.99", "422.22"))
