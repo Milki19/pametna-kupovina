@@ -480,6 +480,13 @@ public class ShoppingListService {
                 true
         );
 
+        // The name no longer carries the amount once the line was read, so
+        // the amount the item already had is kept.
+        FlexibleItemConstraints current = item.flexibleConstraints();
+        boolean keepsAmount = flexible.targetQuantity() == null
+                && current != null
+                && current.targetQuantity() != null;
+
         ShoppingListItemResponse updatedItem = repository.updateItem(
                 listId,
                 itemId,
@@ -496,8 +503,8 @@ public class ShoppingListService {
                 flexible.requiredBrand(),
                 flexible.minPackageQuantity(),
                 flexible.maxPackageQuantity(),
-                flexible.requiredBaseUnit(),
-                flexible.targetQuantity()
+                keepsAmount ? current.requiredBaseUnit() : flexible.requiredBaseUnit(),
+                keepsAmount ? current.targetQuantity() : flexible.targetQuantity()
         ).orElseThrow(() -> new ResponseStatusException(
                 HttpStatus.NOT_FOUND,
                 "Stavka nije pronađena: " + itemId
