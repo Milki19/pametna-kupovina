@@ -14,7 +14,8 @@
 -- price's unit price is the price of the kilogram.
 --
 -- White cheese, meat and anything else without "cca" stay as V127 left them
--- (METRO's 4,5 kg tub of white cheese is the tub). "cca" pieces are read as
+-- (METRO's 4,5 kg tub of white cheese is the tub), and so does food made with
+-- cheese (METRO's 2,5 kg box of rolls with ham and kackavalj is the box). "cca" pieces are read as
 -- in V127. The import reads new rows the same way (PriceImportService).
 
 CREATE OR REPLACE FUNCTION app.per_kilogram_factor(
@@ -46,7 +47,10 @@ AS $$
                    AND normalized_name ~ ('\m(gauda|edamer|edam|trapist|trapis|tilsiter'
                                           '|kackavalj|ementaler|emmentaler|emental|maasdamer'
                                           '|maasdam|parmezan|parmigiano|grana|gorgonzola'
-                                          '|pecorino|cheddar)\M') AS block_cheese,
+                                          '|pecorino|cheddar)\M')
+                   AND normalized_name !~ ('\m(rolnice|rolnica|burek|pita|pite|kroasan'
+                                           '|sendvic|lisnato|pogaca|kiflice|pljeskavica'
+                                           '|pohovan|pohovani)\M') AS block_cheese,
                COALESCE(
                    ABS(ROUND(unit_price * quantity_value / 1000, 2) - quoted_price)
                        <= GREATEST(quoted_price * 0.01, 1),

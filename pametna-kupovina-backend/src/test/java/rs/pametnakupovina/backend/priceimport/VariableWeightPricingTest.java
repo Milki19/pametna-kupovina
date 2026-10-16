@@ -200,6 +200,9 @@ class VariableWeightPricingTest {
         assertThat(perKilogram("2 5kg mc rolnice sun kackavalj stand var", "KOM", "2500",
                 "1015.99", "1015.99"))
                 .isNull();
+        assertThat(perKilogram("2 5kg mc rolnice sun kackavalj stand var", "KOM", "2500",
+                "1015.99", null))
+                .isNull();
         // White cheese and meat without "cca": a unit price of the price over
         // the weight proves nothing, most chains fill the column that way.
         assertThat(perKilogram("sir beli kravlji kanta 4 5 kg", "4500", "1899.99", "422.22"))
