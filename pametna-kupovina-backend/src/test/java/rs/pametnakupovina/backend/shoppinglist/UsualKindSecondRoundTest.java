@@ -30,7 +30,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * The second round from the test of 14.10.2026 in the evening: All Caffe is
  * not coffee, a softener is not laundry powder, one roll or wet wipes are not
  * a pack of toilet paper, "sir" is not urda, "maslac" is not margarine, and
- * "piletina 1kg" is chicken, not dog food (V126).
+ * "piletina 1kg" is chicken, not dog food (V126). "Sir" is not the cheaper
+ * fresh 0% cheese either, unless the list says "sveži sir" (V129).
  */
 @SpringBootTest(properties = {
         "price-import.http.request-timeout-seconds=5",
@@ -67,6 +68,7 @@ class UsualKindSecondRoundTest {
     private static final String TEN_ROLLS = "Toalet papir Perfex 10/1";
     private static final String URDA = "Sir urda 500g";
     private static final String GOUDA = "Sir gauda 500g";
+    private static final String FRESH_CHEESE = "Sveži sir 0% m.m. 500g";
     private static final String MARGARINE = "MASLAC BILJNI 250G";
     private static final String BUTTER = "Maslac 82% 250g";
     private static final String DOG_FOOD = "Moksi piletina 1kg";
@@ -90,6 +92,7 @@ class UsualKindSecondRoundTest {
             + row(TEN_ROLLS, "349,99")
             + row(URDA, "299,99")
             + row(GOUDA, "599,99")
+            + row(FRESH_CHEESE, "249,99")
             + row(MARGARINE, "99,99")
             + row(BUTTER, "399,99")
             + row(DOG_FOOD, "499,99")
@@ -219,6 +222,7 @@ class UsualKindSecondRoundTest {
                         prašak za veš
                         toalet papir
                         sir 500 g
+                        sveži sir
                         maslac
                         piletina 1kg
                         """)
@@ -230,7 +234,7 @@ class UsualKindSecondRoundTest {
                 PRICE_DATE
         );
         assertThat(offers).extracting(StoreItemOffer::productName)
-                .containsExactly(GROUND_COFFEE, POWDER, TEN_ROLLS, GOUDA, BUTTER, CHICKEN);
+                .containsExactly(GROUND_COFFEE, POWDER, TEN_ROLLS, GOUDA, FRESH_CHEESE, BUTTER, CHICKEN);
     }
 
     @Test
