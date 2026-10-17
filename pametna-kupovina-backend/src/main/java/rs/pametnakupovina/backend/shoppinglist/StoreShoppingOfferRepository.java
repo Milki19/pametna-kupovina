@@ -115,13 +115,155 @@ public class StoreShoppingOfferRepository {
                         WITH candidate AS MATERIALIZED (
                             SELECT item.id AS item_id,
                                    product.id AS retailer_product_id,
-                                   pack.by_the_kilogram
-                            FROM (
-                                SELECT DISTINCT requested_store.retailer_id
-                                FROM app.store AS requested_store
-                                WHERE requested_store.id IN (:storeIds)
-                            ) AS chain
-                            CROSS JOIN app.shopping_list_item AS item
+                                   pack.by_the_kilogram,
+                                   pack.size AS package_size,
+                                   pack.unit AS package_unit,
+                                   need.packages,
+                                   -- Everything the offer below ranks by but the price
+                                   -- is the same in every shop of the chain: worked out
+                                   -- here once, not again for every shop.
+                                     CASE
+                                         WHEN item.matching_rule =
+                                              'FLEXIBLE_CATEGORY'
+                                         THEN COALESCE((
+                                             SELECT MIN(
+                                                 allowed_type.match_priority
+                                             )
+                                             FROM app.retailer_product_type
+                                                 AS assignment
+                                             JOIN app.shopping_intent_product_type
+                                                 AS allowed_type
+                                               ON allowed_type.product_type_id =
+                                                  assignment.product_type_id
+                                             WHERE assignment.retailer_product_id =
+                                                   product.id
+                                               AND allowed_type.shopping_intent_id =
+                                                   requested_intent.shopping_intent_id
+                                               AND allowed_type.enabled_by_default =
+                                                   TRUE
+                                         ), 32767)
+                                         ELSE 0
+                                     END AS kind_rank,
+                                     -- The usual kind before an unusual one: white
+                                     -- sugar before powdered, plain bananas before
+                                     -- red ones. Ranked, not filtered: a shop that
+                                     -- has only the unusual kind still offers it
+                                     -- (V125).
+                                     CASE
+                                         WHEN requested_intent.uncommon_name_pattern IS NOT NULL
+                                          AND product.normalized_name ~ requested_intent.uncommon_name_pattern
+                                             THEN 1
+                                         ELSE 0
+                                     END AS uncommon_rank,
+                                     -- A pack bigger than a quarter over the amount
+                                     -- only where nothing fits better.
+                                     CASE
+                                         WHEN item.target_quantity IS NOT NULL
+                                          AND need.packages * pack.size > item.target_quantity * item.quantity
+                                              * CASE WHEN requested_intent.default_base_unit = 'piece'
+                                                     THEN 2 ELSE 1.25 END
+                                             THEN 1
+                                         ELSE 0
+                                     END AS oversize_rank,
+                                     -- Someone who writes only "mleko" means a
+                                     -- litre of it, not the cheapest 200ml cup.
+                                     -- Ranked, not filtered: a store that only
+                                     -- stocks small packs still offers milk
+                                     -- instead of dropping out of the basket.
+                                     -- Once an amount is actually stated, the
+                                     -- cheapest way to supply it wins again:
+                                     -- five 200g cups may beat one 1kg tub.
+                                     CASE
+                                         WHEN item.matching_rule <>
+                                              'FLEXIBLE_CATEGORY'
+                                             THEN 0
+                                         -- A number of bottles or cans still
+                                         -- prefers the usual size of one.
+                                         WHEN NOT pack.by_piece AND (
+                                             item.target_quantity IS NOT NULL
+                                             OR item.min_package_quantity
+                                                 IS NOT NULL
+                                             OR item.max_package_quantity
+                                                 IS NOT NULL
+                                         )
+                                             THEN 0
+                                         -- "Toalet papir 10/1" is ten rolls; an
+                                         -- intent counted in pieces reads the
+                                         -- count from the name (V126).
+                                         WHEN pack.one_size IS NULL
+                                          AND requested_intent.default_base_unit IS NULL
+                                          AND requested_intent.default_max_package_quantity < 100
+                                          AND SUBSTRING(product.name FROM '(?:^|\\D)(\\d{1,3}) ?/ ?1(?:\\D|$)')
+                                              IS NOT NULL
+                                             THEN CASE
+                                                      WHEN SUBSTRING(product.name FROM '(?:^|\\D)(\\d{1,3}) ?/ ?1(?:\\D|$)')::NUMERIC
+                                                           BETWEEN requested_intent.default_min_package_quantity
+                                                               AND requested_intent.default_max_package_quantity
+                                                          THEN 0
+                                                      ELSE 2
+                                                  END
+                                         -- A size we cannot read comes before one
+                                         -- we know is wrong: one roll of toilet
+                                         -- paper is not the usual pack (V126).
+                                         WHEN pack.one_size IS NULL
+                                             THEN 1
+                                         WHEN (
+                                             requested_intent.default_min_package_quantity
+                                                 IS NULL
+                                             OR pack.one_size >=
+                                                requested_intent.default_min_package_quantity
+                                         ) AND (
+                                             requested_intent.default_max_package_quantity
+                                                 IS NULL
+                                             OR pack.one_size <=
+                                                requested_intent.default_max_package_quantity
+                                         ) AND (
+                                             requested_intent.default_base_unit
+                                                 IS NULL
+                                             OR pack.one_unit =
+                                                requested_intent.default_base_unit
+                                         ) THEN 0
+                                         ELSE 2
+                                     END AS size_rank,
+                                     -- Thirteen 16 g sachets for "kafa 200 g" cost more
+                                     -- than the shelf price says: every pack beyond
+                                     -- three, or beyond the count asked for, weighs 5%
+                                     -- more. Relative, so it reads the same in any
+                                     -- currency (V125).
+                                     CASE
+                                               WHEN item.target_quantity IS NULL
+                                                 OR pack.by_piece
+                                                 OR pack.by_the_kilogram
+                                                   THEN 1
+                                               ELSE 1 + 0.05 * GREATEST(
+                                                   0,
+                                                   need.packages - GREATEST(3, item.quantity)
+                                               )
+                                           END AS pack_weight,
+                                     -- Dve ponude koje koštaju isto: bira se
+                                     -- ona koju kupac zaista kupuje, po
+                                     -- skeniranim računima. Stoji tek posle
+                                     -- cene, jer plan ostaje najjeftiniji —
+                                     -- navika ne sme da košta ni dinar. Bez
+                                     -- ijednog računa lista je prazna i ovaj
+                                     -- red ne razlikuje ništa.
+                                     CASE
+                                         WHEN product.product_family_id =
+                                              ANY (:boughtFamilyIds)
+                                             THEN 0
+                                         ELSE 1
+                                     END AS bought_rank,
+                                     (
+                                         SELECT typical.typical_price
+                                         FROM app.product_family_typical_price AS typical
+                                         WHERE typical.product_family_id = product.product_family_id
+                                           AND typical.market_id = (
+                                               SELECT chain.market_id
+                                               FROM app.retailer AS chain
+                                               WHERE chain.id = product.retailer_id
+                                           )
+                                     ) AS typical_price
+                            FROM app.shopping_list_item AS item
                         LEFT JOIN LATERAL (
                             SELECT intent.id AS shopping_intent_id,
                                    intent.default_min_package_quantity,
@@ -145,9 +287,22 @@ public class StoreShoppingOfferRepository {
                             JOIN app.retailer_product_type AS candidate_assignment
                               ON candidate_assignment.product_type_id =
                                  candidate_type.product_type_id
-                            JOIN app.retailer_product AS product
-                              ON product.id = candidate_assignment.retailer_product_id
-                             AND product.retailer_id = chain.retailer_id
+                            -- Each product of the item's types looked up once and
+                            -- kept when its chain is asked for. Started from every
+                            -- chain, the products of each chain were gathered
+                            -- again for every item; joined freely, the planner
+                            -- tried every typed product against every item.
+                            CROSS JOIN LATERAL (
+                                SELECT typed_product.*
+                                FROM app.retailer_product AS typed_product
+                                WHERE typed_product.id = candidate_assignment.retailer_product_id
+                                  AND typed_product.retailer_id IN (
+                                      SELECT requested_store.retailer_id
+                                      FROM app.store AS requested_store
+                                      WHERE requested_store.id IN (:storeIds)
+                                  )
+                                OFFSET 0
+                            ) AS product
                             LEFT JOIN app.canonical_product AS canonical
                               ON canonical.id = product.canonical_product_id
                             CROSS JOIN LATERAL (
@@ -362,7 +517,154 @@ public class StoreShoppingOfferRepository {
                             UNION
                             SELECT item.id,
                                    product.id,
-                                   pack.by_the_kilogram
+                                   pack.by_the_kilogram,
+                                   pack.size AS package_size,
+                                   pack.unit AS package_unit,
+                                   need.packages,
+                                   -- Everything the offer below ranks by but the price
+                                   -- is the same in every shop of the chain: worked out
+                                   -- here once, not again for every shop.
+                                     CASE
+                                         WHEN item.matching_rule =
+                                              'FLEXIBLE_CATEGORY'
+                                         THEN COALESCE((
+                                             SELECT MIN(
+                                                 allowed_type.match_priority
+                                             )
+                                             FROM app.retailer_product_type
+                                                 AS assignment
+                                             JOIN app.shopping_intent_product_type
+                                                 AS allowed_type
+                                               ON allowed_type.product_type_id =
+                                                  assignment.product_type_id
+                                             WHERE assignment.retailer_product_id =
+                                                   product.id
+                                               AND allowed_type.shopping_intent_id =
+                                                   requested_intent.shopping_intent_id
+                                               AND allowed_type.enabled_by_default =
+                                                   TRUE
+                                         ), 32767)
+                                         ELSE 0
+                                     END AS kind_rank,
+                                     -- The usual kind before an unusual one: white
+                                     -- sugar before powdered, plain bananas before
+                                     -- red ones. Ranked, not filtered: a shop that
+                                     -- has only the unusual kind still offers it
+                                     -- (V125).
+                                     CASE
+                                         WHEN requested_intent.uncommon_name_pattern IS NOT NULL
+                                          AND product.normalized_name ~ requested_intent.uncommon_name_pattern
+                                             THEN 1
+                                         ELSE 0
+                                     END AS uncommon_rank,
+                                     -- A pack bigger than a quarter over the amount
+                                     -- only where nothing fits better.
+                                     CASE
+                                         WHEN item.target_quantity IS NOT NULL
+                                          AND need.packages * pack.size > item.target_quantity * item.quantity
+                                              * CASE WHEN requested_intent.default_base_unit = 'piece'
+                                                     THEN 2 ELSE 1.25 END
+                                             THEN 1
+                                         ELSE 0
+                                     END AS oversize_rank,
+                                     -- Someone who writes only "mleko" means a
+                                     -- litre of it, not the cheapest 200ml cup.
+                                     -- Ranked, not filtered: a store that only
+                                     -- stocks small packs still offers milk
+                                     -- instead of dropping out of the basket.
+                                     -- Once an amount is actually stated, the
+                                     -- cheapest way to supply it wins again:
+                                     -- five 200g cups may beat one 1kg tub.
+                                     CASE
+                                         WHEN item.matching_rule <>
+                                              'FLEXIBLE_CATEGORY'
+                                             THEN 0
+                                         -- A number of bottles or cans still
+                                         -- prefers the usual size of one.
+                                         WHEN NOT pack.by_piece AND (
+                                             item.target_quantity IS NOT NULL
+                                             OR item.min_package_quantity
+                                                 IS NOT NULL
+                                             OR item.max_package_quantity
+                                                 IS NOT NULL
+                                         )
+                                             THEN 0
+                                         -- "Toalet papir 10/1" is ten rolls; an
+                                         -- intent counted in pieces reads the
+                                         -- count from the name (V126).
+                                         WHEN pack.one_size IS NULL
+                                          AND requested_intent.default_base_unit IS NULL
+                                          AND requested_intent.default_max_package_quantity < 100
+                                          AND SUBSTRING(product.name FROM '(?:^|\\D)(\\d{1,3}) ?/ ?1(?:\\D|$)')
+                                              IS NOT NULL
+                                             THEN CASE
+                                                      WHEN SUBSTRING(product.name FROM '(?:^|\\D)(\\d{1,3}) ?/ ?1(?:\\D|$)')::NUMERIC
+                                                           BETWEEN requested_intent.default_min_package_quantity
+                                                               AND requested_intent.default_max_package_quantity
+                                                          THEN 0
+                                                      ELSE 2
+                                                  END
+                                         -- A size we cannot read comes before one
+                                         -- we know is wrong: one roll of toilet
+                                         -- paper is not the usual pack (V126).
+                                         WHEN pack.one_size IS NULL
+                                             THEN 1
+                                         WHEN (
+                                             requested_intent.default_min_package_quantity
+                                                 IS NULL
+                                             OR pack.one_size >=
+                                                requested_intent.default_min_package_quantity
+                                         ) AND (
+                                             requested_intent.default_max_package_quantity
+                                                 IS NULL
+                                             OR pack.one_size <=
+                                                requested_intent.default_max_package_quantity
+                                         ) AND (
+                                             requested_intent.default_base_unit
+                                                 IS NULL
+                                             OR pack.one_unit =
+                                                requested_intent.default_base_unit
+                                         ) THEN 0
+                                         ELSE 2
+                                     END AS size_rank,
+                                     -- Thirteen 16 g sachets for "kafa 200 g" cost more
+                                     -- than the shelf price says: every pack beyond
+                                     -- three, or beyond the count asked for, weighs 5%
+                                     -- more. Relative, so it reads the same in any
+                                     -- currency (V125).
+                                     CASE
+                                               WHEN item.target_quantity IS NULL
+                                                 OR pack.by_piece
+                                                 OR pack.by_the_kilogram
+                                                   THEN 1
+                                               ELSE 1 + 0.05 * GREATEST(
+                                                   0,
+                                                   need.packages - GREATEST(3, item.quantity)
+                                               )
+                                           END AS pack_weight,
+                                     -- Dve ponude koje koštaju isto: bira se
+                                     -- ona koju kupac zaista kupuje, po
+                                     -- skeniranim računima. Stoji tek posle
+                                     -- cene, jer plan ostaje najjeftiniji —
+                                     -- navika ne sme da košta ni dinar. Bez
+                                     -- ijednog računa lista je prazna i ovaj
+                                     -- red ne razlikuje ništa.
+                                     CASE
+                                         WHEN product.product_family_id =
+                                              ANY (:boughtFamilyIds)
+                                             THEN 0
+                                         ELSE 1
+                                     END AS bought_rank,
+                                     (
+                                         SELECT typical.typical_price
+                                         FROM app.product_family_typical_price AS typical
+                                         WHERE typical.product_family_id = product.product_family_id
+                                           AND typical.market_id = (
+                                               SELECT chain.market_id
+                                               FROM app.retailer AS chain
+                                               WHERE chain.id = product.retailer_id
+                                           )
+                                     ) AS typical_price
                             FROM (
                                 SELECT DISTINCT requested_store.retailer_id
                                 FROM app.store AS requested_store
@@ -629,15 +931,96 @@ public class StoreShoppingOfferRepository {
                                    ARRAY_AGG(candidate.retailer_product_id
                                              ORDER BY candidate.retailer_product_id)
                                        AS retailer_product_ids,
-                                   ARRAY_AGG(candidate.by_the_kilogram
+                                   ARRAY_AGG(candidate.package_size
                                              ORDER BY candidate.retailer_product_id)
-                                       AS by_the_kilogram
+                                       AS package_sizes,
+                                   ARRAY_AGG(candidate.package_unit
+                                             ORDER BY candidate.retailer_product_id)
+                                       AS package_units,
+                                   ARRAY_AGG(candidate.packages
+                                             ORDER BY candidate.retailer_product_id)
+                                       AS package_counts,
+                                   ARRAY_AGG(candidate.kind_rank
+                                             ORDER BY candidate.retailer_product_id)
+                                       AS kind_ranks,
+                                   ARRAY_AGG(candidate.uncommon_rank
+                                             ORDER BY candidate.retailer_product_id)
+                                       AS uncommon_ranks,
+                                   ARRAY_AGG(candidate.oversize_rank
+                                             ORDER BY candidate.retailer_product_id)
+                                       AS oversize_ranks,
+                                   ARRAY_AGG(candidate.size_rank
+                                             ORDER BY candidate.retailer_product_id)
+                                       AS size_ranks,
+                                   ARRAY_AGG(candidate.pack_weight
+                                             ORDER BY candidate.retailer_product_id)
+                                       AS pack_weights,
+                                   ARRAY_AGG(candidate.bought_rank
+                                             ORDER BY candidate.retailer_product_id)
+                                       AS bought_ranks,
+                                   ARRAY_AGG(candidate.typical_price
+                                             ORDER BY candidate.retailer_product_id)
+                                       AS typical_prices
                             FROM candidate
                             JOIN app.retailer_product AS product
                               ON product.id = candidate.retailer_product_id
                             GROUP BY candidate.item_id, product.retailer_id
-                        )
+                        ),
+                        -- A shop without a price list or reports of its own pays
+                        -- what its chain's list for its format says, the same as
+                        -- every other such shop of that format: twenty shops of
+                        -- a few chains looked up the same prices twenty times.
+                        -- One shop of each such group is priced; the others
+                        -- take its offers.
+                        requested_store AS MATERIALIZED (
+                            SELECT shop.store_id,
+                                   MIN(shop.store_id) OVER (PARTITION BY shop.price_key)
+                                       AS pricing_store_id
+                            FROM (
+                                SELECT store.id AS store_id,
+                                       CASE
+                                           WHEN EXISTS (
+                                               SELECT 1
+                                               FROM app.store_price_format_mapping AS mapping
+                                               WHERE mapping.retailer_id = store.retailer_id
+                                                 AND mapping.store_external_code = store.external_code
+                                                 AND mapping.active = TRUE
+                                                 AND mapping.verification_status = 'VERIFIED'
+                                           )
+                                           OR EXISTS (
+                                               SELECT 1
+                                               FROM app.current_price_offer AS own_offer
+                                               WHERE own_offer.store_id = store.id
+                                           )
+                                           OR EXISTS (
+                                               SELECT 1
+                                               FROM app.price_observation AS own_observation
+                                               WHERE own_observation.store_id = store.id
+                                           )
+                                           OR EXISTS (
+                                               SELECT 1
+                                               FROM app.product_report AS report
+                                               WHERE report.store_id = store.id
+                                                 AND report.reason = 'NOT_IN_STORE'
+                                           )
+                                               THEN 'STORE:' || store.id
+                                           ELSE 'FORMAT:' || store.retailer_id
+                                               || ':' || LOWER(BTRIM(format.name))
+                                               || ':' || LOWER(BTRIM(format.code))
+                                       END AS price_key
+                                FROM app.store AS store
+                                JOIN app.store_format AS format
+                                  ON format.id = store.store_format_id
+                                WHERE store.id IN (:storeIds)
+                                  AND (
+                                      store.pricing_eligible = TRUE
+                                      OR (:includeUnlocated AND store.location IS NULL)
+                                  )
+                            ) AS shop
+                        ),
+                        priced AS MATERIALIZED (
                         SELECT store.id AS store_id,
+                               item.created_at AS item_created_at,
                                retailer.code AS retailer_code,
                                retailer.name AS retailer_name,
                                format.code AS store_format_code,
@@ -672,7 +1055,9 @@ public class StoreShoppingOfferRepository {
                                offer.packages * offer.package_size - item.target_quantity * item.quantity AS extra_amount,
                                ROUND(offer.effective_price / NULLIF(offer.package_size, 0) *
                                    CASE WHEN offer.package_unit IN ('g','ml') THEN 1000 ELSE 1 END, 2) AS unit_price
-                        FROM app.store AS store
+                        FROM requested_store
+                        JOIN app.store AS store
+                          ON store.id = requested_store.store_id
                         JOIN app.retailer AS retailer
                           ON retailer.id = store.retailer_id
                         JOIN app.store_format AS format
@@ -687,22 +1072,6 @@ public class StoreShoppingOfferRepository {
                          AND price_mapping.verification_status = 'VERIFIED'
                         CROSS JOIN app.shopping_list_item AS item
                         LEFT JOIN LATERAL (
-                            SELECT intent.id AS shopping_intent_id,
-                                   intent.default_min_package_quantity,
-                                   intent.default_max_package_quantity,
-                                   intent.default_base_unit,
-                                   alias.required_name_pattern,
-                                   alias.uncommon_name_pattern
-                            FROM app.shopping_intent AS intent
-                            LEFT JOIN app.shopping_intent_alias AS alias
-                              ON alias.shopping_intent_id = intent.id
-                             AND alias.normalized_alias = item.flexible_category_normalized
-                            WHERE item.matching_rule =
-                                  'FLEXIBLE_CATEGORY'
-                              AND intent.id = item.shopping_intent_id
-                              AND intent.active = TRUE
-                        ) AS requested_intent ON TRUE
-                        LEFT JOIN LATERAL (
                             SELECT product.id AS retailer_product_id,
                                    product.canonical_product_id,
                                    product.name AS product_name,
@@ -716,13 +1085,22 @@ public class StoreShoppingOfferRepository {
                                    selected_price.discounted_price,
                                    selected_price.effective_price,
                                    selected_price.price_scope,
-                                   pack.size AS package_size, pack.unit AS package_unit,
-                                   need.packages
+                                   candidate.package_size, candidate.package_unit,
+                                   candidate.packages
                             FROM candidate_group
                             CROSS JOIN LATERAL UNNEST(
                                 candidate_group.retailer_product_ids,
-                                candidate_group.by_the_kilogram
-                            ) AS candidate(retailer_product_id, by_the_kilogram)
+                                candidate_group.package_sizes,
+                                candidate_group.package_units,
+                                candidate_group.package_counts,
+                                candidate_group.kind_ranks,
+                                candidate_group.uncommon_ranks,
+                                candidate_group.oversize_ranks,
+                                candidate_group.size_ranks,
+                                candidate_group.pack_weights,
+                                candidate_group.bought_ranks,
+                                candidate_group.typical_prices
+                            ) AS candidate(retailer_product_id, package_size, package_unit, packages, kind_rank, uncommon_rank, oversize_rank, size_rank, pack_weight, bought_rank, typical_price)
                             JOIN app.retailer_product AS product
                               ON product.id = candidate.retailer_product_id
                              -- Kupci su u ovoj radnji javili da ga nema (V121).
@@ -730,66 +1108,6 @@ public class StoreShoppingOfferRepository {
                             LEFT JOIN app.canonical_product AS canonical
                               ON canonical.id =
                                   product.canonical_product_id
-                            LEFT JOIN app.product_family_typical_price
-                                AS typical_price
-                              ON typical_price.product_family_id =
-                                  product.product_family_id
-                             AND typical_price.market_id = (
-                                 SELECT chain.market_id
-                                 FROM app.retailer AS chain
-                                 WHERE chain.id = product.retailer_id
-                             )
-                            -- "6 kom" of something sold by volume or weight
-                            -- counts bottles, cans and bags, so six bottles
-                            -- and a case of six compare by price (V73). Not
-                            -- where the usual amount is itself a number of
-                            -- pieces, as a litre of liquid egg is no egg, and
-                            -- not for loose goods priced by weight.
-                            CROSS JOIN LATERAL (
-                                SELECT CASE WHEN counted.by_piece
-                                            THEN product.package_count::NUMERIC
-                                            WHEN counted.by_the_kilogram
-                                            THEN 1000
-                                            ELSE product.quantity_value
-                                       END AS size,
-                                       CASE WHEN counted.by_piece
-                                            THEN 'piece'
-                                            WHEN counted.by_the_kilogram
-                                            THEN 'g'
-                                            ELSE product.base_unit
-                                       END AS unit,
-                                       -- One bottle or can, for the usual size.
-                                       CASE WHEN counted.by_piece
-                                            THEN product.quantity_value
-                                                 / product.package_count
-                                            ELSE product.quantity_value
-                                       END AS one_size,
-                                       product.base_unit AS one_unit,
-                                       counted.by_piece,
-                                       counted.by_the_kilogram
-                                FROM (
-                                    SELECT COALESCE(
-                                               item.required_base_unit = 'piece'
-                                               AND product.base_unit IN ('g', 'ml')
-                                               AND requested_intent.default_base_unit
-                                                   IS DISTINCT FROM 'piece'
-                                               AND product.name !~* '\\m(rinfuz|cca)\\M',
-                                               FALSE
-                                           ) AS by_piece,
-                                           -- Loose goods by the kilogram, as the
-                                           -- candidates above found them (V90).
-                                           candidate.by_the_kilogram
-                                ) AS counted
-                            ) pack
-                            CROSS JOIN LATERAL (
-                                SELECT CASE WHEN item.target_quantity IS NULL THEN item.quantity
-                                    -- Loose goods are weighed out: "banane 1,5 kg"
-                                    -- is 1,5 kg at the price of one (V125).
-                                    WHEN pack.by_the_kilogram
-                                    THEN ROUND(item.target_quantity * item.quantity / NULLIF(pack.size, 0), 3)
-                                    ELSE CEIL(item.target_quantity * item.quantity / NULLIF(pack.size, 0))
-                                END AS packages
-                            ) need
                             JOIN LATERAL (
                                 SELECT priced.price_date,
                                        priced.regular_price,
@@ -999,9 +1317,10 @@ public class StoreShoppingOfferRepository {
                                          priced.id DESC
                                 LIMIT 1
                             ) AS selected_price ON TRUE
+                            -- The candidates above already passed every
+                            -- condition of the item; a shop only adds its price.
                             WHERE candidate_group.item_id = item.id
                               AND candidate_group.retailer_id = store.retailer_id
-                              AND product.retailer_id = store.retailer_id
                               -- Far below what other chains charge, the price
                               -- is most likely for one piece or one kilogram
                               -- of a bigger pack (V72). The product screen
@@ -1010,308 +1329,65 @@ public class StoreShoppingOfferRepository {
                               AND NOT app.price_needs_check(
                                   selected_price.regular_price,
                                   selected_price.discounted_price,
-                                  typical_price.typical_price
+                                  candidate.typical_price
                               )
-                              AND (item.target_quantity IS NULL OR (
-                                  pack.size > 0 AND pack.unit = item.required_base_unit
-                                  -- Eggs come in cartons of 6, 10, 15 or 30: twelve
-                                  -- from a shop with only cartons of ten are two
-                                  -- cartons, not no price. Up to twice what was
-                                  -- asked; the cheaper total still wins.
-                                  AND (
-                                      need.packages * pack.size <= item.target_quantity * item.quantity
-                                          * CASE WHEN requested_intent.default_base_unit = 'piece'
-                                                 THEN 2 ELSE 1.25 END
-                                      -- One pack of up to twice the amount: "šećer 500 g"
-                                      -- in a shop with only a kilogram of white sugar.
-                                      -- It comes after every pack that fits (V125).
-                                      OR (need.packages = 1
-                                          AND pack.size <= item.target_quantity * item.quantity * 2)
-                                  )
-                              ))
-                              AND (
-                                  (
-                                      item.matching_rule = 'EXACT_PRODUCT'
-                                      AND item.matching_status IN (
-                                          'AUTO_MATCHED',
-                                          'CONFIRMED'
-                                      )
-                                      -- A case of twenty sharing the
-                                      -- bottle's barcode is not one bottle (V77).
-                                      AND NOT EXISTS (
-                                          SELECT 1
-                                          FROM app.retailer_product AS single_piece
-                                          WHERE single_piece.product_family_id =
-                                                product.product_family_id
-                                            AND single_piece.package_count <
-                                                product.package_count
-                                      )
-                                      AND (
-                                          product.canonical_product_id =
-                                              item.matched_canonical_product_id
-                                          -- The same product under another
-                                          -- chain's barcode.
-                                          OR product.product_family_id IN (
-                                              SELECT member.family_id
-                                              FROM app.product_family_member
-                                                  AS member
-                                              WHERE member.canonical_product_id =
-                                                  item.matched_canonical_product_id
-                                          )
-                                          OR (
-                                              item.barcode IS NOT NULL
-                                              AND product.barcode = item.barcode
-                                          )
-                                      )
-                                  )
-                                  OR
-                                  (
-                                      item.matching_rule = 'PRODUCT_FAMILY'
-                                      AND item.matching_status = 'CONFIRMED'
-                                      AND product.product_family_id =
-                                          item.matched_product_family_id
-                                      -- A case of twenty sharing the
-                                      -- bottle's barcode is not one bottle (V77).
-                                      AND NOT EXISTS (
-                                          SELECT 1
-                                          FROM app.retailer_product AS single_piece
-                                          WHERE single_piece.product_family_id =
-                                                product.product_family_id
-                                            AND single_piece.package_count <
-                                                product.package_count
-                                      )
-                                  )
-                                  OR
-                                  (
-                                      item.matching_rule = 'FLEXIBLE_CATEGORY'
-                                      AND (
-                                          EXISTS (
-                                              SELECT 1
-                                              FROM app.retailer_product_type
-                                                  AS assignment
-                                              JOIN app.shopping_intent_product_type
-                                                  AS allowed_type
-                                                ON allowed_type.product_type_id =
-                                                   assignment.product_type_id
-                                              WHERE assignment.retailer_product_id =
-                                                    product.id
-                                                AND allowed_type.shopping_intent_id =
-                                                    requested_intent.shopping_intent_id
-                                                AND allowed_type.enabled_by_default =
-                                                    TRUE
-                                          )
-                                          OR (
-                                              requested_intent.shopping_intent_id
-                                                  IS NULL
-                                              AND
-                                              NOT EXISTS (
-                                                  SELECT 1
-                                                  FROM app.retailer_product_type
-                                                      AS known_type
-                                                  WHERE known_type.retailer_product_id =
-                                                        product.id
-                                              )
-                                              AND (
-                                                  COALESCE(
-                                                      product.normalized_name,
-                                                      LOWER(product.name)
-                                                  ) = item.flexible_category_normalized
-                                                  OR COALESCE(
-                                                      product.normalized_name,
-                                                      LOWER(product.name)
-                                                  ) LIKE
-                                                      item.flexible_category_normalized
-                                                      || ' %'
-                                              )
-                                          )
-                                      )
-                                  )
-                              )
-                              AND (
-                                  item.matching_rule <> 'FLEXIBLE_CATEGORY'
-                                  OR (
-                                      (requested_intent.required_name_pattern IS NULL
-                                       OR product.normalized_name ~ requested_intent.required_name_pattern)
-                                      AND
-                                      (
-                                          item.required_brand IS NULL
-                                          OR LOWER(BTRIM(COALESCE(
-                                              canonical.brand,
-                                              product.brand,
-                                              ''
-                                          ))) = LOWER(BTRIM(
-                                              item.required_brand
-                                          ))
-                                          -- One brand, several spellings:
-                                          -- "Zaječarsko", "ZAJEČARSKO",
-                                          -- "Zajecarsko".
-                                          OR (
-                                              app.product_match_brand_key(item.required_brand) <> ''
-                                              AND app.product_match_brand_key(item.required_brand) IN (
-                                                  app.product_match_brand_key(canonical.brand),
-                                                  app.product_match_brand_key(product.brand)
-                                              )
-                                          )
-                                      )
-                                      AND (
-                                          item.required_base_unit IS NULL
-                                          OR pack.unit = item.required_base_unit
-                                      )
-                                      AND (
-                                          item.min_package_quantity IS NULL
-                                          OR pack.size >= item.min_package_quantity
-                                      )
-                                      AND (
-                                          item.max_package_quantity IS NULL
-                                          OR pack.size <= item.max_package_quantity
-                                      )
-                                  )
-                              )
-                            ORDER BY CASE
-                                         WHEN item.matching_rule =
-                                              'FLEXIBLE_CATEGORY'
-                                         THEN COALESCE((
-                                             SELECT MIN(
-                                                 allowed_type.match_priority
-                                             )
-                                             FROM app.retailer_product_type
-                                                 AS assignment
-                                             JOIN app.shopping_intent_product_type
-                                                 AS allowed_type
-                                               ON allowed_type.product_type_id =
-                                                  assignment.product_type_id
-                                             WHERE assignment.retailer_product_id =
-                                                   product.id
-                                               AND allowed_type.shopping_intent_id =
-                                                   requested_intent.shopping_intent_id
-                                               AND allowed_type.enabled_by_default =
-                                                   TRUE
-                                         ), 32767)
-                                         ELSE 0
-                                     END ASC,
-                                     -- The usual kind before an unusual one: white
-                                     -- sugar before powdered, plain bananas before
-                                     -- red ones. Ranked, not filtered: a shop that
-                                     -- has only the unusual kind still offers it
-                                     -- (V125).
-                                     CASE
-                                         WHEN requested_intent.uncommon_name_pattern IS NOT NULL
-                                          AND product.normalized_name ~ requested_intent.uncommon_name_pattern
-                                             THEN 1
-                                         ELSE 0
-                                     END ASC,
-                                     -- A pack bigger than a quarter over the amount
-                                     -- only where nothing fits better.
-                                     CASE
-                                         WHEN item.target_quantity IS NOT NULL
-                                          AND need.packages * pack.size > item.target_quantity * item.quantity
-                                              * CASE WHEN requested_intent.default_base_unit = 'piece'
-                                                     THEN 2 ELSE 1.25 END
-                                             THEN 1
-                                         ELSE 0
-                                     END ASC,
-                                     -- Someone who writes only "mleko" means a
-                                     -- litre of it, not the cheapest 200ml cup.
-                                     -- Ranked, not filtered: a store that only
-                                     -- stocks small packs still offers milk
-                                     -- instead of dropping out of the basket.
-                                     -- Once an amount is actually stated, the
-                                     -- cheapest way to supply it wins again:
-                                     -- five 200g cups may beat one 1kg tub.
-                                     CASE
-                                         WHEN item.matching_rule <>
-                                              'FLEXIBLE_CATEGORY'
-                                             THEN 0
-                                         -- A number of bottles or cans still
-                                         -- prefers the usual size of one.
-                                         WHEN NOT pack.by_piece AND (
-                                             item.target_quantity IS NOT NULL
-                                             OR item.min_package_quantity
-                                                 IS NOT NULL
-                                             OR item.max_package_quantity
-                                                 IS NOT NULL
-                                         )
-                                             THEN 0
-                                         -- "Toalet papir 10/1" is ten rolls; an
-                                         -- intent counted in pieces reads the
-                                         -- count from the name (V126).
-                                         WHEN pack.one_size IS NULL
-                                          AND requested_intent.default_base_unit IS NULL
-                                          AND requested_intent.default_max_package_quantity < 100
-                                          AND SUBSTRING(product.name FROM '(?:^|\\D)(\\d{1,3}) ?/ ?1(?:\\D|$)')
-                                              IS NOT NULL
-                                             THEN CASE
-                                                      WHEN SUBSTRING(product.name FROM '(?:^|\\D)(\\d{1,3}) ?/ ?1(?:\\D|$)')::NUMERIC
-                                                           BETWEEN requested_intent.default_min_package_quantity
-                                                               AND requested_intent.default_max_package_quantity
-                                                          THEN 0
-                                                      ELSE 2
-                                                  END
-                                         -- A size we cannot read comes before one
-                                         -- we know is wrong: one roll of toilet
-                                         -- paper is not the usual pack (V126).
-                                         WHEN pack.one_size IS NULL
-                                             THEN 1
-                                         WHEN (
-                                             requested_intent.default_min_package_quantity
-                                                 IS NULL
-                                             OR pack.one_size >=
-                                                requested_intent.default_min_package_quantity
-                                         ) AND (
-                                             requested_intent.default_max_package_quantity
-                                                 IS NULL
-                                             OR pack.one_size <=
-                                                requested_intent.default_max_package_quantity
-                                         ) AND (
-                                             requested_intent.default_base_unit
-                                                 IS NULL
-                                             OR pack.one_unit =
-                                                requested_intent.default_base_unit
-                                         ) THEN 0
-                                         ELSE 2
-                                     END ASC,
-                                     -- Thirteen 16 g sachets for "kafa 200 g" cost more
-                                     -- than the shelf price says: every pack beyond
-                                     -- three, or beyond the count asked for, weighs 5%
-                                     -- more. Relative, so it reads the same in any
-                                     -- currency (V125).
-                                     selected_price.effective_price * need.packages
-                                         * CASE
-                                               WHEN item.target_quantity IS NULL
-                                                 OR pack.by_piece
-                                                 OR pack.by_the_kilogram
-                                                   THEN 1
-                                               ELSE 1 + 0.05 * GREATEST(
-                                                   0,
-                                                   need.packages - GREATEST(3, item.quantity)
-                                               )
-                                           END ASC,
-                                     -- Dve ponude koje koštaju isto: bira se
-                                     -- ona koju kupac zaista kupuje, po
-                                     -- skeniranim računima. Stoji tek posle
-                                     -- cene, jer plan ostaje najjeftiniji —
-                                     -- navika ne sme da košta ni dinar. Bez
-                                     -- ijednog računa lista je prazna i ovaj
-                                     -- red ne razlikuje ništa.
-                                     CASE
-                                         WHEN product.product_family_id =
-                                              ANY (:boughtFamilyIds)
-                                             THEN 0
-                                         ELSE 1
-                                     END ASC,
-                                     need.packages * pack.size ASC NULLS LAST,
+                            ORDER BY candidate.kind_rank ASC,
+                                     candidate.uncommon_rank ASC,
+                                     candidate.oversize_rank ASC,
+                                     candidate.size_rank ASC,
+                                     selected_price.effective_price * candidate.packages
+                                         * candidate.pack_weight ASC,
+                                     candidate.bought_rank ASC,
+                                     candidate.packages * candidate.package_size ASC NULLS LAST,
                                      product.id ASC
                             LIMIT 1
                         ) AS offer ON TRUE
                         WHERE item.shopping_list_id = :listId
-                          AND store.id IN (:storeIds)
-                          AND (
-                              store.pricing_eligible = TRUE
-                              OR (:includeUnlocated AND store.location IS NULL)
-                          )
+                          AND requested_store.store_id = requested_store.pricing_store_id
+                        )
+                        SELECT store.id AS store_id,
+                               retailer.code AS retailer_code,
+                               retailer.name AS retailer_name,
+                               format.code AS store_format_code,
+                               format.name AS store_format_name,
+                               store.name AS store_name,
+                               store.address,
+                               store.city,
+                               ST_Y(store.location::geometry) AS latitude,
+                               ST_X(store.location::geometry) AS longitude,
+                               priced.item_id,
+                               priced.requested_name,
+                               priced.requested_quantity,
+                               priced.matching_rule,
+                               priced.matching_status,
+                               priced.retailer_product_id,
+                               priced.canonical_product_id,
+                               priced.product_name,
+                               priced.product_brand,
+                               priced.product_barcode,
+                               priced.price_date,
+                               priced.regular_price,
+                               priced.discounted_price,
+                               priced.effective_price,
+                               priced.line_total,
+                               priced.price_scope,
+                               priced.packages, priced.package_size, priced.package_unit,
+                               priced.target_amount,
+                               priced.supplied_amount,
+                               priced.extra_amount,
+                               priced.unit_price
+                        FROM requested_store
+                        JOIN priced
+                          ON priced.store_id = requested_store.pricing_store_id
+                        JOIN app.store AS store
+                          ON store.id = requested_store.store_id
+                        JOIN app.retailer AS retailer
+                          ON retailer.id = store.retailer_id
+                        JOIN app.store_format AS format
+                          ON format.id = store.store_format_id
                         ORDER BY store.id ASC,
-                                 item.created_at ASC,
-                                 item.id ASC
+                                 priced.item_created_at ASC,
+                                 priced.item_id ASC
                         """)
                 .param("asOfDate", asOfDate)
                 .param("listId", listId)
