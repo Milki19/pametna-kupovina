@@ -20,5 +20,6 @@ compose stop backend
 compose up -d --wait postgres
 compose exec -T postgres sh -c 'dropdb -U "$POSTGRES_USER" --if-exists "$POSTGRES_DB" && createdb -U "$POSTGRES_USER" -T template0 "$POSTGRES_DB"'
 compose exec -T postgres sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --no-owner' < "$dump"
-compose up -d --build --wait
+start_backend
+compose up -d
 echo "Baza vraćena iz $dump; backend je primenio nove migracije i radi."

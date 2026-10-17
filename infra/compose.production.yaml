@@ -72,7 +72,11 @@ services:
       interval: 15s
       timeout: 5s
       retries: 20
-      start_period: 60s
+      # Flyway runs before the backend answers; a big release migrated for
+      # 13+ minutes. Failures in this window don't count, and the first
+      # success marks the backend healthy, so it is never "unhealthy" just
+      # for migrating. ops/start.sh waits for it the same way.
+      start_period: 45m
     logging: *logging
 
   caddy:
