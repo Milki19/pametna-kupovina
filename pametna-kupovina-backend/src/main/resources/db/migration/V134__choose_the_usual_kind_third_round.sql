@@ -141,6 +141,29 @@ BEGIN
     );
 END $$;
 
+-- Isti proizvod kod dva lanca ------------------------------------------------
+
+-- Reč za vrstu koju piše samo jedan lanac ne razdvaja proizvod (V111):
+-- „COKOLADA MILKA OREO“ i „Milka straw cheesecake“. Vrsta pročitana iz te reči
+-- ne sme da ih razdvoji ni sad, kad čokolada ima vrstu: par se poredi i kad
+-- jedna porodica još nema vrstu. Dve različite vrste i dalje nisu par.
+DO $$
+DECLARE
+    definition TEXT := pg_get_functiondef('app.refresh_product_merge_suggestions()'::regprocedure);
+    old_condition CONSTANT TEXT :=
+        'AND right_family.product_type_id IS NOT DISTINCT FROM left_family.product_type_id';
+BEGIN
+    IF POSITION(old_condition IN definition) = 0 THEN
+        RAISE EXCEPTION 'refresh_product_merge_suggestions: uslov za vrstu nije pronađen';
+    END IF;
+    EXECUTE REPLACE(
+        definition,
+        old_condition,
+        'AND (right_family.product_type_id IS NOT DISTINCT FROM left_family.product_type_id'
+            || ' OR right_family.product_type_id IS NULL OR left_family.product_type_id IS NULL)'
+    );
+END $$;
+
 -- Reči na spisku -----------------------------------------------------------
 
 INSERT INTO app.shopping_intent (
