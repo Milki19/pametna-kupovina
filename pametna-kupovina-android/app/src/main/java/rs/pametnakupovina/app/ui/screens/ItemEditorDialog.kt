@@ -47,6 +47,7 @@ import rs.pametnakupovina.app.data.DraftItemInput
 import rs.pametnakupovina.app.data.MAX_ITEM_QUANTITY
 import rs.pametnakupovina.app.data.MAX_TYPED_NAME_LENGTH
 import rs.pametnakupovina.app.data.amountLabel
+import rs.pametnakupovina.app.data.hasLetter
 import rs.pametnakupovina.app.data.isAllowedQuantity
 import rs.pametnakupovina.app.data.local.DraftItemEntity
 import rs.pametnakupovina.app.data.network.CanonicalProductSearchItemDto
