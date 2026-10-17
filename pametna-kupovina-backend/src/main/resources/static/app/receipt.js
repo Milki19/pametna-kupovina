@@ -7,6 +7,7 @@
 
 /** Caddy i server primaju do 1 MB; ostaje mesta za omot zahteva. */
 const RECEIPT_MOST_BYTES = 950000;
+const RECEIPT_MOST_PIXELS = 12000000;
 
 const receiptState = { list: null, busy: false, result: null, error: null };
 
@@ -68,13 +69,17 @@ async function receiptUpload(file) {
     return { blob: file, name: file.type === 'image/png' ? 'racun.png' : 'racun.jpg' };
   }
   const image = await loadImage(file);
-  let width = image.naturalWidth;
-  let height = image.naturalHeight;
+  // iPhone ne crta platno veće od ~16 miliona tačaka (fotografija od 48 MP),
+  // a QR kodu je dosta i 12.
+  const shrink = Math.min(1, Math.sqrt(RECEIPT_MOST_PIXELS / (image.naturalWidth * image.naturalHeight)));
+  let width = Math.round(image.naturalWidth * shrink);
+  let height = Math.round(image.naturalHeight * shrink);
   for (let attempt = 0; attempt < 5; attempt++) {
     const canvas = document.createElement('canvas');
     canvas.width = width;
     canvas.height = height;
     const context = canvas.getContext('2d');
+    if (!context) throw new Error('Slika je prevelika. Pošalji screenshot samo dela sa QR kodom.');
     context.fillStyle = '#fff';
     context.fillRect(0, 0, width, height);
     context.drawImage(image, 0, 0, width, height);
