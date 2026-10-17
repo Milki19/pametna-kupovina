@@ -63,6 +63,13 @@ WHERE normalized_alias IN (
       )
   AND uncommon_name_pattern IS NULL;
 
+-- Za "maslac" je obično pun maslac; tričetvrt masni i lagani dolaze tek kad
+-- radnja nema drugi (proba 17.10.: Lidl „Tričetvrt masni maslac 60% mm“).
+UPDATE app.shopping_intent_alias
+SET uncommon_name_pattern = '\m(tricetvrt[a-z]*|light|lajt|lagan[a-z]*|polumasn[a-z]*|smanjen[a-z]*)\M'
+WHERE normalized_alias IN ('maslac', 'puter')
+  AND uncommon_name_pattern IS NULL;
+
 -- Šampon -------------------------------------------------------------------
 
 UPDATE app.shopping_intent_alias
@@ -97,12 +104,12 @@ FROM (
     VALUES
         (
             'DISH_DETERGENT',
-            '\m(deterdzent[a-z]*|det|sredstv[a-z]*|tecnost[a-z]*|gel)\M.*\m(sudov[a-z]*|sudj[a-z]*|posud[a-z]*)\M'
+            '\m(deterdzent[a-z]*|det|deter|sredstv[a-z]*|tecnost[a-z]*|tec|gel|tablet[a-z]*|kapsul[a-z]*)\M.*\m(sudov[a-z]*|sudj[a-z]*|posud[a-z]*)\M'
                 || '|\m(sudov[a-z]*|sudj[a-z]*|posudj[a-z]*)\M.*\m(deterdzent[a-z]*|det|tecn[a-z]*|gel|tablet[a-z]*|kapsul[a-z]*)\M'
                 || '|\m(fairy|ludwik|morning fresh|somat|finish)\M',
             '\m(ves|vesa|wc|toalet[a-z]*|stakl[a-z]*|podov[a-z]*|kupatil[a-z]*|rukavic[a-z]*|sundjer[a-z]*'
                 || '|cetk[a-z]*|krp[a-z]*|stalak|susac[a-z]*|so|sol|sjaj[a-z]*|ispiranj[a-z]*|cistac[a-z]*'
-                || '|osvezivac[a-z]*)\M',
+                || '|osvezivac[a-z]*|ciscenj[a-z]*|maramic[a-z]*|towels?|mop|clener|cleaner)\M',
             30
         ),
         (
@@ -111,7 +118,7 @@ FROM (
                 || '|\m(colgate|signal|aquafresh|sensodyne|elmex|parodontax|blend a med|blendamed|meridol|lacalut)\M'
                 || '.*\m(past[a-z]*|ml)\M',
             '\m(cetk[a-z]*|konac|vodic[a-z]*|ispiranj[a-z]*|tecnost[a-z]*|protez[a-z]*|corega|tablet[a-z]*'
-                || '|interdental[a-z]*|brush|floss|mouthwash|sapun[a-z]*|tus[a-z]*|set|poklon[a-z]*)\M',
+                || '|interdental[a-z]*|brush|floss|mouthwash|sapun[a-z]*|tus[a-z]*|set|poklon[a-z]*|serum)\M',
             30
         ),
         (
@@ -123,7 +130,7 @@ FROM (
                 || '|bananic[a-z]*|cips|protein[a-z]*|jaje|jaja|figur[a-z]*|zeka|zec|lizalic[a-z]*'
                 || '|kockic[a-z]*|kapi|kapljic[a-z]*|mrvic[a-z]*|posip[a-z]*|glazur[a-z]*|fondue|rolat'
                 || '|kiflic[a-z]*|flips|smoki|grickalic[a-z]*|krofn[a-z]*|mafin[a-z]*|cookie[a-z]*|brownie'
-                || '|kuglic[a-z]*|drazej[a-z]*|ukus[a-z]*|arom[a-z]*)\M'
+                || '|kuglic[a-z]*|drazej[a-z]*|ukus[a-z]*|arom[a-z]*|granol[a-z]*|kasa|kasic[a-z]*|ovsen[a-z]*)\M'
                 -- Čokolada se ne prodaje na litar; mleko sa ukusom čokolade da.
                 || '|\m(l|dl|ml)\M',
             30
