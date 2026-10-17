@@ -24,4 +24,4 @@ rsync -az "$infra/release/backend.jar" "$target:$remote_dir/release/"
 
 # The first time there are no settings yet: they are written on the server,
 # and ops/restore.sh brings the database over and starts everything.
-ssh "$target" "cd '$remote_dir' && chmod +x ops/*.sh && if [ -f .env.production ]; then ops/start.sh; else echo 'Poslato. Na serveru napravi .env.production iz .env.production.example, pa pokreni ops/restore.sh ili ops/start.sh.'; fi"
+ssh -o ServerAliveInterval=30 "$target" "cd '$remote_dir' && chmod +x ops/*.sh && if [ -f .env.production ]; then ops/start.sh; else echo 'Poslato. Na serveru napravi .env.production iz .env.production.example, pa pokreni ops/restore.sh ili ops/start.sh.'; fi"
