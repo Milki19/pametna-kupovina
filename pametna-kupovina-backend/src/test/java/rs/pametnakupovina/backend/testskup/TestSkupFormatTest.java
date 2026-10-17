@@ -59,6 +59,11 @@ class TestSkupFormatTest {
         assertThat(stavka("S03").oceni("Secer u prahu 500g", BigDecimal.ONE)).isEqualTo(Ocena.POGRESNO);
         assertThat(stavka("S04").oceni("Prašak za pecivo Dr. Oetker 12g", BigDecimal.ONE)).isEqualTo(Ocena.POGRESNO);
         assertThat(stavka("S06").oceni(null, null)).isEqualTo(Ocena.NEMA);
+        // Jedna stanica, 17.10.
+        assertThat(stavka("C33").oceni("DIJAMANT ST.MARG.MASLAC 500G", BigDecimal.ONE)).isEqualTo(Ocena.POGRESNO);
+        assertThat(stavka("C05").oceni("PIL. JETRA I SRCE 1KG", BigDecimal.ONE)).isEqualTo(Ocena.POGRESNO);
+        assertThat(stavka("C05").oceni("PILECA LEDJA OKO 1KG", BigDecimal.ONE)).isEqualTo(Ocena.POGRESNO);
+        assertThat(stavka("C19").oceni("SAMPON DECIJI 300ML", BigDecimal.ONE)).isEqualTo(Ocena.POGRESNO);
     }
 
     @Test
@@ -71,6 +76,8 @@ class TestSkupFormatTest {
         assertThat(stavka("S09").oceni("BRAŠNO T-400 1KG", BigDecimal.ONE)).isEqualTo(Ocena.ISPRAVNO);
         assertThat(stavka("S11").oceni("Juneci cevap 500g", BigDecimal.valueOf(2))).isEqualTo(Ocena.ISPRAVNO);
         assertThat(stavka("S14").oceni("Ulje suncokretovo Maxi 1l", BigDecimal.ONE)).isEqualTo(Ocena.ISPRAVNO);
+        assertThat(stavka("C05").oceni("PILECI BATAK 1KG", BigDecimal.ONE)).isEqualTo(Ocena.ISPRAVNO);
+        assertThat(stavka("C33").oceni("MASLAC 82% 250G", BigDecimal.ONE)).isEqualTo(Ocena.ISPRAVNO);
         assertThat(stavka("S14").oceni("Ulje maslinovo extra vergine WM 1l", BigDecimal.ONE)).isEqualTo(Ocena.POGRESNO);
     }
 }

@@ -6,7 +6,7 @@ S01	kafa 200 g	IZVESTAJ	\b(kafa|kafe|mlevena|espresso|doncafe|don cafe|grand|bon
 S02	banane 1,5 kg	IZVESTAJ	\bbanan[ae]?\b	crven|baby|mini|cips|\bsok\b|jogurt|cokolad|susen|desert|pire|kasic|keks|bombon|bananica		Obične banane na kg (rinfuz) ili pakovane. Nisu crvene ni mini banane.
 S03	secer 500 g	IZVESTAJ	\bsecer\b	prah|vanil|smedj|kock|trsk|braon|zelir|fruktoz|stevi|dekor|glazur|ukras	2	Beli kristal šećer. Nije u prahu, vanilin, smeđi ni u kockama.
 S04	prasak za ves	IZVESTAJ	deterdzent|prasak za (ves|pranje)|\b(ariel|persil|merix|duel|bonux|tide|rubel|faks)\b	pecivo|puding|sladoled|kakao|mleko u prahu|omeksiv|sudov|kapsul		Prašak (deterdžent) za veš. Nije prašak za pecivo ni omekšivač.
-S05	sampon za kosu	IZVESTAJ	\bsampon\b	\bpas\b|\bpse|macke|ljubim|tepih|\bauto		Šampon za kosu, bilo koji.
+S05	sampon za kosu	IZVESTAJ	\bsampon\b	\bpas\b|\bpse|macke|ljubim|tepih|\bauto|\bdec|kids|baby		Šampon za kosu, bilo koji.
 S06	toalet papir	IZVESTAJ	toalet(ni)? papir|\bwc papir|toaletni	vlazn|maramic|kuhinjsk|ubrus		Toalet papir, bilo koji broj rolni. Nisu vlažne maramice ni ubrus.
 S07	pola kile sira	IZVESTAJ	\bsir\b|\bsira\b|trapist|gauda|edamer|\bfeta\b|tilzit|tilsiter|kackavalj	sirup|sirce|smoki|cips|kokice|kroket|\bpica\b|burek|\bpita\b|grickal|namaz|topljen		Sir oko 0,5 kg (beli, trapist, gauda...). Količina 500 g. Nije sirni namaz ni topljeni sir.
 S08	coca cola 2l	IZVESTAJ	coca ?cola|cocacola|\bcoke\b	zero|light|bez secera|limenk	3	Coca-Cola, oko 2 l ukupno (jedna flaša od 2 l ili dve od 1 l). Nije Zero.
@@ -27,7 +27,7 @@ C01	kiselo mleko	CESTO	kiselo mleko|kis mleko	vocn|jagod|biljn|\bsoj		Kiselo mle
 C02	pavlaka	CESTO	pavlak	biljn|cips|smoki|\bsos\b|dresing		Kisela pavlaka.
 C03	beli sir 500 g	CESTO	\b(beli|mladi|sitni|kravlji|sjenicki|zlatiborski|feta|krem)\b.*\bsir|\bsir\b.*\b(beli|mladi|sitni|kravlji|sjenicki|zlatiborski|feta)\b	topljen|namaz|\btost	2	Beli (mladi, kravlji, feta) sir, 500 g.
 C04	kackavalj 300g	CESTO	kackav	namaz|topljen|ukus	2	Kačkavalj.
-C05	piletina 1kg	CESTO	\bpil(e|ec|eci|ece|etina|eca|eca)\b|batak|karabatak|krilc	pastet|virsl|kobasic|parizer|salam|\bsupa|kock|naresk|hrenovk|nuget|konzerv|pohovan|gotov		Sveže pileće meso (file, batak, celo pile).
+C05	piletina 1kg	CESTO	\bpil(e|ec|eci|ece|etina|eca|eca)\b|batak|karabatak|krilc	pastet|virsl|kobasic|parizer|salam|\bsupa|kock|naresk|hrenovk|nuget|konzerv|pohovan|gotov|jetr|\bsrc[ea]\b|zelu[dc]|iznutr|ledj		Sveže pileće meso (file, batak, celo pile).
 C06	mleveno meso 500 g	CESTO	mleven	kafa|biber|paprik|orah|zacin|mak\b	2	Mleveno meso (juneće, svinjsko ili mešano).
 C07	paradajz 1kg	CESTO	paradajz	\bsok|pire|pelat|kecap|\bsos|pasta|susen|konzerv|koncentrat|ajvar|cips|passata|zacin|\bsupa		Svež paradajz.
 C08	krompir 2kg	CESTO	krompir	cips|pomfrit|pire|prz|smoki|kroket|flips|brasno|salat|zamrznut|wedges|grickal		Svež krompir.
@@ -41,7 +41,7 @@ C15	caj kamilica	CESTO	kamilic	sapun|sampon|krem|losion|mleko|kupk|vlazn|maramic
 C16	cokolada 100g	KVACICE	cokolad	mleko|napitak|kakao|namaz|krem|keks|sladoled|puding|kolac|bombon|pralin|\bjaje|kinder|tortic|kroasan|musli|zitar|preliv|sirup|jogurt|desert|stapic|kornet|vafl|napolitank|biskvit|protein|bananic	2	Tabla čokolade, 100 g. Isto kao C17, bez kvačica.
 C17	čokolada 100g	KVACICE	cokolad	mleko|napitak|kakao|namaz|krem|keks|sladoled|puding|kolac|bombon|pralin|\bjaje|kinder|tortic|kroasan|musli|zitar|preliv|sirup|jogurt|desert|stapic|kornet|vafl|napolitank|biskvit|protein|bananic	2	Tabla čokolade, 100 g. Isto kao C16, sa kvačicama.
 C18	šećer 1kg	KVACICE	\bsecer\b	prah|vanil|smedj|kock|trsk|braon|zelir|fruktoz|stevi|dekor|glazur|ukras	2	Beli kristal šećer, 1 kg. Par sa S03 (bez kvačica).
-C19	šampon za kosu	KVACICE	\bsampon\b	\bpas\b|\bpse|macke|ljubim|tepih|\bauto		Šampon za kosu. Par sa S05 (bez kvačica).
+C19	šampon za kosu	KVACICE	\bsampon\b	\bpas\b|\bpse|macke|ljubim|tepih|\bauto|\bdec|kids|baby		Šampon za kosu. Par sa S05 (bez kvačica).
 C20	prašak za veš	KVACICE	deterdzent|prasak za (ves|pranje)|\b(ariel|persil|merix|duel|bonux|tide|rubel|faks)\b	pecivo|puding|sladoled|kakao|mleko u prahu|omeksiv|sudov|kapsul		Prašak za veš. Par sa S04 (bez kvačica).
 C21	ćevapi	KVACICE	cevap	protein|posn|vegan|\bsoj|zacin|kecap|ajvar		Ćevapi. Par sa C22 (bez kvačica).
 C22	cevapi	KVACICE	cevap	protein|posn|vegan|\bsoj|zacin|kecap|ajvar		Ćevapi bez kvačica. Par sa C21.
@@ -55,7 +55,7 @@ C29	sok od pomorandže 1l	CESTO	(sok|nektar|juice|napitak).*(pomorandz|narandz|o
 C30	kečap	CESTO	kecap	cips|smoki|grickal|flips|\bljut|\bhot\b|sos za		Blagi kečap.
 C31	majonez	CESTO	majonez	posn|lagan|light|\bsos\b|salat|tartar|vegan|\bren\b|beli luk		Majonez.
 C32	tunjevina	CESTO	tunjevin|\btuna\b|\btunj	pastet|namaz|salat|hrana za|sendvic		Tunjevina u konzervi.
-C33	puter 250g	CESTO	\bputer\b|maslac|butter	kikiriki|kakao|biljn|namaz|margarin|keks|kroasan|popkorn|kokice|aroma|ukus	2	Puter (maslac), 250 g.
+C33	puter 250g	CESTO	\bputer\b|maslac|butter	kikiriki|kakao|biljn|namaz|margarin|\bmarg\b|\bston|keks|kroasan|popkorn|kokice|aroma|ukus	2	Puter (maslac), 250 g.
 K01	pola kile mlevenog mesa	SLENG	mleven	kafa|biber|paprik|orah|zacin|mak\b	2	Mleveno meso, 500 g („pola kile“).
 K02	kila krompira	SLENG	krompir	cips|pomfrit|pire|prz|smoki|kroket|flips|brasno|salat|zamrznut|wedges|grickal		Krompir, 1 kg („kila“).
 K03	2 kile brasna	SLENG	brasno	kukuruz|integral|heljd|razen|ovsen|pirin|bez glutena|palacink|kokos|badem|krompir|leblebij|prezl	3	Pšenično brašno, 2 kg („kile“).
