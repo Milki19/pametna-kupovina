@@ -4,6 +4,8 @@
 set -euo pipefail
 . "$(dirname "$0")/env.sh"
 
+# The name-meaning model (V135), once; the backend starts without it too.
+"$(dirname "$0")/name-model.sh" || echo "Model za značenje naziva nije preuzet; predlozi se boduju samo po slovima."
 start_backend
 # The backend is healthy by now, so Caddy's depends_on is met at once.
 compose up -d

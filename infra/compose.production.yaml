@@ -56,11 +56,14 @@ services:
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       SHOPPING_MAX_PRICE_AGE_DAYS: ${SHOPPING_MAX_PRICE_AGE_DAYS:-30}
       PRICE_IMPORT_ARCHIVE_DIRECTORY: /data/import-archive
+      # ops/name-model.sh puts the model here; without it pairs are scored by letters only.
+      NAME_MEANING_MODEL_DIR: /models/multilingual-e5-small
       HEALTH_SHOW_DETAILS: never
       TZ: Europe/Belgrade
       JAVA_TOOL_OPTIONS: ${BACKEND_JAVA_OPTIONS:--Xms3g -Xmx4g -XX:+AlwaysPreTouch}
     volumes:
       - price_import_archive:/data/import-archive
+      - ./models:/models:ro
     expose:
       - "8080"
     healthcheck:

@@ -164,7 +164,7 @@
   <div id="error" class="banner error" hidden></div>
 
   <section id="tab-duplicates">
-    <p class="intro">Dva proizvoda istog brenda i veličine koja izgledaju kao jedan. „Isti proizvod“ ih spaja pri sledećem osvežavanju kataloga, „Različiti“ se više ne pitaju. Označi više parova da odlučiš za sve odjednom.</p>
+    <p class="intro">Dva proizvoda istog brenda i veličine koja izgledaju kao jedan. „Isti proizvod“ ih spaja pri sledećem osvežavanju kataloga, „Različiti“ se više ne pitaju. Prvo su parovi čiji nazivi najviše znače isto. Označi više parova da odlučiš za sve odjednom.</p>
     <p class="meta" id="duplicates-total"></p>
     <div id="duplicates"></div>
     <div class="select-bar" id="duplicates-bar" hidden>
@@ -409,10 +409,17 @@
     card.append(
       el('div', { class: 'card-head' },
         el('label', {}, checkbox, [pair.brand, amount(pair.quantityValue, pair.baseUnit)].filter(Boolean).join(' · ')),
-        el('span', {}, 'sličnost naziva ' + Number(pair.score).toLocaleString('sr-RS', { maximumFractionDigits: 2 }))),
+        el('span', {}, similarity(pair))),
       el('div', { class: 'pair' }, side(pair.left), side(pair.right)),
       el('div', { class: 'actions' }, differentButton, sameButton));
     return card;
+  }
+
+  // Slova (pg_trgm) i značenje naziva (V135), kad je bodovano.
+  function similarity(pair) {
+    const number = value => Number(value).toLocaleString('sr-RS', { maximumFractionDigits: 2 });
+    const letters = 'sličnost naziva ' + number(pair.score);
+    return pair.meaningScore == null ? letters : letters + ' · značenja ' + number(pair.meaningScore);
   }
 
   // Prijave
