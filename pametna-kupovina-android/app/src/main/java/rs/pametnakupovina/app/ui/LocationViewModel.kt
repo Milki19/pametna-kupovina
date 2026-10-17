@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import rs.pametnakupovina.app.location.Coordinates
 import rs.pametnakupovina.app.location.FusedLocationProvider
@@ -22,6 +23,8 @@ import rs.pametnakupovina.app.text.uiText
 data class LocationUiState(
     val isResolving: Boolean = false,
     val coordinates: Coordinates? = null,
+    /** Adresa polazne tačke za prikaz; null dok je nema, pa se vide koordinate. */
+    val label: String? = null,
     val message: UiText? = null,
     val isError: Boolean = false,
     /** Greška koju rešavaju podešavanja telefona, a ne druga adresa. */
@@ -45,30 +48,29 @@ class LocationViewModel @Inject constructor(
     }
 
     fun resolveCurrentLocation() = resolve(offerSettings = true) {
-        locationProvider.currentLocation() to
-            uiText(R.string.location_found_current)
+        Triple(locationProvider.currentLocation(), null, uiText(R.string.location_found_current))
     }
 
     fun findAddress(query: String) {
         if (query.isBlank()) return
         resolve(offerSettings = false) {
             locationProvider.findAddress(query.trim()).let { (coordinates, label) ->
-                coordinates to uiText(R.string.location_found_address, label)
+                Triple(coordinates, label, uiText(R.string.location_found_address, label))
             }
         }
     }
 
     private fun resolve(
         offerSettings: Boolean,
-        lookup: suspend () -> Pair<Coordinates, UiText>
+        lookup: suspend () -> Triple<Coordinates, String?, UiText>
     ) {
         if (_uiState.value.isResolving) return
 
         viewModelScope.launch {
             _uiState.value = LocationUiState(isResolving = true)
             _uiState.value = try {
-                val (coordinates, message) = lookup()
-                LocationUiState(coordinates = coordinates, message = message)
+                val (coordinates, label, message) = lookup()
+                LocationUiState(coordinates = coordinates, label = label, message = message)
             } catch (error: kotlinx.coroutines.CancellationException) {
                 throw error
             } catch (error: Exception) {
@@ -79,6 +81,10 @@ class LocationViewModel @Inject constructor(
                     isError = true,
                     offerSettings = offerSettings
                 )
+            }
+            _uiState.value.coordinates?.takeIf { _uiState.value.label == null }?.let { coordinates ->
+                val label = locationProvider.addressOf(coordinates) ?: return@launch
+                _uiState.update { state -> if (state.coordinates == coordinates) state.copy(label = label) else state }
             }
         }
     }

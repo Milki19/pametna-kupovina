@@ -59,6 +59,17 @@ class ResumePurchaseScreenInstrumentedTest {
         compose.onNodeWithText(text(R.string.rec_start_purchase)).performClick()
         compose.runOnIdle { assertTrue(started) }
     }
+
+    @Test fun startingPointShowsAddressInsteadOfCoordinates() {
+        val result = purchaseTestResult()
+        compose.setContent {
+            MaterialTheme {
+                RecommendationContent(result,44.8159 to 20.4595,false,null,null,true,
+                    onResume={}, onStart={ _, _ -> }, originLabel="Kneza Mihaila 10, Beograd")
+            }
+        }
+        compose.onNodeWithTag("origin-label").assertTextEquals("Kneza Mihaila 10, Beograd")
+    }
 }
 
 /** A text as the app shows it on this device, so the test runs in any language. */
