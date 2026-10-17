@@ -96,6 +96,7 @@
     <string name="list_error_name_required">The item name is required.</string>
     <string name="list_error_quantity_range">Quantity must be between 0.01 and 999.</string>
     <string name="list_error_name_too_long">The name can have at most 80 characters.</string>
+    <string name="list_error_name_no_letter">The name needs at least one letter.</string>
     <string name="list_error_target_quantity">The total amount must be positive and use the unit g, ml or piece.</string>
     <string name="list_error_exact_no_family">An exact item can\'t have a product family.</string>
     <string name="list_error_family_required">For the same product, choose a product family.</string>

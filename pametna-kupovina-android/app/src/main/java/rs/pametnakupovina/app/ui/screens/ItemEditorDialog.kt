@@ -198,7 +198,8 @@ internal fun ItemEditorDialog(
     val exactSelection = resolveDraftCanonicalProductId(item, name, rule, selectedProduct)
     val familySelection = resolveDraftProductFamilyId(item, name, rule, selectedProduct)
     val nameTooLong = isFlexible && name.trim().length > MAX_TYPED_NAME_LENGTH
-    val valid = name.isNotBlank() && !nameTooLong &&
+    val nameNoLetter = isFlexible && name.isNotBlank() && !hasLetter(name)
+    val valid = name.isNotBlank() && !nameTooLong && !nameNoLetter &&
         parsedQuantity != null && isAllowedQuantity(parsedQuantity) &&
         (!isAmountMode || (parsedTarget != null && parsedTarget > 0)) &&
         when (rule) {
@@ -388,11 +389,15 @@ internal fun ItemEditorDialog(
                         },
                         label = { Text(stringResource(R.string.list_editor_what_label)) },
                         placeholder = { Text(stringResource(R.string.list_editor_what_placeholder)) },
-                        isError = nameTooLong,
-                        supportingText = if (nameTooLong) {
-                            { Text(stringResource(R.string.list_error_name_too_long)) }
-                        } else {
-                            null
+                        isError = nameTooLong || nameNoLetter,
+                        supportingText = when {
+                            nameTooLong -> {
+                                { Text(stringResource(R.string.list_error_name_too_long)) }
+                            }
+                            nameNoLetter -> {
+                                { Text(stringResource(R.string.list_error_name_no_letter)) }
+                            }
+                            else -> null
                         },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
