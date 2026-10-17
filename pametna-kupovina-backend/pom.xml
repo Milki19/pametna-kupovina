@@ -136,6 +136,13 @@
             <artifactId>pdfbox</artifactId>
             <version>3.0.8</version>
         </dependency>
+
+        <!-- Značenje naziva (multilingual-e5-small) za predloge „Isti proizvodi?“. -->
+        <dependency>
+            <groupId>com.microsoft.onnxruntime</groupId>
+            <artifactId>onnxruntime</artifactId>
+            <version>1.29.0</version>
+        </dependency>
     </dependencies>
 
     <build>

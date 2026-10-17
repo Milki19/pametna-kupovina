@@ -29,6 +29,7 @@ public class ProductReviewService {
         return jdbcClient.sql("""
                         SELECT suggestion.id,
                                suggestion.score,
+                               suggestion.meaning_score,
                                brand.display_name AS brand,
                                left_family.quantity_value,
                                left_family.base_unit,
@@ -73,13 +74,15 @@ public class ProductReviewService {
                               ON retailer.id = presence.retailer_id
                             WHERE presence.product_family_id = right_family.id
                         ) AS right_side
-                        ORDER BY suggestion.score DESC, suggestion.id
+                        -- Likely pairs first, by meaning when it is scored.
+                        ORDER BY suggestion.meaning_score DESC NULLS LAST, suggestion.score DESC, suggestion.id
                         LIMIT ?
                         """)
                 .param(1, limit)
                 .query((resultSet, rowNumber) -> new ProductMergeSuggestionReview(
                         resultSet.getLong("id"),
                         resultSet.getBigDecimal("score"),
+                        resultSet.getBigDecimal("meaning_score"),
                         resultSet.getString("brand"),
                         resultSet.getBigDecimal("quantity_value"),
                         resultSet.getString("base_unit"),

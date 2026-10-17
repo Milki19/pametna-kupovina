@@ -166,6 +166,8 @@ class ProductReviewTest {
                 .findFirst()
                 .orElseThrow();
 
+        // No name-meaning model here: the pair keeps only the letters score.
+        assertThat(candies.meaningScore()).isNull();
         assertThat(reviewService.countMergeSuggestions().total()).isEqualTo(1);
 
         // Several pairs at once; one that no longer exists is skipped.

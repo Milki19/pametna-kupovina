@@ -11,10 +11,16 @@ public class ProductCatalogMaintenanceService {
 
     private final JdbcClient jdbcClient;
     private final SaleListRefresher saleListRefresher;
+    private final MergeSuggestionMeaningScorer meaningScorer;
 
-    public ProductCatalogMaintenanceService(JdbcClient jdbcClient, SaleListRefresher saleListRefresher) {
+    public ProductCatalogMaintenanceService(
+            JdbcClient jdbcClient,
+            SaleListRefresher saleListRefresher,
+            MergeSuggestionMeaningScorer meaningScorer
+    ) {
         this.jdbcClient = jdbcClient;
         this.saleListRefresher = saleListRefresher;
+        this.meaningScorer = meaningScorer;
     }
 
     @Transactional
@@ -1039,6 +1045,8 @@ public class ProductCatalogMaintenanceService {
         jdbcClient.sql("SELECT app.refresh_product_merge_suggestions()")
                 .query((resultSet, rowNumber) -> true)
                 .single();
+        // And by what the two names mean (V135).
+        meaningScorer.scoreSuggestions();
         // A block of one brand, kind and fat of hard cheese is one product
         // under any name; the next import of a chain applies it (V130).
         jdbcClient.sql("SELECT app.join_blocks_of_one_cheese()")
