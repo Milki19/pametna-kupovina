@@ -2,7 +2,8 @@
 --
 -- * "maslac" je u Jednoj stanici u Novom Sadu (METRO) postao
 --   „DIJAMANT ST.MARG.MASLAC“, stoni margarin. Skraćenica „MARG.“ i „stoni“
---   nisu bili među izuzecima maslaca.
+--   nisu bili među izuzecima maslaca. „Maslac namaz“ i „namazni maslac“
+--   (Lurpak, Biser, Moja kravica) su pravi maslac i ostaju (proba 17.10.).
 -- * "piletina" je u METRO-u postala „PIL. JETRA I SRCE“, a svuda drugde
 --   „pileća leđa“. Iznutrice nisu piletina (kao što ni "meso" nije, V87), a
 --   leđa, krila, vratovi i kosti dolaze tek kad radnja nema drugi komad.
@@ -14,7 +15,7 @@
 -- Maslac -------------------------------------------------------------------
 
 UPDATE app.product_type_rule AS rule
-SET exclude_pattern = rule.exclude_pattern || '|\m(marg|ston[a-z]*|namaz[a-z]*)\M',
+SET exclude_pattern = rule.exclude_pattern || '|\m(marg|ston[a-z]*)\M',
     updated_at = NOW()
 FROM app.product_type AS type
 WHERE type.id = rule.product_type_id
