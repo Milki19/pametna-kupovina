@@ -73,8 +73,9 @@ public class PriceImportService {
     // app.per_kilogram_factor).
     private static final java.util.regex.Pattern WEIGHED_GOODS_PATTERN =
             java.util.regex.Pattern.compile(
-                    "\\b(cca|sir|gauda|edamer|edam|trapist|tilsiter|kackavalj|"
-                            + "ementaler|emmentaler|parmezan|parmigiano|grana|brie|"
+                    "\\b(cca|sir|gauda|edamer|edam|trapist|trapis|tilsiter|kackavalj|"
+                            + "ementaler|emmentaler|emental|maasdamer|maasdam|"
+                            + "parmezan|parmigiano|grana|brie|"
                             + "camembert|gorgonzola|pecorino|cheddar|sunka|slanina|"
                             + "pecenica|kulen|kobasica|salama|mortadela|panceta|"
                             + "prsuta|meso|file|vrat|kare|but|plecka|rebra)\\b"

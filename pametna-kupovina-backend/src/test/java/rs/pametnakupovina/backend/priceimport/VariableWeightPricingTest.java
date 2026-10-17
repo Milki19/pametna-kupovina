@@ -56,6 +56,8 @@ class VariableWeightPricingTest {
             8;Meso;PILECI FILE CCA 3KG VAKUUM;NO BRAND;2604065701012;KG;Test format;698,49;;13-09-2026;698,49;;;10
             9;Slatkisi;Bombonjera Ferrero Rocher T16 200g;Ferrero;2604065701013;kg;Test format;861,99;;13-09-2026;861,99;;;20
             1;Mleko;Mleko 1l;Test;2604065701014;L;Test format;99,99;;13-09-2026;99,99;;;10
+            2;Sir;Paladin Maasdamer blok 48%mm 3.3kg 09744 09/23;Silbo;2604065701015;KOM;Test format;1399,99;;13-09-2026;;;;10
+            2;Sir;Paladin Trapis Blok 45%3.3kg Silbo0484;Silbo;2604065701016;KOM;Test format;1569,99;;13-09-2026;;;;10
             """;
 
     private static HttpServer csvServer;
@@ -128,6 +130,15 @@ class VariableWeightPricingTest {
         // No "cca": the row already states what the package costs.
         assertThat(priceOf("2604065701013"))
                 .isEqualByComparingTo("861.99");
+
+        // RIČ's blocks name the kind without "sir": still a block of hard
+        // cheese quoted per kilogram, as V128 reads it (V131).
+        assertThat(quantityOf("2604065701015"))
+                .isEqualByComparingTo("1000");
+        assertThat(priceOf("2604065701015"))
+                .isEqualByComparingTo("1399.99");
+        assertThat(quantityOf("2604065701016"))
+                .isEqualByComparingTo("1000");
 
         // Exactly one unit of measure: nothing to scale either way.
         assertThat(priceOf("2604065701014"))
