@@ -982,6 +982,11 @@ function locate() {
 
 let recommendation = null;
 let recommendationFor = null;
+// Cene se menjaju jednom dnevno, pri uvozu; sat vremena je dovoljno sveže.
+const PLAN_REMEMBERED_FOR = 60 * 60 * 1000;
+/** Ono od čega plan zavisi: stavke, količine i odluke, bez vremena izmene. */
+const planInputs = list => JSON.stringify(list.items.map(i => [i.id, i.name, i.barcode, i.quantity, i.matchingRule,
+  i.matchingStatus, i.matchedCanonicalProductId, i.matchedProductFamilyId, i.matchingDecisionId, i.flexibleConstraints]));
 let selectedType = 'RECOMMENDED_BALANCE';
 const scenarioTitle = { SINGLE_STORE: 'Jedna prodavnica', RECOMMENDED_BALANCE: 'Preporučeni balans', LOWEST_PRICE: 'Najniža cena' };
 const scenarioShort = { SINGLE_STORE: 'Jedna stanica', RECOMMENDED_BALANCE: 'Najbolje ukupno', LOWEST_PRICE: 'Najjeftinija korpa' };
@@ -1051,11 +1056,15 @@ async function showRecommendation() {
   // Obrisana stavka koja još čeka „Vrati“ prvo stiže do servera.
   await flushDelete();
   const travel = saved.get('walking', false) ? '&travelMode=WALKING' : '';
-  const key = `${listId}|${listVersion}|${origin.lat}|${origin.lng}|${travel}`;
-  if (recommendation && remembered(recommendationFor, key)) return renderRecommendation();
-  screen({ title: 'Preporuke', back: '#/lokacija', html:
-    '<p class="center muted">Računam tri scenarija…</p>' + '<div class="skeleton" aria-hidden="true"></div>'.repeat(3) });
   try {
+    // Plan se ne računa ponovo dok se spisak ne promeni. Stavke se pitaju
+    // server, jer spisak može da se menja i u aplikaciji, a to je brzo.
+    const list = await api('GET', `shopping-lists/${listId}`);
+    const key = `${listId}|${origin.lat}|${origin.lng}|${travel}|${new Date().toDateString()}|${planInputs(list)}`;
+    if (recommendation && recommendationFor && recommendationFor.key === key
+        && Date.now() - recommendationFor.at < PLAN_REMEMBERED_FOR) return renderRecommendation();
+    screen({ title: 'Preporuke', back: '#/lokacija', html:
+      '<p class="center muted">Računam tri scenarija…</p>' + '<div class="skeleton" aria-hidden="true"></div>'.repeat(3) });
     recommendation = await api('GET', `shopping-lists/${listId}/recommendations?latitude=${origin.lat}&longitude=${origin.lng}${travel}`);
     recommendationFor = { key, at: Date.now() };
   } catch (error) {
