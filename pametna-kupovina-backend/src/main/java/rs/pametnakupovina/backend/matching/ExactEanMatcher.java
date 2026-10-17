@@ -11,6 +11,7 @@ import java.util.Optional;
 public class ExactEanMatcher {
 
     private static final String CANONICAL_KEY_PREFIX = "EAN:";
+    private static final int MINIMUM_SIGNIFICANT_DIGITS = 8;
 
     private final JdbcClient jdbcClient;
     private final EanValidator eanValidator;
@@ -33,7 +34,7 @@ public class ExactEanMatcher {
     ) {
         Optional<String> validEan = eanValidator.normalize(barcode);
 
-        if (validEan.isEmpty()) {
+        if (validEan.isEmpty() || isChainCode(validEan.get())) {
             return Optional.empty();
         }
 
@@ -83,5 +84,15 @@ public class ExactEanMatcher {
                 .single();
 
         return Optional.of(canonicalProductId);
+    }
+
+    /**
+     * A chain's own short code padded with zeros ("0000000002288") passes the
+     * check digit but names a different product in every chain: Transkom's
+     * peppers and BB Trade's trapist shared one. A barcode has at least eight
+     * digits after its leading zeros (V132).
+     */
+    static boolean isChainCode(String ean) {
+        return ean.replaceFirst("^0+", "").length() < MINIMUM_SIGNIFICANT_DIGITS;
     }
 }
