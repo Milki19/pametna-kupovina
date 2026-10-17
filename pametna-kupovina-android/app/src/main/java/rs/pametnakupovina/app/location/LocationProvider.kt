@@ -210,7 +210,13 @@ class FusedLocationProvider @Inject constructor(
             ?: throw LocationUnavailableException(
                 uiText(R.string.location_address_not_found)
             )
-        Coordinates(found.latitude, found.longitude) to toLatin(found.getAddressLine(0) ?: query)
+        val label = shortAddress(
+            street = found.thoroughfare,
+            number = found.subThoroughfare,
+            place = found.locality ?: found.subAdminArea,
+            fullLine = found.getAddressLine(0)
+        ) ?: query
+        Coordinates(found.latitude, found.longitude) to toLatin(label)
     }
 
     /**
