@@ -284,25 +284,26 @@ public class StoreShoppingOfferRepository {
                               ON candidate_type.shopping_intent_id =
                                  requested_intent.shopping_intent_id
                              AND candidate_type.enabled_by_default = TRUE
+                            -- Only the item's types in the chains asked for (V136),
+                            -- the chains read once: as a subquery they were asked
+                            -- again for each of 60,000 products.
                             JOIN app.retailer_product_type AS candidate_assignment
                               ON candidate_assignment.product_type_id =
                                  candidate_type.product_type_id
-                            -- Each product of the item's types looked up once and
-                            -- kept when its chain is asked for. Started from every
-                            -- chain, the products of each chain were gathered
-                            -- again for every item; joined freely, the planner
-                            -- tried every typed product against every item.
+                             AND candidate_assignment.retailer_id = ANY (ARRAY(
+                                 SELECT requested_store.retailer_id
+                                 FROM app.store AS requested_store
+                                 WHERE requested_store.id IN (:storeIds)
+                             ))
+                            -- Each product of the item's types looked up once.
+                            -- Started from every chain, the products of each chain
+                            -- were gathered again for every item; joined freely,
+                            -- the planner tried every typed product against every
+                            -- item.
                             CROSS JOIN LATERAL (
                                 SELECT typed_product.*
                                 FROM app.retailer_product AS typed_product
                                 WHERE typed_product.id = candidate_assignment.retailer_product_id
-                                  -- The chains asked for, read once: as a subquery
-                                  -- it was asked again for each of 60,000 products.
-                                  AND typed_product.retailer_id = ANY (ARRAY(
-                                      SELECT requested_store.retailer_id
-                                      FROM app.store AS requested_store
-                                      WHERE requested_store.id IN (:storeIds)
-                                  ))
                                 OFFSET 0
                             ) AS product
                             LEFT JOIN app.canonical_product AS canonical
