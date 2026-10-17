@@ -13,6 +13,14 @@ class LocationProviderTest {
         assertEquals("Knez Mihailova 5", toLatin("Knez Mihailova 5"))
     }
 
+    @Test fun startingPointShowsStreetAndPlace() {
+        assertEquals("Kneza Mihaila 10, Beograd", shortAddress("Kneza Mihaila", "10", "Beograd", "Kneza Mihaila 10, Beograd 11000, Srbija"))
+        assertEquals("Bulevar oslobođenja, Novi Sad", shortAddress("Bulevar oslobođenja", null, "Novi Sad", null))
+        assertEquals("Karaburma, Beograd", shortAddress(null, null, "Beograd", "Karaburma, Beograd, Srbija"))
+        assertEquals("Beograd", shortAddress("Unnamed Road", null, "Beograd", "MF8X+9V Beograd, Srbija"))
+        assertEquals(null, shortAddress(null, null, null, null))
+    }
+
     @Test fun refusesStaleAndFutureLocation() = runBlocking {
         assertEquals(true, isRecentLocation(1_000_000_000, 31_000_000_000))
         assertEquals(false, isRecentLocation(1_000_000_000, 32_000_000_000))

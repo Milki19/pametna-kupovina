@@ -58,6 +58,22 @@ internal fun toLatin(text: String): String = buildString {
     }
 }
 
+/**
+ * Ulica sa brojem i mesto, bez poštanskog broja i države; bez ulice prvi deo
+ * pune adrese (često naziv kraja ili objekta).
+ */
+internal fun shortAddress(street: String?, number: String?, place: String?, fullLine: String?): String? {
+    val streetPart = street?.takeIf { it.isNotBlank() && !it.equals("Unnamed Road", ignoreCase = true) }
+        ?.let { name -> number?.takeIf(String::isNotBlank)?.let { "$name $it" } ?: name }
+    val first = streetPart ?: fullLine?.substringBefore(',')?.trim()?.takeIf {
+        it.isNotBlank() && !it.equals("Unnamed Road", ignoreCase = true) && it.any(Char::isLetter) &&
+            '+' !in it // Plus kod („MF8X+9V") nije adresa.
+    }
+    return listOfNotNull(first, place?.takeIf { it.isNotBlank() && it != first })
+        .joinToString(", ")
+        .ifBlank { null }
+}
+
 @Singleton
 class FusedLocationProvider @Inject constructor(
     @param:ApplicationContext private val context: Context,
@@ -195,6 +211,29 @@ class FusedLocationProvider @Inject constructor(
                 uiText(R.string.location_address_not_found)
             )
         Coordinates(found.latitude, found.longitude) to toLatin(found.getAddressLine(0) ?: query)
+    }
+
+    /**
+     * Adresa tačke za prikaz („Kneza Mihaila 10, Beograd") umesto brojeva.
+     * Samo za oznaku: bez Geocoder-a, mreže ili pogotka vraća null, pa se
+     * prikazuju koordinate.
+     */
+    @Suppress("DEPRECATION") // Verzija sa listener-om postoji tek od API 33.
+    suspend fun addressOf(coordinates: Coordinates): String? = withContext(Dispatchers.IO) {
+        if (!Geocoder.isPresent()) return@withContext null
+        val geocoder = Geocoder(context, Locale.forLanguageTag("sr-Latn-RS"))
+        runCatching { geocoder.getFromLocation(coordinates.latitude, coordinates.longitude, 1) }
+            .getOrNull()
+            ?.firstOrNull()
+            ?.let { found ->
+                shortAddress(
+                    street = found.thoroughfare,
+                    number = found.subThoroughfare,
+                    place = found.locality ?: found.subAdminArea,
+                    fullLine = found.getAddressLine(0)
+                )
+            }
+            ?.let(::toLatin)
     }
 
     private fun locationRequest(

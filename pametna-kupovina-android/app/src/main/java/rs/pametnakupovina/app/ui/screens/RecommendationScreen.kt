@@ -59,6 +59,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -125,6 +126,7 @@ fun RecommendationScreen(
     listId: Long,
     location: Pair<Double, Double>?,
     onBack: () -> Unit,
+    originLabel: String? = null,
     onOpenPurchase: (String) -> Unit = {},
     purchaseViewModel: PurchaseViewModel = hiltViewModel(),
     productSearchViewModel: ProductSearchViewModel = hiltViewModel(),
@@ -291,6 +293,7 @@ fun RecommendationScreen(
                 state.result != null -> RecommendationContent(
                     result = requireNotNull(state.result),
                     origin = requireNotNull(location),
+                    originLabel = originLabel,
                     saving = saving,
                     saveError = saveError?.asString(),
                     activePurchase = activePurchase,
@@ -324,6 +327,7 @@ internal fun RecommendationContent(
     onStart: (OptimizationScenarioDto, Boolean) -> Unit,
     onAlternative: (RecommendationItemDto) -> Unit = {},
     onChangeOrigin: () -> Unit = {},
+    originLabel: String? = null,
     onSimilar: (RecommendationItemDto) -> Unit = {},
     onWrongProduct: (RecommendationItemDto) -> Unit = {}
 ) {
@@ -386,7 +390,7 @@ internal fun RecommendationContent(
             }
 
             item(key = "origin") {
-                OriginCard(origin, onChangeOrigin, Modifier.enter(entrance))
+                OriginCard(origin, originLabel, onChangeOrigin, Modifier.enter(entrance))
             }
 
             scenarios.forEachIndexed { index, scenario ->
@@ -578,7 +582,12 @@ private fun RecommendationLoading() {
 
 /** Polazna tačka plana; „Promeni" vraća na izbor lokacije. */
 @Composable
-private fun OriginCard(origin: Pair<Double, Double>, onChange: () -> Unit, modifier: Modifier = Modifier) {
+private fun OriginCard(
+    origin: Pair<Double, Double>,
+    label: String?,
+    onChange: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     GlassCard(modifier = modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.padding(start = AppSpacing.md, end = AppSpacing.xs, top = AppSpacing.md, bottom = AppSpacing.md),
@@ -594,9 +603,12 @@ private fun OriginCard(origin: Pair<Double, Double>, onChange: () -> Unit, modif
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    coordinatesLabel(origin.first, origin.second),
+                    label ?: coordinatesLabel(origin.first, origin.second),
                     style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.testTag("origin-label")
                 )
             }
             TextButton(onClick = onChange) { Text(stringResource(R.string.rec_change_origin)) }

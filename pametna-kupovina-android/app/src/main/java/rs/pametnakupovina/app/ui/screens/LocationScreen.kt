@@ -69,7 +69,7 @@ import rs.pametnakupovina.app.ui.components.StepCard
 @Composable
 fun LocationScreen(
     onBack: () -> Unit,
-    onCalculate: (Double, Double) -> Unit,
+    onCalculate: (latitude: Double, longitude: Double, label: String?) -> Unit,
     viewModel: LocationViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
@@ -107,6 +107,10 @@ fun LocationScreen(
     val latitude = latitudeText.replace(',', '.').toDoubleOrNull()
     val longitude = longitudeText.replace(',', '.').toDoubleOrNull()
     val coordinatesValid = coordinatesAreValid(latitude, longitude)
+    // Adresa važi samo dok ručno upisani brojevi ne pomere tačku.
+    val label = state.label?.takeIf {
+        state.coordinates?.let { it.latitude == latitude && it.longitude == longitude } == true
+    }
     val manualVisible = showManual ||
         (!coordinatesValid && (latitudeText.isNotBlank() || longitudeText.isNotBlank()))
 
@@ -119,7 +123,7 @@ fun LocationScreen(
                     Text(
                         stringResource(
                             R.string.location_starting_point_value,
-                            coordinatesLabel(requireNotNull(latitude), requireNotNull(longitude))
+                            label ?: coordinatesLabel(requireNotNull(latitude), requireNotNull(longitude))
                         ),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -129,7 +133,7 @@ fun LocationScreen(
                     text = stringResource(R.string.location_show_recommendations),
                     enabled = coordinatesValid && !state.isResolving,
                     onClick = {
-                        onCalculate(requireNotNull(latitude), requireNotNull(longitude))
+                        onCalculate(requireNotNull(latitude), requireNotNull(longitude), label)
                     }
                 )
             }

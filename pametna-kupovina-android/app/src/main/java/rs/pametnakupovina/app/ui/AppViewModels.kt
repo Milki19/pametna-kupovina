@@ -12,7 +12,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import rs.pametnakupovina.app.location.Coordinates
+import rs.pametnakupovina.app.location.FusedLocationProvider
 import retrofit2.HttpException
 import rs.pametnakupovina.app.data.DraftItemInput
 import rs.pametnakupovina.app.data.ShoppingRepository
@@ -441,12 +444,26 @@ data class RecommendationUiState(
 )
 
 @HiltViewModel
-class CalculationSessionViewModel @Inject constructor() : ViewModel() {
+class CalculationSessionViewModel @Inject constructor(
+    private val locationProvider: FusedLocationProvider
+) : ViewModel() {
     private val _location = MutableStateFlow<Pair<Double, Double>?>(null)
     val location: StateFlow<Pair<Double, Double>?> = _location.asStateFlow()
 
-    fun useLocation(latitude: Double, longitude: Double) {
+    /** Adresa polazne tačke; za ručno upisane koordinate traži se naknadno. */
+    private val _originLabel = MutableStateFlow<String?>(null)
+    val originLabel: StateFlow<String?> = _originLabel.asStateFlow()
+    private var labelLookup: Job? = null
+
+    fun useLocation(latitude: Double, longitude: Double, label: String? = null) {
         _location.value = latitude to longitude
+        _originLabel.value = label
+        labelLookup?.cancel()
+        if (label == null) {
+            labelLookup = viewModelScope.launch {
+                _originLabel.value = locationProvider.addressOf(Coordinates(latitude, longitude))
+            }
+        }
     }
 }
 

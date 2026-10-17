@@ -166,6 +166,8 @@ fun PametnaKupovinaApp(
     val calculationSession: CalculationSessionViewModel = hiltViewModel()
     val calculationLocation by calculationSession.location
         .collectAsStateWithLifecycle()
+    val calculationOriginLabel by calculationSession.originLabel
+        .collectAsStateWithLifecycle()
     // Deljen sa dashboard-om i menijem, da skeniranje iz menija odmah osveži
     // brojke koje dashboard već prikazuje.
     val receiptViewModel: ReceiptViewModel = hiltViewModel()
@@ -351,8 +353,8 @@ fun PametnaKupovinaApp(
                 val listId = requireNotNull(entry.arguments?.getLong("listId"))
                 LocationScreen(
                     onBack = navController::popBackStack,
-                    onCalculate = { latitude, longitude ->
-                        calculationSession.useLocation(latitude, longitude)
+                    onCalculate = { latitude, longitude, label ->
+                        calculationSession.useLocation(latitude, longitude, label)
                         navController.navigate(Route.recommendation(listId))
                     }
                 )
@@ -367,6 +369,7 @@ fun PametnaKupovinaApp(
                 RecommendationScreen(
                     listId = requireNotNull(entry.arguments?.getLong("listId")),
                     location = calculationLocation,
+                    originLabel = calculationOriginLabel,
                     onOpenPurchase = { navController.navigate("purchase/$it") },
                     onBack = navController::popBackStack
                 )
