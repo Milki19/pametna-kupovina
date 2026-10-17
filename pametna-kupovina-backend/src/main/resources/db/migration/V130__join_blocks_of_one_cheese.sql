@@ -14,8 +14,9 @@
 -- taken for a pair is kept.
 --
 -- Slices, grated and smoked cheese, light and aged kinds, flavoured ones and
--- food made with cheese are other products and are left out, as is a family
--- whose names disagree on the brand, kind or fat. The kinds and the words
+-- food made with cheese are other products and are left out. A family is
+-- what most of its names say, and one whose names do not mostly agree on
+-- the brand, kind or fat is left as it is. The kinds and the words
 -- are words of a language, kept here as in V128. The import runs the same
 -- rule after every price list, so a block a chain renames joins again.
 
@@ -42,7 +43,7 @@ BEGIN
            (REGEXP_MATCH(product.name, '(?<![0-9])([0-9]{1,2})(?:[.,][0-9]+)?\s*%'))[1] AS fat,
            folded.words ~ ('\m(slajs|slajsovi|slice|secen|secena|seceni|seceno|rezan|rezana'
                            '|rezani|ribani|ribana|rendani|rendana|listici|kocke|kockice'
-                           '|stapici|dimljen|dimljena|dimljeni|light|lajt|lagani|lagana'
+                           '|stapici|dim|dimlj|dimljen|dimljena|dimljeni|light|lajt|lagani|lagana'
                            '|laktoze|mini|zreli|zrela|zrelo|odlezali|stari|stara|premium'
                            '|extra|ekstra|pikant|pikantni|ljuti|paprika|paprikom|biber'
                            '|orah|orasi|bilje|biljem|vlasac|tartuf|kozji|ovciji|bivolji'
@@ -61,10 +62,10 @@ BEGIN
         SELECT reading.kind
         FROM (
             VALUES
-                -- Bajuval is Paladin's emmentaler and says so in its name.
-                (1, 'bajuval', 'bajuval'),
+                -- Bajuval is Paladin's emmentaler ("Ementaler 48%mm Bajuval
+                -- Paladin").
                 (2, 'maasdamer', 'maasdamer|maasdam|masdamer'),
-                (3, 'ementaler', 'ementaler|emmentaler|emental|emmental'),
+                (3, 'ementaler', 'ementaler|emmentaler|emental|emmental|bajuval'),
                 (4, 'tilsiter', 'tilsiter|tilziter|tilzit'),
                 (5, 'trapist', 'trapist|trapis'),
                 (6, 'edam', 'edam|edamer|edammer'),
@@ -94,26 +95,49 @@ BEGIN
       AND LENGTH(app.fold_match_text(brand.display_name)) >= 3
     GROUP BY brand.id, brand.display_name;
 
+    -- A family is what most of its names say: one chain writes the maker
+    -- ("EDAM BLOK 40%MM 3.3KG SILBO"), another leaves out the fat or the
+    -- line ("EMENTALER PALADIN" beside "Ementaler Bajuval Paladin").
     CREATE TEMP TABLE block_family ON COMMIT DROP AS
-    SELECT block.family_id,
-           block.match_key,
-           MIN(named.brand_id) AS brand_id,
-           MIN(block.kind) AS kind,
-           MIN(block.fat) AS fat,
-           COUNT(DISTINCT block.retailer_id) AS chain_count
-    FROM block_product AS block
-    LEFT JOIN LATERAL (
-        SELECT brand.id AS brand_id
-        FROM block_brand AS brand
-        WHERE ' ' || block.words || ' ' LIKE '%' || brand.words || '%'
-        ORDER BY brand.family_count DESC, brand.id
-        LIMIT 1
-    ) AS named ON TRUE
-    GROUP BY block.family_id, block.match_key
-    HAVING NOT BOOL_OR(block.other_product)
-       AND COUNT(DISTINCT block.kind) = 1
-       AND COUNT(DISTINCT named.brand_id) = 1
-       AND COUNT(DISTINCT block.fat) <= 1;
+    WITH named AS (
+        SELECT block.*,
+               (SELECT brand.id
+                FROM block_brand AS brand
+                WHERE ' ' || block.words || ' ' LIKE '%' || brand.words || '%'
+                ORDER BY brand.family_count DESC, brand.id
+                LIMIT 1) AS named_brand_id
+        FROM block_product AS block
+    ), reading AS (
+        SELECT family_id,
+               match_key,
+               BOOL_OR(other_product) AS other_product,
+               MODE() WITHIN GROUP (ORDER BY named_brand_id) AS brand_id,
+               MODE() WITHIN GROUP (ORDER BY kind) AS kind,
+               MODE() WITHIN GROUP (ORDER BY fat) AS fat,
+               COUNT(DISTINCT retailer_id) AS chain_count
+        FROM named
+        GROUP BY family_id, match_key
+    )
+    SELECT reading.family_id,
+           reading.match_key,
+           reading.brand_id,
+           reading.kind,
+           reading.fat,
+           reading.chain_count
+    FROM reading
+    JOIN named
+      ON named.family_id = reading.family_id
+    WHERE NOT reading.other_product
+      AND reading.brand_id IS NOT NULL
+      AND reading.kind IS NOT NULL
+    GROUP BY reading.family_id, reading.match_key, reading.brand_id,
+             reading.kind, reading.fat, reading.chain_count
+    -- More than half of the names that say it agree.
+    HAVING COUNT(*) FILTER (WHERE named.named_brand_id = reading.brand_id) * 2
+               > COUNT(named.named_brand_id)
+       AND COUNT(*) FILTER (WHERE named.kind = reading.kind) * 2 > COUNT(named.kind)
+       AND (reading.fat IS NULL
+            OR COUNT(*) FILTER (WHERE named.fat = reading.fat) * 2 > COUNT(named.fat));
 
     -- A family whose names state no fat belongs to its brand and kind when
     -- they come in one fat only.
