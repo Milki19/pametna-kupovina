@@ -690,6 +690,16 @@ public class StoreShoppingOfferRepository {
                                             AND own_intent.active = TRUE
                                       )
                                   )
+                                  -- A product or family not yet found has no
+                                  -- offer; it was still tried against every
+                                  -- product of every chain.
+                                  AND (
+                                      own_item.matching_rule = 'FLEXIBLE_CATEGORY'
+                                      OR (own_item.matching_rule = 'EXACT_PRODUCT'
+                                          AND own_item.matching_status IN ('AUTO_MATCHED', 'CONFIRMED'))
+                                      OR (own_item.matching_rule = 'PRODUCT_FAMILY'
+                                          AND own_item.matching_status = 'CONFIRMED')
+                                  )
                             ) AS item
                         LEFT JOIN LATERAL (
                             SELECT intent.id AS shopping_intent_id,
