@@ -54,6 +54,8 @@ internal const val MIN_ITEM_QUANTITY = 0.01
 internal const val MAX_ITEM_QUANTITY = 999.0
 internal const val MAX_TYPED_NAME_LENGTH = 80
 
+internal fun hasLetter(name: String): Boolean = name.any(Char::isLetter)
+
 internal fun isAllowedQuantity(quantity: Double): Boolean =
     quantity.isFinite() && quantity >= MIN_ITEM_QUANTITY && quantity <= MAX_ITEM_QUANTITY
 
@@ -80,6 +82,13 @@ data class DraftItemInput(
                 name.trim().length <= MAX_TYPED_NAME_LENGTH
         ) {
             uiText(R.string.list_error_name_too_long)
+        }
+        // "%%%###" nije nešto što se kupuje; i server traži bar jedno slovo.
+        requireUser(
+            canonicalProductId != null || productFamilyId != null || barcode != null ||
+                hasLetter(name)
+        ) {
+            uiText(R.string.list_error_name_no_letter)
         }
         requireUser(isAllowedQuantity(quantity)) {
             uiText(R.string.list_error_quantity_range)

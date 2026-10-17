@@ -67,4 +67,14 @@ class DraftItemInputTest {
             matchingRule = ShoppingItemRuleDto.EXACT_PRODUCT
         ).validated()
     }
+
+    @Test
+    fun `naziv bez ijednog slova se ne cuva`() {
+        listOf("%%%###", "!!!", "123").forEach { name ->
+            val error = assertThrows(UserFacingException::class.java) { hleb(1.0, name).validated() }
+            assertEquals(uiText(R.string.list_error_name_no_letter), error.text)
+        }
+        hleb(1.0, "7up").validated()
+        hleb(1.0, "Čaj").validated()
+    }
 }

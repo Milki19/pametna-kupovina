@@ -948,7 +948,15 @@ public class ShoppingListService {
         }
     }
 
+    // "%%%###" or "!!!" pasted from a note is not something to buy; a name
+    // needs at least one letter, as "7up" and "Mleko 2,8%" have.
     private void validateTypedName(String name) {
+        if (name.codePoints().noneMatch(Character::isLetter)) {
+            throw new FieldRefusal(
+                    "name",
+                    "Naziv mora imati bar jedno slovo."
+            );
+        }
         if (name.length() > MAX_TYPED_NAME_LENGTH) {
             throw new FieldRefusal(
                     "name",

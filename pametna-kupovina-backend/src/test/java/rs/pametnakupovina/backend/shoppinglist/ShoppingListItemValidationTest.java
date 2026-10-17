@@ -9,6 +9,7 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
@@ -77,6 +78,72 @@ class ShoppingListItemValidationTest {
                 .isEqualTo("name");
         assertThatCode(() -> service.addItem(7L, ACCOUNT, typed("a".repeat(80), "1")))
                 .doesNotThrowAnyException();
+    }
+
+    @Test
+    void aTypedNameWithoutALetterNamesTheField() {
+        for (String name : new String[]{"%%%###", "!!!", "123", "-- ..."}) {
+            assertThatThrownBy(() -> service.addItem(7L, ACCOUNT, typed(name, "1")))
+                    .isInstanceOf(FieldRefusal.class)
+                    .hasMessageContaining("bar jedno slovo")
+                    .extracting(e -> ((FieldRefusal) e).getField())
+                    .isEqualTo("name");
+            assertThatThrownBy(() -> service.updateItem(7L, 1L, ACCOUNT, edited(name, "1")))
+                    .isInstanceOf(FieldRefusal.class)
+                    .extracting(e -> ((FieldRefusal) e).getField())
+                    .isEqualTo("name");
+        }
+        assertThatCode(() -> service.addItem(7L, ACCOUNT, typed("7up", "1")))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> service.addItem(7L, ACCOUNT, typed("Čaj", "1")))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void aPastedLineWithoutALetterIsRejectedAndTheRestIsAdded() {
+        String text = "mleko\n%%%###\n!!!";
+        ParsedShoppingListLine milk = line("mleko");
+        ParsedShoppingListLine signs = line("%%%###");
+        ParsedShoppingListLine bangs = line("!!!");
+        when(parser.parse(text)).thenReturn(
+                new ParsedShoppingListText(List.of(milk, signs, bangs), 0));
+        for (ParsedShoppingListLine each : List.of(milk, signs, bangs)) {
+            when(interpreter.interpret(each)).thenReturn(interpreted(each.name()));
+        }
+
+        PasteShoppingListItemsResponse response =
+                service.addPastedItems(7L, ACCOUNT, new PasteShoppingListItemsRequest(text));
+
+        assertThat(response.createdCount()).isEqualTo(1);
+        assertThat(response.rejectedLines())
+                .extracting(PasteShoppingListItemsResponse.RejectedLine::text)
+                .containsExactly("%%%###", "!!!");
+        assertThat(response.rejectedLines())
+                .extracting(PasteShoppingListItemsResponse.RejectedLine::field)
+                .containsOnly("name");
+    }
+
+    @Test
+    void aPasteOfOnlySignsAddsNothingAndSaysWhy() {
+        String text = "%%%###";
+        ParsedShoppingListLine signs = line(text);
+        when(parser.parse(text)).thenReturn(new ParsedShoppingListText(List.of(signs), 0));
+        when(interpreter.interpret(signs)).thenReturn(interpreted(text));
+
+        assertThatThrownBy(() -> service.addPastedItems(
+                7L, ACCOUNT, new PasteShoppingListItemsRequest(text)))
+                .isInstanceOf(FieldRefusal.class)
+                .hasMessageContaining("bar jedno slovo");
+    }
+
+    private static ParsedShoppingListLine line(String text) {
+        return new ParsedShoppingListLine(text, text, BigDecimal.ONE, null, null);
+    }
+
+    private static ShoppingLineInterpreter.InterpretedLine interpreted(String name) {
+        return new ShoppingLineInterpreter.InterpretedLine(
+                name, BigDecimal.ONE, ShoppingItemRule.FLEXIBLE_CATEGORY, name, name,
+                null, null, null, null);
     }
 
     @Test
