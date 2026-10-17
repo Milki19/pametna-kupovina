@@ -1,6 +1,5 @@
 package rs.pametnakupovina.backend.dataquality;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
@@ -18,16 +17,14 @@ import java.util.Locale;
 @Service
 public class DataQualityService {
 
-    private final JdbcClient jdbcClient;
-    private final int stalePriceDays;
+    // A price list without its own limit is old after two days without a
+    // successful run.
+    static final int DEFAULT_PRICE_SUCCESS_AGE_HOURS = 48;
 
-    public DataQualityService(
-            JdbcClient jdbcClient,
-            @Value("${data-quality.stale-price-days:2}")
-            int stalePriceDays
-    ) {
+    private final JdbcClient jdbcClient;
+
+    public DataQualityService(JdbcClient jdbcClient) {
         this.jdbcClient = jdbcClient;
-        this.stalePriceDays = stalePriceDays;
     }
 
     public DataQualityReport report() {
@@ -37,8 +34,8 @@ public class DataQualityService {
         DataQualityReport.Summary summary = loadSummary();
         DataQualityReport.LocationSummary locations = loadLocations();
         List<DataQualityReport.RetailerQuality> retailers = loadRetailers();
-        List<DataQualityReport.SourceQuality> sources = loadSources(
-                generatedAt
+        List<DataQualityReport.SourceQuality> sources = coveredByOtherSources(
+                loadSources(generatedAt)
         );
 
         boolean critical = locations.unsafePricingEligible() > 0
@@ -385,19 +382,30 @@ public class DataQualityService {
                                  COALESCE(regular_price, 0) > 0
                                  OR COALESCE(discounted_price, 0) > 0
                              )) AS invalid_current_price_offers,
+                            -- Old prices a shopper still sees: in the
+                            -- chain's newest list (V75, V133), but that list
+                            -- is older than the chain's usual (V124). A
+                            -- product the chain dropped keeps its last price
+                            -- for its history; no one is shown it, so it is
+                            -- not counted.
                             (SELECT COUNT(*)
                              FROM app.current_price_offer AS offer
                              JOIN app.retailer_product AS product
                                ON product.id = offer.retailer_product_id
                              JOIN app.retailer AS chain
                                ON chain.id = product.retailer_id
-                             JOIN app.market AS market
-                               ON market.id = chain.market_id
-                             WHERE offer.last_seen_date
-                                   < (NOW() AT TIME ZONE market.time_zone)::DATE - :staleDays)
+                             JOIN app.price_list_snapshot AS snapshot
+                               ON snapshot.retailer_id = product.retailer_id
+                              AND snapshot.scope_key = offer.scope_key
+                              AND snapshot.latest_price_date = offer.price_date
+                              AND NOT snapshot.retired
+                             WHERE app.price_is_stale(
+                                 product.retailer_id,
+                                 offer.price_date,
+                                 app.market_today(chain.market_id)
+                             ))
                                 AS stale_current_price_offers
                         """)
-                .param("staleDays", stalePriceDays)
                 .query((resultSet, rowNumber) ->
                         new DataQualityReport.Summary(
                                 resultSet.getLong("canonical_products"),
@@ -667,7 +675,11 @@ public class DataQualityService {
                             lastProgressAt,
                             generatedAt
                     );
-                    String health = health(active, alerts);
+                    String health = health(
+                            active,
+                            alerts,
+                            maxAgeHours != null
+                    );
 
                     return new DataQualityReport.SourceQuality(
                             resultSet.getLong("id"),
@@ -748,10 +760,15 @@ public class DataQualityService {
             alerts.add("IMPORT_PROGRESS_STALE");
         }
 
-        if (maxAgeHours != null && (
+        Integer successAgeLimit = maxAgeHours != null
+                ? maxAgeHours
+                : "PRICE_CATALOG".equals(sourceType)
+                ? DEFAULT_PRICE_SUCCESS_AGE_HOURS
+                : null;
+        if (successAgeLimit != null && (
                 lastSuccessAt == null
                         || lastSuccessAt.isBefore(
-                        generatedAt.minusSeconds(maxAgeHours * 3600L)
+                        generatedAt.minusSeconds(successAgeLimit * 3600L)
                 )
         )) {
             alerts.add("SOURCE_DATA_STALE");
@@ -770,12 +787,17 @@ public class DataQualityService {
         return List.copyOf(alerts);
     }
 
-    private String health(boolean active, List<String> alerts) {
+    /**
+     * @param watched the source has its own age limit (the core chains); a
+     *                failed run of another chain is a warning while its last
+     *                list is still fresh, and critical once it is old
+     */
+    static String health(boolean active, List<String> alerts, boolean watched) {
         if (!active) {
             return "DISABLED";
         }
         if (alerts.stream().anyMatch(alert ->
-                alert.equals("LAST_RUN_FAILED")
+                (watched && alert.equals("LAST_RUN_FAILED"))
                         || alert.equals("IMPORT_PROGRESS_STALE")
                         || alert.equals("SOURCE_DATA_STALE")
                         || alert.equals("ROW_COUNT_BELOW_MINIMUM")
@@ -787,6 +809,58 @@ public class DataQualityService {
         }
 
         return "HEALTHY";
+    }
+
+    /**
+     * A chain's price list that another of its price sources carries is not
+     * critical: shoppers get that source's prices. Maxi's store files have
+     * been refused since 12.10. while Delhaize's list for every Maxi came in
+     * each day, and the report stayed CRITICAL for it.
+     */
+    static List<DataQualityReport.SourceQuality> coveredByOtherSources(
+            List<DataQualityReport.SourceQuality> sources
+    ) {
+        return sources.stream()
+                .map(source -> {
+                    boolean covered = "CRITICAL".equals(source.health())
+                            && "PRICE_CATALOG".equals(source.sourceType())
+                            && sources.stream().anyMatch(other ->
+                            other.id() != source.id()
+                                    && other.retailerCode()
+                                    .equals(source.retailerCode())
+                                    && "PRICE_CATALOG".equals(other.sourceType())
+                                    && "HEALTHY".equals(other.health()));
+                    if (!covered) {
+                        return source;
+                    }
+                    List<String> alerts = new ArrayList<>(source.alerts());
+                    alerts.add("COVERED_BY_OTHER_SOURCE");
+                    return new DataQualityReport.SourceQuality(
+                            source.id(),
+                            source.retailerCode(),
+                            source.sourceCode(),
+                            source.sourceType(),
+                            source.active(),
+                            "WARNING",
+                            source.lastStatus(),
+                            source.lastStartedAt(),
+                            source.lastSuccessAt(),
+                            source.lastSnapshotDate(),
+                            source.lastRowsRead(),
+                            source.lastRowsSaved(),
+                            source.expectedMinRowsSaved(),
+                            source.maxSuccessAgeHours(),
+                            source.volumeRatio(),
+                            source.minimumVolumeRatio(),
+                            source.consecutiveSuccessCount(),
+                            source.consecutiveFailureCount(),
+                            source.latestRunStage(),
+                            source.latestRunDownloadedBytes(),
+                            source.latestRunLastProgressAt(),
+                            List.copyOf(alerts)
+                    );
+                })
+                .toList();
     }
 
     private Instant instant(Timestamp timestamp) {

@@ -34,6 +34,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * the same six days turn out to be how late that chain always is, its price
  * is an equal again. The name keeps neither the stock code in front nor the
  * no-break space the file had.
+ *
+ * A store's own list that stopped coming gives way to the chain's newer list
+ * for every shop (V133), as Maxi's Valjevo store files did from 12.10.
  */
 @SpringBootTest(properties = {
         "price-import.http.request-timeout-seconds=5",
@@ -62,6 +65,9 @@ class StalePriceListTest {
 
     private static final String COFFEE =
             "KAFA;Kafa;369680 KAFA  STAROCENOVNA 200G;Testna;8601234500209;KOM;Test format;%s;;%s;%s;;;20\n";
+
+    private static final String TEA =
+            "CAJ;Caj;CAJ PRODAVNICKI 20 KESICA;Testna;8601234500216;KOM;Test format;%s;;%s;%s;;;20\n";
 
     private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("dd-MM-yyyy");
 
@@ -100,8 +106,12 @@ class StalePriceListTest {
     }
 
     private long chain(String code, String price, LocalDate listDate) {
+        return chain(code, COFFEE, price, listDate);
+    }
+
+    private long chain(String code, String row, String price, LocalDate listDate) {
         String path = "/" + code.toLowerCase() + ".csv";
-        catalogues.put(path, HEADER + COFFEE.formatted(price, listDate.format(DAY), price));
+        catalogues.put(path, HEADER + row.formatted(price, listDate.format(DAY), price));
         long retailerId = jdbcClient.sql("""
                         INSERT INTO app.retailer (code, name, dataset_url)
                         VALUES (?, ?, ?)
@@ -168,5 +178,73 @@ class StalePriceListTest {
                         org.assertj.core.groups.Tuple.tuple("LATELIST", false),
                         org.assertj.core.groups.Tuple.tuple("FRESHLIST", false)
                 );
+    }
+
+    @Test
+    void aStoreListBehindTheChainsListForEveryShopNoLongerCounts() {
+        LocalDate today = LocalDate.now(ZoneId.of("Europe/Belgrade"));
+        long retailer = chain("STOREFILES", TEA, "300,00", today);
+        long format = jdbcClient.sql("""
+                        INSERT INTO app.store_format (retailer_id, code, name)
+                        VALUES (?, 'STOREFILES', 'Test format')
+                        RETURNING id
+                        """)
+                .param(retailer)
+                .query(Long.class)
+                .single();
+        long store = jdbcClient.sql("""
+                        INSERT INTO app.store (retailer_id, store_format_id, external_code, name, address, city, active)
+                        VALUES (?, ?, 'STOREFILES-1', 'Objekat', 'Test adresa', 'Valjevo', TRUE)
+                        RETURNING id
+                        """)
+                .param(retailer)
+                .param(format)
+                .query(Long.class)
+                .single();
+        // The store's own file, last read six days ago.
+        jdbcClient.sql("""
+                        INSERT INTO app.current_price_offer (
+                            retailer_product_id, import_run_id, scope_type, store_id,
+                            price_date, first_seen_date, last_seen_date, regular_price
+                        )
+                        SELECT offer.retailer_product_id, offer.import_run_id, 'STORE', ?,
+                               ?, ?, ?, 250.00
+                        FROM app.current_price_offer AS offer
+                        JOIN app.retailer_product AS product
+                          ON product.id = offer.retailer_product_id
+                        WHERE product.retailer_id = ?
+                        """)
+                .param(store)
+                .param(today.minusDays(6))
+                .param(today.minusDays(6))
+                .param(today.minusDays(6))
+                .param(retailer)
+                .update();
+
+        assertThat(storeListCounts(retailer, store, today.minusDays(6), today)).isFalse();
+
+        // The store files come again.
+        jdbcClient.sql("""
+                        UPDATE app.current_price_offer SET price_date = ?, last_seen_date = ?
+                        WHERE store_id = ?
+                        """)
+                .param(today)
+                .param(today)
+                .param(store)
+                .update();
+        assertThat(storeListCounts(retailer, store, today, today)).isTrue();
+    }
+
+    private boolean storeListCounts(long retailer, long store, LocalDate priceDate, LocalDate asOf) {
+        jdbcClient.sql("SELECT app.refresh_price_list_snapshots()")
+                .query((resultSet, rowNumber) -> true)
+                .single();
+        return jdbcClient.sql("SELECT app.in_latest_price_list(?, ?, ?, ?)")
+                .param(retailer)
+                .param("STORE:" + store)
+                .param(priceDate)
+                .param(asOf)
+                .query(Boolean.class)
+                .single();
     }
 }
