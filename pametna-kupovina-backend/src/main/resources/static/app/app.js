@@ -1622,6 +1622,7 @@ function showMore(_, __, loaded = false) {
       (standalone || !appleMobile ? '' : `<div class="card hero">
         <div class="title">Dodaj na početni ekran</div>
         <p>U Safari-ju dodirni <b>Podeli</b> pa <b>Dodaj na početni ekran</b>. Otvara se kao aplikacija, a spisak i kartice ostaju i kad Safari čisti stare podatke sajtova.</p>
+        ${account.state?.signedIn ? '' : '<p class="muted small">Aplikacija na početnom ekranu ima svoje podatke, odvojene od Safari-ja. Da spisak pređe u nju, prvo se prijavi preko Google-a ovde, pa se prijavi i u njoj.</p>'}
       </div>`) +
       accountCard() +
       `<a class="card row" href="#/racun" style="text-decoration:none;color:inherit">
