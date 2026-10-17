@@ -142,6 +142,77 @@ class ShoppingRecommendationServiceTest {
     }
 
     @Test
+    void singleStoreCountsTheTripNotOnlyTheBasket() {
+        ShoppingListRepository listRepository =
+                mock(ShoppingListRepository.class);
+        NearbyStoreRepository nearbyRepository =
+                mock(NearbyStoreRepository.class);
+        StoreShoppingOfferRepository offerRepository =
+                mock(StoreShoppingOfferRepository.class);
+        RouteMatrixProvider routeProvider =
+                mock(RouteMatrixProvider.class);
+
+        ShoppingRecommendationService service =
+                new ShoppingRecommendationService(
+                        listRepository,
+                        nearbyRepository,
+                        offerRepository,
+                        routeProvider,
+                        new ShoppingOptimizationProperties(),
+                        markets()
+                );
+
+        ShoppingListItemResponse milk = item(1L, "Mleko", 101L);
+        when(listRepository.findById(10L)).thenReturn(Optional.of(
+                new ShoppingListResponse(
+                        10L,
+                        "Test korpa",
+                        OffsetDateTime.now(),
+                        OffsetDateTime.now(),
+                        List.of(milk)
+                )
+        ));
+
+        // Seen on 17.10.: the shop round the corner at 225 RSD, and one
+        // 12.9 km away a little cheaper. One stop is the shop round the corner.
+        NearbyStore nearStore = store(1L, "A");
+        NearbyStore farStore = store(2L, "B");
+        when(nearbyRepository.findPricingEligibleNearby(
+                SERBIA, 44.0, 19.0, 15_000, 20
+        )).thenReturn(List.of(nearStore, farStore));
+        when(offerRepository.findOffers(
+                eq(10L), anyList(), eq(DATE), eq(true)
+        )).thenAnswer(call -> offersFor(call.getArgument(1), List.of(
+                offer(nearStore, milk, 222, 1001L),
+                offer(farStore, milk, 200, 2001L)
+        )));
+
+        List<RouteMatrixEntry> entries = new ArrayList<>();
+        long[][] meters = {{0, 125, 6_450}, {125, 0, 6_400}, {6_450, 6_400, 0}};
+        String[] ids = {"USER", "STORE:1", "STORE:2"};
+        for (int from = 0; from < ids.length; from++) {
+            for (int to = 0; to < ids.length; to++) {
+                entries.add(new RouteMatrixEntry(
+                        ids[from], ids[to], meters[from][to], null));
+            }
+        }
+        when(routeProvider.calculate(anyList())).thenReturn(new RouteMatrix(
+                "TEST", "STRAIGHT_LINE_ESTIMATE", true, entries));
+
+        ShoppingRecommendationResponse response =
+                service.recommend(10L, 44.0, 19.0, DATE);
+
+        assertThat(response.singleStore().stores())
+                .extracting(RecommendationStoreResponse::storeId)
+                .containsExactly(1L);
+        assertThat(response.singleStore().totalCost())
+                .isEqualByComparingTo(response.recommendedBalance().totalCost());
+        // The cheapest basket stays where it belongs, in its own plan.
+        assertThat(response.lowestPrice().basketCost())
+                .isEqualByComparingTo("200.00");
+    }
+
+    @Test
     void importantExactCandidateBlocksOptimizationUntilConfirmed() {
         ShoppingListRepository listRepository =
                 mock(ShoppingListRepository.class);

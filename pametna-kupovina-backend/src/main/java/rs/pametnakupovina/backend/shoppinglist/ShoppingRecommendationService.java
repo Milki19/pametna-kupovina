@@ -289,7 +289,11 @@ public class ShoppingRecommendationService {
                         .toList()
         );
 
-        EvaluatedPlan bestSingle = chooseByBasket(evaluatedSingles);
+        // Jedna stanica je najbolja radnja za jedan odlazak: put i vreme se
+        // računaju kao i u planu Najbolje ukupno. Po samoj korpi bi pobedila
+        // radnja 13 km dalje koja je jeftinija za par dinara, pa bi taj plan
+        // bio i skuplji i dalji od plana sa radnjom iza ćoška.
+        EvaluatedPlan bestSingle = chooseByTotalCost(evaluatedSingles);
         EvaluatedPlan lowestPrice = chooseByBasket(evaluatedAll);
         EvaluatedPlan recommended = chooseByTotalCost(evaluatedAll);
 
@@ -1112,7 +1116,7 @@ public class ShoppingRecommendationService {
 
         String base = switch (type) {
             case SINGLE_STORE ->
-                    "Najjeftinija poznata korpa u jednoj obližnjoj prodavnici.";
+                    "Najbolja jedna prodavnica kad se uračunaju korpa, put i vreme.";
             case RECOMMENDED_BALANCE ->
                     "Najbolji balans cene korpe, puta, vremena i broja stajanja.";
             case LOWEST_PRICE ->
