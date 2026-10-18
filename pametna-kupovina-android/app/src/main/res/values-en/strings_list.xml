@@ -159,5 +159,8 @@
     <string name="match_not_found_text">Items not found aren\'t in the total. Pick them from search or continue without them.</string>
     <string name="match_pick_from_search">Pick from search</string>
     <string name="match_change">Change</string>
-    <string name="list_duplicate_warning">“%1$s” is on the list more than once. If that\'s a mistake, delete the extra one.</string>
+    <string name="list_duplicate_warning">“%1$s” is on the list more than once with a different product, brand or unit, so they aren\'t merged. If that\'s a mistake, delete the extra one.</string>
+    <string name="list_duplicate_merge_hint">“%1$s” is on the list more than once. Merge them into one item or delete the extra one.</string>
+    <string name="list_duplicate_merge">Merge</string>
+    <string name="list_notice_merged">Merged: %1$s.</string>
 </resources>

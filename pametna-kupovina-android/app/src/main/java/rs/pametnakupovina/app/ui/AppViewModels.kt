@@ -260,6 +260,15 @@ class ShoppingListViewModel @Inject constructor(
         mutate { repository.updateItem(item, item.asInput(quantity)) }
     }
 
+    /** Prva stavka dobija zbir, ostale se brišu; sve ide serveru kao obična izmena i brisanje. */
+    fun mergeDuplicates(items: List<DraftItemEntity>, merged: DraftItemEntity) {
+        mutate {
+            repository.updateItem(items.first(), merged.asInput())
+            items.drop(1).forEach { repository.deleteItem(it) }
+            _uiState.update { it.copy(notice = uiText(R.string.list_notice_merged, merged.name)) }
+        }
+    }
+
     private fun DraftItemEntity.asInput(newQuantity: Double = quantity): DraftItemInput {
         val rule = ShoppingItemRuleDto.valueOf(matchingRule)
         return DraftItemInput(
