@@ -94,7 +94,7 @@ async function renewSession() {
     // Ključ ovog pregledača više ne otvara nalog: počinje se kao nov uređaj.
     saved.set('token', null);
     saved.set('session', null);
-    saved.set('listId', null);
+    if (saved.get('listId')) forgetLostList();
     return sessionCall('sessions', { deviceToken: clientToken(), deviceName: webDeviceName() });
   }
 }
@@ -179,6 +179,17 @@ function loadList() {
   return listLoading;
 }
 
+/**
+ * Spisak koji je ovaj pregledač imao više ne postoji (nalog obrisan ili
+ * sesija ugašena). Kupovina po njemu ide sa njim, a kupac to saznaje na
+ * spisku, umesto da zatekne prazan spisak bez reči.
+ */
+function forgetLostList() {
+  saved.set('listId', null);
+  saved.set('purchase', null);
+  saved.set('listLost', true);
+}
+
 async function loadListOnce() {
   await flushDelete();
   const id = saved.get('listId');
@@ -187,6 +198,7 @@ async function loadListOnce() {
       return await api('GET', `shopping-lists/${id}`);
     } catch (error) {
       if (error.status !== 404) throw error;
+      forgetLostList();
     }
   }
   const created = await api('POST', 'shopping-lists', { name: 'Moja kupovina' });
@@ -535,9 +547,25 @@ function duplicateNotice(items) {
     + ' Ako je to greška, obriši višak.', 'warn');
 }
 
+function lostListNotice() {
+  if (!saved.get('listLost')) return '';
+  const signedIn = typeof account !== 'undefined' && account.state?.signedIn;
+  return `<div class="card">${notice('Tvoj prethodni spisak više nije dostupan, pa je ovo nov, prazan spisak.'
+      + (signedIn ? '' : ' Da se to ne ponovi, prijavi se preko Google-a: spisak se tada čuva uz nalog.'), 'warn')}
+    <div class="btn-row">
+      <button class="btn" data-act="lost-list-ok">U redu</button>
+      ${signedIn ? '' : '<a class="btn primary" href="#/vise">Prijavi se</a>'}
+    </div></div>`;
+}
+
 function renderList() {
   const items = listState.list.items;
-  const purchase = saved.get('purchase');
+  let purchase = saved.get('purchase');
+  // Kupovina po spisku koji ovaj pregledač više nema (stari, ili drugi u domaćinstvu).
+  if (purchase?.listId != null && purchase.listId !== listState.list.id) {
+    saved.set('purchase', null);
+    purchase = null;
+  }
   const form = listState.adding === 'one'
     ? `<form class="card" data-form="add-one">
          <label class="label" for="one">Šta kupuješ</label>
@@ -554,7 +582,7 @@ function renderList() {
   screen({
     title: 'Moj spisak',
     subtitle: items.length ? counted(items.length, 'stavka', 'stavke', 'stavki') : null,
-    html:
+    html: lostListNotice() +
       (purchase ? `<a class="card row" href="#/kupovina" style="text-decoration:none;color:inherit">
           <div class="grow"><div class="name">Kupovina u toku</div>
           <div class="muted small">Kupljeno ${purchaseBought(purchase)} od ${purchaseItems(purchase).length}</div></div>${icon.chevron}</a>` : '') +
@@ -1204,7 +1232,7 @@ const purchaseBought = purchase => purchaseItems(purchase).filter(i => purchase.
 function startPurchase() {
   const s = distinctScenarios(recommendation).find(x => x.type === selectedType) || recommendation.recommendedBalance;
   if (saved.get('purchase') && !confirm('Započni novu kupovinu? Napredak prethodne kupovine se briše.')) return;
-  saved.set('purchase', { startedAt: new Date().toISOString(), scenario: s, checked: {},
+  saved.set('purchase', { startedAt: new Date().toISOString(), listId: saved.get('listId'), scenario: s, checked: {},
     walking: recommendation.assumptions?.travelMode === 'WALKING' });
   location.hash = '#/kupovina';
 }
@@ -1772,6 +1800,7 @@ const actions = {
   'pick-open': el => openPick(Number(el.dataset.item)),
   'pick-cancel': () => { picking = null; renderMatching(); },
   pick: el => pickProduct(picking.results[Number(el.dataset.index)]),
+  'lost-list-ok': () => { saved.set('listLost', null); renderList(); },
   'finish-purchase': () => {
     if (!confirm('Završi kupovinu? Napredak se briše, a spisak ostaje.')) return;
     saved.set('purchase', null);

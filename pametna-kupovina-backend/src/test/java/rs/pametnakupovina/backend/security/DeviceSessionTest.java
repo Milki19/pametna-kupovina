@@ -133,6 +133,40 @@ class DeviceSessionTest {
     }
 
     @Test
+    void aPhoneSilentTooLongGetsItsOwnListsBackWithItsNumber() throws Exception {
+        String number = newDeviceToken();
+        JsonNode session = open(number);
+        long listId = createList(access(session), "Preko leta");
+        refresh(session.path("refreshToken").asText(), 200);
+
+        jdbcClient.sql("""
+                        UPDATE app.device_session
+                           SET refresh_expires_at = NOW() - INTERVAL '1 second'
+                         WHERE device_id = :deviceId
+                        """)
+                .param("deviceId", session.path("deviceId").asLong())
+                .update();
+
+        JsonNode reopened = open(number);
+
+        assertThat(reopened.path("deviceId").asLong()).isEqualTo(session.path("deviceId").asLong());
+        assertThat(status(get("/api/v1/shopping-lists/" + listId), access(reopened))).isEqualTo(200);
+    }
+
+    @Test
+    void aPhoneWhoseTokenWasCopiedCannotOpenTheSessionAgainWithItsNumber() throws Exception {
+        String number = newDeviceToken();
+        JsonNode first = open(number);
+        String firstRefresh = first.path("refreshToken").asText();
+        JsonNode second = refresh(firstRefresh, 200);
+        assertThat(status(get("/api/v1/accounts/me"), access(second))).isEqualTo(200);
+
+        refresh(firstRefresh, 401);
+
+        openExpecting(number, 401);
+    }
+
+    @Test
     void aRefreshTokenWorksOnceAndACopyUsedLaterEndsTheSession() throws Exception {
         JsonNode first = open(newDeviceToken());
         String firstRefresh = first.path("refreshToken").asText();

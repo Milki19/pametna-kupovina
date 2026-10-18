@@ -77,6 +77,7 @@ async function googleSignIn(button) {
 async function finishGoogleSignIn(idToken) {
   if (!idToken) throw new Error('Prijava nije uspela. Probaj ponovo kasnije.');
   account.state = await api('POST', 'accounts/sign-in/google', { idToken });
+  saved.set('listLost', null);
   // Isti čovek već ima nalog sa drugog telefona: ovaj pregledač prelazi na
   // njega, a spisak ovog pregledača ide za njim.
   if (location.hash === '#/vise') showMore();

@@ -62,12 +62,16 @@ public class DeviceSessionService {
      * A new phone, or an old one moving from its number to a session. A
      * number that has already been exchanged opens nothing — except when the
      * session it opened was never used, which means the answer to the
-     * exchange was lost on the way and the phone is asking again.
+     * exchange was lost on the way and the phone is asking again, or when
+     * that session ran out because the phone was silent too long. A phone
+     * without a Google sign-in has nothing else to get its lists back with.
+     * A session ended because a copy of its token turned up is gone, not
+     * expired, so the number stays shut for whoever holds the copy.
      */
     @Transactional
     public SessionGrant open(String deviceToken, String deviceName) {
         String hash = clientTokenPolicy.validateAndHash(deviceToken);
-        repository.deleteExpiredSessions();
+        Instant now = clock.instant();
 
         DeviceSessionRepository.Device device = repository.findDevice(hash)
                 .orElseGet(() -> {
@@ -76,11 +80,12 @@ public class DeviceSessionService {
                 });
 
         if (device.retired()) {
-            boolean answerWasLost = repository.lockSessionOfDevice(device.id())
-                    .filter(session -> !session.pairUsed() && session.neverRefreshed())
+            boolean mayReopen = repository.lockSessionOfDevice(device.id())
+                    .filter(session -> session.expired(now)
+                            || (!session.pairUsed() && session.neverRefreshed()))
                     .isPresent();
 
-            if (!answerWasLost) {
+            if (!mayReopen) {
                 throw rejected("Ovaj telefon već ima sesiju. Otvori aplikaciju ponovo.");
             }
         }
@@ -180,7 +185,7 @@ public class DeviceSessionService {
 
     private SessionGrant rotate(DeviceSessionRepository.Session session, String spentHash, Instant now) {
         if (session.expired(now)) {
-            repository.deleteSession(session.id());
+            // Kept, so the phone's own number can open it again (open).
             throw rejected("Sesija je istekla. Otvori aplikaciju ponovo.");
         }
 
