@@ -31,7 +31,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * "jabuke 2kg" can be two kilograms of loose apples and "ćevapi 1,5kg" one
  * and a half. A piece the chain also
  * writes in kilograms is not: its price list gives another price per
- * kilogram, or its name says "komad".
+ * kilogram, or its name says "komad". Fruit and vegetables with no amount
+ * are a kilogram weighed out, before the smallest bag (V137).
  */
 @SpringBootTest(properties = {
         "price-import.http.request-timeout-seconds=5",
@@ -61,6 +62,8 @@ class LooseGoodsByTheKilogramTest {
     private static final String MANGO = "MANGO KOMAD";
     private static final String CEVAPI = "ĆEVAPI SA PULTA";
     private static final String TURKEY_MINCE = "MASA OD MLEV.CURECEG MESA400G";
+    private static final String LOOSE_TOMATOES = "PARADAJZ";
+    private static final String TOMATO_MIX = "PARADAJZ MIKS 500G";
 
     private static final String CATALOGUE = "KATEGORIJA;NAZIV KATEGORIJE;"
             + "Naziv proizvoda;Robna marka;Barkod proizvoda;Jedinica mere;"
@@ -72,7 +75,9 @@ class LooseGoodsByTheKilogramTest {
             + "3;Sveže voće i povrće;" + ONE_APPLE + ";;;kg;Test format;19,99;;13-09-2026;19,99;;;10\n"
             + "3;Sveže voće i povrće;" + MANGO + ";;;kg;Test format;219,99;;13-09-2026;628,54;;;10\n"
             + "8;Sveže i prerađeno meso;" + CEVAPI + ";;;KG;Test format;699,99;;13-09-2026;699,99;;;10\n"
-            + "8;Sveže i prerađeno meso;" + TURKEY_MINCE + ";;;kg;Test format;399,99;;13-09-2026;399,99;;;10\n";
+            + "8;Sveže i prerađeno meso;" + TURKEY_MINCE + ";;;kg;Test format;399,99;;13-09-2026;399,99;;;10\n"
+            + "3;Sveže voće i povrće;" + LOOSE_TOMATOES + ";;;KG;Test format;189,99;;13-09-2026;189,99;;;10\n"
+            + "3;Sveže voće i povrće;" + TOMATO_MIX + ";Testna;8600000002028;KOM;Test format;199,99;;13-09-2026;399,98;;;10\n";
 
     private static HttpServer csvServer;
 
@@ -179,6 +184,8 @@ class LooseGoodsByTheKilogramTest {
                         mango 1kg
                         ćevapi 1,5kg
                         jabuke
+                        paradajz 1 kom
+                        paradajz 1kg
                         """)
         );
 
@@ -187,7 +194,7 @@ class LooseGoodsByTheKilogramTest {
                 List.of(shop),
                 PRICE_DATE
         );
-        assertThat(offers).hasSize(5);
+        assertThat(offers).hasSize(7);
 
         // Two kilograms of loose apples beat the 2 kg bag; one apple for 19,99
         // is not a kilogram.
@@ -212,7 +219,21 @@ class LooseGoodsByTheKilogramTest {
             assertThat(cevapi.purchaseQuantity().extraAmount()).isEqualByComparingTo("0");
             assertThat(cevapi.lineTotal()).isEqualByComparingTo("1049.99");
         });
-        // Without an amount nothing changes: the bag with a size comes first.
-        assertThat(offers.get(4).productName()).isEqualTo(APPLE_BAG);
+        // Fruit without an amount is a kilogram of loose apples, not the bag
+        // (V137).
+        assertThat(offers.get(4)).satisfies(apples -> {
+            assertThat(apples.productName()).isEqualTo(LOOSE_APPLES);
+            assertThat(apples.purchaseQuantity().packages()).isEqualByComparingTo("1");
+            assertThat(apples.purchaseQuantity().packageSize()).isEqualByComparingTo("1000");
+            assertThat(apples.lineTotal()).isEqualByComparingTo("119.99");
+        });
+        // "paradajz 1 kom" is loose tomatoes at 189,99 a kilogram, not a
+        // 500 g mix at 399,98 (test of 17.10.2026).
+        assertThat(offers.get(5)).satisfies(tomatoes -> {
+            assertThat(tomatoes.productName()).isEqualTo(LOOSE_TOMATOES);
+            assertThat(tomatoes.purchaseQuantity().unitPrice()).isEqualByComparingTo("189.99");
+            assertThat(tomatoes.lineTotal()).isEqualByComparingTo("189.99");
+        });
+        assertThat(offers.get(6).productName()).isEqualTo(LOOSE_TOMATOES);
     }
 }

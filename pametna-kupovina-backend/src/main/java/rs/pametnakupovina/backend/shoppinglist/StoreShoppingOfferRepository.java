@@ -155,6 +155,17 @@ public class StoreShoppingOfferRepository {
                                              THEN 1
                                          ELSE 0
                                      END AS uncommon_rank,
+                                     -- Fruit and vegetables with no amount are a
+                                     -- kilogram weighed out, not the smallest
+                                     -- bag: "paradajz" is loose tomatoes before
+                                     -- a 500 g mix (V137).
+                                     CASE
+                                         WHEN requested_intent.weighed_out
+                                          AND item.target_quantity IS NULL
+                                          AND NOT pack.by_the_kilogram
+                                             THEN 1
+                                         ELSE 0
+                                     END AS loose_rank,
                                      -- A pack bigger than a quarter over the amount
                                      -- only where nothing fits better.
                                      CASE
@@ -269,6 +280,7 @@ public class StoreShoppingOfferRepository {
                                    intent.default_min_package_quantity,
                                    intent.default_max_package_quantity,
                                    intent.default_base_unit,
+                                   intent.weighed_out,
                                    alias.required_name_pattern,
                                    alias.uncommon_name_pattern
                             FROM app.shopping_intent AS intent
@@ -344,6 +356,13 @@ public class StoreShoppingOfferRepository {
                                            -- pack (V90).
                                            CASE WHEN item.target_quantity IS NOT NULL
                                                  AND item.required_base_unit = 'g'
+                                                 AND product.quantity_value IS NULL
+                                                THEN app.sold_by_the_kilogram(product.id)
+                                                -- With no amount, a kilogram of
+                                                -- fruit or vegetables (V137).
+                                                WHEN item.target_quantity IS NULL
+                                                 AND item.required_base_unit IS NULL
+                                                 AND requested_intent.weighed_out
                                                  AND product.quantity_value IS NULL
                                                 THEN app.sold_by_the_kilogram(product.id)
                                                 ELSE FALSE
@@ -560,6 +579,17 @@ public class StoreShoppingOfferRepository {
                                              THEN 1
                                          ELSE 0
                                      END AS uncommon_rank,
+                                     -- Fruit and vegetables with no amount are a
+                                     -- kilogram weighed out, not the smallest
+                                     -- bag: "paradajz" is loose tomatoes before
+                                     -- a 500 g mix (V137).
+                                     CASE
+                                         WHEN requested_intent.weighed_out
+                                          AND item.target_quantity IS NULL
+                                          AND NOT pack.by_the_kilogram
+                                             THEN 1
+                                         ELSE 0
+                                     END AS loose_rank,
                                      -- A pack bigger than a quarter over the amount
                                      -- only where nothing fits better.
                                      CASE
@@ -707,6 +737,7 @@ public class StoreShoppingOfferRepository {
                                    intent.default_min_package_quantity,
                                    intent.default_max_package_quantity,
                                    intent.default_base_unit,
+                                   intent.weighed_out,
                                    alias.required_name_pattern,
                                    alias.uncommon_name_pattern
                             FROM app.shopping_intent AS intent
@@ -758,6 +789,13 @@ public class StoreShoppingOfferRepository {
                                            -- pack (V90).
                                            CASE WHEN item.target_quantity IS NOT NULL
                                                  AND item.required_base_unit = 'g'
+                                                 AND product.quantity_value IS NULL
+                                                THEN app.sold_by_the_kilogram(product.id)
+                                                -- With no amount, a kilogram of
+                                                -- fruit or vegetables (V137).
+                                                WHEN item.target_quantity IS NULL
+                                                 AND item.required_base_unit IS NULL
+                                                 AND requested_intent.weighed_out
                                                  AND product.quantity_value IS NULL
                                                 THEN app.sold_by_the_kilogram(product.id)
                                                 ELSE FALSE
@@ -959,6 +997,9 @@ public class StoreShoppingOfferRepository {
                                    ARRAY_AGG(candidate.uncommon_rank
                                              ORDER BY candidate.retailer_product_id)
                                        AS uncommon_ranks,
+                                   ARRAY_AGG(candidate.loose_rank
+                                             ORDER BY candidate.retailer_product_id)
+                                       AS loose_ranks,
                                    ARRAY_AGG(candidate.oversize_rank
                                              ORDER BY candidate.retailer_product_id)
                                        AS oversize_ranks,
@@ -1120,13 +1161,14 @@ public class StoreShoppingOfferRepository {
                                 candidate_group.package_counts,
                                 candidate_group.kind_ranks,
                                 candidate_group.uncommon_ranks,
+                                candidate_group.loose_ranks,
                                 candidate_group.oversize_ranks,
                                 candidate_group.size_ranks,
                                 candidate_group.pack_weights,
                                 candidate_group.bought_ranks,
                                 candidate_group.typical_prices,
                                 candidate_group.loose_observations
-                            ) AS candidate(retailer_product_id, package_size, package_unit, packages, kind_rank, uncommon_rank, oversize_rank, size_rank, pack_weight, bought_rank, typical_price, has_loose_observation)
+                            ) AS candidate(retailer_product_id, package_size, package_unit, packages, kind_rank, uncommon_rank, loose_rank, oversize_rank, size_rank, pack_weight, bought_rank, typical_price, has_loose_observation)
                         ),
                         -- Every price a candidate has in the newest lists, read
                         -- once per product. Looked up again for every shop of
@@ -1372,6 +1414,7 @@ public class StoreShoppingOfferRepository {
                                      candidate_row.item_id,
                                      candidate_row.kind_rank ASC,
                                      candidate_row.uncommon_rank ASC,
+                                     candidate_row.loose_rank ASC,
                                      candidate_row.oversize_rank ASC,
                                      candidate_row.size_rank ASC,
                                      store_price.effective_price * candidate_row.packages
