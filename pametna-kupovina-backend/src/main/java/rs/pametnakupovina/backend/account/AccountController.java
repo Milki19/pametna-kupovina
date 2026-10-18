@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -22,15 +23,18 @@ public class AccountController {
 
     private final AccountSignInService signInService;
     private final DeviceSessionService sessionService;
+    private final TripCostService tripCostService;
     private final String googleClientId;
 
     public AccountController(
             AccountSignInService signInService,
             DeviceSessionService sessionService,
+            TripCostService tripCostService,
             @Value("${account.google.client-id:}") String googleClientId
     ) {
         this.signInService = signInService;
         this.sessionService = sessionService;
+        this.tripCostService = tripCostService;
         this.googleClientId = googleClientId == null ? "" : googleClientId.strip();
     }
 
@@ -73,6 +77,20 @@ public class AccountController {
             @RequestBody JoinRequest request
     ) {
         return signInService.join(caller, request.code());
+    }
+
+    /** Koliko plan računa sat u putu i jedno stajanje. */
+    @GetMapping("/me/trip-costs")
+    public TripCostService.TripCosts tripCosts(DeviceCaller caller) {
+        return tripCostService.get(caller);
+    }
+
+    @PutMapping("/me/trip-costs")
+    public TripCostService.TripCosts saveTripCosts(
+            DeviceCaller caller,
+            @RequestBody TripCostService.TripCostRequest request
+    ) {
+        return tripCostService.save(caller, request);
     }
 
     /** Telefoni na nalogu, da se izgubljen ili tuđ može ukloniti. */

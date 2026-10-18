@@ -258,6 +258,9 @@ class PametnaKupovinaBackendApplicationTests {
     private rs.pametnakupovina.backend.market.MarketRepository marketRepository;
 
     @Autowired
+    private rs.pametnakupovina.backend.account.TripCostService tripCostService;
+
+    @Autowired
     private LoyaltyCardService loyaltyCardService;
 
     @Autowired
@@ -1091,6 +1094,61 @@ class PametnaKupovinaBackendApplicationTests {
                 .contains(storeId);
         assertThat(marketRepository.forRetailerCode("MARKET_TEST_HR").currencyCode())
                 .isEqualTo("EUR");
+    }
+
+    /**
+     * Ko hoće da se vozi do jeftinije radnje, sam kaže koliko mu vredi sat
+     * i stajanje. Plan to čita, cena tržišta ostaje svima ostalima, a
+     * nalog koji se vrati na nju ponovo prati tržište.
+     */
+    @Test
+    void aShopperPricesTheirOwnTimeAndStopsAndCanGoBackToTheMarkets() {
+        var caller = callers.caller("telefon-vreme");
+        long listId = shoppingListService.create(
+                new CreateShoppingListRequest("Vreme"), caller.accountId()).id();
+
+        var before = tripCostService.get(caller);
+        assertThat(before.valuePerHour()).isEqualByComparingTo("400");
+        assertThat(before.costPerStop()).isEqualByComparingTo("80");
+        assertThat(before.maxValuePerHour()).isEqualByComparingTo("10000");
+        assertThat(before.maxCostPerStop()).isEqualByComparingTo("2000");
+        assertThat(before.customized()).isFalse();
+        assertThat(before.currency()).isEqualTo("RSD");
+        assertThat(marketRepository.forPlanningShoppingList(listId).valuePerHour())
+                .isEqualByComparingTo("400");
+
+        var own = tripCostService.save(caller, new rs.pametnakupovina.backend.account
+                .TripCostService.TripCostRequest(new BigDecimal("1200"), BigDecimal.ZERO));
+        assertThat(own.valuePerHour()).isEqualByComparingTo("1200");
+        assertThat(own.costPerStop()).isEqualByComparingTo("0");
+        assertThat(own.customized()).isTrue();
+        var plan = marketRepository.forPlanningShoppingList(listId);
+        assertThat(plan.valuePerHour()).isEqualByComparingTo("1200");
+        assertThat(plan.costPerStop()).isEqualByComparingTo("0");
+        assertThat(plan.currencyCode()).isEqualTo("RSD");
+        // Tržište i drugi nalozi ostaju na svojoj ceni.
+        assertThat(marketRepository.forShoppingList(listId).valuePerHour())
+                .isEqualByComparingTo("400");
+        assertThat(tripCostService.get(callers.caller("telefon-komsija")).valuePerHour())
+                .isEqualByComparingTo("400");
+
+        assertThatThrownBy(() -> tripCostService.save(caller, new rs.pametnakupovina.backend.account
+                .TripCostService.TripCostRequest(new BigDecimal("10000.01"), null)))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("od 0 do 10000 RSD");
+        assertThatThrownBy(() -> tripCostService.save(caller, new rs.pametnakupovina.backend.account
+                .TripCostService.TripCostRequest(null, new BigDecimal("-1"))))
+                .isInstanceOf(ResponseStatusException.class);
+
+        // Upisana cena tržišta nije svoja cena: nalog dalje prati tržište.
+        assertThat(tripCostService.save(caller, new rs.pametnakupovina.backend.account
+                .TripCostService.TripCostRequest(new BigDecimal("400.00"), new BigDecimal("80")))
+                .customized()).isFalse();
+        assertThat(jdbcClient.sql("""
+                        SELECT value_per_hour IS NULL AND cost_per_stop IS NULL
+                        FROM app.account WHERE id = ?
+                        """).param(caller.accountId()).query(Boolean.class).single())
+                .isTrue();
     }
 
     /**

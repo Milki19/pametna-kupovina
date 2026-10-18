@@ -1264,6 +1264,7 @@ function renderRecommendation() {
           s.approximateRoute ? 'Udaljenosti su procena: vazdušna linija uvećana za ulice, bez saobraćaja.' : null,
           `Razmotreno ${counted(result.candidateStoreCount, 'prodavnica', 'prodavnice', 'prodavnica')} u krugu od ${decimal(a.candidateRadiusMeters / 1000, 1)} km.`
         ].filter(Boolean).map(line => `<p class="small">${esc(line)}</p>`).join('')}
+        <a class="btn text small" href="#/vreme">Promeni cenu vremena i stajanja</a>
       </details>`,
     action: s.available ? `<button class="btn primary main" data-act="start-purchase">Započni kupovinu po ovom planu</button>` : ''
   });
@@ -1812,6 +1813,7 @@ function showMore(_, __, loaded = false) {
         <span class="muted small">Screenshot ili PDF digitalnog računa</span></span>${icon.chevron}</a>` +
       link('#/potrosnja', 'Potrošnja', 'Koliko trošiš mesečno, po prodavnicama i kategorijama') +
       link('#/domacinstvo', 'Domaćinstvo', account.state?.household ? 'Delite spisak, račune i kartice' : 'Pozovi ukućanina da delite spisak') +
+      link('#/vreme', 'Vreme i stajanja', 'Koliko plan računa sat u putu i jedno stajanje') +
       themeCard() +
       `<div class="card">
         <div class="title">O aplikaciji</div>
@@ -1839,6 +1841,59 @@ function themeCard() {
     </div>
     <p class="muted small">Sistemska prati telefon. Crna štedi bateriju na OLED ekranima.</p>
   </div>`;
+}
+
+// Cena vremena i stajanja: plan njima meri da li se isplati vožnja do jeftinije radnje.
+let tripCosts = null;
+let tripFrom = '#/vise';
+async function showTripCosts() {
+  try {
+    tripCosts = await api('GET', 'accounts/me/trip-costs');
+  } catch (error) {
+    return failed('Vreme i stajanja', error, '#/vreme');
+  }
+  renderTripCosts();
+}
+
+function renderTripCosts(message = null) {
+  const t = tripCosts;
+  const amount = value => number(value, market.currencyMinorUnits).split(separators.group).join('');
+  screen({
+    title: 'Vreme i stajanja',
+    back: tripFrom,
+    html: `
+      <div class="card soft">
+        <div class="title">Šta ti vredi više: vreme ili ušteda</div>
+        <p class="muted small">Plan sabira korpu, gorivo, vreme u putu i stajanja. Jeftinija korpa dalje od tebe pobeđuje samo ako ušteda pokrije put.</p>
+      </div>
+      <form class="card" data-form="trip-costs">
+        <label class="label" for="trip-hour">Sat u putu (${esc(t.currency)})</label>
+        <input id="trip-hour" name="hour" inputmode="decimal" value="${esc(amount(t.valuePerHour))}" required>
+        <label class="label" for="trip-stop">Jedno stajanje (${esc(t.currency)})</label>
+        <input id="trip-stop" name="stop" inputmode="decimal" value="${esc(amount(t.costPerStop))}" required>
+        <p class="muted small">Podrazumevano je ${money(t.defaultValuePerHour)} po satu i ${money(t.defaultCostPerStop)} po stajanju. Veći iznos znači manje vožnje i manje radnji, a 0 znači da plan gleda samo cenu korpe i goriva.</p>
+        <div class="btn-row">${t.customized ? '<button type="button" class="btn" data-act="trip-reset">Vrati podrazumevano</button>' : ''}<button class="btn primary">Sačuvaj</button></div>
+      </form>
+      ${message ? `<div class="notice pos" role="status">${esc(message)}</div>` : ''}`
+  });
+}
+
+async function saveTripCosts(valuePerHour, costPerStop) {
+  tripCosts = await api('PUT', 'accounts/me/trip-costs', { valuePerHour, costPerStop });
+  // Plan je računat po staroj ceni.
+  recommendation = null;
+  recommendationFor = null;
+  renderTripCosts(tripCosts.customized
+    ? `Sačuvano. Plan računa ${money(tripCosts.valuePerHour)} po satu i ${money(tripCosts.costPerStop)} po stajanju.`
+    : 'Sačuvano. Plan opet računa podrazumevano vreme i stajanja.');
+}
+
+function tripAmount(data, name, max) {
+  const value = parseNumber(data.get(name));
+  if (value == null || value < 0 || value > max) {
+    throw fieldError(name, `Upiši iznos od 0 do ${money(max)}.`);
+  }
+  return value;
 }
 
 async function deleteAccount() {
@@ -1871,6 +1926,7 @@ const routes = {
   proizvod: showProduct,
   kartice: showCards,
   vise: showMore,
+  vreme: showTripCosts,
   racun: showReceipt,
   ...accountRoutes
 };
@@ -1889,11 +1945,12 @@ function route() {
   currentRoute = name;
   const handler = routes[name] || routes.spisak;
   if (name === 'cene' || name === 'akcije') productFrom = '#/' + name;
+  if (name === 'vreme' && currentFrom !== 'vreme') tripFrom = currentFrom === 'preporuke' ? '#/preporuke' : '#/vise';
   if (name === 'akcije' && (currentFrom === 'spisak' || currentFrom === 'cene')) salesFrom = '#/' + currentFrom;
   // Obaveštenje pripada ekranu na kome je nastalo.
   if (name !== currentFrom) { document.getElementById('toast').hidden = true; flushDelete(); }
   const tab = name === 'akcije' || name === 'proizvod' ? 'cene'
-    : name === 'racun' || name === 'domacinstvo' || name === 'potrosnja' ? 'vise' : routes[name] ? name : 'spisak';
+    : name === 'racun' || name === 'domacinstvo' || name === 'potrosnja' || name === 'vreme' ? 'vise' : routes[name] ? name : 'spisak';
   document.querySelectorAll('.tabs a').forEach(a => {
     const current = a.dataset.tab === tab;
     if (current) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
@@ -1961,6 +2018,7 @@ const actions = {
     await showCards();
   },
   'delete-account': deleteAccount,
+  'trip-reset': () => saveTripCosts(null, null),
   theme: el => {
     const value = el.dataset.value || null;
     saved.set('theme', value);
@@ -1986,6 +2044,9 @@ const actions = {
 const forms = {
   ...accountForms,
   'pick-search': data => runPick(String(data.get('q') || '')),
+  'trip-costs': data => saveTripCosts(
+    tripAmount(data, 'hour', tripCosts.maxValuePerHour),
+    tripAmount(data, 'stop', tripCosts.maxCostPerStop)),
   'add-one': data => addText(data.get('text')),
   'add-many': data => addText(data.get('text')),
   'edit-item': (data, form) => saveItem(Number(form.dataset.id), data),

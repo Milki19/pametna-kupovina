@@ -99,8 +99,9 @@ public class ShoppingRecommendationService {
                 ));
 
         // Prices, travel costs and "today" are the market's; a shop across
-        // the border quotes another currency and never enters the plan.
-        Market market = onFoot(marketRepository.forShoppingList(listId), walking);
+        // the border quotes another currency and never enters the plan. The
+        // value of an hour and of a stop is the account's, where it set one.
+        Market market = onFoot(marketRepository.forPlanningShoppingList(listId), walking);
         LocalDate asOfDate = requestedDate != null
                 ? requestedDate
                 : market.today();

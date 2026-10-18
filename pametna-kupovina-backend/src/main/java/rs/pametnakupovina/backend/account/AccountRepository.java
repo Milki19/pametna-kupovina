@@ -4,6 +4,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
@@ -144,6 +145,47 @@ public class AccountRepository {
                 .single();
     }
 
+    /** What the account's trips cost, next to what its market says. */
+    public TripCostService.Stored tripCosts(long accountId) {
+        return jdbcClient.sql("""
+                        SELECT account.value_per_hour, account.cost_per_stop,
+                               market.value_per_hour AS market_value_per_hour,
+                               market.cost_per_stop AS market_cost_per_stop,
+                               market.currency_code, market.currency_minor_units
+                        FROM app.account AS account
+                        JOIN app.market AS market ON market.id = account.market_id
+                        WHERE account.id = :accountId
+                        """)
+                .param("accountId", accountId)
+                .query((row, number) -> new TripCostService.Stored(
+                        row.getBigDecimal("value_per_hour"),
+                        row.getBigDecimal("cost_per_stop"),
+                        row.getBigDecimal("market_value_per_hour"),
+                        row.getBigDecimal("market_cost_per_stop"),
+                        row.getString("currency_code"),
+                        row.getInt("currency_minor_units")
+                ))
+                .single();
+    }
+
+    /** @param valuePerHour NULL leaves the market's own, as does costPerStop */
+    public void saveTripCosts(
+            long accountId,
+            BigDecimal valuePerHour,
+            BigDecimal costPerStop
+    ) {
+        jdbcClient.sql("""
+                        UPDATE app.account
+                           SET value_per_hour = :valuePerHour,
+                               cost_per_stop = :costPerStop
+                         WHERE id = :accountId
+                        """)
+                .param("valuePerHour", valuePerHour)
+                .param("costPerStop", costPerStop)
+                .param("accountId", accountId)
+                .update();
+    }
+
     public void attachIdentity(
             long accountId,
             String provider,
@@ -204,6 +246,20 @@ public class AccountRepository {
                     .param("from", fromAccountId)
                     .update();
         }
+
+        // Ono što je telefon sam podesio važi dok nalog nema svoje.
+        jdbcClient.sql("""
+                        UPDATE app.account AS kept
+                           SET value_per_hour = COALESCE(kept.value_per_hour, moved.value_per_hour),
+                               cost_per_stop = COALESCE(kept.cost_per_stop, moved.cost_per_stop)
+                          FROM app.account AS moved
+                         WHERE kept.id = :to
+                           AND moved.id = :from
+                           AND moved.market_id = kept.market_id
+                        """)
+                .param("to", toAccountId)
+                .param("from", fromAccountId)
+                .update();
 
         jdbcClient.sql("""
                         DELETE FROM app.account
