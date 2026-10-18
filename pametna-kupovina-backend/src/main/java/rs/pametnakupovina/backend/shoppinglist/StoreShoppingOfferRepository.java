@@ -1079,75 +1079,39 @@ public class StoreShoppingOfferRepository {
                                   )
                             ) AS shop
                         ),
-                        priced AS MATERIALIZED (
-                        SELECT store.id AS store_id,
-                               item.created_at AS item_created_at,
-                               retailer.code AS retailer_code,
-                               retailer.name AS retailer_name,
-                               format.code AS store_format_code,
-                               format.name AS store_format_name,
-                               store.name AS store_name,
-                               store.address,
-                               store.city,
-                               ST_Y(store.location::geometry) AS latitude,
-                               ST_X(store.location::geometry) AS longitude,
-                               item.id AS item_id,
-                               item.name AS requested_name,
-                               item.quantity AS requested_quantity,
-                               item.matching_rule,
-                               item.matching_status,
-                               offer.retailer_product_id,
-                               offer.canonical_product_id,
-                               offer.product_name,
-                               offer.product_brand,
-                               offer.product_barcode,
-                               offer.price_date,
-                               offer.regular_price,
-                               offer.discounted_price,
-                               offer.effective_price,
-                               ROUND(
-                                   offer.effective_price * offer.packages,
-                                   2
-                               ) AS line_total,
-                               offer.price_scope,
-                               offer.packages, offer.package_size, offer.package_unit,
-                               item.target_quantity * item.quantity AS target_amount,
-                               offer.packages * offer.package_size AS supplied_amount,
-                               offer.packages * offer.package_size - item.target_quantity * item.quantity AS extra_amount,
-                               ROUND(offer.effective_price / NULLIF(offer.package_size, 0) *
-                                   CASE WHEN offer.package_unit IN ('g','ml') THEN 1000 ELSE 1 END, 2) AS unit_price
-                        FROM requested_store
-                        JOIN app.store AS store
-                          ON store.id = requested_store.store_id
-                        JOIN app.retailer AS retailer
-                          ON retailer.id = store.retailer_id
-                        JOIN app.store_format AS format
-                          ON format.id = store.store_format_id
-                        LEFT JOIN app.store_price_format_mapping
-                            AS price_mapping
-                          ON price_mapping.retailer_id =
-                             store.retailer_id
-                         AND price_mapping.store_external_code =
-                             store.external_code
-                        AND price_mapping.active = TRUE
-                         AND price_mapping.verification_status = 'VERIFIED'
-                        CROSS JOIN app.shopping_list_item AS item
-                        LEFT JOIN LATERAL (
-                            SELECT product.id AS retailer_product_id,
-                                   product.canonical_product_id,
-                                   product.name AS product_name,
-                                   COALESCE(
-                                       canonical.brand,
-                                       product.brand
-                                   ) AS product_brand,
-                                   product.barcode AS product_barcode,
-                                   selected_price.price_date,
-                                   selected_price.regular_price,
-                                   selected_price.discounted_price,
-                                   selected_price.effective_price,
-                                   selected_price.price_scope,
-                                   candidate.package_size, candidate.package_unit,
-                                   candidate.packages
+                        -- The shops priced, with what their price lists are
+                        -- matched by.
+                        pricing_store AS MATERIALIZED (
+                            SELECT store.id AS store_id,
+                                   store.retailer_id,
+                                   LOWER(BTRIM(COALESCE(
+                                       price_mapping.retailer_format_name,
+                                       format.name
+                                   ))) AS format_name_key,
+                                   CASE
+                                       WHEN price_mapping.id IS NULL
+                                           THEN LOWER(BTRIM(format.code))
+                                   END AS format_code_key
+                            FROM requested_store
+                            JOIN app.store AS store
+                              ON store.id = requested_store.store_id
+                            JOIN app.store_format AS format
+                              ON format.id = store.store_format_id
+                            LEFT JOIN app.store_price_format_mapping
+                                AS price_mapping
+                              ON price_mapping.retailer_id =
+                                 store.retailer_id
+                             AND price_mapping.store_external_code =
+                                 store.external_code
+                             AND price_mapping.active = TRUE
+                             AND price_mapping.verification_status = 'VERIFIED'
+                            WHERE requested_store.store_id =
+                                  requested_store.pricing_store_id
+                        ),
+                        candidate_row AS MATERIALIZED (
+                            SELECT candidate_group.item_id,
+                                   candidate_group.retailer_id,
+                                   candidate.*
                             FROM candidate_group
                             CROSS JOIN LATERAL UNNEST(
                                 candidate_group.retailer_product_ids,
@@ -1163,255 +1127,300 @@ public class StoreShoppingOfferRepository {
                                 candidate_group.typical_prices,
                                 candidate_group.loose_observations
                             ) AS candidate(retailer_product_id, package_size, package_unit, packages, kind_rank, uncommon_rank, oversize_rank, size_rank, pack_weight, bought_rank, typical_price, has_loose_observation)
-                            JOIN app.retailer_product AS product
-                              ON product.id = candidate.retailer_product_id
-                             -- Kupci su u ovoj radnji javili da ga nema (V121).
-                             AND NOT EXISTS (
-                                 SELECT 1
-                                 FROM missing_in_store
-                                 WHERE missing_in_store.retailer_product_id = product.id
-                                   AND missing_in_store.store_id = store.id
-                             )
-                            LEFT JOIN app.canonical_product AS canonical
-                              ON canonical.id =
-                                  product.canonical_product_id
-                            JOIN LATERAL (
-                                SELECT priced.price_date,
-                                       priced.regular_price,
-                                       priced.discounted_price,
-                                       priced.effective_price,
-                                       priced.price_scope
-                                FROM (
-                                    SELECT current_offer.price_date,
+                        ),
+                        -- Every price a candidate has in the newest lists, read
+                        -- once per product. Looked up again for every shop of
+                        -- the chain, the same offers were read 33,000 times for
+                        -- 13,600 products (2.5 s of a 4.6 s plan on the server).
+                        price_source AS MATERIALIZED (
+                            SELECT wanted.retailer_product_id,
+                                   source.*
+                            FROM (
+                                SELECT candidate_row.retailer_product_id,
+                                       MIN(candidate_row.retailer_id) AS retailer_id,
+                                       BOOL_OR(candidate_row.has_loose_observation)
+                                           AS has_loose_observation
+                                FROM candidate_row
+                                GROUP BY candidate_row.retailer_product_id
+                            ) AS wanted
+                            CROSS JOIN LATERAL (
+                                SELECT FALSE AS observed,
+                                       current_offer.store_id AS source_store_id,
+                                       current_offer.scope_type,
+                                       LOWER(BTRIM(
+                                           current_offer.retailer_format_name
+                                       )) AS format_key,
+                                       current_offer.price_date,
+                                       current_offer.regular_price,
+                                       current_offer.discounted_price,
+                                       -- A sale counts only while it lasts (V115).
+                                       app.effective_price(
                                            current_offer.regular_price,
                                            current_offer.discounted_price,
-                                           -- A sale counts only while it lasts (V115).
-                                           app.effective_price(
-                                               current_offer.regular_price,
-                                               current_offer.discounted_price,
-                                               current_offer.discount_start,
-                                               current_offer.discount_end,
-                                               :asOfDate
-                                           ) AS effective_price,
-                                           current_offer.scope_type AS price_scope,
-                                           CASE
-                                               WHEN current_offer.store_id = store.id
-                                                   THEN 1
-                                               WHEN current_offer.scope_type =
-                                                    'STORE_FORMAT'
-                                                AND (
-                                                    LOWER(BTRIM(
-                                                        current_offer.retailer_format_name
-                                                    )) = LOWER(BTRIM(COALESCE(
-                                                        price_mapping.retailer_format_name,
-                                                        format.name
-                                                    )))
-                                                    OR (
-                                                        price_mapping.id IS NULL
-                                                        AND LOWER(BTRIM(
-                                                        current_offer.retailer_format_name
-                                                        )) = LOWER(BTRIM(
-                                                            format.code
-                                                        ))
-                                                    )
-                                                )
-                                                   THEN 2
-                                               ELSE 3
-                                           END AS scope_priority,
-                                           0 AS source_priority,
-                                           current_offer.id
-                                    FROM app.current_price_offer AS current_offer
-                                    WHERE current_offer.retailer_product_id =
-                                            product.id
-                                      AND current_offer.price_date <= :asOfDate
-                                      -- Only a price in the chain's newest list:
-                                      -- a dropped product keeps its old price (V75).
-                                      AND app.in_latest_price_list(
-                                          product.retailer_id,
-                                          current_offer.scope_key,
-                                          current_offer.price_date,
-                                          :asOfDate
-                                      )
-                                      AND (
-                                          current_offer.store_id = store.id
-                                          OR (
-                                              current_offer.scope_type =
-                                                  'STORE_FORMAT'
-                                                  AND (
-                                                      LOWER(BTRIM(
-                                                          current_offer.retailer_format_name
-                                                      )) = LOWER(BTRIM(COALESCE(
-                                                          price_mapping.retailer_format_name,
-                                                          format.name
-                                                      )))
-                                                      OR (
-                                                          price_mapping.id IS NULL
-                                                          AND LOWER(BTRIM(
-                                                          current_offer.retailer_format_name
-                                                          )) = LOWER(BTRIM(
-                                                              format.code
-                                                          ))
-                                                      )
-                                                  )
-                                          )
-                                          OR current_offer.scope_type = 'RETAILER'
-                                      )
-                                    UNION ALL
-                                    SELECT observation.price_date,
+                                           current_offer.discount_start,
+                                           current_offer.discount_end,
+                                           :asOfDate
+                                       ) AS effective_price,
+                                       current_offer.scope_type AS price_scope,
+                                       0 AS source_priority,
+                                       current_offer.id
+                                FROM app.current_price_offer AS current_offer
+                                WHERE current_offer.retailer_product_id =
+                                        wanted.retailer_product_id
+                                  AND current_offer.price_date <= :asOfDate
+                                  -- Only a price in the chain's newest list:
+                                  -- a dropped product keeps its old price (V75).
+                                  AND app.in_latest_price_list(
+                                      wanted.retailer_id,
+                                      current_offer.scope_key,
+                                      current_offer.price_date,
+                                      :asOfDate
+                                  )
+                                UNION ALL
+                                SELECT TRUE AS observed,
+                                       observation.store_id AS source_store_id,
+                                       NULL AS scope_type,
+                                       LOWER(NULLIF(BTRIM(
+                                           observation.retailer_format_name
+                                       ), '')) AS format_key,
+                                       observation.price_date,
+                                       observation.regular_price,
+                                       observation.discounted_price,
+                                       -- A sale counts only while it lasts (V115).
+                                       app.effective_price(
                                            observation.regular_price,
                                            observation.discounted_price,
-                                           -- A sale counts only while it lasts (V115).
-                                           app.effective_price(
-                                               observation.regular_price,
-                                               observation.discounted_price,
-                                               observation.discount_start,
-                                               observation.discount_end,
-                                               :asOfDate
-                                           ) AS effective_price,
-                                           CASE
-                                               WHEN observation.store_id = store.id
-                                                   THEN 'STORE'
-                                               WHEN NULLIF(BTRIM(
-                                                   observation.retailer_format_name
-                                               ), '') IS NOT NULL
-                                                   THEN 'STORE_FORMAT'
-                                               ELSE 'RETAILER'
-                                           END AS price_scope,
-                                           CASE
-                                               WHEN observation.store_id = store.id
-                                                   THEN 1
-                                               WHEN observation.store_id IS NULL
-                                                AND NULLIF(BTRIM(
+                                           observation.discount_start,
+                                           observation.discount_end,
+                                           :asOfDate
+                                       ) AS effective_price,
+                                       CASE
+                                           WHEN observation.store_id IS NOT NULL
+                                               THEN 'STORE'
+                                           WHEN NULLIF(BTRIM(
+                                               observation.retailer_format_name
+                                           ), '') IS NOT NULL
+                                               THEN 'STORE_FORMAT'
+                                           ELSE 'RETAILER'
+                                       END AS price_scope,
+                                       1 AS source_priority,
+                                       observation.id
+                                FROM app.price_observation AS observation
+                                -- Almost never: see loose_observations above.
+                                WHERE wanted.has_loose_observation
+                                  AND observation.retailer_product_id =
+                                        wanted.retailer_product_id
+                                  AND observation.price_date <= :asOfDate
+                                  AND app.in_latest_price_list(
+                                      wanted.retailer_id,
+                                      CASE
+                                          WHEN observation.store_id IS NOT NULL
+                                              THEN 'STORE:' || observation.store_id::TEXT
+                                          WHEN NULLIF(BTRIM(observation.retailer_format_name), '') IS NOT NULL
+                                              THEN 'STORE_FORMAT:' || LOWER(BTRIM(observation.retailer_format_name))
+                                          ELSE 'RETAILER'
+                                      END,
+                                      observation.price_date,
+                                      :asOfDate
+                                  )
+                                  AND NOT EXISTS (
+                                      SELECT 1
+                                      FROM app.current_price_offer
+                                          AS available_current
+                                      WHERE available_current.retailer_product_id =
+                                            observation.retailer_product_id
+                                        AND available_current.price_date <=
+                                            :asOfDate
+                                        AND available_current.scope_key =
+                                            CASE
+                                                WHEN observation.store_id
+                                                        IS NOT NULL
+                                                    THEN 'STORE:' ||
+                                                         observation.store_id::TEXT
+                                                WHEN NULLIF(BTRIM(
                                                     observation.retailer_format_name
                                                 ), '') IS NOT NULL
-                                                AND (
-                                                    LOWER(BTRIM(
-                                                        observation.retailer_format_name
-                                                    )) = LOWER(BTRIM(COALESCE(
-                                                        price_mapping.retailer_format_name,
-                                                        format.name
-                                                    )))
-                                                    OR (
-                                                        price_mapping.id IS NULL
-                                                        AND LOWER(BTRIM(
-                                                        observation.retailer_format_name
-                                                        )) = LOWER(BTRIM(
-                                                            format.code
-                                                        ))
-                                                    )
+                                                    THEN 'STORE_FORMAT:' ||
+                                                         LOWER(BTRIM(
+                                                             observation.retailer_format_name
+                                                         ))
+                                                ELSE 'RETAILER'
+                                            END
+                                  )
+                            ) AS source
+                            WHERE source.effective_price > 0
+                        ),
+                        -- Each shop's price of each candidate: its own price
+                        -- first, then its format's, then the chain's; the
+                        -- newest, a current offer before an old observation.
+                        store_price AS MATERIALIZED (
+                            SELECT DISTINCT ON (
+                                       matched.store_id,
+                                       matched.retailer_product_id
+                                   )
+                                   matched.*
+                            FROM (
+                                SELECT pricing_store.store_id,
+                                       price_source.*,
+                                       CASE
+                                           WHEN price_source.source_store_id =
+                                                pricing_store.store_id
+                                               THEN 1
+                                           WHEN (
+                                                   (NOT price_source.observed
+                                                    AND price_source.scope_type =
+                                                        'STORE_FORMAT')
+                                                   OR (price_source.observed
+                                                       AND price_source.source_store_id IS NULL
+                                                       AND price_source.format_key IS NOT NULL)
                                                 )
-                                                   THEN 2
-                                               ELSE 3
-                                           END AS scope_priority,
-                                           1 AS source_priority,
-                                           observation.id
-                                    FROM app.price_observation AS observation
-                                    WHERE candidate.has_loose_observation
-                                      AND observation.retailer_product_id =
-                                            product.id
-                                      AND observation.price_date <= :asOfDate
-                                      AND app.in_latest_price_list(
-                                          product.retailer_id,
-                                          CASE
-                                              WHEN observation.store_id IS NOT NULL
-                                                  THEN 'STORE:' || observation.store_id::TEXT
-                                              WHEN NULLIF(BTRIM(observation.retailer_format_name), '') IS NOT NULL
-                                                  THEN 'STORE_FORMAT:' || LOWER(BTRIM(observation.retailer_format_name))
-                                              ELSE 'RETAILER'
-                                          END,
-                                          observation.price_date,
-                                          :asOfDate
-                                      )
-                                      AND NOT EXISTS (
-                                          SELECT 1
-                                          FROM app.current_price_offer
-                                              AS available_current
-                                          WHERE available_current.retailer_product_id =
-                                                observation.retailer_product_id
-                                            AND available_current.price_date <=
-                                                :asOfDate
-                                            AND available_current.scope_key =
-                                                CASE
-                                                    WHEN observation.store_id
-                                                            IS NOT NULL
-                                                        THEN 'STORE:' ||
-                                                             observation.store_id::TEXT
-                                                    WHEN NULLIF(BTRIM(
-                                                        observation.retailer_format_name
-                                                    ), '') IS NOT NULL
-                                                        THEN 'STORE_FORMAT:' ||
-                                                             LOWER(BTRIM(
-                                                                 observation.retailer_format_name
-                                                             ))
-                                                    ELSE 'RETAILER'
-                                                END
-                                      )
-                                      AND (
-                                          observation.store_id = store.id
-                                          OR (
-                                              observation.store_id IS NULL
-                                              AND NULLIF(BTRIM(
-                                                  observation.retailer_format_name
-                                              ), '') IS NOT NULL
-                                              AND (
-                                                  LOWER(BTRIM(
-                                                      observation.retailer_format_name
-                                                  )) = LOWER(BTRIM(COALESCE(
-                                                      price_mapping.retailer_format_name,
-                                                      format.name
-                                                  )))
-                                                  OR (
-                                                      price_mapping.id IS NULL
-                                                      AND LOWER(BTRIM(
-                                                      observation.retailer_format_name
-                                                      )) = LOWER(BTRIM(
-                                                          format.code
-                                                      ))
-                                                  )
-                                              )
-                                          )
-                                          OR (
-                                              observation.store_id IS NULL
-                                              AND NULLIF(BTRIM(
-                                                  observation.retailer_format_name
-                                              ), '') IS NULL
-                                          )
-                                      )
-                                ) AS priced
-                                WHERE priced.effective_price > 0
-                                ORDER BY priced.scope_priority ASC,
-                                         priced.price_date DESC,
-                                         priced.source_priority ASC,
-                                         priced.id DESC
-                                LIMIT 1
-                            ) AS selected_price ON TRUE
-                            -- The candidates above already passed every
-                            -- condition of the item; a shop only adds its price.
-                            WHERE candidate_group.item_id = item.id
-                              AND candidate_group.retailer_id = store.retailer_id
+                                            AND (
+                                                price_source.format_key =
+                                                    pricing_store.format_name_key
+                                                OR price_source.format_key =
+                                                    pricing_store.format_code_key
+                                            )
+                                               THEN 2
+                                           ELSE 3
+                                       END AS scope_priority
+                                FROM price_source
+                                JOIN (
+                                    SELECT DISTINCT candidate_row.retailer_id,
+                                           candidate_row.retailer_product_id
+                                    FROM candidate_row
+                                ) AS wanted
+                                  ON wanted.retailer_product_id =
+                                     price_source.retailer_product_id
+                                JOIN pricing_store
+                                  ON pricing_store.retailer_id = wanted.retailer_id
+                                WHERE price_source.source_store_id =
+                                          pricing_store.store_id
+                                   OR (
+                                       NOT price_source.observed
+                                       AND (
+                                           (price_source.scope_type = 'STORE_FORMAT'
+                                            AND (
+                                                price_source.format_key =
+                                                    pricing_store.format_name_key
+                                                OR price_source.format_key =
+                                                    pricing_store.format_code_key
+                                            ))
+                                           OR price_source.scope_type = 'RETAILER'
+                                       )
+                                   )
+                                   OR (
+                                       price_source.observed
+                                       AND price_source.source_store_id IS NULL
+                                       AND (
+                                           price_source.format_key IS NULL
+                                           OR price_source.format_key =
+                                               pricing_store.format_name_key
+                                           OR price_source.format_key =
+                                               pricing_store.format_code_key
+                                       )
+                                   )
+                            ) AS matched
+                            ORDER BY matched.store_id,
+                                     matched.retailer_product_id,
+                                     matched.scope_priority ASC,
+                                     matched.price_date DESC,
+                                     matched.source_priority ASC,
+                                     matched.id DESC
+                        ),
+                        -- For each shop and item, the first candidate by the
+                        -- item's ranks, then by what it costs.
+                        best_offer AS MATERIALIZED (
+                            SELECT DISTINCT ON (
+                                       store_price.store_id,
+                                       candidate_row.item_id
+                                   )
+                                   store_price.store_id,
+                                   candidate_row.item_id,
+                                   candidate_row.retailer_product_id,
+                                   candidate_row.package_size,
+                                   candidate_row.package_unit,
+                                   candidate_row.packages,
+                                   store_price.price_date,
+                                   store_price.regular_price,
+                                   store_price.discounted_price,
+                                   store_price.effective_price,
+                                   store_price.price_scope
+                            FROM candidate_row
+                            JOIN store_price
+                              ON store_price.retailer_product_id =
+                                 candidate_row.retailer_product_id
+                            WHERE NOT EXISTS (
+                                      -- Kupci su u ovoj radnji javili da ga nema (V121).
+                                      SELECT 1
+                                      FROM missing_in_store
+                                      WHERE missing_in_store.retailer_product_id =
+                                            candidate_row.retailer_product_id
+                                        AND missing_in_store.store_id =
+                                            store_price.store_id
+                                  )
                               -- Far below what other chains charge, the price
                               -- is most likely for one piece or one kilogram
                               -- of a bigger pack (V72). The product screen
                               -- shows it to be checked; a plan never counts
                               -- on it.
                               AND NOT app.price_needs_check(
-                                  selected_price.regular_price,
-                                  selected_price.discounted_price,
-                                  candidate.typical_price
+                                  store_price.regular_price,
+                                  store_price.discounted_price,
+                                  candidate_row.typical_price
                               )
-                            ORDER BY candidate.kind_rank ASC,
-                                     candidate.uncommon_rank ASC,
-                                     candidate.oversize_rank ASC,
-                                     candidate.size_rank ASC,
-                                     selected_price.effective_price * candidate.packages
-                                         * candidate.pack_weight ASC,
-                                     candidate.bought_rank ASC,
-                                     candidate.packages * candidate.package_size ASC NULLS LAST,
-                                     product.id ASC
-                            LIMIT 1
-                        ) AS offer ON TRUE
+                            ORDER BY store_price.store_id,
+                                     candidate_row.item_id,
+                                     candidate_row.kind_rank ASC,
+                                     candidate_row.uncommon_rank ASC,
+                                     candidate_row.oversize_rank ASC,
+                                     candidate_row.size_rank ASC,
+                                     store_price.effective_price * candidate_row.packages
+                                         * candidate_row.pack_weight ASC,
+                                     candidate_row.bought_rank ASC,
+                                     candidate_row.packages * candidate_row.package_size ASC NULLS LAST,
+                                     candidate_row.retailer_product_id ASC
+                        ),
+                        priced AS MATERIALIZED (
+                        SELECT pricing_store.store_id,
+                               item.created_at AS item_created_at,
+                               item.id AS item_id,
+                               item.name AS requested_name,
+                               item.quantity AS requested_quantity,
+                               item.matching_rule,
+                               item.matching_status,
+                               offer.retailer_product_id,
+                               product.canonical_product_id,
+                               product.name AS product_name,
+                               COALESCE(
+                                   canonical.brand,
+                                   product.brand
+                               ) AS product_brand,
+                               product.barcode AS product_barcode,
+                               offer.price_date,
+                               offer.regular_price,
+                               offer.discounted_price,
+                               offer.effective_price,
+                               ROUND(
+                                   offer.effective_price * offer.packages,
+                                   2
+                               ) AS line_total,
+                               offer.price_scope,
+                               offer.packages, offer.package_size, offer.package_unit,
+                               item.target_quantity * item.quantity AS target_amount,
+                               offer.packages * offer.package_size AS supplied_amount,
+                               offer.packages * offer.package_size - item.target_quantity * item.quantity AS extra_amount,
+                               ROUND(offer.effective_price / NULLIF(offer.package_size, 0) *
+                                   CASE WHEN offer.package_unit IN ('g','ml') THEN 1000 ELSE 1 END, 2) AS unit_price
+                        FROM pricing_store
+                        CROSS JOIN app.shopping_list_item AS item
+                        LEFT JOIN best_offer AS offer
+                          ON offer.store_id = pricing_store.store_id
+                         AND offer.item_id = item.id
+                        LEFT JOIN app.retailer_product AS product
+                          ON product.id = offer.retailer_product_id
+                        LEFT JOIN app.canonical_product AS canonical
+                          ON canonical.id = product.canonical_product_id
                         WHERE item.shopping_list_id = :listId
-                          AND requested_store.store_id = requested_store.pricing_store_id
                         )
                         SELECT store.id AS store_id,
                                retailer.code AS retailer_code,
