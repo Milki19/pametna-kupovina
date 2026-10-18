@@ -148,12 +148,6 @@ public class DeviceSessionRepository {
                 .update();
     }
 
-    /** Sessions nobody refreshed in time; their phones start over. */
-    public void deleteExpiredSessions() {
-        jdbcClient.sql("DELETE FROM app.device_session WHERE refresh_expires_at < NOW()")
-                .update();
-    }
-
     /** Who holds a live access token, if anyone. */
     public Optional<DeviceCaller> callerForAccessHash(String accessHash) {
         Optional<SessionCaller> found = jdbcClient.sql("""
