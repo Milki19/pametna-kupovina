@@ -708,7 +708,7 @@ class ShoppingRecommendationServiceTest {
 
     private static MarketRepository markets() {
         MarketRepository markets = mock(MarketRepository.class);
-        when(markets.forShoppingList(anyLong())).thenReturn(TestMarkets.serbia());
+        when(markets.forPlanningShoppingList(anyLong())).thenReturn(TestMarkets.serbia());
         return markets;
     }
 }

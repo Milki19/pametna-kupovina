@@ -23,6 +23,15 @@ public class MarketRepository {
             market.cost_per_stop
             """;
 
+    private static final String PLANNING_COLUMNS = """
+            market.id, market.code, market.name, market.currency_code,
+            market.currency_minor_units, market.locale,
+            market.default_language, market.time_zone,
+            market.travel_cost_per_km,
+            COALESCE(account.value_per_hour, market.value_per_hour) AS value_per_hour,
+            COALESCE(account.cost_per_stop, market.cost_per_stop) AS cost_per_stop
+            """;
+
     private static final RowMapper<Market> ROW_MAPPER =
             (resultSet, rowNumber) -> new Market(
                     resultSet.getInt("id"),
@@ -86,6 +95,23 @@ public class MarketRepository {
     /** The market of the account the list belongs to. */
     public Market forShoppingList(long listId) {
         return jdbcClient.sql("SELECT " + COLUMNS + """
+                         FROM app.shopping_list AS list
+                         JOIN app.account AS account ON account.id = list.account_id
+                         JOIN app.market AS market ON market.id = account.market_id
+                        WHERE list.id = :listId
+                        """)
+                .param("listId", listId)
+                .query(ROW_MAPPER)
+                .optional()
+                .orElseGet(this::defaultMarket);
+    }
+
+    /**
+     * The list's market as its account plans trips: an hour on the road and
+     * a stop cost what the account set, where it set them (V138).
+     */
+    public Market forPlanningShoppingList(long listId) {
+        return jdbcClient.sql("SELECT " + PLANNING_COLUMNS + """
                          FROM app.shopping_list AS list
                          JOIN app.account AS account ON account.id = list.account_id
                          JOIN app.market AS market ON market.id = account.market_id
