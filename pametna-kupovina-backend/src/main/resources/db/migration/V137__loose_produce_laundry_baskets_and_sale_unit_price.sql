@@ -6,8 +6,10 @@
 --   sad kilogram na meru, pre najmanjeg pakovanja. Koja reč se kupuje na meru
 --   piše uz reč na spisku (shopping_intent), pa svako tržište ima svoje.
 -- * Pretraga "prasak za ves" je prvo nudila „PERSIL korpa za pr veš“: brend
---   Persil je bio dovoljan za deterdžent. Korpa, mrežica i štipaljke za veš
---   nisu deterdžent.
+--   Persil je bio dovoljan za deterdžent. Proizvod koji počinje korpom,
+--   mrežicom ili štipaljkama je ta stvar, a ne deterdžent. Deterdžent uz koji
+--   ide korpa gratis („PERSIL POWDER 5,4+KORPA ZA VES“) ostaje deterdžent
+--   (proba 18.10.: takvih je 40, samih korpi 3).
 -- * API je za RIČ Prokuplje davao unitPrice 1.569,99 (redovna cena po kg) uz
 --   effectivePrice 899,99. Lanac jediničnu cenu daje za redovnu cenu, pa je
 --   app.effective_unit_price prevodi na cenu koja danas važi.
@@ -30,7 +32,7 @@ WHERE code IN ('FRUIT', 'VEGETABLE', 'FRESH_PRODUCE');
 
 UPDATE app.product_type_rule AS rule
 SET exclude_pattern = rule.exclude_pattern
-        || '|\m(korp[a-z]*|kosar[a-z]*|mrez[a-z]*|mrezic[a-z]*|stipalj[a-z]*|susilic[a-z]*|susac[a-z]*)\M',
+        || '|^(korp|kosar|mrez|stipalj|susilic|susac)[a-z]*\M',
     updated_at = NOW()
 FROM app.product_type AS type
 WHERE type.id = rule.product_type_id
@@ -38,7 +40,7 @@ WHERE type.id = rule.product_type_id
   AND rule.active
   AND rule.retailer_id IS NULL
   AND rule.exclude_pattern IS NOT NULL
-  AND POSITION('korp[a-z]*' IN rule.exclude_pattern) = 0;
+  AND POSITION('^(korp|kosar' IN rule.exclude_pattern) = 0;
 
 DELETE FROM app.product_type_candidate AS candidate
 USING app.product_type AS type,
@@ -46,7 +48,7 @@ USING app.product_type AS type,
 WHERE type.id = candidate.product_type_id
   AND type.code = 'LAUNDRY_DETERGENT'
   AND product.id = candidate.retailer_product_id
-  AND product.normalized_name ~ '\m(korp[a-z]*|kosar[a-z]*|mrez[a-z]*|mrezic[a-z]*|stipalj[a-z]*|susilic[a-z]*|susac[a-z]*)\M'
+  AND product.normalized_name ~ '^(korp|kosar|mrez|stipalj|susilic|susac)[a-z]*\M'
   AND candidate.status = 'PENDING';
 
 -- Mašinska vrsta se skida; ručno potvrđena ostaje.
@@ -60,7 +62,7 @@ JOIN app.retailer_product AS product
 WHERE type.code = 'LAUNDRY_DETERGENT'
   AND assignment.reviewed = FALSE
   AND product.product_family_id IS NOT NULL
-  AND product.normalized_name ~ '\m(korp[a-z]*|kosar[a-z]*|mrez[a-z]*|mrezic[a-z]*|stipalj[a-z]*|susilic[a-z]*|susac[a-z]*)\M';
+  AND product.normalized_name ~ '^(korp|kosar|mrez|stipalj|susilic|susac)[a-z]*\M';
 
 DELETE FROM app.retailer_product_type AS assignment
 USING app.product_type AS type,
@@ -69,7 +71,7 @@ WHERE type.id = assignment.product_type_id
   AND type.code = 'LAUNDRY_DETERGENT'
   AND product.id = assignment.retailer_product_id
   AND assignment.reviewed = FALSE
-  AND product.normalized_name ~ '\m(korp[a-z]*|kosar[a-z]*|mrez[a-z]*|mrezic[a-z]*|stipalj[a-z]*|susilic[a-z]*|susac[a-z]*)\M';
+  AND product.normalized_name ~ '^(korp|kosar|mrez|stipalj|susilic|susac)[a-z]*\M';
 
 -- Porodica pokazuje vrstu koju ima većina njenih proizvoda, ili nijednu.
 UPDATE app.product_family AS family
@@ -121,8 +123,9 @@ IMMUTABLE
 PARALLEL SAFE
 AS $$
     SELECT CASE
-               WHEN unit_price IS NULL OR effective_price IS NULL
-                   THEN unit_price
+               -- Neki lanci (RIČ) pišu 0: to nije cena.
+               WHEN unit_price IS NULL OR unit_price <= 0 OR effective_price IS NULL
+                   THEN NULLIF(unit_price, 0)
                ELSE ROUND(unit_price * effective_price / NULLIF(basis.price, 0), 2)
            END
     FROM (
