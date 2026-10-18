@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import rs.pametnakupovina.app.data.local.DraftItemEntity
 import rs.pametnakupovina.app.data.network.ShoppingItemMatchResultDto
 import rs.pametnakupovina.app.data.network.ShoppingItemMatchingStatusDto
 import rs.pametnakupovina.app.data.network.ShoppingItemRuleDto
@@ -68,8 +69,11 @@ class MatchingScreenTest {
 
     @Test
     fun `ista stavka dva puta se prepoznaje bez obzira na kvacice i velika slova`() {
-        assertEquals(listOf("mleko", "Šećer"), duplicateNames(listOf("mleko", "hleb", "Mleko ", "Šećer", "secer")))
-        assertEquals(emptyList<String>(), duplicateNames(listOf("mleko", "hleb")))
+        fun names(vararg names: String) = duplicateGroups(names.mapIndexed { index, name ->
+            DraftItemEntity(localId = index + 1L, name = name, quantity = 1.0, matchingRule = "FLEXIBLE_CATEGORY")
+        }).map { it.items.first().name }
+        assertEquals(listOf("mleko", "Šećer"), names("mleko", "hleb", "Mleko ", "Šećer", "secer"))
+        assertEquals(emptyList<String>(), names("mleko", "hleb"))
     }
 
     private fun matchResult(

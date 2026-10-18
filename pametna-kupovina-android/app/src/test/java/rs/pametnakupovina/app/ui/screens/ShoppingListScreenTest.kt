@@ -146,4 +146,47 @@ class ShoppingListScreenTest {
             )
         )
     }
+
+    private fun flexible(id: Long, name: String, quantity: Double = 1.0, target: Double? = null, unit: String? = null, brand: String? = null) =
+        DraftItemEntity(
+            localId = id, remoteId = id * 10, name = name, quantity = quantity,
+            matchingRule = ShoppingItemRuleDto.FLEXIBLE_CATEGORY.name, category = name,
+            requiredBrand = brand, targetQuantity = target, requiredBaseUnit = unit,
+            // Server je za svaku izabrao drugi proizvod; to ne smeta spajanju.
+            canonicalProductId = 100 + id, syncState = "SYNCED"
+        )
+
+    @Test
+    fun `duplikati bez kolicine se spajaju u prvu stavku sa zbirom komada`() {
+        val merged = mergedItem(listOf(flexible(1, "mleko", 2.0), flexible(2, "Mleko ", 1.0)))!!
+        assertEquals(1L, merged.localId)
+        assertEquals("mleko", merged.name)
+        assertEquals(3.0, merged.quantity, 0.0)
+        assertNull(merged.targetQuantity)
+    }
+
+    @Test
+    fun `duplikati sa kolicinom u istoj jedinici sabiraju ukupnu kolicinu`() {
+        val merged = mergedItem(listOf(flexible(1, "mleko", 2.0, 1000.0, "ml"), flexible(2, "mleko", 1.0, 500.0, "ml")))!!
+        assertEquals(1.0, merged.quantity, 0.0)
+        assertEquals(2500.0, merged.targetQuantity!!, 0.0)
+        assertEquals("ml", merged.requiredBaseUnit)
+    }
+
+    @Test
+    fun `duplikati koji se razlikuju po jedinici, brendu ili proizvodu se ne spajaju`() {
+        assertNull(mergedItem(listOf(flexible(1, "mleko", target = 1000.0, unit = "ml"), flexible(2, "mleko"))))
+        assertNull(mergedItem(listOf(flexible(1, "sir", target = 400.0, unit = "g"), flexible(2, "sir", target = 2.0, unit = "piece"))))
+        assertNull(mergedItem(listOf(flexible(1, "mleko", brand = "Imlek"), flexible(2, "mleko", brand = "Moja kravica"))))
+        assertNull(mergedItem(listOf(existingItem, existingItem.copy(localId = 2, canonicalProductId = 16))))
+        assertNull(mergedItem(listOf(flexible(1, "mleko"), flexible(2, "mleko").copy(syncState = "PENDING_PASTE"))))
+        assertNull(mergedItem(listOf(flexible(1, "pivo", 600.0), flexible(2, "pivo", 500.0))))
+    }
+
+    @Test
+    fun `isti tacan proizvod dva puta sabira pakovanja`() {
+        val merged = mergedItem(listOf(existingItem, existingItem.copy(localId = 2, quantity = 2.0)))!!
+        assertEquals(3.0, merged.quantity, 0.0)
+        assertEquals(15L, merged.canonicalProductId)
+    }
 }

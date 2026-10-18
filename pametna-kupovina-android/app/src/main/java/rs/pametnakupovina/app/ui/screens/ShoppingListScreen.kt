@@ -79,7 +79,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import rs.pametnakupovina.app.R
 import rs.pametnakupovina.app.data.amountLabel
+import rs.pametnakupovina.app.data.MAX_ITEM_QUANTITY
 import rs.pametnakupovina.app.data.local.DraftItemEntity
+import rs.pametnakupovina.app.data.local.SyncState
 import rs.pametnakupovina.app.data.network.ShoppingItemRuleDto
 import rs.pametnakupovina.app.ui.ProductSearchViewModel
 import rs.pametnakupovina.app.ui.ShoppingListViewModel
@@ -254,12 +256,17 @@ fun ShoppingListScreen(
                 if (state.items.isEmpty()) {
                     item(key = "empty") { EmptyList(Modifier.enter(entrance, 1)) }
                 }
-                // Ista stavka dva puta: samo upozorenje, spisak ostaje kakav jeste.
-                duplicateNames(state.items.map { it.name }).takeIf { it.isNotEmpty() }?.let { names ->
-                    item(key = "duplicates") {
+                // Ista stavka dva puta: upozorenje, a kad se količine mogu sabrati i dugme koje ih spaja.
+                duplicateGroups(state.items).forEach { group ->
+                    item(key = "duplicates-${group.items.first().localId}") {
                         NoticeBanner(
-                            text = names.map { stringResource(R.string.list_duplicate_warning, it) }.joinToString(" "),
+                            text = stringResource(
+                                if (group.merged != null) R.string.list_duplicate_merge_hint else R.string.list_duplicate_warning,
+                                group.items.first().name
+                            ),
                             tone = StatusTone.WARNING,
+                            actionLabel = group.merged?.let { stringResource(R.string.list_duplicate_merge) },
+                            onAction = group.merged?.let { merged -> { viewModel.mergeDuplicates(group.items, merged) } },
                             modifier = Modifier.padding(bottom = AppSpacing.lg)
                         )
                     }
@@ -635,9 +642,42 @@ private fun draftAttention(status: String): Pair<Int, StatusTone>? = when (statu
     else -> null
 }
 
-/** Nazivi koji su na spisku više puta, bez obzira na velika slova, razmake i kvačice. */
-internal fun duplicateNames(names: List<String>): List<String> =
-    names.groupBy { sameName(it) }.values.filter { it.size > 1 }.map { it.first() }
+/**
+ * Stavke koje su na spisku više puta, bez obzira na velika slova, razmake i
+ * kvačice; [merged] je prva stavka sa zbirom, ili null kad se ne mogu sabrati.
+ */
+internal data class DuplicateGroup(val items: List<DraftItemEntity>, val merged: DraftItemEntity?)
+
+internal fun duplicateGroups(items: List<DraftItemEntity>): List<DuplicateGroup> =
+    items.groupBy { sameName(it.name) }.values.filter { it.size > 1 }.map { DuplicateGroup(it, mergedItem(it)) }
+
+/**
+ * Prva stavka ostaje (mesto, pravilo, proizvod) i dobija zbir količina.
+ * Null kad zbir nema smisla: drugo pravilo, proizvod ili brend, količina u
+ * različitim jedinicama („mleko 1 l“ i „mleko“ od 1 kom), ili red iz
+ * nalepljenog spiska koji server još nije pročitao.
+ */
+internal fun mergedItem(group: List<DraftItemEntity>): DraftItemEntity? {
+    val keep = group.first()
+    fun same(pick: (DraftItemEntity) -> String?) = group.all { sameName(pick(it).orEmpty()) == sameName(pick(keep).orEmpty()) }
+    // Server upisuje svoj pogodak i u „bilo koji“, pa se proizvod poredi samo kad ga pravilo traži.
+    val fits = group.all { it.matchingRule == keep.matchingRule && it.syncState != SyncState.PENDING_PASTE.name } &&
+        (keep.matchingRule != ShoppingItemRuleDto.EXACT_PRODUCT.name ||
+            (group.all { it.canonicalProductId == keep.canonicalProductId } && same { it.barcode })) &&
+        (keep.matchingRule != ShoppingItemRuleDto.PRODUCT_FAMILY.name ||
+            group.all { it.productFamilyId == keep.productFamilyId }) &&
+        same { it.requiredBrand } && same { it.category }
+    if (!fits) return null
+    if (group.all { it.targetQuantity == null }) {
+        val quantity = Math.round(group.sumOf { it.quantity } * 100) / 100.0
+        return keep.copy(quantity = quantity).takeIf { quantity <= MAX_ITEM_QUANTITY }
+    }
+    if (group.any { it.targetQuantity == null || it.requiredBaseUnit != keep.requiredBaseUnit }) return null
+    // Isto kao na redu spiska: ukupno je ciljna količina puta broj.
+    val target = Math.round(group.sumOf { it.targetQuantity!! * it.quantity } * 1000) / 1000.0
+    val limit = if (keep.requiredBaseUnit == "piece") MAX_ITEM_QUANTITY else MAX_ITEM_QUANTITY * 1000
+    return keep.copy(quantity = 1.0, targetQuantity = target).takeIf { target <= limit }
+}
 
 private fun sameName(name: String): String =
     java.text.Normalizer.normalize(name.replace("đ", "dj").replace("Đ", "Dj"), java.text.Normalizer.Form.NFD)

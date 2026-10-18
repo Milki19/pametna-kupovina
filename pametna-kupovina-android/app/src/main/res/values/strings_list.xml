@@ -164,5 +164,8 @@
     <string name="match_not_found_text">Nepronađene stavke ne ulaze u račun. Izaberi ih iz pretrage ili nastavi bez njih.</string>
     <string name="match_pick_from_search">Izaberi iz pretrage</string>
     <string name="match_change">Promeni</string>
-    <string name="list_duplicate_warning">„%1$s“ je na spisku više puta. Ako je to greška, obriši višak.</string>
+    <string name="list_duplicate_warning">„%1$s“ je na spisku više puta, sa različitim proizvodom, brendom ili jedinicom, pa ih ne spajam. Ako je to greška, obriši višak.</string>
+    <string name="list_duplicate_merge_hint">„%1$s“ je na spisku više puta. Spoji ih u jednu stavku ili obriši višak.</string>
+    <string name="list_duplicate_merge">Spoji</string>
+    <string name="list_notice_merged">Spojeno: %1$s.</string>
 </resources>
