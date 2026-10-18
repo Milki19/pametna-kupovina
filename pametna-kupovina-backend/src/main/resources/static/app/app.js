@@ -128,7 +128,7 @@ let listVersion = 0;
 const REMEMBERED_FOR = 10 * 60 * 1000;
 const remembered = (entry, key) => entry && entry.key === key && Date.now() - entry.at < REMEMBERED_FOR;
 
-async function api(method, path, body, retried = false) {
+async function api(method, path, body, retried = false, signal = undefined) {
   if (method !== 'GET' && path.startsWith('shopping-lists')) listVersion++;
   let response;
   let token;
@@ -141,16 +141,19 @@ async function api(method, path, body, retried = false) {
         // FormData (fajl računa) sam postavlja svoj Content-Type.
         ...(body === undefined || body instanceof FormData ? {} : { 'Content-Type': 'application/json' })
       },
-      body: body === undefined || body instanceof FormData ? body : JSON.stringify(body)
+      body: body === undefined || body instanceof FormData ? body : JSON.stringify(body),
+      signal
     });
-  } catch {
+  } catch (error) {
+    // Otkazana pretraga (stiglo je novo slovo) nije greška veze.
+    if (error.name === 'AbortError') throw error;
     throw new Error('Nema veze sa serverom. Proveri internet i probaj ponovo.');
   }
   if (response.status === 401 && !retried
       && (response.headers.get('WWW-Authenticate') || '').startsWith('Bearer')) {
     const session = saved.get('session');
     if (session?.access === token) saved.set('session', { ...session, expiresAt: 0 });
-    return api(method, path, body, true);
+    return api(method, path, body, true, signal);
   }
   if (!response.ok) {
     let message = null;
@@ -535,17 +538,91 @@ async function showList() {
   renderList();
 }
 
-/** Ista stavka dva puta: samo upozorenje, spisak ostaje kakav jeste. */
+/** Ista stavka dva puta: upozorenje, a kad se količine mogu sabrati i dugme koje ih spaja. */
 const sameName = name => String(name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   .replace(/đ/gi, 'dj').toLowerCase().replace(/\s+/g, ' ').trim();
-function duplicateNotice(items) {
+const duplicateGroups = items => {
   const seen = new Map();
-  items.forEach(item => seen.set(sameName(item.name), [...(seen.get(sameName(item.name)) || []), item.name]));
-  const twice = [...seen.values()].filter(names => names.length > 1);
-  if (!twice.length) return '';
-  return notice(twice.map(names => `„${names[0]}“ je na spisku ${names.length === 2 ? 'dva puta' : names.length + ' puta'}.`).join(' ')
-    + ' Ako je to greška, obriši višak.', 'warn');
+  items.forEach(item => seen.set(sameName(item.name), [...(seen.get(sameName(item.name)) || []), item]));
+  return [...seen.values()].filter(group => group.length > 1);
+};
+
+/**
+ * Prva stavka ostaje (mesto, pravilo, proizvod) i dobija zbir količina.
+ * Null kad zbir nema smisla: drugo pravilo, proizvod ili brend, ili
+ * količina u različitim jedinicama („mleko 1 l“ i „mleko“ od 1 kom).
+ */
+function mergePlan(group) {
+  const [keep] = group;
+  const c = keep.flexibleConstraints || {};
+  const same = (item, pick) => sameName(pick(item) ?? '') === sameName(pick(keep) ?? '');
+  const fits = group.every(item => item.matchingRule === keep.matchingRule
+    // Server upisuje svoj pogodak i u „bilo koji“, pa se proizvod poredi samo kad ga pravilo traži.
+    && (keep.matchingRule !== 'EXACT_PRODUCT' || (item.matchedCanonicalProductId === keep.matchedCanonicalProductId
+      && same(item, i => i.barcode)))
+    && (keep.matchingRule !== 'PRODUCT_FAMILY' || item.matchedProductFamilyId === keep.matchedProductFamilyId)
+    && same(item, i => i.flexibleConstraints?.requiredBrand)
+    && same(item, i => i.flexibleConstraints?.category));
+  if (!fits) return null;
+  const targets = group.map(item => item.flexibleConstraints?.targetQuantity || null);
+  if (targets.every(t => t == null)) {
+    const quantity = Math.round(group.reduce((sum, item) => sum + item.quantity, 0) * 100) / 100;
+    return quantity <= MAX_QUANTITY ? { keep, quantity, constraints: keep.flexibleConstraints } : null;
+  }
+  if (!targets.every(t => t != null)
+      || !group.every(item => item.flexibleConstraints.requiredBaseUnit === c.requiredBaseUnit)) return null;
+  // Isto kao itemAmount: ukupno je ciljna količina puta broj.
+  const target = group.reduce((sum, item) => sum + item.flexibleConstraints.targetQuantity * item.quantity, 0);
+  if (target > (c.requiredBaseUnit === 'piece' ? MAX_QUANTITY : MAX_QUANTITY * 1000)) return null;
+  return { keep, quantity: 1, constraints: { ...c, targetQuantity: Math.round(target * 1000) / 1000 } };
 }
+
+function duplicateNotice(items) {
+  const groups = duplicateGroups(items);
+  if (!groups.length) return '';
+  const mergeable = groups.filter(mergePlan);
+  const text = groups.map(group => `„${group[0].name}“ je na spisku ${group.length === 2 ? 'dva puta' : group.length + ' puta'}.`).join(' ')
+    + (mergeable.length === groups.length ? ' Spoji ih u jednu stavku ili obriši višak.'
+      : mergeable.length ? ' Gde se količine mogu sabrati, spoji ih; ostalo obriši ako je greška.'
+        : ' Razlikuju se po proizvodu, brendu ili jedinici, pa ih ne spajam. Ako je to greška, obriši višak.');
+  if (!mergeable.length) return notice(text, 'warn');
+  return `<div class="card">${notice(text, 'warn')}<div class="btn-row">${mergeable.map(group =>
+    `<button class="btn tonal" data-act="merge" data-id="${group[0].id}">Spoji „${esc(group[0].name)}“</button>`).join('')}</div></div>`;
+}
+
+/** Prva stavka dobija zbir, ostale se brišu; spisak se zatim čita sa servera. */
+async function mergeDuplicates(id) {
+  await flushDelete();
+  const listId = listState.list.id;
+  const group = duplicateGroups(listState.list.items).find(g => g[0].id === id);
+  const plan = group && mergePlan(group);
+  if (!plan) return renderList();
+  const { keep, quantity, constraints } = plan;
+  await api('PUT', `shopping-lists/${listId}/items/${keep.id}`, {
+    ...itemRequest(keep), quantity, flexibleConstraints: constraints
+  });
+  for (const extra of group.slice(1)) {
+    await api('DELETE', `shopping-lists/${listId}/items/${extra.id}`)
+      .catch(error => { if (error.status !== 404) throw error; });
+  }
+  listState.editing = null;
+  listState.list = await api('GET', `shopping-lists/${listId}`);
+  renderList();
+  const merged = listState.list.items.find(i => i.id === keep.id);
+  toast(merged ? `Spojeno: ${merged.name}, ${itemAmount(merged)}.` : 'Spojeno.');
+}
+
+/** Stavka kakva jeste, u obliku koji server prima za dodavanje i izmenu. */
+const itemRequest = item => ({
+  name: item.name,
+  rawInput: item.rawInput,
+  barcode: item.barcode,
+  canonicalProductId: item.matchingRule === 'EXACT_PRODUCT' ? item.matchedCanonicalProductId : null,
+  productFamilyId: item.matchingRule === 'PRODUCT_FAMILY' ? item.matchedProductFamilyId : null,
+  quantity: item.quantity,
+  matchingRule: item.matchingRule,
+  flexibleConstraints: item.flexibleConstraints
+});
 
 function lostListNotice() {
   if (!saved.get('listLost')) return '';
@@ -672,16 +749,7 @@ async function deleteItem(id) {
       }
       return;
     }
-    await api('POST', `shopping-lists/${listId}/items`, {
-      name: item.name,
-      rawInput: item.rawInput,
-      barcode: item.barcode,
-      canonicalProductId: item.matchingRule === 'EXACT_PRODUCT' ? item.matchedCanonicalProductId : null,
-      productFamilyId: item.matchingRule === 'PRODUCT_FAMILY' ? item.matchedProductFamilyId : null,
-      quantity: item.quantity,
-      matchingRule: item.matchingRule,
-      flexibleConstraints: item.flexibleConstraints
-    });
+    await api('POST', `shopping-lists/${listId}/items`, itemRequest(item));
     listState.list = await api('GET', `shopping-lists/${listId}`);
     renderList();
   });
@@ -735,7 +803,13 @@ function pickerCard(item) {
       <label class="label" for="pick-q">Traži proizvod</label>
       <div class="row"><input id="pick-q" name="q" type="search" enterkeyhint="search" autocomplete="off"
         value="${esc(picking.query)}" style="flex:1"><button class="btn primary">Traži</button></div>
-      ${picking.loading ? spinner('Tražim…') : ''}
+      <div id="pick-results" data-item="${item.itemId}">${pickResults(item)}</div>
+      <button type="button" class="btn text" data-act="pick-cancel">Odustani</button>
+    </form>`;
+}
+
+function pickResults(item) {
+  return `${picking.loading ? spinner('Tražim…') : ''}
       ${picking.error ? `<p class="small" role="alert" style="color:var(--error)">${esc(picking.error)}</p>` : ''}
       ${picking.results && !picking.results.length && !picking.loading ? `<p class="muted small">Nema proizvoda za „${esc(picking.query)}“. Probaj kraći naziv.</p>` : ''}
       ${(picking.results || []).map((p, index) => `
@@ -745,9 +819,15 @@ function pickerCard(item) {
             <div class="muted small">${esc([p.brand, p.quantityValue && p.baseUnit ? amountLabel(p.quantityValue, p.baseUnit, p.packageCount) : null,
               p.hasUsablePrice ? null : 'bez cene'].filter(Boolean).join(' · '))}</div></div>
           <b class="label accent">Izaberi</b></div>
-        </button>`).join('')}
-      <button type="button" class="btn text" data-act="pick-cancel">Odustani</button>
-    </form>`;
+        </button>`).join('')}`;
+}
+
+/** Dok se kuca menja se samo spisak predloga, da polje zadrži slovo i kursor. */
+function renderPick() {
+  const box = view.querySelector('#pick-results');
+  const item = picking && matching.items.find(i => i.itemId === picking.itemId);
+  if (box && item && Number(box.dataset.item) === item.itemId) box.innerHTML = pickResults(item);
+  else renderMatching();
 }
 
 function decisionCard(item, showExplanation) {
@@ -830,24 +910,28 @@ function openPick(itemId) {
 
 async function runPick(query) {
   const current = picking;
+  const signal = pickTyping.signal();
   current.query = query.trim();
   current.error = null;
-  if (current.query.length < 2) {
+  if (!searchable(current.query)) {
     current.results = [];
+    current.loading = false;
     current.error = 'Upiši bar 2 slova.';
-    return renderMatching();
+    return renderPick();
   }
   current.loading = true;
-  renderMatching();
+  renderPick();
   try {
-    const page = await api('GET', `products/search?query=${encodeURIComponent(current.query)}&page=0&limit=5${searchLocation()}`);
+    const page = await api('GET', `products/search?query=${encodeURIComponent(current.query)}&page=0&limit=5${searchLocation()}`,
+      undefined, false, signal);
     current.results = page.items.slice(0, 5);
   } catch (error) {
+    if (error.name === 'AbortError') return;
     current.results = [];
     current.error = error.message;
   }
   current.loading = false;
-  if (picking === current) renderMatching();
+  if (picking === current) renderPick();
 }
 
 /** Izabrani proizvod iz pretrage postaje stavka: naziv sa spiska ostaje, proizvod je tačan. */
@@ -1298,6 +1382,25 @@ function showPurchase() {
 
 let search = { query: '', onSale: false, page: null, items: [], error: null };
 
+// Jedno slovo nađe skoro ceo katalog i traje sekundama; server ga isto odbija.
+const searchable = query => (String(query).match(/[\p{L}\p{N}]/gu) || []).length >= 2;
+
+/**
+ * Pretraga dok se kuca: kreće 300 ms posle poslednjeg slova, kao u aplikaciji,
+ * a zahtev za stariji upit se otkazuje, pa server radi samo za ono što se čita.
+ */
+function liveQuery() {
+  let timer = null;
+  let controller = null;
+  return {
+    later(work) { clearTimeout(timer); timer = setTimeout(work, 300); },
+    cancel() { clearTimeout(timer); controller?.abort(); controller = null; },
+    signal() { this.cancel(); controller = new AbortController(); return controller.signal; }
+  };
+}
+const searchTyping = liveQuery();
+const pickTyping = liveQuery();
+
 function searchLocation() {
   const origin = saved.get('origin');
   // Zaokruženo na ~1 km, kao u aplikaciji: dovoljno za redosled lanaca.
@@ -1319,18 +1422,30 @@ function shortList(offers) {
 }
 
 function renderSearch(loading = false) {
-  const page = search.page;
+  // Dok se kuca menjaju se samo rezultati, da polje zadrži slovo i kursor.
+  const box = view.querySelector('#search-results');
+  if (box) {
+    box.innerHTML = searchResults(loading);
+    box.setAttribute('aria-busy', String(loading));
+    return;
+  }
   screen({
     title: 'Cene',
     html: `
       <form data-form="search" role="search">
         <input name="q" type="search" enterkeyhint="search" placeholder="Naziv ili barkod, npr. kravica mleko" value="${esc(search.query)}" autocomplete="off"
-          aria-label="Pretraga proizvoda" aria-describedby="search-hint">
-        <p class="muted small" id="search-hint">Upiši naziv pa pritisni Enter (na telefonu Traži).</p>
+          aria-label="Pretraga proizvoda" aria-describedby="search-hint" aria-controls="search-results">
+        <p class="muted small" id="search-hint">Rezultati stižu dok kucaš, od 2 slova.</p>
       </form>
       <label class="toggle"><input type="checkbox" data-sale-filter ${search.onSale ? 'checked' : ''}>Samo proizvodi na akciji</label>
-      <p class="muted small">Cena u cenovniku nije potvrda da proizvoda ima na stanju.</p>` +
-      (!page && !loading ? salesShortcut() : '') +
+      <p class="muted small">Cena u cenovniku nije potvrda da proizvoda ima na stanju.</p>
+      <div id="search-results" aria-busy="${loading}">${searchResults(loading)}</div>`
+  });
+}
+
+function searchResults(loading) {
+  const page = search.page;
+  return (!page && !loading ? salesShortcut() : '') +
       (search.error ? notice(search.error, 'err') : '') +
       (page && page.correctedQuery ? `<p class="small muted">Prikazujem rezultate za „${esc(page.correctedQuery)}“.</p>` : '') +
       (page && !search.items.length ? `<div class="card soft center">${search.onSale
@@ -1353,14 +1468,20 @@ function renderSearch(loading = false) {
           </div>
         </div>`).join('') +
       (loading ? spinner('Tražim…') : '') +
-      (page && page.hasNext && !loading ? `<button class="btn" data-act="more">Prikaži još</button>` : '')
-  });
+      (page && page.hasNext && !loading ? `<button class="btn" data-act="more">Prikaži još</button>` : '');
 }
 
 async function runSearch(more = false) {
-  if (!search.query.trim()) return renderSearch();
-  // Jedno slovo nađe skoro ceo katalog i traje sekundama; server ga isto odbija.
-  if ((search.query.match(/[\p{L}\p{N}]/gu) || []).length < 2) {
+  const signal = searchTyping.signal();
+  // Kucanje koje je stiglo posle odlaska sa Cena ne crta ništa preko drugog ekrana.
+  if (!view.querySelector('#search-results')) return;
+  if (!search.query.trim()) {
+    search.page = null;
+    search.items = [];
+    search.error = null;
+    return renderSearch();
+  }
+  if (!searchable(search.query)) {
     search.page = null;
     search.items = [];
     search.error = 'Upiši bar 2 slova ili broja.';
@@ -1372,16 +1493,35 @@ async function runSearch(more = false) {
   renderSearch(true);
   try {
     const page = await api('GET', `products/search?query=${encodeURIComponent(search.query.trim())}&page=${next}&limit=10${
-      search.onSale ? '&onSale=true' : ''}${searchLocation()}`);
+      search.onSale ? '&onSale=true' : ''}${searchLocation()}`, undefined, false, signal);
     search.page = page;
     search.items = more ? search.items.concat(page.items) : page.items;
   } catch (error) {
+    if (error.name === 'AbortError') return;
     search.error = error.message;
   }
-  renderSearch();
-  const field = view.querySelector('input[name=q]');
-  if (!more && field && document.activeElement === document.body) field.blur();
+  if (view.querySelector('#search-results')) renderSearch();
 }
+
+document.addEventListener('input', event => {
+  const field = event.target;
+  if (field.matches('[data-form=search] input[name=q]')) {
+    search.query = field.value;
+    // Ispod 2 slova nema pretrage ni opomene dok se još kuca; Enter je ipak objasni.
+    if (searchable(search.query)) return searchTyping.later(() => runSearch());
+    searchTyping.cancel();
+    search.page = null;
+    search.items = [];
+    search.error = null;
+    renderSearch();
+  } else if (field.id === 'pick-q' && picking) {
+    picking.query = field.value;
+    if (searchable(field.value)) return pickTyping.later(() => runPick(field.value));
+    pickTyping.cancel();
+    Object.assign(picking, { results: null, loading: false, error: null });
+    renderPick();
+  }
+});
 
 async function addProduct(product) {
   await loadList().then(list => { listState.list = list; });
@@ -1781,6 +1921,7 @@ const actions = {
   edit: el => { listState.editing = Number(el.dataset.id); listState.adding = null; renderList(); },
   'cancel-edit': () => { listState.editing = null; renderList(); },
   delete: el => deleteItem(Number(el.dataset.id)),
+  merge: el => mergeDuplicates(Number(el.dataset.id)),
   calculate: () => { location.hash = '#/provera'; },
   choose: el => {
     const item = matching.items.find(i => i.itemId === Number(el.dataset.item));
@@ -1798,7 +1939,7 @@ const actions = {
   'wrong-product': el => wrongProduct(Number(el.dataset.item)),
   'unlocated-more': () => { unlocatedOpen = !unlocatedOpen; renderRecommendation(); },
   'pick-open': el => openPick(Number(el.dataset.item)),
-  'pick-cancel': () => { picking = null; renderMatching(); },
+  'pick-cancel': () => { pickTyping.cancel(); picking = null; renderMatching(); },
   pick: el => pickProduct(picking.results[Number(el.dataset.index)]),
   'lost-list-ok': () => { saved.set('listLost', null); renderList(); },
   'finish-purchase': () => {
