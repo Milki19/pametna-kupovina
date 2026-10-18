@@ -1048,16 +1048,25 @@ public class StoreShoppingOfferRepository {
                                        0 AS source_priority,
                                        current_offer.id
                                 FROM app.current_price_offer AS current_offer
+                                -- Only a price in the chain's newest list:
+                                -- a dropped product keeps its old price (V75).
+                                -- The same test as app.in_latest_price_list,
+                                -- read as a join: the function ran as a query
+                                -- of its own for every offer.
+                                LEFT JOIN app.price_list_snapshot AS snapshot
+                                  ON snapshot.retailer_id = wanted.retailer_id
+                                 AND snapshot.scope_key = current_offer.scope_key
                                 WHERE current_offer.retailer_product_id =
                                         wanted.retailer_product_id
                                   AND current_offer.price_date <= :asOfDate
-                                  -- Only a price in the chain's newest list:
-                                  -- a dropped product keeps its old price (V75).
-                                  AND app.in_latest_price_list(
-                                      wanted.retailer_id,
-                                      current_offer.scope_key,
-                                      current_offer.price_date,
-                                      :asOfDate
+                                  AND COALESCE(
+                                      CASE
+                                          WHEN snapshot.latest_price_date > :asOfDate
+                                              THEN TRUE
+                                          ELSE snapshot.latest_price_date = current_offer.price_date
+                                               AND NOT snapshot.retired
+                                      END,
+                                      TRUE
                                   )
                                 UNION ALL
                                 SELECT TRUE AS observed,
