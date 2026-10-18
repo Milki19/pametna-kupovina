@@ -115,6 +115,7 @@ public class StoreShoppingOfferRepository {
                         WITH candidate AS MATERIALIZED (
                             SELECT item.id AS item_id,
                                    product.id AS retailer_product_id,
+                                   product.retailer_id,
                                    pack.by_the_kilogram,
                                    pack.size AS package_size,
                                    pack.unit AS package_unit,
@@ -122,28 +123,10 @@ public class StoreShoppingOfferRepository {
                                    -- Everything the offer below ranks by but the price
                                    -- is the same in every shop of the chain: worked out
                                    -- here once, not again for every shop.
-                                     CASE
-                                         WHEN item.matching_rule =
-                                              'FLEXIBLE_CATEGORY'
-                                         THEN COALESCE((
-                                             SELECT MIN(
-                                                 allowed_type.match_priority
-                                             )
-                                             FROM app.retailer_product_type
-                                                 AS assignment
-                                             JOIN app.shopping_intent_product_type
-                                                 AS allowed_type
-                                               ON allowed_type.product_type_id =
-                                                  assignment.product_type_id
-                                             WHERE assignment.retailer_product_id =
-                                                   product.id
-                                               AND allowed_type.shopping_intent_id =
-                                                   requested_intent.shopping_intent_id
-                                               AND allowed_type.enabled_by_default =
-                                                   TRUE
-                                         ), 32767)
-                                         ELSE 0
-                                     END AS kind_rank,
+                                   -- A product has one type, the one it was found by
+                                   -- here, so that type's priority is its rank: no need
+                                   -- to look it up again for each candidate.
+                                     candidate_type.match_priority::INTEGER AS kind_rank,
                                      -- The usual kind before an unusual one: white
                                      -- sugar before powdered, plain bananas before
                                      -- red ones. Ranked, not filtered: a shop that
@@ -266,13 +249,11 @@ public class StoreShoppingOfferRepository {
                                      END AS bought_rank,
                                      (
                                          SELECT typical.typical_price
-                                         FROM app.product_family_typical_price AS typical
-                                         WHERE typical.product_family_id = product.product_family_id
-                                           AND typical.market_id = (
-                                               SELECT chain.market_id
-                                               FROM app.retailer AS chain
-                                               WHERE chain.id = product.retailer_id
-                                           )
+                                         FROM app.retailer AS chain
+                                         JOIN app.product_family_typical_price AS typical
+                                           ON typical.market_id = chain.market_id
+                                         WHERE chain.id = product.retailer_id
+                                           AND typical.product_family_id = product.product_family_id
                                      ) AS typical_price
                             FROM app.shopping_list_item AS item
                         LEFT JOIN LATERAL (
@@ -318,8 +299,6 @@ public class StoreShoppingOfferRepository {
                                 WHERE typed_product.id = candidate_assignment.retailer_product_id
                                 OFFSET 0
                             ) AS product
-                            LEFT JOIN app.canonical_product AS canonical
-                              ON canonical.id = product.canonical_product_id
                             CROSS JOIN LATERAL (
                                 SELECT CASE WHEN counted.by_piece
                                             THEN product.package_count::NUMERIC
@@ -343,9 +322,12 @@ public class StoreShoppingOfferRepository {
                                        counted.by_piece,
                                        counted.by_the_kilogram
                                 FROM (
-                                    SELECT COALESCE(
-                                               item.required_base_unit = 'piece'
-                                               AND product.base_unit IN ('g', 'ml')
+                                    -- The name is read only for an item counted
+                                    -- in pieces: it was read for every product
+                                    -- of every item.
+                                    SELECT COALESCE(item.required_base_unit = 'piece', FALSE)
+                                           AND COALESCE(
+                                               product.base_unit IN ('g', 'ml')
                                                AND requested_intent.default_base_unit
                                                    IS DISTINCT FROM 'piece'
                                                AND product.name !~* '\\m(rinfuz|cca)\\M',
@@ -367,6 +349,11 @@ public class StoreShoppingOfferRepository {
                                                 THEN app.sold_by_the_kilogram(product.id)
                                                 ELSE FALSE
                                            END AS by_the_kilogram
+                                    -- Worked out once per product. Folded into
+                                    -- every condition that reads the pack, the
+                                    -- name and the kilogram price were looked
+                                    -- up again for each of them.
+                                    OFFSET 0
                                 ) AS counted
                             ) pack
                             CROSS JOIN LATERAL (
@@ -398,147 +385,56 @@ public class StoreShoppingOfferRepository {
                                           AND pack.size <= item.target_quantity * item.quantity * 2)
                                   )
                               ))
+                              -- Found by one of the intent's types, so it is of a kind
+                              -- the item allows: asked again, that was 30,000 lookups.
+                              AND (requested_intent.required_name_pattern IS NULL
+                                   OR product.normalized_name ~ requested_intent.required_name_pattern)
+                              -- The product's canonical brand is read only for an item
+                              -- with a brand, not for every product of every item.
                               AND (
-                                  (
-                                      item.matching_rule = 'EXACT_PRODUCT'
-                                      AND item.matching_status IN (
-                                          'AUTO_MATCHED',
-                                          'CONFIRMED'
-                                      )
-                                      -- A case of twenty sharing the
-                                      -- bottle's barcode is not one bottle (V77).
-                                      AND NOT EXISTS (
-                                          SELECT 1
-                                          FROM app.retailer_product AS single_piece
-                                          WHERE single_piece.product_family_id =
-                                                product.product_family_id
-                                            AND single_piece.package_count <
-                                                product.package_count
-                                      )
-                                      AND (
-                                          product.canonical_product_id =
-                                              item.matched_canonical_product_id
-                                          -- The same product under another
-                                          -- chain's barcode.
-                                          OR product.product_family_id IN (
-                                              SELECT member.family_id
-                                              FROM app.product_family_member
-                                                  AS member
-                                              WHERE member.canonical_product_id =
-                                                  item.matched_canonical_product_id
-                                          )
-                                          OR (
-                                              item.barcode IS NOT NULL
-                                              AND product.barcode = item.barcode
-                                          )
-                                      )
-                                  )
-                                  OR
-                                  (
-                                      item.matching_rule = 'PRODUCT_FAMILY'
-                                      AND item.matching_status = 'CONFIRMED'
-                                      AND product.product_family_id =
-                                          item.matched_product_family_id
-                                      -- A case of twenty sharing the
-                                      -- bottle's barcode is not one bottle (V77).
-                                      AND NOT EXISTS (
-                                          SELECT 1
-                                          FROM app.retailer_product AS single_piece
-                                          WHERE single_piece.product_family_id =
-                                                product.product_family_id
-                                            AND single_piece.package_count <
-                                                product.package_count
-                                      )
-                                  )
-                                  OR
-                                  (
-                                      item.matching_rule = 'FLEXIBLE_CATEGORY'
-                                      AND (
-                                          EXISTS (
-                                              SELECT 1
-                                              FROM app.retailer_product_type
-                                                  AS assignment
-                                              JOIN app.shopping_intent_product_type
-                                                  AS allowed_type
-                                                ON allowed_type.product_type_id =
-                                                   assignment.product_type_id
-                                              WHERE assignment.retailer_product_id =
-                                                    product.id
-                                                AND allowed_type.shopping_intent_id =
-                                                    requested_intent.shopping_intent_id
-                                                AND allowed_type.enabled_by_default =
-                                                    TRUE
-                                          )
-                                          OR (
-                                              requested_intent.shopping_intent_id
-                                                  IS NULL
-                                              AND
-                                              NOT EXISTS (
-                                                  SELECT 1
-                                                  FROM app.retailer_product_type
-                                                      AS known_type
-                                                  WHERE known_type.retailer_product_id =
-                                                        product.id
-                                              )
-                                              AND (
-                                                  COALESCE(
-                                                      product.normalized_name,
-                                                      LOWER(product.name)
-                                                  ) = item.flexible_category_normalized
-                                                  OR COALESCE(
-                                                      product.normalized_name,
-                                                      LOWER(product.name)
-                                                  ) LIKE
-                                                      item.flexible_category_normalized
-                                                      || ' %'
-                                              )
-                                          )
-                                      )
+                                  item.required_brand IS NULL
+                                  OR EXISTS (
+                                      SELECT 1
+                                      FROM (SELECT 1) AS one
+                                      LEFT JOIN app.canonical_product AS canonical
+                                        ON canonical.id = product.canonical_product_id
+                                      WHERE LOWER(BTRIM(COALESCE(
+                                                canonical.brand,
+                                                product.brand,
+                                                ''
+                                            ))) = LOWER(BTRIM(
+                                                item.required_brand
+                                            ))
+                                         -- One brand, several spellings:
+                                         -- "Zaječarsko", "ZAJEČARSKO",
+                                         -- "Zajecarsko".
+                                         OR (
+                                             app.product_match_brand_key(item.required_brand) <> ''
+                                             AND app.product_match_brand_key(item.required_brand) IN (
+                                                 app.product_match_brand_key(canonical.brand),
+                                                 app.product_match_brand_key(product.brand)
+                                             )
+                                         )
                                   )
                               )
                               AND (
-                                  item.matching_rule <> 'FLEXIBLE_CATEGORY'
-                                  OR (
-                                      (requested_intent.required_name_pattern IS NULL
-                                       OR product.normalized_name ~ requested_intent.required_name_pattern)
-                                      AND
-                                      (
-                                          item.required_brand IS NULL
-                                          OR LOWER(BTRIM(COALESCE(
-                                              canonical.brand,
-                                              product.brand,
-                                              ''
-                                          ))) = LOWER(BTRIM(
-                                              item.required_brand
-                                          ))
-                                          -- One brand, several spellings:
-                                          -- "Zaječarsko", "ZAJEČARSKO",
-                                          -- "Zajecarsko".
-                                          OR (
-                                              app.product_match_brand_key(item.required_brand) <> ''
-                                              AND app.product_match_brand_key(item.required_brand) IN (
-                                                  app.product_match_brand_key(canonical.brand),
-                                                  app.product_match_brand_key(product.brand)
-                                              )
-                                          )
-                                      )
-                                      AND (
-                                          item.required_base_unit IS NULL
-                                          OR pack.unit = item.required_base_unit
-                                      )
-                                      AND (
-                                          item.min_package_quantity IS NULL
-                                          OR pack.size >= item.min_package_quantity
-                                      )
-                                      AND (
-                                          item.max_package_quantity IS NULL
-                                          OR pack.size <= item.max_package_quantity
-                                      )
-                                  )
+                                  item.required_base_unit IS NULL
+                                  OR pack.unit = item.required_base_unit
                               )
-                            UNION
+                              AND (
+                                  item.min_package_quantity IS NULL
+                                  OR pack.size >= item.min_package_quantity
+                              )
+                              AND (
+                                  item.max_package_quantity IS NULL
+                                  OR pack.size <= item.max_package_quantity
+                              )
+                            -- The two halves never share an item, so nothing
+                            -- needs removing twice.
+                            UNION ALL
                             SELECT item.id,
                                    product.id,
+                                   product.retailer_id,
                                    pack.by_the_kilogram,
                                    pack.size AS package_size,
                                    pack.unit AS package_unit,
@@ -690,13 +586,11 @@ public class StoreShoppingOfferRepository {
                                      END AS bought_rank,
                                      (
                                          SELECT typical.typical_price
-                                         FROM app.product_family_typical_price AS typical
-                                         WHERE typical.product_family_id = product.product_family_id
-                                           AND typical.market_id = (
-                                               SELECT chain.market_id
-                                               FROM app.retailer AS chain
-                                               WHERE chain.id = product.retailer_id
-                                           )
+                                         FROM app.retailer AS chain
+                                         JOIN app.product_family_typical_price AS typical
+                                           ON typical.market_id = chain.market_id
+                                         WHERE chain.id = product.retailer_id
+                                           AND typical.product_family_id = product.product_family_id
                                      ) AS typical_price
                             FROM (
                                 SELECT DISTINCT requested_store.retailer_id
@@ -972,90 +866,6 @@ public class StoreShoppingOfferRepository {
                                   )
                               )
                         ),
-                        -- The offer below runs once for every shop and every
-                        -- item, and scanning all the candidates each time to
-                        -- find that item's was 1.8 s of a 3.9 s plan. Grouped
-                        -- by item and chain, a shop reads only its own.
-                        candidate_group AS MATERIALIZED (
-                            SELECT candidate.item_id,
-                                   product.retailer_id,
-                                   ARRAY_AGG(candidate.retailer_product_id
-                                             ORDER BY candidate.retailer_product_id)
-                                       AS retailer_product_ids,
-                                   ARRAY_AGG(candidate.package_size
-                                             ORDER BY candidate.retailer_product_id)
-                                       AS package_sizes,
-                                   ARRAY_AGG(candidate.package_unit
-                                             ORDER BY candidate.retailer_product_id)
-                                       AS package_units,
-                                   ARRAY_AGG(candidate.packages
-                                             ORDER BY candidate.retailer_product_id)
-                                       AS package_counts,
-                                   ARRAY_AGG(candidate.kind_rank
-                                             ORDER BY candidate.retailer_product_id)
-                                       AS kind_ranks,
-                                   ARRAY_AGG(candidate.uncommon_rank
-                                             ORDER BY candidate.retailer_product_id)
-                                       AS uncommon_ranks,
-                                   ARRAY_AGG(candidate.loose_rank
-                                             ORDER BY candidate.retailer_product_id)
-                                       AS loose_ranks,
-                                   ARRAY_AGG(candidate.oversize_rank
-                                             ORDER BY candidate.retailer_product_id)
-                                       AS oversize_ranks,
-                                   ARRAY_AGG(candidate.size_rank
-                                             ORDER BY candidate.retailer_product_id)
-                                       AS size_ranks,
-                                   ARRAY_AGG(candidate.pack_weight
-                                             ORDER BY candidate.retailer_product_id)
-                                       AS pack_weights,
-                                   ARRAY_AGG(candidate.bought_rank
-                                             ORDER BY candidate.retailer_product_id)
-                                       AS bought_ranks,
-                                   ARRAY_AGG(candidate.typical_price
-                                             ORDER BY candidate.retailer_product_id)
-                                       AS typical_prices,
-                                   -- Whether an old observation could still price
-                                   -- the product: one whose list has no current
-                                   -- offer of it. Asked once per product, not again
-                                   -- in every shop; almost never true, and looking
-                                   -- was 1.1 s of a 4.6 s plan on the server.
-                                   ARRAY_AGG(EXISTS (
-                                       SELECT 1
-                                       FROM app.price_observation AS loose
-                                       WHERE loose.retailer_product_id =
-                                               candidate.retailer_product_id
-                                         AND loose.price_date <= :asOfDate
-                                         AND NOT EXISTS (
-                                             SELECT 1
-                                             FROM app.current_price_offer
-                                                 AS loose_current
-                                             WHERE loose_current.retailer_product_id =
-                                                   loose.retailer_product_id
-                                               AND loose_current.price_date <=
-                                                   :asOfDate
-                                               AND loose_current.scope_key =
-                                                   CASE
-                                                       WHEN loose.store_id IS NOT NULL
-                                                           THEN 'STORE:' ||
-                                                                loose.store_id::TEXT
-                                                       WHEN NULLIF(BTRIM(
-                                                           loose.retailer_format_name
-                                                       ), '') IS NOT NULL
-                                                           THEN 'STORE_FORMAT:' ||
-                                                                LOWER(BTRIM(
-                                                                    loose.retailer_format_name
-                                                                ))
-                                                       ELSE 'RETAILER'
-                                                   END
-                                         )
-                                   ) ORDER BY candidate.retailer_product_id)
-                                       AS loose_observations
-                            FROM candidate
-                            JOIN app.retailer_product AS product
-                              ON product.id = candidate.retailer_product_id
-                            GROUP BY candidate.item_id, product.retailer_id
-                        ),
                         -- Products shoppers said twice in two days a shop lacks
                         -- (V121), read once instead of once per shop and product.
                         missing_in_store AS MATERIALIZED (
@@ -1149,26 +959,57 @@ public class StoreShoppingOfferRepository {
                             WHERE requested_store.store_id =
                                   requested_store.pricing_store_id
                         ),
+                        -- Whether an old observation could still price a
+                        -- candidate: one whose list has no current offer of it.
+                        -- Asked once per candidate, not again in every shop;
+                        -- almost never true, and looking was 1.1 s of a 4.6 s
+                        -- plan on the server.
                         candidate_row AS MATERIALIZED (
-                            SELECT candidate_group.item_id,
-                                   candidate_group.retailer_id,
-                                   candidate.*
-                            FROM candidate_group
-                            CROSS JOIN LATERAL UNNEST(
-                                candidate_group.retailer_product_ids,
-                                candidate_group.package_sizes,
-                                candidate_group.package_units,
-                                candidate_group.package_counts,
-                                candidate_group.kind_ranks,
-                                candidate_group.uncommon_ranks,
-                                candidate_group.loose_ranks,
-                                candidate_group.oversize_ranks,
-                                candidate_group.size_ranks,
-                                candidate_group.pack_weights,
-                                candidate_group.bought_ranks,
-                                candidate_group.typical_prices,
-                                candidate_group.loose_observations
-                            ) AS candidate(retailer_product_id, package_size, package_unit, packages, kind_rank, uncommon_rank, loose_rank, oversize_rank, size_rank, pack_weight, bought_rank, typical_price, has_loose_observation)
+                            SELECT candidate.item_id,
+                                   candidate.retailer_id,
+                                   candidate.retailer_product_id,
+                                   candidate.package_size,
+                                   candidate.package_unit,
+                                   candidate.packages,
+                                   candidate.kind_rank,
+                                   candidate.uncommon_rank,
+                                   candidate.loose_rank,
+                                   candidate.oversize_rank,
+                                   candidate.size_rank,
+                                   candidate.pack_weight,
+                                   candidate.bought_rank,
+                                   candidate.typical_price,
+                                   EXISTS (
+                                       SELECT 1
+                                       FROM app.price_observation AS loose
+                                       WHERE loose.retailer_product_id =
+                                               candidate.retailer_product_id
+                                         AND loose.price_date <= :asOfDate
+                                         AND NOT EXISTS (
+                                             SELECT 1
+                                             FROM app.current_price_offer
+                                                 AS loose_current
+                                             WHERE loose_current.retailer_product_id =
+                                                   loose.retailer_product_id
+                                               AND loose_current.price_date <=
+                                                   :asOfDate
+                                               AND loose_current.scope_key =
+                                                   CASE
+                                                       WHEN loose.store_id IS NOT NULL
+                                                           THEN 'STORE:' ||
+                                                                loose.store_id::TEXT
+                                                       WHEN NULLIF(BTRIM(
+                                                           loose.retailer_format_name
+                                                       ), '') IS NOT NULL
+                                                           THEN 'STORE_FORMAT:' ||
+                                                                LOWER(BTRIM(
+                                                                    loose.retailer_format_name
+                                                                ))
+                                                       ELSE 'RETAILER'
+                                                   END
+                                         )
+                                   ) AS has_loose_observation
+                            FROM candidate
                         ),
                         -- Every price a candidate has in the newest lists, read
                         -- once per product. Looked up again for every shop of
@@ -1248,7 +1089,7 @@ public class StoreShoppingOfferRepository {
                                        1 AS source_priority,
                                        observation.id
                                 FROM app.price_observation AS observation
-                                -- Almost never: see loose_observations above.
+                                -- Almost never: see candidate_row above.
                                 WHERE wanted.has_loose_observation
                                   AND observation.retailer_product_id =
                                         wanted.retailer_product_id
