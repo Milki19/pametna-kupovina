@@ -26,6 +26,17 @@ class DraftItemInputTest {
     }
 
     @Test
+    fun `emodzi se skida iz naziva, a sam emodzi nije naziv`() {
+        val tomato = DraftItemInput(
+            name = "🍅 paradajz",
+            quantity = 1.0,
+            matchingRule = ShoppingItemRuleDto.EXACT_PRODUCT
+        )
+        assertEquals("paradajz", tomato.validated().name)
+        assertThrows(UserFacingException::class.java) { tomato.copy(name = "🍅").validated() }
+    }
+
+    @Test
     fun `pakovanje od sest komada je broj komada`() {
         assertEquals("piece", pivo("kom").validated().requiredBaseUnit)
     }

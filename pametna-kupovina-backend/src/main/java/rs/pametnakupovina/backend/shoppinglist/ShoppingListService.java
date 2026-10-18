@@ -968,7 +968,7 @@ public class ShoppingListService {
     }
 
     private String requiredItemName(String value) {
-        String name = nullableText(value);
+        String name = nullableText(ItemNames.withoutEmoji(value));
 
         if (name == null) {
             throw new FieldRefusal(
