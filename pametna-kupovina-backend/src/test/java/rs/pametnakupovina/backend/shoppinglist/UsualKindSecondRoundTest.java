@@ -63,7 +63,8 @@ class UsualKindSecondRoundTest {
     private static final String LENOR_SCENTED = "ARIEL TOUCH OF LENOR 70PRANJA 5,25KG";
     private static final String SILAN_SCENTED = "DET PERSIL POW EXP SILAN 72WL 5.4KG";
     private static final String ORNEL_DETERGENT = "DETERDŽENT ZA VEŠ CALMING ORNEL 4KG";
-    private static final String LAUNDRY_BASKET = "PERSIL korpa za pr veš";
+    private static final String LAUNDRY_BASKET = "KORPA ZA PR VEŠ PERSIL";
+    private static final String POWDER_WITH_BASKET = "PERSIL POWDER 5,4+KORPA ZA VES";
     private static final String ONE_ROLL = "Toalet papir 1/1";
     private static final String WET_PAPER = "TOALET PAPIR VL KIDS 60/1";
     private static final String TEN_ROLLS = "Toalet papir Perfex 10/1";
@@ -89,6 +90,7 @@ class UsualKindSecondRoundTest {
             + row(SILAN_SCENTED, "1899,99")
             + row(ORNEL_DETERGENT, "1199,99")
             + row(LAUNDRY_BASKET, "399,99")
+            + row(POWDER_WITH_BASKET, "1999,99")
             + row(ONE_ROLL, "39,99")
             + row(WET_PAPER, "129,99")
             + row(TEN_ROLLS, "349,99")
@@ -221,6 +223,8 @@ class UsualKindSecondRoundTest {
         assertThat(typeOf(ORNEL_DETERGENT)).isEqualTo("LAUNDRY_DETERGENT");
         // A Persil laundry basket is not detergent (V137).
         assertThat(typeOf(LAUNDRY_BASKET)).isNull();
+        // Powder with a basket thrown in is still powder.
+        assertThat(typeOf(POWDER_WITH_BASKET)).isEqualTo("LAUNDRY_DETERGENT");
         assertThat(typeOf(TEN_ROLLS)).isEqualTo("TOILET_PAPER");
         assertThat(typeOf(BUTTER)).isEqualTo("BUTTER");
         assertThat(typeOf(DOG_FOOD)).isNull();
