@@ -973,11 +973,59 @@ public class StoreShoppingOfferRepository {
                                        AS bought_ranks,
                                    ARRAY_AGG(candidate.typical_price
                                              ORDER BY candidate.retailer_product_id)
-                                       AS typical_prices
+                                       AS typical_prices,
+                                   -- Whether an old observation could still price
+                                   -- the product: one whose list has no current
+                                   -- offer of it. Asked once per product, not again
+                                   -- in every shop; almost never true, and looking
+                                   -- was 1.1 s of a 4.6 s plan on the server.
+                                   ARRAY_AGG(EXISTS (
+                                       SELECT 1
+                                       FROM app.price_observation AS loose
+                                       WHERE loose.retailer_product_id =
+                                               candidate.retailer_product_id
+                                         AND loose.price_date <= :asOfDate
+                                         AND NOT EXISTS (
+                                             SELECT 1
+                                             FROM app.current_price_offer
+                                                 AS loose_current
+                                             WHERE loose_current.retailer_product_id =
+                                                   loose.retailer_product_id
+                                               AND loose_current.price_date <=
+                                                   :asOfDate
+                                               AND loose_current.scope_key =
+                                                   CASE
+                                                       WHEN loose.store_id IS NOT NULL
+                                                           THEN 'STORE:' ||
+                                                                loose.store_id::TEXT
+                                                       WHEN NULLIF(BTRIM(
+                                                           loose.retailer_format_name
+                                                       ), '') IS NOT NULL
+                                                           THEN 'STORE_FORMAT:' ||
+                                                                LOWER(BTRIM(
+                                                                    loose.retailer_format_name
+                                                                ))
+                                                       ELSE 'RETAILER'
+                                                   END
+                                         )
+                                   ) ORDER BY candidate.retailer_product_id)
+                                       AS loose_observations
                             FROM candidate
                             JOIN app.retailer_product AS product
                               ON product.id = candidate.retailer_product_id
                             GROUP BY candidate.item_id, product.retailer_id
+                        ),
+                        -- Products shoppers said twice in two days a shop lacks
+                        -- (V121), read once instead of once per shop and product.
+                        missing_in_store AS MATERIALIZED (
+                            SELECT report.retailer_product_id, report.store_id
+                            FROM app.product_report AS report
+                            WHERE report.reason = 'NOT_IN_STORE'
+                              AND report.store_id IN (:storeIds)
+                              AND report.created_at >= (CAST(:asOfDate AS DATE) - 2)::TIMESTAMP AT TIME ZONE 'UTC'
+                              AND report.created_at < (CAST(:asOfDate AS DATE) + 1)::TIMESTAMP AT TIME ZONE 'UTC'
+                            GROUP BY report.retailer_product_id, report.store_id
+                            HAVING COUNT(DISTINCT COALESCE(report.client_token_hash, report.id::TEXT)) >= 2
                         ),
                         -- A shop without a price list or reports of its own pays
                         -- what its chain's list for its format says, the same as
@@ -1112,12 +1160,18 @@ public class StoreShoppingOfferRepository {
                                 candidate_group.size_ranks,
                                 candidate_group.pack_weights,
                                 candidate_group.bought_ranks,
-                                candidate_group.typical_prices
-                            ) AS candidate(retailer_product_id, package_size, package_unit, packages, kind_rank, uncommon_rank, oversize_rank, size_rank, pack_weight, bought_rank, typical_price)
+                                candidate_group.typical_prices,
+                                candidate_group.loose_observations
+                            ) AS candidate(retailer_product_id, package_size, package_unit, packages, kind_rank, uncommon_rank, oversize_rank, size_rank, pack_weight, bought_rank, typical_price, has_loose_observation)
                             JOIN app.retailer_product AS product
                               ON product.id = candidate.retailer_product_id
                              -- Kupci su u ovoj radnji javili da ga nema (V121).
-                             AND NOT app.reported_not_in_store(product.id, store.id, :asOfDate)
+                             AND NOT EXISTS (
+                                 SELECT 1
+                                 FROM missing_in_store
+                                 WHERE missing_in_store.retailer_product_id = product.id
+                                   AND missing_in_store.store_id = store.id
+                             )
                             LEFT JOIN app.canonical_product AS canonical
                               ON canonical.id =
                                   product.canonical_product_id
@@ -1252,7 +1306,8 @@ public class StoreShoppingOfferRepository {
                                            1 AS source_priority,
                                            observation.id
                                     FROM app.price_observation AS observation
-                                    WHERE observation.retailer_product_id =
+                                    WHERE candidate.has_loose_observation
+                                      AND observation.retailer_product_id =
                                             product.id
                                       AND observation.price_date <= :asOfDate
                                       AND app.in_latest_price_list(
