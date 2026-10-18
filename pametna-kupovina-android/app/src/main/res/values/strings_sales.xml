@@ -4,6 +4,8 @@
     <string name="sale_title">Akcije</string>
     <string name="sale_shortcut_text">Šta je danas na popustu u radnjama blizu tebe</string>
     <string name="sale_nearby_subtitle">Radnje do 10 km od tebe</string>
+    <string name="sale_scope_near">Blizu mene</string>
+    <string name="sale_scope_all">Svi lanci</string>
     <string name="sale_loading">Učitavam akcije…</string>
     <string name="sale_load_error">Akcije trenutno nisu dostupne.</string>
     <string name="sale_empty">Danas nema proizvoda na akciji za ovaj izbor.</string>
