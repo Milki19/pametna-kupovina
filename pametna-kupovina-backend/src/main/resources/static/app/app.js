@@ -1874,7 +1874,7 @@ function renderTripCosts(message = null) {
         <p class="muted small">Podrazumevano je ${money(t.defaultValuePerHour)} po satu i ${money(t.defaultCostPerStop)} po stajanju. Veći iznos znači manje vožnje i manje radnji, a 0 znači da plan gleda samo cenu korpe i goriva.</p>
         <div class="btn-row">${t.customized ? '<button type="button" class="btn" data-act="trip-reset">Vrati podrazumevano</button>' : ''}<button class="btn primary">Sačuvaj</button></div>
       </form>
-      ${message ? `<div class="notice pos" role="status">${esc(message)}</div>` : ''}`
+      ${message ? `<div class="notice pos" role="status" data-trip-saved>${esc(message)}</div>` : ''}`
   });
 }
 
@@ -2044,9 +2044,9 @@ const actions = {
 const forms = {
   ...accountForms,
   'pick-search': data => runPick(String(data.get('q') || '')),
-  'trip-costs': data => saveTripCosts(
+  'trip-costs': data => (view.querySelector('[data-trip-saved]')?.remove(), saveTripCosts(
     tripAmount(data, 'hour', tripCosts.maxValuePerHour),
-    tripAmount(data, 'stop', tripCosts.maxCostPerStop)),
+    tripAmount(data, 'stop', tripCosts.maxCostPerStop))),
   'add-one': data => addText(data.get('text')),
   'add-many': data => addText(data.get('text')),
   'edit-item': (data, form) => saveItem(Number(form.dataset.id), data),
