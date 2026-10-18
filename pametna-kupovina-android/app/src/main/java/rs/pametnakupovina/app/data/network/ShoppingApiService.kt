@@ -99,6 +99,12 @@ interface ShoppingApiService {
     @DELETE("api/v1/accounts/me")
     suspend fun deleteAccount()
 
+    @GET("api/v1/accounts/me/trip-costs")
+    suspend fun getTripCosts(): TripCostsDto
+
+    @PUT("api/v1/accounts/me/trip-costs")
+    suspend fun saveTripCosts(@Body request: TripCostRequestDto): TripCostsDto
+
     @GET("api/v1/accounts/devices")
     suspend fun getAccountDevices(): List<AccountDeviceDto>
 

@@ -144,6 +144,16 @@ fun RecommendationScreen(
     var replacementError by remember { mutableStateOf<UiText?>(null) }
     var similarFor by remember { mutableStateOf<RecommendationItemDto?>(null) }
     var wrongFor by remember { mutableStateOf<RecommendationItemDto?>(null) }
+    var changingTripCosts by rememberSaveable { mutableStateOf(false) }
+    if (changingTripCosts) {
+        TripCostDialog(
+            onDismiss = { changingTripCosts = false },
+            // Plan je računat po staroj ceni vremena i stajanja.
+            onSaved = {
+                location?.let { (latitude, longitude) -> viewModel.recalculate(listId, latitude, longitude) }
+            }
+        )
+    }
     wrongFor?.let { item ->
         AlertDialog(
             onDismissRequest = { wrongFor = null },
@@ -308,7 +318,8 @@ fun RecommendationScreen(
                     },
                     onChangeOrigin = onBack,
                     onSimilar = { item -> similarFor = item },
-                    onWrongProduct = { item -> wrongFor = item }
+                    onWrongProduct = { item -> wrongFor = item },
+                    onChangeTripCosts = { changingTripCosts = true }
                 )
             }
         }
@@ -329,7 +340,8 @@ internal fun RecommendationContent(
     onChangeOrigin: () -> Unit = {},
     originLabel: String? = null,
     onSimilar: (RecommendationItemDto) -> Unit = {},
-    onWrongProduct: (RecommendationItemDto) -> Unit = {}
+    onWrongProduct: (RecommendationItemDto) -> Unit = {},
+    onChangeTripCosts: () -> Unit = {}
 ) {
     val context = LocalContext.current
     var selectedTypeName by rememberSaveable {
@@ -458,7 +470,7 @@ internal fun RecommendationContent(
             }
 
             item(key = "calculation-details") {
-                CalculationDetails(result, selected)
+                CalculationDetails(result, selected, onChangeTripCosts)
             }
         }
 
@@ -1136,7 +1148,8 @@ internal fun UnlocatedOptionsSection(
 @Composable
 private fun CalculationDetails(
     result: ShoppingRecommendationDto,
-    scenario: OptimizationScenarioDto
+    scenario: OptimizationScenarioDto,
+    onChangeTripCosts: () -> Unit
 ) {
     var expanded by rememberSaveable { mutableStateOf(false) }
     val assumptions = result.assumptions
@@ -1210,6 +1223,10 @@ private fun CalculationDetails(
                     ).forEach { line ->
                         Text(line, style = MaterialTheme.typography.bodyMedium)
                     }
+                    TextButton(
+                        onClick = onChangeTripCosts,
+                        modifier = Modifier.testTag("rec-change-trip-costs")
+                    ) { Text(stringResource(R.string.rec_calc_change_trip)) }
                 }
             }
         }

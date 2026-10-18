@@ -548,6 +548,12 @@ class RecommendationViewModel @Inject constructor(
     // worked out for the same list, place and way of travel are shown as they are.
     private var loadedFor: Pair<List<Any>, Long>? = null
 
+    /** Isto mesto i spisak, ali plan računat po drugoj ceni vremena i stajanja. */
+    fun recalculate(listId: Long, latitude: Double, longitude: Double) {
+        loadedFor = null
+        load(listId, latitude, longitude)
+    }
+
     fun load(listId: Long, latitude: Double, longitude: Double) {
         viewModelScope.launch {
             val walking = travelModes.isWalking()
