@@ -63,6 +63,7 @@ class UsualKindSecondRoundTest {
     private static final String LENOR_SCENTED = "ARIEL TOUCH OF LENOR 70PRANJA 5,25KG";
     private static final String SILAN_SCENTED = "DET PERSIL POW EXP SILAN 72WL 5.4KG";
     private static final String ORNEL_DETERGENT = "DETERDŽENT ZA VEŠ CALMING ORNEL 4KG";
+    private static final String LAUNDRY_BASKET = "PERSIL korpa za pr veš";
     private static final String ONE_ROLL = "Toalet papir 1/1";
     private static final String WET_PAPER = "TOALET PAPIR VL KIDS 60/1";
     private static final String TEN_ROLLS = "Toalet papir Perfex 10/1";
@@ -87,6 +88,7 @@ class UsualKindSecondRoundTest {
             + row(LENOR_SCENTED, "1999,99")
             + row(SILAN_SCENTED, "1899,99")
             + row(ORNEL_DETERGENT, "1199,99")
+            + row(LAUNDRY_BASKET, "399,99")
             + row(ONE_ROLL, "39,99")
             + row(WET_PAPER, "129,99")
             + row(TEN_ROLLS, "349,99")
@@ -196,9 +198,17 @@ class UsualKindSecondRoundTest {
                 .orElse(null);
     }
 
+    /** The tests share one chain, imported by whichever runs first. */
+    private long existingShop() {
+        return jdbcClient.sql("SELECT id FROM app.store WHERE external_code = 'ROUND2-1'")
+                .query(Long.class)
+                .optional()
+                .orElseGet(this::shop);
+    }
+
     @Test
     void theUsualKindWinsOverTheCheaperLookAlike() {
-        long shop = shop();
+        long shop = existingShop();
 
         assertThat(typeOf(ALL_CAFFE)).isNull();
         assertThat(typeOf(SOFTENER)).isNull();
@@ -209,6 +219,8 @@ class UsualKindSecondRoundTest {
         assertThat(typeOf(LENOR_SCENTED)).isEqualTo("LAUNDRY_DETERGENT");
         assertThat(typeOf(SILAN_SCENTED)).isEqualTo("LAUNDRY_DETERGENT");
         assertThat(typeOf(ORNEL_DETERGENT)).isEqualTo("LAUNDRY_DETERGENT");
+        // A Persil laundry basket is not detergent (V137).
+        assertThat(typeOf(LAUNDRY_BASKET)).isNull();
         assertThat(typeOf(TEN_ROLLS)).isEqualTo("TOILET_PAPER");
         assertThat(typeOf(BUTTER)).isEqualTo("BUTTER");
         assertThat(typeOf(DOG_FOOD)).isNull();
@@ -237,12 +249,19 @@ class UsualKindSecondRoundTest {
                 .containsExactly(GROUND_COFFEE, POWDER, TEN_ROLLS, GOUDA, FRESH_CHEESE, BUTTER, CHICKEN);
     }
 
+    /** The test of 17.10.2026 found „PERSIL korpa za pr veš“ first (V137). */
+    @Test
+    void aSearchForWashingPowderFindsPowderFirst() {
+        existingShop();
+
+        var page = searchService.search("prasak za ves", 0, 10, true, null, false);
+        assertThat(page.items()).isNotEmpty();
+        assertThat(page.items().get(0).name()).doesNotContainIgnoringCase("korpa");
+    }
+
     @Test
     void aSearchForChickenFindsChickenFirst() {
-        jdbcClient.sql("SELECT id FROM app.store WHERE external_code = 'ROUND2-1'")
-                .query(Long.class)
-                .optional()
-                .orElseGet(this::shop);
+        existingShop();
 
         var page = searchService.search("piletina 1kg", 0, 10, true, null, false);
         assertThat(page.items()).isNotEmpty();

@@ -194,11 +194,15 @@ class SaleTest {
         assertThat(detailsRepository.findLatestOffers(saleProduct, today)).singleElement().satisfies(offer -> {
             assertThat(offer.effectivePrice()).isEqualByComparingTo("150.00");
             assertThat(offer.saleEndDate()).isEqualTo(today.plusDays(5));
+            // The chain's unit price is for the regular price; on sale it
+            // follows the sale (V137, RIČ 1.569,99 against 899,99).
+            assertThat(offer.unitPrice()).isEqualByComparingTo("150.00");
         });
         assertThat(detailsRepository.findLatestOffers(canonicalId("KEKS DRUGOISTEKAO 200G"), today))
                 .singleElement().satisfies(offer -> {
                     assertThat(offer.effectivePrice()).isEqualByComparingTo("100.00");
                     assertThat(offer.saleEndDate()).isNull();
+                    assertThat(offer.unitPrice()).isEqualByComparingTo("100.00");
                 });
     }
 

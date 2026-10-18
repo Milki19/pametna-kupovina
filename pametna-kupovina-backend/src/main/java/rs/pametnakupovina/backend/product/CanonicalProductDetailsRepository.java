@@ -137,7 +137,22 @@ public class CanonicalProductDetailsRepository {
                                        ) IS NOT NULL
                                            THEN observation.discount_end
                                    END AS sale_end_date,
-                                   observation.unit_price,
+                                   -- The chain's unit price is for its regular
+                                   -- price; on sale it follows the sale (V137).
+                                   app.effective_unit_price(
+                                       observation.unit_price,
+                                       observation.regular_price,
+                                       observation.discounted_price,
+                                       app.effective_price(
+                                           observation.regular_price,
+                                           observation.discounted_price,
+                                           observation.discount_start,
+                                           observation.discount_end,
+                                           :asOfDate
+                                       ),
+                                       retailer_product.quantity_value,
+                                       retailer_product.base_unit
+                                   ) AS unit_price,
                                    app.price_needs_check(
                                        observation.regular_price,
                                        observation.discounted_price,
