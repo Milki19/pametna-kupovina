@@ -21,6 +21,14 @@ class PastedListParserTest {
     }
 
     @Test
+    fun `emodzi nije deo naziva`() {
+        val result = PastedListParser.parse("🍅 paradajz\n✔️ hleb\n2x 🍌 banane\n🥛")
+
+        assertEquals(listOf("paradajz", "hleb", "banane"), result.map { it.name })
+        assertEquals(2.0, result[2].quantity, 0.0)
+    }
+
+    @Test
     fun `zarez sa razmakom deli stavke kao na serveru`() {
         val result = PastedListParser.parse("10 jaja, mleko 2, 2 mleka\nмлеко 1л\nMleko 2,8%\nmleko, 2l")
 

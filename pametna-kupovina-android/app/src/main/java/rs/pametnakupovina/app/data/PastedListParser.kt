@@ -35,7 +35,7 @@ object PastedListParser {
         .filter(String::isNotBlank)
         .flatMap { itemsOnLine(it) }
         .map { rawLine ->
-            val clean = rawLine.replace(bullet, "").trim()
+            val clean = withoutEmoji(rawLine).replace(bullet, "").trim()
             val leading = leadingQuantity.matchEntire(clean)
             val trailing = trailingQuantity.matchEntire(clean)
 

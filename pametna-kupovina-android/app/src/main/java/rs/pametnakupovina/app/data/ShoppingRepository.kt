@@ -75,6 +75,8 @@ data class DraftItemInput(
     val targetQuantity: Double? = null
 ) {
     fun validated(): DraftItemInput {
+        val typed = withoutEmoji(name)
+        if (typed != name) return copy(name = typed).validated()
         requireUser(name.isNotBlank()) { uiText(R.string.list_error_name_required) }
         // A product picked from the catalogue keeps its own, sometimes longer, name.
         requireUser(

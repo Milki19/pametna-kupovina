@@ -149,7 +149,7 @@ public class ShoppingListTextParser {
 
     /** A count and an amount can share a line: "2x ćevapi 3kg" is 2 × 3 kg. */
     public ParsedShoppingListLine parseLine(String rawLine) {
-        String line = LIST_MARK.matcher(rawLine.trim()).replaceFirst("").trim();
+        String line = LIST_MARK.matcher(ItemNames.withoutEmoji(rawLine).trim()).replaceFirst("").trim();
         if (line.isEmpty()) {
             line = rawLine.trim();
         }

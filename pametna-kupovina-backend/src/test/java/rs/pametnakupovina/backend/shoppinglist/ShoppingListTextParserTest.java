@@ -23,6 +23,18 @@ class ShoppingListTextParserTest {
     }
 
     @Test
+    void emojiCopiedFromNotesIsNotPartOfTheName() {
+        assertThat(parseOne("🍅 paradajz").name()).isEqualTo("paradajz");
+        assertThat(parseOne("✔️ hleb").name()).isEqualTo("hleb");
+        assertThat(parseOne("👨‍👩‍👧 mleko 🥛 1l").name()).isEqualTo("mleko");
+        assertThat(parseOne("2x 🍌 banane").quantity()).isEqualByComparingTo("2");
+        assertThat(parseOne("2x 🍌 banane").name()).isEqualTo("banane");
+        // Without words there is nothing left to buy, and the refusal says so.
+        assertThat(parseOne("🍅").name()).isEqualTo("🍅");
+        assertThat(parseOne("Mleko 2,8% Imlek®").name()).isEqualTo("Mleko 2,8% Imlek®");
+    }
+
+    @Test
     void weightBecomesATotalAmountAndLeavesTheNameSearchable() {
         ParsedShoppingListLine cevapi = parseOne("Ćevapi 3kg");
         assertThat(cevapi.name()).isEqualTo("Ćevapi");

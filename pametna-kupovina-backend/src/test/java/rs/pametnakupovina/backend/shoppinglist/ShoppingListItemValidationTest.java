@@ -62,6 +62,14 @@ class ShoppingListItemValidationTest {
     }
 
     @Test
+    void aNameOfOnlyEmojiIsEmptyAndNamesTheField() {
+        assertThatThrownBy(() -> service.addItem(7L, ACCOUNT, typed("🍅 ✔️", "1")))
+                .isInstanceOf(FieldRefusal.class)
+                .extracting(e -> ((FieldRefusal) e).getField())
+                .isEqualTo("name");
+    }
+
+    @Test
     void theEdgesOfTheRangeAreAccepted() {
         assertThatCode(() -> service.addItem(7L, ACCOUNT, typed("hleb", "0.01")))
                 .doesNotThrowAnyException();
