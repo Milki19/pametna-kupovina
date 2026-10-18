@@ -1451,12 +1451,15 @@ async function showProduct(id) {
 
 // ---------- Akcije ----------
 
-let sales = { sort: 'DISCOUNT', category: null, place: null, page: null, items: [], categories: [], error: null };
+let sales = { sort: 'DISCOUNT', category: null, allChains: false, place: null, page: null, items: [], categories: [], error: null };
 const saleSorts = { DISCOUNT: 'Najveći popust', SAVING: 'Najveća ušteda', PRICE: 'Najniža cena' };
+
+/** Sa sačuvanom polaznom tačkom samo radnje u blizini, osim kad kupac izabere „Svi lanci". */
+const salesPlace = () => sales.allChains ? '' : searchLocation();
 
 /** Lista se pamti dok se ide na detalje i nazad; nova kad se promeni mesto. */
 function showSales() {
-  if (sales.page && sales.place === searchLocation()) return renderSales();
+  if (sales.page && sales.place === salesPlace()) return renderSales();
   loadList().then(list => { listState.list = list; if (location.hash === '#/akcije' && sales.page) renderSales(); }).catch(() => {});
   return loadSales();
 }
@@ -1479,7 +1482,7 @@ async function loadSales(more = false) {
     sales.items = []; sales.page = null;
   }
   sales.error = null;
-  sales.place = searchLocation();
+  sales.place = salesPlace();
   renderSales(true);
   try {
     const page = await api('GET', `products/on-sale?sort=${sales.sort}&page=${next}&limit=20${
@@ -1525,7 +1528,9 @@ function renderSales(loading = false) {
       (!saved.get('origin') ? `<button class="card soft row" style="text-align:left;cursor:pointer" data-act="sales-locate">
         <span class="letter" style="border-radius:50%;background:var(--mint);color:var(--on-mint)">${icon.pin}</span>
         <span class="grow"><span class="name" style="display:block">Samo radnje blizu mene</span>
-        <span class="muted small">${browserName} će pitati za dozvolu</span></span>${icon.chevron}</button>` : '') +
+        <span class="muted small">${browserName} će pitati za dozvolu</span></span>${icon.chevron}</button>`
+        : `<div class="chips" role="group" aria-label="Radnje">${chip('sale-scope', 'near', 'Blizu mene', !sales.allChains)}${
+          chip('sale-scope', 'all', 'Svi lanci', sales.allChains)}</div>`) +
       `<div class="chips" role="group" aria-label="Redosled">${Object.entries(saleSorts).map(([key, label]) =>
         chip('sale-sort', key, label, key === sales.sort)).join('')}</div>` +
       (sales.categories.length ? `<div class="chips" role="group" aria-label="Kategorija">${chip('sale-category', '', 'Sve', !sales.category)}${
@@ -1549,7 +1554,7 @@ function renderSales(loading = false) {
 function salesLocate() {
   if (!navigator.geolocation) return toast('Ovaj pregledač ne daje lokaciju.');
   navigator.geolocation.getCurrentPosition(
-    position => { saved.set('origin', { lat: position.coords.latitude, lng: position.coords.longitude }); loadSales(); },
+    position => { saved.set('origin', { lat: position.coords.latitude, lng: position.coords.longitude }); sales.allChains = false; loadSales(); },
     error => toast(error.code === 1 ? `${browserName} nema dozvolu za lokaciju.` : 'Lokacija trenutno nije dostupna.', null, null, true),
     { enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 }
   );
@@ -1735,7 +1740,7 @@ function route() {
   window.scrollTo(0, 0);
   const shown = handler(arg ? Number(arg) : undefined, parts);
   // Lista koja se samo ponovo iscrtava (pretraga, akcije) vraća se gde je bila.
-  if ((name === 'cene' && search.page) || (name === 'akcije' && sales.page && sales.place === searchLocation())) {
+  if ((name === 'cene' && search.page) || (name === 'akcije' && sales.page && sales.place === salesPlace())) {
     Promise.resolve(shown).then(() => window.scrollTo(0, scrolls[name] || 0));
   }
 }
@@ -1794,6 +1799,7 @@ const actions = {
   },
   ...accountActions,
   'sale-sort': el => { sales.sort = el.dataset.value; return loadSales(); },
+  'sale-scope': el => { sales.allChains = el.dataset.value === 'all'; return loadSales(); },
   'sale-category': el => { sales.category = el.dataset.value || null; return loadSales(); },
   'sales-more': () => loadSales(true),
   'sales-locate': salesLocate,
@@ -1911,8 +1917,32 @@ document.addEventListener('submit', event => {
   run(event.target.querySelector('button:not([type=button])'), () => handler(new FormData(event.target), event.target), event.target);
 });
 
-window.addEventListener('hashchange', route);
+// ---------- Nova verzija ----------
+
+// Kartica otvorena danima, ili stranica iz keša kad mreža nije stigla, vrti
+// staru verziju. Kad server ima noviju, ona se učita na sledećem prelazu
+// između ekrana, kad nema ničeg nesačuvanog.
+const loadedScripts = new URL(document.currentScript.src).search;
+let newerVersion = false;
+let versionCheckedAt = 0;
+
+async function checkVersion() {
+  if (newerVersion || Date.now() - versionCheckedAt < 30 * 60 * 1000) return;
+  versionCheckedAt = Date.now();
+  try {
+    const page = await fetch('index.html', { cache: 'no-store' });
+    const found = page.ok && (await page.text()).match(/src="app\.js(\?v=[^"]*)"/);
+    if (!found || found[1] === loadedScripts) return;
+    newerVersion = true;
+    toast('Stigla je nova verzija aplikacije.', 'Osveži', () => location.reload());
+  } catch { /* bez mreže ostaje ova verzija */ }
+}
+
+window.addEventListener('hashchange', () => newerVersion ? location.reload() : route());
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkVersion(); });
+window.addEventListener('pageshow', event => { if (event.persisted) checkVersion(); });
 route();
 // Bez mreže u prodavnici stranica se ipak otvori (sw.js).
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+setTimeout(checkVersion, 3000);
 refreshMarket().then(changed => { if (changed) route(); });
