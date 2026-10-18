@@ -107,6 +107,7 @@ import rs.pametnakupovina.app.R
 import rs.pametnakupovina.app.ui.components.AppSpacing
 import rs.pametnakupovina.app.ui.screens.AboutDialog
 import rs.pametnakupovina.app.ui.screens.HouseholdDialog
+import rs.pametnakupovina.app.ui.screens.TripCostDialog
 import rs.pametnakupovina.app.ui.screens.DashboardScreen
 import rs.pametnakupovina.app.ui.screens.LocationScreen
 import rs.pametnakupovina.app.ui.screens.LoyaltyCardsScreen
@@ -176,6 +177,7 @@ fun PametnaKupovinaApp(
     var showMenu by rememberSaveable { mutableStateOf(false) }
     var showAbout by rememberSaveable { mutableStateOf(false) }
     var showHousehold by rememberSaveable { mutableStateOf(false) }
+    var showTripCosts by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
     // Ishod učitavanja računa se javlja na početnom ekranu, kao i skeniranje.
     val pickReceiptFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -214,6 +216,10 @@ fun PametnaKupovinaApp(
         )
     }
 
+    if (showTripCosts) {
+        TripCostDialog(onDismiss = { showTripCosts = false })
+    }
+
     BackHandler(enabled = showMenu) { showMenu = false }
     val menuContent: @Composable () -> Unit = {
             AppMenuContent(
@@ -236,6 +242,10 @@ fun PametnaKupovinaApp(
                 onHousehold = {
                     showMenu = false
                     showHousehold = true
+                },
+                onTripCosts = {
+                    showMenu = false
+                    showTripCosts = true
                 },
                 onAbout = {
                     showMenu = false
@@ -596,6 +606,7 @@ private fun AppMenuContent(
     onScan: () -> Unit,
     onImportFile: () -> Unit,
     onHousehold: () -> Unit,
+    onTripCosts: () -> Unit,
     onAbout: () -> Unit
 ) {
     Column(
@@ -608,6 +619,7 @@ private fun AppMenuContent(
             Triple(R.string.app_menu_scan_receipt, R.drawable.ic_camera, onScan) to "menu-scan",
             Triple(R.string.app_menu_import_receipt, R.drawable.ic_image, onImportFile) to "menu-import-receipt",
             Triple(R.string.app_menu_household, R.drawable.ic_home, onHousehold) to "menu-household",
+            Triple(R.string.app_menu_trip_costs, R.drawable.ic_directions, onTripCosts) to "menu-trip-costs",
             Triple(R.string.app_menu_about, R.drawable.ic_info, onAbout) to "menu-about"
         ).forEach { (entry, tag) ->
             val (label, icon, onClick) = entry

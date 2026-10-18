@@ -10,6 +10,7 @@
     <string name="app_menu_scan_receipt">Skeniraj račun</string>
     <string name="app_menu_import_receipt">Učitaj račun sa slike</string>
     <string name="app_menu_household">Domaćinstvo</string>
+    <string name="app_menu_trip_costs">Vreme i stajanja</string>
     <string name="app_menu_about">O aplikaciji</string>
     <string name="app_menu_sales">Akcije</string>
     <string name="app_theme">Tema</string>
@@ -70,6 +71,19 @@
     <string name="household_scan_failed">Skener nije uspeo da se otvori. Probaj ponovo.</string>
     <string name="household_joined">Sada delite spisak, račune i kartice.</string>
     <string name="household_not_a_code">To nije kod za domaćinstvo.</string>
+
+    <!-- Time and stops -->
+    <string name="trip_title">Vreme i stajanja</string>
+    <string name="trip_intro">Plan sabira korpu, gorivo, vreme u putu i stajanja. Jeftinija korpa dalje od tebe pobeđuje samo ako ušteda pokrije put.</string>
+    <string name="trip_hour_label">Sat u putu (%1$s)</string>
+    <string name="trip_stop_label">Jedno stajanje (%1$s)</string>
+    <string name="trip_defaults">Podrazumevano je %1$s po satu i %2$s po stajanju. Veći iznos znači manje vožnje i manje radnji, a 0 znači da plan gleda samo cenu korpe i goriva.</string>
+    <string name="trip_invalid">Upiši iznos od 0 do %1$s.</string>
+    <string name="trip_reset">Vrati podrazumevano</string>
+    <string name="trip_saved">Sačuvano. Plan računa %1$s po satu i %2$s po stajanju.</string>
+    <string name="trip_saved_default">Sačuvano. Plan opet računa podrazumevano vreme i stajanja.</string>
+    <string name="trip_load_failed">Podešavanje nije učitano. Proveri internet i probaj ponovo.</string>
+    <string name="trip_save_failed">Nije sačuvano. Proveri internet i probaj ponovo.</string>
 
     <!-- Location -->
     <string name="location_title">Odakle krećeš</string>

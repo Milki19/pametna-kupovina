@@ -313,6 +313,26 @@ data class AccountStateDto(
     val market: MarketSettings? = null
 )
 
+/** Koliko plan računa sat u putu i jedno stajanje, u valuti tržišta naloga. */
+@Serializable
+data class TripCostsDto(
+    val valuePerHour: Double,
+    val costPerStop: Double,
+    val defaultValuePerHour: Double,
+    val defaultCostPerStop: Double,
+    val maxValuePerHour: Double,
+    val maxCostPerStop: Double,
+    val customized: Boolean = false,
+    val currency: String
+)
+
+/** Iznos koji nedostaje vraća cenu tržišta. */
+@Serializable
+data class TripCostRequestDto(
+    val valuePerHour: Double? = null,
+    val costPerStop: Double? = null
+)
+
 @Serializable
 data class CreateSessionRequestDto(
     val deviceToken: String,

@@ -20,6 +20,8 @@ import rs.pametnakupovina.app.data.network.AddLoyaltyCardRequestDto
 import rs.pametnakupovina.app.data.network.HabitDto
 import rs.pametnakupovina.app.location.Coordinates
 import rs.pametnakupovina.app.data.network.JoinRequestDto
+import rs.pametnakupovina.app.data.network.TripCostRequestDto
+import rs.pametnakupovina.app.data.network.TripCostsDto
 import rs.pametnakupovina.app.data.network.LoyaltyCardDto
 import rs.pametnakupovina.app.data.network.NearbyStoreDto
 import rs.pametnakupovina.app.data.network.ReceiptDto
@@ -222,6 +224,12 @@ class ShoppingRepository @Inject constructor(
     }
 
     suspend fun deleteAccount() = api.deleteAccount()
+
+    suspend fun tripCosts(): TripCostsDto = api.getTripCosts()
+
+    /** Null vraća cenu tržišta; plan posle ovoga treba izračunati ponovo. */
+    suspend fun saveTripCosts(valuePerHour: Double?, costPerStop: Double?): TripCostsDto =
+        api.saveTripCosts(TripCostRequestDto(valuePerHour, costPerStop))
 
     /** Proizvod čije cene se otvaraju za stavku „isti proizvod, sve varijante". */
     suspend fun productInFamily(productFamilyId: Long): Long? =

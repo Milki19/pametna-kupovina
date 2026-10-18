@@ -10,6 +10,7 @@
     <string name="app_menu_scan_receipt">Scan receipt</string>
     <string name="app_menu_import_receipt">Load receipt from image</string>
     <string name="app_menu_household">Household</string>
+    <string name="app_menu_trip_costs">Time and stops</string>
     <string name="app_menu_about">About</string>
     <string name="app_menu_sales">On sale</string>
     <string name="app_theme">Theme</string>
@@ -69,6 +70,19 @@
     <string name="household_scan_failed">The scanner could not open. Try again.</string>
     <string name="household_joined">You now share the list, receipts and cards.</string>
     <string name="household_not_a_code">That\'s not a household code.</string>
+
+    <!-- Time and stops -->
+    <string name="trip_title">Time and stops</string>
+    <string name="trip_intro">The plan adds up the basket, fuel, time on the road and stops. A cheaper basket farther away wins only if the saving covers the trip.</string>
+    <string name="trip_hour_label">An hour on the road (%1$s)</string>
+    <string name="trip_stop_label">One stop (%1$s)</string>
+    <string name="trip_defaults">The default is %1$s per hour and %2$s per stop. A higher amount means less driving and fewer shops; 0 means the plan looks only at the basket and fuel.</string>
+    <string name="trip_invalid">Enter an amount from 0 to %1$s.</string>
+    <string name="trip_reset">Back to default</string>
+    <string name="trip_saved">Saved. The plan counts %1$s per hour and %2$s per stop.</string>
+    <string name="trip_saved_default">Saved. The plan uses the default time and stops again.</string>
+    <string name="trip_load_failed">The setting didn\'t load. Check the internet and try again.</string>
+    <string name="trip_save_failed">Not saved. Check the internet and try again.</string>
 
     <!-- Location -->
     <string name="location_title">Where are you starting from</string>
