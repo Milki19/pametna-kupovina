@@ -36,6 +36,9 @@ data class SalesUiState(
     val hasNext: Boolean = false,
     // Server je znao gde je kupac, pa su na spisku samo lanci u blizini.
     val nearby: Boolean = false,
+    // Lokacija je poznata, pa kupac bira između radnji u blizini i svih lanaca.
+    val located: Boolean = false,
+    val allChains: Boolean = false,
     val errorMessage: UiText? = null,
     val notice: UiText? = null,
     // Proizvodi koji su već na spisku, odakle god da su dodati.
@@ -87,6 +90,12 @@ class SalesViewModel @Inject constructor(
     fun chooseSort(sort: SaleSortDto) {
         if (sort == _uiState.value.sort) return
         _uiState.update { it.copy(sort = sort) }
+        load()
+    }
+
+    fun chooseAllChains(all: Boolean) {
+        if (all == _uiState.value.allChains) return
+        _uiState.update { it.copy(allChains = all) }
         load()
     }
 
@@ -160,7 +169,7 @@ class SalesViewModel @Inject constructor(
                     sort = asked.sort,
                     page = page,
                     limit = PAGE_SIZE,
-                    near = near
+                    near = near.takeUnless { asked.allChains }
                 )
                 _uiState.update { current ->
                     current.copy(
@@ -173,7 +182,8 @@ class SalesViewModel @Inject constructor(
                         page = response.page,
                         totalElements = response.totalElements,
                         hasNext = response.hasNext,
-                        nearby = response.nearbyChecked
+                        nearby = response.nearbyChecked,
+                        located = near != null
                     )
                 }
             } catch (error: CancellationException) {

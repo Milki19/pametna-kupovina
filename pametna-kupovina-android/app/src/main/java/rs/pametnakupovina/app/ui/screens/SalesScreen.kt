@@ -117,6 +117,26 @@ fun SalesScreen(
                     }
                 }
 
+                if (state.located) {
+                    item(key = "scope") {
+                        // Krupna slova: drugi čip prelazi u novi red umesto da se seče.
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm)) {
+                            FilterChip(
+                                selected = !state.allChains,
+                                onClick = { viewModel.chooseAllChains(false) },
+                                label = { Text(stringResource(R.string.sale_scope_near)) },
+                                modifier = Modifier.testTag("sale-scope-near")
+                            )
+                            FilterChip(
+                                selected = state.allChains,
+                                onClick = { viewModel.chooseAllChains(true) },
+                                label = { Text(stringResource(R.string.sale_scope_all)) },
+                                modifier = Modifier.testTag("sale-scope-all")
+                            )
+                        }
+                    }
+                }
+
                 item(key = "sort") {
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm)) {
                         items(SortLabels, key = { it.first.name }) { (sort, label) ->

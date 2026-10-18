@@ -4,6 +4,8 @@
     <string name="sale_title">On sale</string>
     <string name="sale_shortcut_text">What is discounted today in shops near you</string>
     <string name="sale_nearby_subtitle">Shops within 10 km of you</string>
+    <string name="sale_scope_near">Near me</string>
+    <string name="sale_scope_all">All chains</string>
     <string name="sale_loading">Loading sales…</string>
     <string name="sale_load_error">Sales are not available right now.</string>
     <string name="sale_empty">Nothing is on sale today for this choice.</string>
