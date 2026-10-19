@@ -1,6 +1,7 @@
 package rs.pametnakupovina.backend.account;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.springframework.web.server.ResponseStatusException;
 import rs.pametnakupovina.backend.security.DeviceCaller;
 
@@ -39,6 +40,22 @@ class TripCostServiceTest {
                 new TripCostService.TripCostRequest(new BigDecimal("200.01"), null)))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("od 0 do 200 EUR");
+        verify(repository, never()).saveTripCosts(anyLong(), any(), any());
+    }
+
+    /** Kratak broj sa ogromnim eksponentom se odbija odmah, a ne zaokružuje sekundama. */
+    @Test
+    @Timeout(2)
+    void aHugeOrTinyExponentIsRefusedBeforeAnyRounding() {
+        when(repository.tripCosts(7L)).thenReturn(new TripCostService.Stored(
+                null, null, new BigDecimal("400.00"), new BigDecimal("80.00"), "RSD", 2));
+
+        for (String amount : new String[]{"1e10000000", "1e-10000000", "1e999999999"}) {
+            assertThatThrownBy(() -> service.save(CALLER,
+                    new TripCostService.TripCostRequest(new BigDecimal(amount), null)))
+                    .isInstanceOf(ResponseStatusException.class)
+                    .hasMessageContaining("od 0 do 10000 RSD");
+        }
         verify(repository, never()).saveTripCosts(anyLong(), any(), any());
     }
 

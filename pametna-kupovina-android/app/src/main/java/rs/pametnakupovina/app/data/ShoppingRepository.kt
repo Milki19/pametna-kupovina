@@ -3,6 +3,10 @@ package rs.pametnakupovina.app.data
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import okhttp3.MediaType.Companion.toMediaType
@@ -227,9 +231,15 @@ class ShoppingRepository @Inject constructor(
 
     suspend fun tripCosts(): TripCostsDto = api.getTripCosts()
 
+    private val _tripCostsVersion = MutableStateFlow(0)
+
+    /** Raste sa svakom sačuvanom cenom vremena i stajanja; zapamćen plan stariji od nje ne važi. */
+    val tripCostsVersion: StateFlow<Int> = _tripCostsVersion.asStateFlow()
+
     /** Null vraća cenu tržišta; plan posle ovoga treba izračunati ponovo. */
     suspend fun saveTripCosts(valuePerHour: Double?, costPerStop: Double?): TripCostsDto =
         api.saveTripCosts(TripCostRequestDto(valuePerHour, costPerStop))
+            .also { _tripCostsVersion.update { version -> version + 1 } }
 
     /** Proizvod čije cene se otvaraju za stavku „isti proizvod, sve varijante". */
     suspend fun productInFamily(productFamilyId: Long): Long? =

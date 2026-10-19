@@ -25,6 +25,10 @@ public class TripCostService {
      */
     static final BigDecimal MAX_MULTIPLE = new BigDecimal("25");
 
+    /** Koliko cifara iznos sme da ima pre i posle zareza da bi se uopšte računalo. */
+    private static final int MAX_INTEGER_DIGITS = 12;
+    private static final int MAX_DECIMALS = 10;
+
     private final AccountRepository accountRepository;
 
     public TripCostService(AccountRepository accountRepository) {
@@ -57,10 +61,16 @@ public class TripCostService {
         if (requested == null) {
             return null;
         }
-        BigDecimal amount = requested.setScale(
-                stored.currencyMinorUnits(), RoundingMode.HALF_UP);
         BigDecimal max = max(market, stored.currencyMinorUnits());
-        if (amount.signum() < 0 || amount.compareTo(max) > 0) {
+        // Broj kao 1e10000000 je kratak, ali bi se zaokruživao sekundama;
+        // veličina se proverava pre ikakvog računanja.
+        BigDecimal plain = requested.stripTrailingZeros();
+        boolean sane = plain.precision() - plain.scale() <= MAX_INTEGER_DIGITS
+                && plain.scale() <= MAX_DECIMALS;
+        BigDecimal amount = sane
+                ? requested.setScale(stored.currencyMinorUnits(), RoundingMode.HALF_UP)
+                : null;
+        if (amount == null || amount.signum() < 0 || amount.compareTo(max) > 0) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
                     what + " može da vredi od 0 do " + max.stripTrailingZeros().toPlainString()

@@ -1171,8 +1171,10 @@ async function showRecommendation() {
   try {
     // Plan se ne računa ponovo dok se spisak ne promeni. Stavke se pitaju
     // server, jer spisak može da se menja i u aplikaciji, a to je brzo.
-    const list = await api('GET', `shopping-lists/${listId}`);
-    const key = `${listId}|${origin.lat}|${origin.lng}|${travel}|${new Date().toDateString()}|${planInputs(list)}`;
+    // Cena vremena i stajanja može da se promeni i u aplikaciji ili kod ukućanina.
+    const [list, trip] = await Promise.all([api('GET', `shopping-lists/${listId}`),
+      api('GET', 'accounts/me/trip-costs').catch(() => null)]);
+    const key = `${listId}|${origin.lat}|${origin.lng}|${travel}|${new Date().toDateString()}|${planInputs(list)}|${trip?.valuePerHour}|${trip?.costPerStop}`;
     if (recommendation && recommendationFor && recommendationFor.key === key
         && Date.now() - recommendationFor.at < PLAN_REMEMBERED_FOR) return renderRecommendation();
     screen({ title: 'Preporuke', back: '#/lokacija', html:
@@ -1847,17 +1849,30 @@ function themeCard() {
 let tripCosts = null;
 let tripFrom = '#/vise';
 async function showTripCosts() {
+  screen({ title: 'Vreme i stajanja', back: tripFrom, html: spinner('Učitavam…') });
   try {
     tripCosts = await api('GET', 'accounts/me/trip-costs');
   } catch (error) {
-    return failed('Vreme i stajanja', error, '#/vreme');
+    if (currentRoute === 'vreme') failed('Vreme i stajanja', error, '#/vreme');
+    return;
   }
-  renderTripCosts();
+  // Ko je u međuvremenu otišao na drugi ekran, ostaje tamo.
+  if (currentRoute === 'vreme') renderTripCosts();
+}
+
+// Iznos u polju bez razdvajanja hiljada, da se pročita isto kao što je upisan.
+const tripInput = value => number(value, market.currencyMinorUnits).split(separators.group).join('');
+
+// „1.000“ je u Srbiji hiljada: tačka razdvaja hiljade samo kad grupe stvarno imaju po tri cifre.
+function parseTripAmount(text) {
+  const raw = String(text ?? '').trim().replace(/\s/g, '');
+  const escape = c => c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const grouped = new RegExp(`^\\d{1,3}(${escape(separators.group)}\\d{3})+(${escape(separators.decimal)}\\d*)?$`).test(raw);
+  return parseNumber(grouped ? raw.split(separators.group).join('') : raw);
 }
 
 function renderTripCosts(message = null) {
   const t = tripCosts;
-  const amount = value => number(value, market.currencyMinorUnits).split(separators.group).join('');
   screen({
     title: 'Vreme i stajanja',
     back: tripFrom,
@@ -1868,9 +1883,9 @@ function renderTripCosts(message = null) {
       </div>
       <form class="card" data-form="trip-costs">
         <label class="label" for="trip-hour">Sat u putu (${esc(t.currency)})</label>
-        <input id="trip-hour" name="hour" inputmode="decimal" value="${esc(amount(t.valuePerHour))}" required>
+        <input id="trip-hour" name="hour" inputmode="decimal" value="${esc(tripInput(t.valuePerHour))}" required>
         <label class="label" for="trip-stop">Jedno stajanje (${esc(t.currency)})</label>
-        <input id="trip-stop" name="stop" inputmode="decimal" value="${esc(amount(t.costPerStop))}" required>
+        <input id="trip-stop" name="stop" inputmode="decimal" value="${esc(tripInput(t.costPerStop))}" required>
         <p class="muted small">Podrazumevano je ${money(t.defaultValuePerHour)} po satu i ${money(t.defaultCostPerStop)} po stajanju. Veći iznos znači manje vožnje i manje radnji, a 0 znači da plan gleda samo cenu korpe i goriva.</p>
         <div class="btn-row">${t.customized ? '<button type="button" class="btn" data-act="trip-reset">Vrati podrazumevano</button>' : ''}<button class="btn primary">Sačuvaj</button></div>
       </form>
@@ -1883,15 +1898,16 @@ async function saveTripCosts(valuePerHour, costPerStop) {
   // Plan je računat po staroj ceni.
   recommendation = null;
   recommendationFor = null;
+  if (currentRoute !== 'vreme') return;
   renderTripCosts(tripCosts.customized
     ? `Sačuvano. Plan računa ${money(tripCosts.valuePerHour)} po satu i ${money(tripCosts.costPerStop)} po stajanju.`
     : 'Sačuvano. Plan opet računa podrazumevano vreme i stajanja.');
 }
 
 function tripAmount(data, name, max) {
-  const value = parseNumber(data.get(name));
+  const value = parseTripAmount(data.get(name));
   if (value == null || value < 0 || value > max) {
-    throw fieldError(name, `Upiši iznos od 0 do ${money(max)}.`);
+    throw fieldError(name, `Upiši iznos od 0 do ${tripInput(max)} ${market.currency}.`);
   }
   return value;
 }

@@ -19,6 +19,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -52,6 +54,8 @@ import rs.pametnakupovina.app.ui.money
 
 data class TripCostUiState(
     val costs: TripCostsDto? = null,
+    /** Raste svaki put kad stignu iznosi sa servera, da polja znaju kad da se popune. */
+    val revision: Int = 0,
     val busy: Boolean = false,
     /** Plan računat pre ovoga više ne važi. */
     val saved: Boolean = false,
@@ -69,19 +73,30 @@ class TripCostViewModel @Inject constructor(
 
     /** Dijalog se otvara ispočetka; model ga nadživi. */
     fun open() {
-        _uiState.update { TripCostUiState(costs = it.costs) }
+        _uiState.update { TripCostUiState(costs = it.costs, revision = it.revision) }
         load()
     }
 
+    /** Posle okretanja ekrana sve ostaje kako je bilo; učitava se samo ono što fali. */
+    fun resume() {
+        if (_uiState.value.costs == null) load()
+    }
+
     private fun load() = run(uiText(R.string.trip_load_failed)) {
-        _uiState.update { it.copy(costs = repository.tripCosts()) }
+        val costs = repository.tripCosts()
+        _uiState.update { it.copy(costs = costs, revision = it.revision + 1) }
         null
+    }
+
+    /** Poruka o prethodnom čuvanju ne važi za iznos koji se upravo kuca. */
+    fun edited() {
+        if (!_uiState.value.busy) _uiState.update { it.copy(message = null) }
     }
 
     /** Null vraća podrazumevano. */
     fun save(valuePerHour: Double?, costPerStop: Double?) = run(uiText(R.string.trip_save_failed)) {
         val costs = repository.saveTripCosts(valuePerHour, costPerStop)
-        _uiState.update { it.copy(costs = costs, saved = true) }
+        _uiState.update { it.copy(costs = costs, revision = it.revision + 1, saved = true) }
         if (costs.customized) {
             uiText(R.string.trip_saved, money(costs.valuePerHour), money(costs.costPerStop))
         } else {
@@ -114,8 +129,24 @@ internal fun amountInput(value: Double): String {
     return BigDecimal.valueOf(value).stripTrailingZeros().toPlainString().replace('.', separator)
 }
 
-internal fun parseAmount(text: String): Double? =
-    text.filterNot { it.isWhitespace() }.replace(',', '.').toDoubleOrNull()?.takeIf { it.isFinite() }
+/**
+ * „1.000“ je u Srbiji hiljada: razdvajanje hiljada tržišta se skida samo kad
+ * grupe stvarno imaju po tri cifre, pa „400.5“ i dalje znači 400,5.
+ */
+internal fun parseAmount(text: String): Double? {
+    val symbols = DecimalFormatSymbols.getInstance(CurrentMarket.settings.formatLocale)
+    val group = symbols.groupingSeparator.toString()
+    val raw = text.filterNot { it.isWhitespace() || it == '\u00A0' || it == '\u202F' }
+    val grouped = Regex(
+        "\\d{1,3}(" + Regex.escape(group) + "\\d{3})+(" +
+            Regex.escape(symbols.decimalSeparator.toString()) + "\\d*)?"
+    ).matches(raw)
+    val plain = if (grouped) raw.replace(group, "") else raw
+    return plain.replace(',', '.').toDoubleOrNull()?.takeIf { it.isFinite() }
+}
+
+/** Najveći iznos u istom obliku kao polje: bez razdvajanja hiljada, uz valutu. */
+private fun limit(value: Double, currency: String) = amountInput(value) + " " + currency
 
 /**
  * Koliko kupcu vredi sat u putu i jedno stajanje. Plan njima meri da li se
@@ -129,14 +160,26 @@ fun TripCostDialog(
     viewModel: TripCostViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    LaunchedEffect(Unit) { viewModel.open() }
+    // Okretanje ekrana ne otvara dijalog ponovo: „sačuvano“ i upisani iznosi ostaju.
+    var opened by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        if (opened) {
+            viewModel.resume()
+        } else {
+            opened = true
+            viewModel.open()
+        }
+    }
     val costs = state.costs
     var hour by rememberSaveable { mutableStateOf<String?>(null) }
     var stop by rememberSaveable { mutableStateOf<String?>(null) }
-    LaunchedEffect(costs) {
-        if (costs != null) {
+    // Polja se pune samo novim iznosima sa servera, ne preko onoga što je kupac upisao.
+    var filledRevision by rememberSaveable { mutableStateOf(-1) }
+    LaunchedEffect(state.revision) {
+        if (costs != null && filledRevision != state.revision) {
             hour = amountInput(costs.valuePerHour)
             stop = amountInput(costs.costPerStop)
+            filledRevision = state.revision
         }
     }
     val hourValue = hour?.let(::parseAmount)
@@ -144,9 +187,12 @@ fun TripCostDialog(
     val hourWrong = costs != null && hour != null && (hourValue == null || hourValue < 0 || hourValue > costs.maxValuePerHour)
     val stopWrong = costs != null && stop != null && (stopValue == null || stopValue < 0 || stopValue > costs.maxCostPerStop)
 
+    // Dok se čuva, dijalog ostaje otvoren, da plan ne ostane na staroj ceni.
     val close = {
-        if (state.saved) onSaved()
-        onDismiss()
+        if (!state.busy) {
+            if (state.saved) onSaved()
+            onDismiss()
+        }
     }
     AlertDialog(
         onDismissRequest = close,
@@ -159,32 +205,51 @@ fun TripCostDialog(
             ) {
                 Text(stringResource(R.string.trip_intro), style = MaterialTheme.typography.bodyMedium)
                 if (costs != null) {
-                    OutlinedTextField(
-                        value = hour.orEmpty(),
-                        onValueChange = { hour = it },
-                        enabled = !state.busy,
-                        label = { Text(stringResource(R.string.trip_hour_label, costs.currency)) },
-                        isError = hourWrong,
-                        supportingText = if (hourWrong) {
-                            { Text(stringResource(R.string.trip_invalid, money(costs.maxValuePerHour))) }
-                        } else null,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth().testTag("trip-hour")
-                    )
-                    OutlinedTextField(
-                        value = stop.orEmpty(),
-                        onValueChange = { stop = it },
-                        enabled = !state.busy,
-                        label = { Text(stringResource(R.string.trip_stop_label, costs.currency)) },
-                        isError = stopWrong,
-                        supportingText = if (stopWrong) {
-                            { Text(stringResource(R.string.trip_invalid, money(costs.maxCostPerStop))) }
-                        } else null,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth().testTag("trip-stop")
-                    )
+                    // Natpis iznad polja: sa krupnim slovima dug natpis u okviru polja prelazi preko ivice.
+                    val hourLabel = stringResource(R.string.trip_hour_label, costs.currency)
+                    Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)) {
+                        Text(hourLabel, style = MaterialTheme.typography.labelLarge)
+                        OutlinedTextField(
+                            value = hour.orEmpty(),
+                            onValueChange = {
+                                hour = it
+                                viewModel.edited()
+                            },
+                            enabled = !state.busy,
+                            isError = hourWrong,
+                            supportingText = if (hourWrong) {
+                                { Text(stringResource(R.string.trip_invalid, limit(costs.maxValuePerHour, costs.currency))) }
+                            } else null,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            singleLine = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .semantics { contentDescription = hourLabel }
+                                .testTag("trip-hour")
+                        )
+                    }
+                    val stopLabel = stringResource(R.string.trip_stop_label, costs.currency)
+                    Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)) {
+                        Text(stopLabel, style = MaterialTheme.typography.labelLarge)
+                        OutlinedTextField(
+                            value = stop.orEmpty(),
+                            onValueChange = {
+                                stop = it
+                                viewModel.edited()
+                            },
+                            enabled = !state.busy,
+                            isError = stopWrong,
+                            supportingText = if (stopWrong) {
+                                { Text(stringResource(R.string.trip_invalid, limit(costs.maxCostPerStop, costs.currency))) }
+                            } else null,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            singleLine = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .semantics { contentDescription = stopLabel }
+                                .testTag("trip-stop")
+                        )
+                    }
                     Text(
                         stringResource(
                             R.string.trip_defaults,
@@ -220,7 +285,7 @@ fun TripCostDialog(
             ) { Text(stringResource(R.string.common_save)) }
         },
         dismissButton = {
-            TextButton(onClick = close) { Text(stringResource(R.string.common_close)) }
+            TextButton(onClick = close, enabled = !state.busy) { Text(stringResource(R.string.common_close)) }
         }
     )
 }

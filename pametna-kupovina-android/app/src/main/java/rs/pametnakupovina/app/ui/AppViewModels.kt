@@ -557,7 +557,8 @@ class RecommendationViewModel @Inject constructor(
     fun load(listId: Long, latitude: Double, longitude: Double) {
         viewModelScope.launch {
             val walking = travelModes.isWalking()
-            val key = listOf(listId, latitude, longitude, walking)
+            // Cena vremena i stajanja može da se promeni i iz menija dok je plan u pozadini.
+            val key = listOf(listId, latitude, longitude, walking, repository.tripCostsVersion.value)
             val loaded = loadedFor
             if (_uiState.value.result != null && loaded != null && loaded.first == key &&
                 System.currentTimeMillis() - loaded.second < REMEMBERED_FOR_MILLIS
