@@ -39,8 +39,9 @@ public class CanonicalProductSearchService {
             "\\b(whiskas|felix|friskies|kitekat|sheba|pedigree|purina|chappi|dreamies|macke|macka|mace"
                     + "|macje|maca|pse|psa|pas|pasa|psi|ljubim[a-z]*|cat|dog|pica|pizza|pizze"
                     // A ready meal or a cold cut made of it ("Carnex meksičko
-                    // jelo sa piletinom", "Meso rol piletina") is not the meat.
-                    + "|jelo|jela|obrok|gotov[a-z]*|mac|sendvic[a-z]*|burger[a-z]*|tortilj[a-z]*|wrap"
+                    // jelo sa piletinom", the shortened "jelosa", "Meso rol piletina") is not
+                    // the meat.
+                    + "|jel[ao][a-z]*|obrok|gotov[a-z]*|mac|sendvic[a-z]*|burger[a-z]*|tortilj[a-z]*|wrap"
                     + "|pastet[a-z]*|rol|narez[a-z]*|salam[a-z]*|virsl[a-z]*|parizer|hrenovk[a-z]*"
                     + "|kobasic[a-z]*|supa|supe|corba|kroket[a-z]*|nuget[a-z]*|nuggets)\\b");
 

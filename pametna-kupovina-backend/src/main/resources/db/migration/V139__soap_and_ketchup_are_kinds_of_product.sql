@@ -46,21 +46,25 @@ FROM (
                 || '|deterdzent[a-z]*|det|detergent[a-z]*|merix|axal|vanish|marsej[a-z]*|odmasc[a-z]*|fleka|fleke'
                 || '|sudov[a-z]*|sudj[a-z]*|sundjer[a-z]*|rukavic[a-z]*|maramic[a-z]*|kutij[a-z]*|posud[a-z]*|drzac[a-z]*'
                 || '|dispenzer[a-z]*|kalup[a-z]*|mehur[a-z]*|balon[a-z]*|igrack[a-z]*|set|poklon[a-z]*'
-                || '|kesa|kese|torb[a-z]*|necesser|praznjen[a-z]*)\M'
+                || '|kesa|kese|torb[a-z]*|necesser|praznjen[a-z]*|fairy)\M'
                 -- Dozer ili pumpica bez sapuna: naziv počinje njima.
                 || '|^(dozer|dozator|pumpic)[a-z]*\M',
-            30
+            -- Ispred mleka i jogurta: „tečni sapun med i mleko“ i „sapun jogurt“
+            -- su sapun (proba 19.10.).
+            5
         ),
         (
             'KETCHUP',
             '\m(kecap[a-z]*|ketchup[a-z]*|kecup|ketcup)\M',
-            -- Čips i smoki sa ukusom kečapa, pica i sendvič sa kečapom.
+            -- Čips i smoki sa ukusom kečapa, pašteta i sendvič sa kečapom.
+            -- „Kečap pizza“ je kečap (proba 19.10.); obično nije prvi izbor.
             -- „CHIP.REBRASTI KECAP“, „Brrr“ i „Kubeti“ su grickalice (proba 19.10.).
             '\m(cips[a-z]*|chips[a-z]*|chip|brrr|kubet[a-z]*|smoki|flips|bits|grickalic[a-z]*|kokic[a-z]*|stapic[a-z]*|kreker[a-z]*'
-                || '|ukus[a-z]*|arom[a-z]*|pica|pizza|sendvic[a-z]*|burger[a-z]*|tortilj[a-z]*|wrap'
+                || '|ukus[a-z]*|arom[a-z]*|pastet[a-z]*|sendvic[a-z]*|burger[a-z]*|tortilj[a-z]*|wrap'
                 || '|hot dog|hotdog|kobasic[a-z]*|virsl[a-z]*|pomfrit|krompiric[a-z]*|majonez[a-z]*|senf[a-z]*'
                 || '|set|poklon[a-z]*)\M',
-            30
+            -- Ispred paradajza i začina za picu.
+            5
         )
 ) AS rule (type_code, include_pattern, exclude_pattern, priority)
 JOIN app.product_type AS type
@@ -135,15 +139,15 @@ FROM (
         ('LIQUID_SOAP', 'sapun tecni', '\m(tecn[a-z]*|tec|liquid|ml|dopun[a-z]*|refill)\M',
             '\m(intim[a-z]*|dec[a-z]*|djec[a-z]*|kids?|baby|beb[a-z]*)\M'),
         ('KETCHUP', 'kecap', NULL,
-            '\m(ljut[a-z]*|hot|chili|cili|spicy|pikant[a-z]*|bbq|barbecue|curry|kari|light|lajt|bez secera|zero)\M'),
+            '\m(ljut[a-z]*|hot|chili|cili|spicy|pikant[a-z]*|bbq|barbecue|curry|kari|light|lajt|bez secera|zero|pizza|pica)\M'),
         ('KETCHUP', 'ketchup', NULL,
-            '\m(ljut[a-z]*|hot|chili|cili|spicy|pikant[a-z]*|bbq|barbecue|curry|kari|light|lajt|bez secera|zero)\M'),
+            '\m(ljut[a-z]*|hot|chili|cili|spicy|pikant[a-z]*|bbq|barbecue|curry|kari|light|lajt|bez secera|zero|pizza|pica)\M'),
         ('KETCHUP', 'kecup', NULL,
-            '\m(ljut[a-z]*|hot|chili|cili|spicy|pikant[a-z]*|bbq|barbecue|curry|kari|light|lajt|bez secera|zero)\M'),
+            '\m(ljut[a-z]*|hot|chili|cili|spicy|pikant[a-z]*|bbq|barbecue|curry|kari|light|lajt|bez secera|zero|pizza|pica)\M'),
         ('KETCHUP', 'blagi kecap', NULL,
-            '\m(ljut[a-z]*|hot|chili|cili|spicy|pikant[a-z]*|bbq|barbecue|curry|kari|light|lajt|bez secera|zero)\M'),
+            '\m(ljut[a-z]*|hot|chili|cili|spicy|pikant[a-z]*|bbq|barbecue|curry|kari|light|lajt|bez secera|zero|pizza|pica)\M'),
         ('KETCHUP', 'kecap blagi', NULL,
-            '\m(ljut[a-z]*|hot|chili|cili|spicy|pikant[a-z]*|bbq|barbecue|curry|kari|light|lajt|bez secera|zero)\M'),
+            '\m(ljut[a-z]*|hot|chili|cili|spicy|pikant[a-z]*|bbq|barbecue|curry|kari|light|lajt|bez secera|zero|pizza|pica)\M'),
         ('KETCHUP', 'ljuti kecap', '\m(ljut[a-z]*|hot|chili|cili|spicy|pikant[a-z]*)\M', NULL),
         ('KETCHUP', 'kecap ljuti', '\m(ljut[a-z]*|hot|chili|cili|spicy|pikant[a-z]*)\M', NULL)
 ) AS word (intent_code, alias, required, uncommon)
@@ -169,14 +173,7 @@ WHERE code = 'MEAT'
 
 -- Vrste po novim pravilima ---------------------------------------------------
 
-INSERT INTO app.retailer_product_type (
-    retailer_product_id,
-    product_type_id,
-    confidence,
-    assignment_source,
-    evidence,
-    algorithm_version
-)
+CREATE TEMPORARY TABLE soap_and_ketchup ON COMMIT DROP AS
 SELECT prediction.retailer_product_id,
        prediction.product_type_id,
        prediction.confidence,
@@ -193,7 +190,32 @@ WHERE prediction.confidence >= 0.9500
       FROM app.retailer_product_type_rejection AS rejected
       WHERE rejected.retailer_product_id = prediction.retailer_product_id
         AND rejected.product_type_id = prediction.product_type_id
-  )
+  );
+
+-- „Tečni sapun med i mleko“ je mašinski bio mleko, a „sapun jogurt“ jogurt
+-- (proba 19.10.). Mašinska vrsta takvog proizvoda se menja; ručno potvrđena
+-- ostaje.
+DELETE FROM app.retailer_product_type AS assignment
+USING soap_and_ketchup AS prediction
+WHERE assignment.retailer_product_id = prediction.retailer_product_id
+  AND assignment.product_type_id <> prediction.product_type_id
+  AND assignment.reviewed = FALSE;
+
+INSERT INTO app.retailer_product_type (
+    retailer_product_id,
+    product_type_id,
+    confidence,
+    assignment_source,
+    evidence,
+    algorithm_version
+)
+SELECT retailer_product_id,
+       product_type_id,
+       confidence,
+       prediction_source,
+       evidence,
+       algorithm_version
+FROM soap_and_ketchup
 ON CONFLICT (retailer_product_id) DO NOTHING;
 
 -- Svaka porodica proizvoda u ovim vrstama pokazuje vrstu koju ima većina.
