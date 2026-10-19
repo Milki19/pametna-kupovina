@@ -298,6 +298,25 @@ class DeviceSessionTest {
     }
 
     @Test
+    void aWholeListIsClearedOnlyByItsOwnAccountAndTheListStays() throws Exception {
+        JsonNode mine = open(newDeviceToken());
+        JsonNode stranger = open(newDeviceToken());
+        long listId = createList(access(mine), "Posle kupovine");
+        MvcResult pasted = mvc.perform(authorized(post("/api/v1/shopping-lists/" + listId + "/items/paste"), access(mine))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"text\":\"mleko\\nhleb\"}"))
+                .andReturn();
+        assertThat(pasted.getResponse().getStatus()).isEqualTo(201);
+
+        assertThat(status(delete("/api/v1/shopping-lists/" + listId + "/items"), access(stranger))).isEqualTo(404);
+        assertThat(status(delete("/api/v1/shopping-lists/" + listId + "/items"), access(mine))).isEqualTo(204);
+
+        MvcResult list = mvc.perform(authorized(get("/api/v1/shopping-lists/" + listId), access(mine))).andReturn();
+        assertThat(list.getResponse().getStatus()).isEqualTo(200);
+        assertThat(json(list).path("items").size()).isZero();
+    }
+
+    @Test
     void theAdminApiAnswersOnlyTheKey() throws Exception {
         JsonNode phone = open(newDeviceToken());
 

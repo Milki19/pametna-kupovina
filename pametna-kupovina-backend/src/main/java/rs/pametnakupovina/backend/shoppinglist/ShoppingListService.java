@@ -331,6 +331,13 @@ public class ShoppingListService {
     }
 
     @Transactional
+    public void deleteAllItems(Long listId, long accountId) {
+        requireList(listId, accountId);
+        repository.deleteAllItems(listId);
+        repository.touch(listId);
+    }
+
+    @Transactional
     public void deleteList(Long listId, long accountId) {
 
         if (!repository.deactivateList(listId, accountId)) {

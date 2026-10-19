@@ -199,6 +199,15 @@ public class ShoppingListController {
         service.deleteItem(listId, itemId, caller.accountId());
     }
 
+    @DeleteMapping("/{listId}/items")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteAllItems(
+            @PathVariable("listId") Long listId,
+            DeviceCaller caller
+    ) {
+        service.deleteAllItems(listId, caller.accountId());
+    }
+
     @DeleteMapping("/{listId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteList(
