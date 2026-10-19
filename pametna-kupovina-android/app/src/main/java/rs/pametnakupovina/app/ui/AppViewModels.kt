@@ -509,6 +509,7 @@ class RecommendationViewModel @Inject constructor(
                 _uiState.value = RecommendationUiState(
                     result = repository.getRecommendations(listId, latitude, longitude, walking = travelModes.isWalking())
                 )
+                loadUnlocated()
             } catch (error: kotlinx.coroutines.CancellationException) { throw error }
             catch (error: Exception) {
                 _uiState.value = RecommendationUiState(
@@ -530,6 +531,7 @@ class RecommendationViewModel @Inject constructor(
                 _uiState.value = RecommendationUiState(isLoading = true)
                 val result = repository.getRecommendations(listId, latitude, longitude, walking = travelModes.isWalking())
                 _uiState.value=RecommendationUiState(result=result)
+                loadUnlocated()
                 onDone(null)
             } catch(error: kotlinx.coroutines.CancellationException) { throw error }
             catch(error: Exception) {
@@ -582,6 +584,27 @@ class RecommendationViewModel @Inject constructor(
                         R.string.list_error_recommendations_unavailable
                     )
                 )
+            }
+            loadUnlocated()
+        }
+    }
+
+    /**
+     * Lanci bez adresa stižu posle plana: najveći su deo računanja, a samo
+     * se porede. Ako ne stignu, plan ostaje bez tog odeljka.
+     */
+    private fun loadUnlocated() {
+        val result = _uiState.value.result ?: return
+        viewModelScope.launch {
+            val options = try {
+                repository.getUnlocatedPriceOptions(result.listId, result.requestedDate)
+            } catch (error: kotlinx.coroutines.CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                return@launch
+            }
+            _uiState.update { state ->
+                if (state.result === result) state.copy(result = result.copy(unlocatedPriceOptions = options)) else state
             }
         }
     }

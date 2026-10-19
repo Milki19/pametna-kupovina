@@ -142,6 +142,77 @@ class ShoppingRecommendationServiceTest {
     }
 
     @Test
+    void chainsWithoutAddressesCanBeAskedForApartFromThePlan() {
+        ShoppingListRepository listRepository =
+                mock(ShoppingListRepository.class);
+        NearbyStoreRepository nearbyRepository =
+                mock(NearbyStoreRepository.class);
+        StoreShoppingOfferRepository offerRepository =
+                mock(StoreShoppingOfferRepository.class);
+        RouteMatrixProvider routeProvider =
+                mock(RouteMatrixProvider.class);
+        ShoppingRecommendationService service =
+                new ShoppingRecommendationService(
+                        listRepository,
+                        nearbyRepository,
+                        offerRepository,
+                        routeProvider,
+                        new ShoppingOptimizationProperties(),
+                        markets()
+                );
+
+        ShoppingListItemResponse milk = item(1L, "Mleko", 101L);
+        ShoppingListItemResponse bread = item(2L, "Hleb", 102L);
+        when(listRepository.findById(10L)).thenReturn(Optional.of(new ShoppingListResponse(
+                10L,
+                "Test korpa",
+                OffsetDateTime.now(),
+                OffsetDateTime.now(),
+                List.of(milk, bread)
+        )));
+
+        NearbyStore nearby = store(1L, "A");
+        // A published list whose shop has no address.
+        NearbyStore priceList = store(3L, "C");
+        when(nearbyRepository.findPricingEligibleNearby(SERBIA, 44.0, 19.0, 15_000, 20))
+                .thenReturn(List.of(nearby));
+        when(offerRepository.findPriceListEntriesWithoutLocation(SERBIA))
+                .thenReturn(List.of(new StoreShoppingOfferRepository.PriceListEntry(
+                        3L, "C", "Lanac C", "Cenovnik C"
+                )));
+        List<List<Long>> askedFor = new ArrayList<>();
+        when(offerRepository.findOffers(eq(10L), anyList(), eq(DATE), eq(true)))
+                .thenAnswer(call -> {
+                    askedFor.add(List.copyOf(call.getArgument(1)));
+                    return offersFor(call.getArgument(1), List.of(
+                            offer(nearby, milk, 100, 1001L),
+                            offer(nearby, bread, 300, 1002L),
+                            offer(priceList, milk, 90, 3001L),
+                            offer(priceList, bread, 80, 3002L)
+                    ));
+                });
+        when(routeProvider.calculate(anyList())).thenReturn(routeMatrix(List.of(1L)));
+
+        ShoppingRecommendationResponse together =
+                service.recommend(10L, 44.0, 19.0, DATE);
+        ShoppingRecommendationResponse planOnly = service.recommend(
+                10L, 44.0, 19.0, DATE, TravelMode.DRIVING, false);
+        askedFor.clear();
+        List<UnlocatedPriceOption> apart = service.unlocatedPriceOptions(10L, DATE);
+
+        assertThat(together.unlocatedPriceOptions()).hasSize(1);
+        assertThat(together.unlocatedPriceOptions().getFirst().lowestBasketCost())
+                .isEqualByComparingTo("170.00");
+        assertThat(planOnly.unlocatedPriceOptions()).isEmpty();
+        assertThat(planOnly.recommendedBalance()).isEqualTo(together.recommendedBalance());
+        assertThat(planOnly.singleStore()).isEqualTo(together.singleStore());
+        assertThat(planOnly.lowestPrice()).isEqualTo(together.lowestPrice());
+        assertThat(apart).isEqualTo(together.unlocatedPriceOptions());
+        // On their own, the nearby shops are not priced again.
+        assertThat(askedFor).flatExtracting(ids -> ids).containsExactly(3L);
+    }
+
+    @Test
     void singleStoreCountsTheTripNotOnlyTheBasket() {
         ShoppingListRepository listRepository =
                 mock(ShoppingListRepository.class);

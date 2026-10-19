@@ -11,6 +11,7 @@ import rs.pametnakupovina.backend.privacy.PreciseLocationPurpose;
 import rs.pametnakupovina.backend.security.DeviceCaller;
 
 import java.time.LocalDate;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/shopping-lists")
@@ -43,7 +44,11 @@ public class ShoppingRecommendationController {
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
             LocalDate date,
             @RequestParam(name = "travelMode", defaultValue = "DRIVING")
-            TravelMode travelMode
+            TravelMode travelMode,
+            // Without the chains that publish no shop addresses: the web asks
+            // for them separately, so the plan shows without waiting for them.
+            @RequestParam(name = "unlocated", defaultValue = "true")
+            boolean unlocated
     ) {
         shoppingListService.requireOwnedList(listId, caller.accountId());
 
@@ -56,8 +61,26 @@ public class ShoppingRecommendationController {
                         location.latitude(),
                         location.longitude(),
                         date,
-                        travelMode
+                        travelMode,
+                        unlocated
                 )
         );
+    }
+
+    /** The chains without shop addresses; no location needed. */
+    @GetMapping("/{listId}/recommendations/unlocated-price-options")
+    public List<UnlocatedPriceOption> unlocatedPriceOptions(
+            @PathVariable("listId") Long listId,
+            DeviceCaller caller,
+            @RequestParam(
+                    name = "date",
+                    required = false
+            )
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+            LocalDate date
+    ) {
+        shoppingListService.requireOwnedList(listId, caller.accountId());
+
+        return recommendationService.unlocatedPriceOptions(listId, date);
     }
 }
