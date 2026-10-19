@@ -74,6 +74,12 @@ class UsualKindFourthRoundTest {
     private static final String STAIN_BAR = "VANISH SAPUN 250G";
     private static final String CHIP_STICKS = "CHIP.REBRASTI KECAP 60G";
     private static final String KETCHUP_CUBES = "35G KUBETI-KECAP";
+    // Seen in the trial on a copy of the database, 19.10.2026.
+    private static final String PIZZA_KETCHUP = "KECAP PIZZA 500G";
+    private static final String TUNA_PATE = "PASTETA TUNA-KECAP 80G";
+    private static final String HONEY_MILK_SOAP = "TECNI SAPUN MED I MLEKO 500ML";
+    private static final String YOGURT_SOAP = "FA SAPUN JOGURT 90G";
+    private static final String SHORT_READY_MEAL = "MEKSICKO JELOSA SA PILETINOM 350G";
 
     private static final String CATALOGUE = "KATEGORIJA;NAZIV KATEGORIJE;"
             + "Naziv proizvoda;Robna marka;Barkod proizvoda;Jedinica mere;"
@@ -99,7 +105,12 @@ class UsualKindFourthRoundTest {
             + row(SHOWER_BAR, "179,99")
             + row(STAIN_BAR, "199,99")
             + row(CHIP_STICKS, "59,99")
-            + row(KETCHUP_CUBES, "45,00");
+            + row(KETCHUP_CUBES, "45,00")
+            + row(PIZZA_KETCHUP, "149,99")
+            + row(TUNA_PATE, "99,99")
+            + row(HONEY_MILK_SOAP, "249,99")
+            + row(YOGURT_SOAP, "169,99")
+            + row(SHORT_READY_MEAL, "229,99");
 
     private static int barcode = 4000;
 
@@ -242,6 +253,10 @@ class UsualKindFourthRoundTest {
         assertThat(typeOf(KETCHUP_CUBES)).isNull();
         assertThat(typeOf(SHOWER_BAR)).isEqualTo("SOAP");
         assertThat(typeOf(STAIN_BAR)).isNull();
+        assertThat(typeOf(PIZZA_KETCHUP)).isEqualTo("KETCHUP");
+        assertThat(typeOf(TUNA_PATE)).isNotEqualTo("KETCHUP");
+        assertThat(typeOf(HONEY_MILK_SOAP)).isEqualTo("SOAP");
+        assertThat(typeOf(YOGURT_SOAP)).isEqualTo("SOAP");
 
         var list = shoppingListService.create(new CreateShoppingListRequest("Test 18.10."), callers.account(TOKEN));
         shoppingListService.addPastedItems(
