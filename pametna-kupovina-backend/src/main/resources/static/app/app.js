@@ -626,6 +626,11 @@ const itemRequest = item => ({
 
 function lostListNotice() {
   if (!saved.get('listLost')) return '';
+  // Spisak se vratio (ili je već popunjen), pa poruka o praznom više ne važi.
+  if (listState.list.items.length) {
+    saved.set('listLost', null);
+    return '';
+  }
   const signedIn = typeof account !== 'undefined' && account.state?.signedIn;
   return `<div class="card">${notice('Tvoj prethodni spisak više nije dostupan, pa je ovo nov, prazan spisak.'
       + (signedIn ? '' : ' Da se to ne ponovi, prijavi se preko Google-a: spisak se tada čuva uz nalog.'), 'warn')}

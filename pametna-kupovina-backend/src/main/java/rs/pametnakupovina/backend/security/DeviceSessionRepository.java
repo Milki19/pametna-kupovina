@@ -94,8 +94,7 @@ public class DeviceSessionRepository {
     private Optional<Session> lockSession(String condition, Object value) {
         return jdbcClient.sql("""
                         SELECT id, device_id, refresh_token_hash, refresh_expires_at,
-                               current_pair_used,
-                               previous_refresh_token_hash IS NULL AS never_refreshed
+                               current_pair_used
                         FROM app.device_session
                         WHERE %s
                         FOR UPDATE
@@ -106,8 +105,7 @@ public class DeviceSessionRepository {
                         row.getLong("device_id"),
                         row.getString("refresh_token_hash"),
                         row.getObject("refresh_expires_at", OffsetDateTime.class).toInstant(),
-                        row.getBoolean("current_pair_used"),
-                        row.getBoolean("never_refreshed")
+                        row.getBoolean("current_pair_used")
                 ))
                 .optional();
     }
@@ -241,8 +239,7 @@ public class DeviceSessionRepository {
             long deviceId,
             String refreshHash,
             Instant refreshExpiresAt,
-            boolean pairUsed,
-            boolean neverRefreshed
+            boolean pairUsed
     ) {
         boolean expired(Instant now) {
             return !refreshExpiresAt.isAfter(now);

@@ -60,10 +60,9 @@ public class DeviceSessionService {
 
     /**
      * A new phone, or an old one moving from its number to a session. A
-     * number that has already been exchanged opens nothing — except when the
-     * session it opened was never used, which means the answer to the
-     * exchange was lost on the way and the phone is asking again, or when
-     * that session ran out because the phone was silent too long. A phone
+     * number that has already been exchanged opens its session again, live
+     * or not, and the tokens issued before stop working: a browser that lost
+     * its refresh token still holds the number beside it, and a phone
      * without a Google sign-in has nothing else to get its lists back with.
      * A session ended because a copy of its token turned up is gone, not
      * expired, so the number stays shut for whoever holds the copy.
@@ -71,7 +70,6 @@ public class DeviceSessionService {
     @Transactional
     public SessionGrant open(String deviceToken, String deviceName) {
         String hash = clientTokenPolicy.validateAndHash(deviceToken);
-        Instant now = clock.instant();
 
         DeviceSessionRepository.Device device = repository.findDevice(hash)
                 .orElseGet(() -> {
@@ -80,12 +78,7 @@ public class DeviceSessionService {
                 });
 
         if (device.retired()) {
-            boolean mayReopen = repository.lockSessionOfDevice(device.id())
-                    .filter(session -> session.expired(now)
-                            || (!session.pairUsed() && session.neverRefreshed()))
-                    .isPresent();
-
-            if (!mayReopen) {
+            if (repository.lockSessionOfDevice(device.id()).isEmpty()) {
                 throw rejected("Ovaj telefon već ima sesiju. Otvori aplikaciju ponovo.");
             }
         }
