@@ -710,6 +710,31 @@ public class StoreShoppingOfferRepository {
                                   item.matching_rule = 'FLEXIBLE_CATEGORY'
                                   AND requested_intent.shopping_intent_id IS NOT NULL
                               )
+                              -- Asked once, before any product is read: a list with
+                              -- no such item skips this half. On a fresh copy the
+                              -- planner read all 344,000 products first, to keep
+                              -- none (0.5 s of a 0.9 s plan).
+                              AND EXISTS (
+                                  SELECT 1
+                                  FROM app.shopping_list_item AS any_item
+                                  WHERE any_item.shopping_list_id = :listId
+                                    AND NOT (
+                                        any_item.matching_rule = 'FLEXIBLE_CATEGORY'
+                                        AND EXISTS (
+                                            SELECT 1
+                                            FROM app.shopping_intent AS any_intent
+                                            WHERE any_intent.id = any_item.shopping_intent_id
+                                              AND any_intent.active = TRUE
+                                        )
+                                    )
+                                    AND (
+                                        any_item.matching_rule = 'FLEXIBLE_CATEGORY'
+                                        OR (any_item.matching_rule = 'EXACT_PRODUCT'
+                                            AND any_item.matching_status IN ('AUTO_MATCHED', 'CONFIRMED'))
+                                        OR (any_item.matching_rule = 'PRODUCT_FAMILY'
+                                            AND any_item.matching_status = 'CONFIRMED')
+                                    )
+                              )
                               AND (item.target_quantity IS NULL OR (
                                   pack.size > 0 AND pack.unit = item.required_base_unit
                                   -- Eggs come in cartons of 6, 10, 15 or 30: twelve
