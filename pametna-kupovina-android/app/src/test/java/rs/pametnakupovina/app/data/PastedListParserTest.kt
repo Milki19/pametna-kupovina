@@ -79,4 +79,32 @@ class PastedListParserTest {
         assertEquals(listOf("hleb", "mleko"), result.map { it.name })
         assertEquals(0.0, result[0].quantity, 0.0)
     }
+
+    @Test
+    fun `prava poruka cita naslov kolicinu i belesku kao server`() {
+        val result = PastedListParser.parse(
+            """
+            Kupi:
+            jogurte (3)
+            piletina oko 1kg
+            cokolada za malog
+            prasak za ves
+            """.trimIndent()
+        )
+
+        assertEquals(listOf("jogurte", "piletina 1kg", "cokolada", "prasak za ves"), result.map { it.name })
+        assertEquals(3.0, result[0].quantity, 0.0)
+        // Server čita red kako je napisan, pa i belešku iz njega.
+        assertEquals("cokolada za malog", result[2].rawInput)
+        assertEquals("za malog", PastedListParser.noteOf(result[2].rawInput))
+        assertEquals(null, PastedListParser.noteOf("prasak za ves"))
+    }
+
+    @Test
+    fun `naslov u istom redu kao stavke se preskace`() {
+        val result = PastedListParser.parse("Kupi: mleko, hleb")
+
+        assertEquals(listOf("mleko", "hleb"), result.map { it.name })
+    }
 }
+

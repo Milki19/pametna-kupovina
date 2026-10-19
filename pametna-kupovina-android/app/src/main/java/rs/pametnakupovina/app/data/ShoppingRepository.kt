@@ -358,8 +358,13 @@ class ShoppingRepository @Inject constructor(
 
     suspend fun alternativeQuery(itemId: Long): String {
         val item = requireUserNotNull(dao.findByRemoteId(itemId)) { uiText(R.string.list_error_item_not_in_list) }
-        return item.rawInput?.takeIf { it.isNotBlank() } ?: item.name
+        // Reči sa spiska bez „(3)" i „za malog", koje pretraga ne razume.
+        return item.rawInput?.let { PastedListParser.parse(it).singleOrNull()?.name } ?: item.name
     }
+
+    /** Koliko je stavka tražila, da izbor iz pretrage zadrži količinu. */
+    suspend fun requestedPackages(itemId: Long): RequestedPackages? =
+        dao.findByRemoteId(itemId)?.let { RequestedPackages(it.quantity, it.targetQuantity, it.requiredBaseUnit) }
 
     /** Stavka koje nema u planu postaje „slično, bilo koji brend" (vidi [similarItem]). */
     suspend fun replaceWithSimilar(itemId: Long, kind: String) {
