@@ -81,6 +81,36 @@ public class CanonicalProductSearchRepository {
                             FROM app.brand_alias
                             WHERE POSITION(' ' || normalized_alias || ' '
                                 IN ' ' || ? || ' ') > 0
+                        ),
+                        -- Each way of matching on its own, so the name ones
+                        -- use the trigram index: joined by OR with the brand
+                        -- test, the server read all 129,000 families for
+                        -- every search (0.8 s of 1.25 s).
+                        hit AS MATERIALIZED (
+                            SELECT member.family_id AS id
+                            FROM app.canonical_product AS canonical
+                            JOIN app.product_family_member AS member
+                              ON member.canonical_product_id = canonical.id
+                            WHERE ? IS NOT NULL
+                              AND canonical.barcode = ?
+                            UNION
+                            SELECT family.id
+                            FROM app.product_family AS family
+                            WHERE family.normalized_name OPERATOR(public.%) ?
+                            UNION
+                            SELECT family.id
+                            FROM app.product_family AS family
+                            WHERE family.normalized_name LIKE '%' || ? || '%'
+                            UNION
+                            SELECT family.id
+                            FROM matching_brands AS alias
+                            JOIN app.product_family AS family
+                              ON family.brand_id = alias.brand_id
+                            WHERE NOT EXISTS (
+                                SELECT 1 FROM unnest(string_to_array(?, ' ')) AS token(value)
+                                WHERE POSITION(token.value IN family.normalized_name) = 0
+                                  AND POSITION(token.value IN alias.normalized_alias) = 0
+                            )
                         )
                         SELECT family.id AS product_family_id,
                                representative.id AS canonical_product_id,
@@ -103,20 +133,7 @@ public class CanonicalProductSearchRepository {
                                      AND member_product.quantity_value =
                                          family.quantity_value
                                ), 1) AS package_count,
-                               EXISTS (
-                                   SELECT 1 FROM app.product_retailer_presence AS presence
-                                   JOIN app.retailer AS presence_retailer
-                                     ON presence_retailer.id = presence.retailer_id
-                                   JOIN app.market AS presence_market
-                                     ON presence_market.id = presence_retailer.market_id
-                                   WHERE presence.product_family_id=family.id
-                                     AND presence.current_offer_count > 0
-                                     AND presence.minimum_effective_price > 0
-                                     -- "Today" is the chain's market's today.
-                                     AND presence.latest_price_date BETWEEN
-                                         (CURRENT_TIMESTAMP AT TIME ZONE presence_market.time_zone)::date - ?
-                                         AND (CURRENT_TIMESTAMP AT TIME ZONE presence_market.time_zone)::date
-                               ) AS has_usable_price,
+                               usable.family_id IS NOT NULL AS has_usable_price,
                                GREATEST(
                                    1,
                                    (
@@ -157,7 +174,27 @@ public class CanonicalProductSearchRepository {
                                          AND canonical.barcode = ?
                                    )
                                ) AS exact_ean_match
-                        FROM app.product_family AS family
+                        FROM hit
+                        JOIN app.product_family AS family
+                          ON family.id = hit.id
+                        -- Asked family by family: as one EXISTS the planner
+                        -- hashed all 283,000 presences first (0.36 s).
+                        LEFT JOIN LATERAL (
+                            SELECT presence.product_family_id AS family_id
+                            FROM app.product_retailer_presence AS presence
+                            JOIN app.retailer AS presence_retailer
+                              ON presence_retailer.id = presence.retailer_id
+                            JOIN app.market AS presence_market
+                              ON presence_market.id = presence_retailer.market_id
+                            WHERE presence.product_family_id=family.id
+                              AND presence.current_offer_count > 0
+                              AND presence.minimum_effective_price > 0
+                              -- "Today" is the chain's market's today.
+                              AND presence.latest_price_date BETWEEN
+                                  (CURRENT_TIMESTAMP AT TIME ZONE presence_market.time_zone)::date - ?
+                                  AND (CURRENT_TIMESTAMP AT TIME ZONE presence_market.time_zone)::date
+                            LIMIT 1
+                        ) AS usable ON TRUE
                         LEFT JOIN app.brand AS brand
                           ON brand.id = family.brand_id
                         LEFT JOIN app.product_category AS category
@@ -188,51 +225,24 @@ public class CanonicalProductSearchRepository {
                             LIMIT 1
                         ) AS representative ON TRUE
                         WHERE family.review_status <> 'REJECTED'
-                          AND (
-                              (
-                                  ? IS NOT NULL
-                                  AND EXISTS (
-                                      SELECT 1
-                                      FROM app.product_family_member AS member
-                                      JOIN app.canonical_product AS canonical
-                                        ON canonical.id =
-                                            member.canonical_product_id
-                                      WHERE member.family_id = family.id
-                                        AND canonical.barcode = ?
-                                  )
-                              )
-                              OR family.normalized_name
-                                  OPERATOR(public.%) ?
-                              OR family.normalized_name LIKE
-                                  '%' || ? || '%'
-                              OR EXISTS (
-                                  SELECT 1 FROM matching_brands AS alias
-                                  WHERE alias.brand_id = family.brand_id
-                                    AND NOT EXISTS (
-                                        SELECT 1 FROM unnest(string_to_array(?, ' ')) AS token(value)
-                                        WHERE POSITION(token.value IN family.normalized_name) = 0
-                                          AND POSITION(token.value IN alias.normalized_alias) = 0
-                                    )
-                              )
-                          )
                         ORDER BY name_similarity DESC,
                                  family.display_name ASC,
                                  family.id ASC
                         """)
                 .param(1, normalizedQuery)
-                .param(2, maxPriceAgeDays)
+                .param(2, validEan, Types.VARCHAR)
                 .param(3, validEan, Types.VARCHAR)
-                .param(4, validEan, Types.VARCHAR)
+                .param(4, normalizedQuery)
                 .param(5, normalizedQuery)
-                .param(6, validEan, Types.VARCHAR)
+                .param(6, normalizedQuery)
                 .param(7, validEan, Types.VARCHAR)
                 .param(8, validEan, Types.VARCHAR)
-                .param(9, validEan, Types.VARCHAR)
+                .param(9, normalizedQuery)
                 .param(10, validEan, Types.VARCHAR)
                 .param(11, validEan, Types.VARCHAR)
-                .param(12, normalizedQuery)
-                .param(13, normalizedQuery)
-                .param(14, normalizedQuery)
+                .param(12, maxPriceAgeDays)
+                .param(13, validEan, Types.VARCHAR)
+                .param(14, validEan, Types.VARCHAR)
                 .query(SEARCH_ROW_MAPPER)
                 .list();
     }
