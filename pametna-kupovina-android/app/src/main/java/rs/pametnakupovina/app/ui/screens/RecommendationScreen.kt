@@ -939,6 +939,15 @@ internal fun StopBadge(number: Int) {
 /** What was asked for, what it became, and the line's price on the right. */
 @Composable
 private fun PlanItemRow(item: RecommendationItemDto, requestedDate: String, onWrongProduct: () -> Unit) {
+    // Sa krupnim slovima cena ide ispod naziva, kao u kupovini, da naziv ne lomi reč po reč.
+    val largeFont = LocalDensity.current.fontScale >= 1.5f
+    val price: @Composable (Modifier) -> Unit = { modifier ->
+        Text(
+            item.lineTotal?.let(::money) ?: stringResource(R.string.rec_no_price_short),
+            style = MaterialTheme.typography.titleMedium,
+            modifier = modifier
+        )
+    }
     Row(
         modifier = Modifier.padding(horizontal = AppSpacing.lg, vertical = AppSpacing.md),
         verticalAlignment = Alignment.Top
@@ -974,12 +983,9 @@ private fun PlanItemRow(item: RecommendationItemDto, requestedDate: String, onWr
             if (manySmallPacks(item)) {
                 StatusPill(stringResource(R.string.rec_many_small_packs), StatusTone.WARNING)
             }
+            if (largeFont) price(Modifier)
         }
-        Text(
-            item.lineTotal?.let(::money) ?: stringResource(R.string.rec_no_price_short),
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.padding(start = AppSpacing.sm)
-        )
+        if (!largeFont) price(Modifier.padding(start = AppSpacing.sm))
         // Retko potrebno, pa u meniju, kao u kupovini, a ne uz svaku stavku.
         var menuOpen by remember { mutableStateOf(false) }
         Box {

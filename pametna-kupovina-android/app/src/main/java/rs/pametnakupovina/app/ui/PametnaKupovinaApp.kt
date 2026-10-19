@@ -314,7 +314,16 @@ fun PametnaKupovinaApp(
                     onBack = navController::popBackStack,
                     onOpen = { navController.navigate("purchase/$it") },
                     onOpenCards = { navController.navigate(Route.CARDS) },
-                    onStartNewList = { navController.openTab(Route.LIST) },
+                    onStartNewList = {
+                        // Iz kupovine po planu: nazad na spisak ispod nje. Iz istorije: spisak
+                        // kao nov tab, bez vraćanja sačuvanog steka sa kupovinom na vrhu.
+                        if (!navController.popBackStack(Route.LIST, inclusive = false)) {
+                            navController.navigate(Route.LIST) {
+                                popUpTo(navController.graph.findStartDestination().id)
+                                launchSingleTop = true
+                            }
+                        }
+                    },
                     receiptViewModel = receiptViewModel)
             }
             composable(Route.LIST) {
