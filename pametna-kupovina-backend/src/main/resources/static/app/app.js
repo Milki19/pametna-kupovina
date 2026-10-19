@@ -704,6 +704,7 @@ function renderList() {
               <div class="grow" data-act="edit" data-id="${item.id}" role="button" tabindex="0" style="cursor:pointer" aria-label="Izmeni ${esc(item.name)}">
                 ${itemAttention(item)}
                 <div class="name">${esc(item.name)}</div>
+                ${item.note ? `<div class="muted small">${esc(item.note)}</div>` : ''}
                 ${itemRule(item) ? `<div class="muted small">${esc(itemRule(item))}</div>` : ''}
               </div>
               <span class="amount">${esc(itemAmount(item))}</span>
@@ -740,7 +741,8 @@ async function addText(text) {
   if (!rejected.length) listState.adding = null;
   listState.list = await api('GET', `shopping-lists/${listId}`);
   renderList();
-  const added = result.createdCount === 1 ? 'Dodato.' : `Dodato: ${counted(result.createdCount, 'stavka', 'stavke', 'stavki')}.`;
+  const added = result.createdCount === 1 ? 'Dodato.'
+    : result.createdCount ? `Dodato: ${counted(result.createdCount, 'stavka', 'stavke', 'stavki')}.` : 'Nema stavki za dodavanje.';
   toast(rejected.length ? `${added} Nije dodato: ${rejected.length}, razlog je ispod polja.` : added);
 }
 
@@ -965,25 +967,41 @@ async function runPick(query) {
   if (picking === current) renderPick();
 }
 
-/** Izabrani proizvod iz pretrage postaje stavka: naziv sa spiska ostaje, proizvod je tačan. */
+/**
+ * Koliko pakovanja izabranog proizvoda traži stavka: „jogurte (3)“ ostaju 3,
+ * „piletina oko 1kg“ od 500 g su 2, a „pivo 6“ u paketu od 6 je jedan paket.
+ * Do četvrtine manje je dovoljno, kao kad aplikacija sama bira.
+ */
+function packagesFor(item, product) {
+  const c = item.flexibleConstraints;
+  if (c && c.targetQuantity && product.baseUnit === c.requiredBaseUnit && product.quantityValue > 0) {
+    const packages = Math.ceil(c.targetQuantity * item.quantity / product.quantityValue - 0.25);
+    return Math.min(MAX_QUANTITY, Math.max(1, packages));
+  }
+  const inPack = product.packageCount > 1 ? product.packageCount : 1;
+  return item.quantity % inPack === 0 ? item.quantity / inPack : item.quantity;
+}
+
+/** Izabrani proizvod iz pretrage postaje stavka: naziv i količina sa spiska ostaju, proizvod je tačan. */
 async function pickProduct(product) {
   const listId = matching.listId;
   const itemId = picking.itemId;
   const list = await api('GET', `shopping-lists/${listId}`);
   const item = list.items.find(i => i.id === itemId);
   if (!item) throw new Error('Stavke više nema na spisku.');
+  const quantity = packagesFor(item, product);
   await api('PUT', `shopping-lists/${listId}/items/${itemId}`, {
     name: item.name,
     rawInput: item.rawInput,
     canonicalProductId: product.productFamilyId ? null : product.canonicalProductId,
     productFamilyId: product.productFamilyId || null,
-    quantity: item.matchingRule === 'FLEXIBLE_CATEGORY' ? 1 : item.quantity,
+    quantity,
     matchingRule: product.productFamilyId ? 'PRODUCT_FAMILY' : 'EXACT_PRODUCT'
   });
   picking = null;
   await rematch(itemId);
   renderMatching();
-  toast(`Izabrano: ${product.name}`);
+  toast(quantity === 1 ? `Izabrano: ${product.name}` : `Izabrano: ${product.name}, ${decimal(quantity)} kom`);
 }
 
 // Lanci koji ne objavljuju adrese prodavnica (za upozorenje u Akcijama).

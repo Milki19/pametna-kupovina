@@ -195,4 +195,101 @@ class ShoppingListTextParserTest {
         assertThat(flour.targetQuantity()).isEqualByComparingTo("1000");
         assertThat(flour.quantity()).isEqualByComparingTo("1");
     }
+
+    /**
+     * The colleague's test of 18.10.: a message as a wife sends it, pasted
+     * whole. Every line is something to buy, read without a click.
+     */
+    @Test
+    void aRealMessageReadsLineByLine() {
+        ParsedShoppingListText message = parser.parse("""
+                Kupi:
+                2 mleka
+                hleb
+                jogurte (3)
+                piletina oko 1kg
+                krompir 2kg
+                luk
+                banane
+                jaja 10
+                pivo za utakmicu 6
+                sapun
+                kecap
+                cokolada za malog
+                🍅 paradajz
+                prasak za ves
+                sir (500g)
+                """);
+
+        assertThat(message.items()).extracting(ParsedShoppingListLine::name).containsExactly(
+                "mleka", "hleb", "jogurte", "piletina", "krompir", "luk", "banane",
+                "jaja", "pivo", "sapun", "kecap", "cokolada", "paradajz", "prasak za ves", "sir");
+        // The heading is line 1, so "2 mleka" still points at line 2.
+        assertThat(message.lineNumber(0)).isEqualTo(2);
+    }
+
+    @Test
+    void aHeadingIsNotAnItem() {
+        assertThat(parser.parse("Kupi:").items()).isEmpty();
+        assertThat(parser.parse("🛒 Spisak za subotu:").items()).isEmpty();
+        assertThat(ShoppingListTextParser.isHeading("- Kupi:")).isTrue();
+        // A colon with a number is something to buy, not a heading.
+        assertThat(ShoppingListTextParser.isHeading("mleko: 2")).isFalse();
+
+        assertThat(parser.parse("Kupi: mleko, hleb").items())
+                .extracting(ParsedShoppingListLine::name)
+                .containsExactly("mleko", "hleb");
+    }
+
+    @Test
+    void theCountInBracketsIsTheCount() {
+        ParsedShoppingListLine yoghurt = parseOne("jogurte (3)");
+        assertThat(yoghurt.name()).isEqualTo("jogurte");
+        assertThat(yoghurt.quantity()).isEqualByComparingTo("3");
+        assertThat(yoghurt.rawInput()).isEqualTo("jogurte (3)");
+
+        assertThat(parseOne("jaja (10 kom)").quantity()).isEqualByComparingTo("10");
+
+        ParsedShoppingListLine cheese = parseOne("sir (500g)");
+        assertThat(cheese.name()).isEqualTo("sir");
+        assertThat(cheese.targetQuantity()).isEqualByComparingTo("500");
+        assertThat(cheese.baseUnit()).isEqualTo("g");
+    }
+
+    @Test
+    void anApproximateAmountIsTheAmount() {
+        ParsedShoppingListLine chicken = parseOne("piletina oko 1kg");
+        assertThat(chicken.name()).isEqualTo("piletina");
+        assertThat(chicken.targetQuantity()).isEqualByComparingTo("1000");
+        assertThat(chicken.baseUnit()).isEqualTo("g");
+
+        assertThat(parseOne("cca 2 kg krompira").targetQuantity()).isEqualByComparingTo("2000");
+        assertThat(parseOne("mleko ~2l").targetQuantity()).isEqualByComparingTo("2000");
+        // "oko" without a number stays a word.
+        assertThat(parseOne("oko mleka").name()).isEqualTo("oko mleka");
+    }
+
+    @Test
+    void whomItIsForIsANoteAndTheCountAfterItStaysTheCount() {
+        ParsedShoppingListLine beer = parseOne("pivo za utakmicu 6");
+        assertThat(beer.name()).isEqualTo("pivo");
+        assertThat(beer.bareNumber()).isEqualByComparingTo("6");
+        assertThat(ShoppingListTextParser.noteOf(beer.rawInput())).isEqualTo("za utakmicu");
+
+        ParsedShoppingListLine chocolate = parseOne("cokolada za malog");
+        assertThat(chocolate.name()).isEqualTo("cokolada");
+        assertThat(chocolate.rawInput()).isEqualTo("cokolada za malog");
+        assertThat(ShoppingListTextParser.noteOf("cokolada za malog")).isEqualTo("za malog");
+
+        assertThat(parseOne("keks (za malu)").name()).isEqualTo("keks");
+        assertThat(ShoppingListTextParser.noteOf("keks (za malu)")).isEqualTo("za malu");
+        assertThat(parseOne("Čokolada za Malog").name()).isEqualTo("Čokolada");
+
+        // These name what is bought, so they stay whole and carry no note.
+        for (String product : List.of("prasak za ves", "hrana za pse", "kore za pitu",
+                "rezanci za supu", "deterdžent za sudove")) {
+            assertThat(parseOne(product).name()).as(product).isEqualTo(product);
+            assertThat(ShoppingListTextParser.noteOf(product)).as(product).isNull();
+        }
+    }
 }

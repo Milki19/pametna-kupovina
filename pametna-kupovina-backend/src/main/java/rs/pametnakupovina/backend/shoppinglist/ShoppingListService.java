@@ -240,6 +240,18 @@ public class ShoppingListService {
 
         ParsedShoppingListText parsedText = textParser.parse(text);
 
+        // "Kupi:" sent alone, as the phone sends each pasted line, adds
+        // nothing and is no mistake.
+        if (parsedText.items().isEmpty()
+                && text.lines().anyMatch(ShoppingListTextParser::isHeading)) {
+            return new PasteShoppingListItemsResponse(
+                    0,
+                    parsedText.ignoredBlankLineCount(),
+                    List.of(),
+                    List.of()
+            );
+        }
+
         if (parsedText.items().isEmpty()) {
             throw badRequest(
                     "Zalepljeni spisak mora imati bar jedan neprazan red"

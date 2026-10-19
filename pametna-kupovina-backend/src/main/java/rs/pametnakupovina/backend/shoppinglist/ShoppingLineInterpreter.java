@@ -131,7 +131,8 @@ public class ShoppingLineInterpreter {
 
     /**
      * "2 mleka", "kisele vode": a list says how many of something, so its
-     * last word often comes in the genitive. Only a form that is exactly a
+     * last word often comes in the genitive. A message asks for something in
+     * the accusative too: "jogurte (3)", "uzmi piletinu". Only a form that is exactly a
      * kind of product counts, so a product's own name never turns into one.
      */
     private Optional<Spelled> dictionaryForm(String name) {
@@ -145,7 +146,8 @@ public class ShoppingLineInterpreter {
         String stem = word.substring(0, word.length() - 1);
         List<String> forms = switch (Character.toLowerCase(word.charAt(word.length() - 1))) {
             case 'a' -> List.of(stem, stem + "o", stem + "e");
-            case 'e' -> List.of(stem + "a");
+            case 'e' -> List.of(stem + "a", stem);
+            case 'u' -> List.of(stem + "a");
             default -> List.of();
         };
         for (String form : forms) {

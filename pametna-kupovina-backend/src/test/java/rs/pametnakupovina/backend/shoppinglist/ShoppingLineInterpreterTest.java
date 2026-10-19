@@ -179,4 +179,31 @@ class ShoppingLineInterpreterTest {
         assertThat(coffee.name()).isEqualTo("3 u 1");
         assertThat(coffee.quantity()).isEqualByComparingTo("1");
     }
+
+    @Test
+    void aWordInTheAccusativeFindsItsKindOfProduct() {
+        kind("jogurt", "jogurt", true, "g");
+        kind("piletina", "piletina", true, "g");
+
+        var yoghurt = interpreter.interpret("jogurte (3)");
+        assertThat(yoghurt.matchingRule()).isEqualTo(ShoppingItemRule.FLEXIBLE_CATEGORY);
+        assertThat(yoghurt.name()).isEqualTo("jogurt");
+        assertThat(yoghurt.quantity()).isEqualByComparingTo("3");
+
+        var chicken = interpreter.interpret("piletinu oko 1kg");
+        assertThat(chicken.name()).isEqualTo("piletina");
+        assertThat(chicken.targetQuantity()).isEqualByComparingTo("1000");
+    }
+
+    @Test
+    void theCountAfterANoteCountsPackages() {
+        kind("pivo", "pivo", true, "ml");
+
+        var beer = interpreter.interpret("pivo za utakmicu 6");
+
+        assertThat(beer.matchingRule()).isEqualTo(ShoppingItemRule.FLEXIBLE_CATEGORY);
+        assertThat(beer.name()).isEqualTo("pivo");
+        assertThat(beer.quantity()).isEqualByComparingTo("6");
+        assertThat(beer.targetQuantity()).isNull();
+    }
 }

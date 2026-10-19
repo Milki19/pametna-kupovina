@@ -96,6 +96,50 @@ public class ShoppingListTextParser {
 
     private static final Pattern WORD = Pattern.compile("\\p{L}{2,}");
 
+    /** "Kupi:", "Spisak za subotu:": a heading over the list, nothing to buy. */
+    private static final Pattern HEADING = Pattern.compile(
+            "^[^0-9:]{1,40}:$", FLAGS
+    );
+
+    /** "Kupi: mleko, hleb": the heading written on the same line as the items. */
+    private static final Pattern HEADING_BEFORE_ITEMS = Pattern.compile(
+            "^(?:kupi(?:ti)?|spisak|lista|treba|potrebno|nabavka|market|prodavnica"
+                    + "|купи(?:ти)?|списак|листа|треба|потребно|набавка)\\s*:\\s*(?=\\S)",
+            FLAGS
+    );
+
+    /** "piletina oko 1kg", "cca 2 kom": an approximate amount is still the amount. */
+    private static final Pattern APPROXIMATELY = Pattern.compile(
+            "(?<![\\p{L}0-9])(?:oko|otprilike|cca\\.?|около|отприлике|~)\\s*(?=[0-9])", FLAGS
+    );
+
+    /** "jogurte (3)", "sir (500g)": the amount written in brackets. */
+    private static final Pattern AMOUNT_IN_BRACKETS = Pattern.compile(
+            "\\s*\\(\\s*(?<number>[0-9]+(?:[.,][0-9]+)?)\\s*(?:(?<piece>" + PIECE_UNIT + ")|(?<measure>"
+                    + AMOUNT_UNIT.replace("(?<unit>", "(?:") + "))?\\s*\\)", FLAGS
+    );
+
+    /**
+     * "čokolada za malog", "pivo za utakmicu 6": who or what the item is for.
+     * Only these words make a note, because "prašak za veš", "hrana za pse"
+     * and "kore za pitu" name what is bought.
+     */
+    private static final String NOTE_WORDS =
+            "(?:malog|malu|male|mamu|tatu|baku|deku|dedu|decu|dete|sina|[cć]erku|[žz]enu|mu[žz]a"
+                    + "|goste|gosta|kom[šs]ij[ue]|prijatelje|kuma|kumu|brata|sestru|nju|njega|sebe"
+                    + "|utakmicu|ro[đd]j?endan|slavu|[žz]urku|proslavu|vikend|put|posao|[šs]kolu"
+                    + "|vrti[ćc]|doru[čc]ak|ru[čc]ak|ve[čc]eru|u[žz]inu|sutra|danas|praznik"
+                    + "|novu godinu|bo[žz]i[ćc]|uskrs)";
+
+    private static final Pattern NOTE = Pattern.compile(
+            "\\s+(?<note>za\\s+" + NOTE_WORDS + "(?![\\p{L}])[^0-9()]*?)(?=\\s+[0-9]|\\s*$)", FLAGS
+    );
+
+    /** "(za malog)": anything written for whom in brackets is a note. */
+    private static final Pattern NOTE_IN_BRACKETS = Pattern.compile(
+            "\\s*\\((?<note>\\s*za\\s+[^()]+?)\\s*\\)", FLAGS
+    );
+
     public ParsedShoppingListText parse(String text) {
         if (text == null) {
             return new ParsedShoppingListText(List.of(), 0);
@@ -112,8 +156,11 @@ public class ShoppingListTextParser {
                 blankLineCount++;
                 continue;
             }
+            if (isHeading(rawLine)) {
+                continue;
+            }
 
-            for (String part : itemsOnLine(rawLine)) {
+            for (String part : itemsOnLine(withoutHeading(rawLine))) {
                 items.add(parseLine(part));
                 lineNumbers.add(lineNumber);
             }
@@ -147,13 +194,79 @@ public class ShoppingListTextParser {
         return items;
     }
 
+    /** "Kupi:" over a message, with an emoji or a list mark around it. */
+    static boolean isHeading(String rawLine) {
+        String line = withoutMarks(rawLine);
+        return HEADING.matcher(line).matches() && WORD.matcher(line).find();
+    }
+
+    private static String withoutHeading(String rawLine) {
+        String line = rawLine.trim();
+        Matcher heading = HEADING_BEFORE_ITEMS.matcher(line);
+        return heading.find() ? line.substring(heading.end()) : rawLine;
+    }
+
+    private static String withoutMarks(String rawLine) {
+        return LIST_MARK.matcher(ItemNames.withoutEmoji(rawLine).trim()).replaceFirst("").trim();
+    }
+
+    /**
+     * The note a written line carries ("za malog"), or null. The list shows
+     * it beside the item, read from the line as it was written, so nothing
+     * but the line itself has to be kept.
+     */
+    public static String noteOf(String rawLine) {
+        if (rawLine == null || rawLine.isBlank()) {
+            return null;
+        }
+        return withNote(withoutMarks(rawLine)).note();
+    }
+
+    /** What a line asks for, and the note it carries, apart. */
+    private static Noted withNote(String line) {
+        String note = null;
+        Matcher bracketed = NOTE_IN_BRACKETS.matcher(line);
+        if (bracketed.find()) {
+            note = bracketed.group("note").trim();
+            line = (line.substring(0, bracketed.start()) + line.substring(bracketed.end())).trim();
+        }
+        Matcher written = NOTE.matcher(line);
+        if (written.find() && hasLetter(line.substring(0, written.start()))) {
+            note = note == null ? written.group("note").trim() : note;
+            line = (line.substring(0, written.start()) + line.substring(written.end())).trim();
+        }
+        return new Noted(line, note);
+    }
+
+    private record Noted(String line, String note) {
+    }
+
+    /**
+     * "jogurte (3)" is three, "sir (500g)" half a kilo: the brackets move to
+     * the end of the line, where the counting and the amount patterns look.
+     */
+    private static String amountFromBrackets(String line) {
+        Matcher bracket = AMOUNT_IN_BRACKETS.matcher(line);
+        if (!bracket.find()) {
+            return line;
+        }
+        String rest = (line.substring(0, bracket.start()) + " " + line.substring(bracket.end())).trim();
+        String number = bracket.group("number");
+        return bracket.group("measure") == null
+                ? rest + " x" + number
+                : rest + " " + number + bracket.group("measure");
+    }
+
     /** A count and an amount can share a line: "2x ćevapi 3kg" is 2 × 3 kg. */
     public ParsedShoppingListLine parseLine(String rawLine) {
-        String line = LIST_MARK.matcher(ItemNames.withoutEmoji(rawLine).trim()).replaceFirst("").trim();
+        String line = withoutMarks(rawLine);
         if (line.isEmpty()) {
             line = rawLine.trim();
         }
 
+        line = APPROXIMATELY.matcher(line).replaceAll("");
+        line = withNote(line).line();
+        line = amountFromBrackets(line);
         line = amountInWords(line);
 
         BigDecimal quantity = BigDecimal.ONE;
