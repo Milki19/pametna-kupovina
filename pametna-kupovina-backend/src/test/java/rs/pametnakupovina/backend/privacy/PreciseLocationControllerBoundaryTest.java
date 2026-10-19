@@ -101,7 +101,8 @@ class PreciseLocationControllerBoundaryTest {
                     LATITUDE,
                     LONGITUDE,
                     recommendationDate,
-                    rs.pametnakupovina.backend.shoppinglist.TravelMode.DRIVING
+                    rs.pametnakupovina.backend.shoppinglist.TravelMode.DRIVING,
+                    true
             );
 
             verify(optimizationService).optimize(
@@ -134,7 +135,8 @@ class PreciseLocationControllerBoundaryTest {
                     LATITUDE,
                     LONGITUDE,
                     recommendationDate,
-                    rs.pametnakupovina.backend.shoppinglist.TravelMode.DRIVING
+                    rs.pametnakupovina.backend.shoppinglist.TravelMode.DRIVING,
+                    true
             );
 
             assertThat(appender.list)

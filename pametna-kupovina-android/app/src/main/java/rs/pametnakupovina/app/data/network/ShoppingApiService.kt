@@ -197,8 +197,15 @@ interface ShoppingApiService {
         @Query("latitude") latitude: Double,
         @Query("longitude") longitude: Double,
         @Query("date") date: String? = null,
-        @Query("travelMode") travelMode: String? = null
+        @Query("travelMode") travelMode: String? = null,
+        @Query("unlocated") unlocated: Boolean? = null
     ): ShoppingRecommendationDto
+
+    @GET("api/v1/shopping-lists/{listId}/recommendations/unlocated-price-options")
+    suspend fun getUnlocatedPriceOptions(
+        @Path("listId") listId: Long,
+        @Query("date") date: String? = null
+    ): List<UnlocatedPriceOptionDto>
 
     @POST("api/v1/products/{canonicalProductId}/reports")
     suspend fun reportProduct(

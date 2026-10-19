@@ -88,6 +88,24 @@ public class ShoppingRecommendationService {
             LocalDate requestedDate,
             TravelMode travelMode
     ) {
+        return recommend(listId, latitude, longitude, requestedDate, travelMode, true);
+    }
+
+    /**
+     * @param includeUnlocated also prices the chains without shop addresses.
+     *                         They are most of the work and none of the plan:
+     *                         a client that asks for them on their own
+     *                         ({@link #unlocatedPriceOptions}) gets the plan
+     *                         without waiting for them.
+     */
+    public ShoppingRecommendationResponse recommend(
+            Long listId,
+            double latitude,
+            double longitude,
+            LocalDate requestedDate,
+            TravelMode travelMode,
+            boolean includeUnlocated
+    ) {
         validate(latitude, longitude);
         boolean walking = travelMode == TravelMode.WALKING;
 
@@ -150,7 +168,9 @@ public class ShoppingRecommendationService {
         // chain is what it spends its time on. Asking once for both costs a
         // little more than the larger half and saves the whole smaller one.
         List<StoreShoppingOfferRepository.PriceListEntry> priceListEntries =
-                offerRepository.findPriceListEntriesWithoutLocation(market.id());
+                includeUnlocated
+                        ? offerRepository.findPriceListEntriesWithoutLocation(market.id())
+                        : List.of();
 
         Map<String, List<Long>> storesByChain = new LinkedHashMap<>();
         nearbyStores.forEach(store -> storesByChain
@@ -342,6 +362,46 @@ public class ShoppingRecommendationService {
                         shoppingList.items().size()
                 ),
                 DISCLAIMER
+        );
+    }
+
+    /**
+     * The chains without shop addresses on their own, for a client that asked
+     * for the plan without them. Their offers do not depend on the shops
+     * nearby, so they are the same as in the plan's answer.
+     */
+    public List<UnlocatedPriceOption> unlocatedPriceOptions(
+            Long listId,
+            LocalDate requestedDate
+    ) {
+        ShoppingListResponse shoppingList = shoppingListRepository
+                .findById(listId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Spisak nije pronađen: " + listId
+                ));
+        Market market = marketRepository.forPlanningShoppingList(listId);
+        LocalDate asOfDate = requestedDate != null
+                ? requestedDate
+                : market.today();
+
+        if (asOfDate.isAfter(market.today())) {
+            throw badRequest(
+                    "Datum obračuna ne može biti u budućnosti"
+            );
+        }
+
+        List<StoreShoppingOfferRepository.PriceListEntry> priceListEntries =
+                offerRepository.findPriceListEntriesWithoutLocation(market.id());
+        Map<String, List<Long>> storesByChain = new LinkedHashMap<>();
+        priceListEntries.forEach(entry -> storesByChain
+                .computeIfAbsent(entry.retailerCode(), code -> new ArrayList<>())
+                .add(entry.storeId()));
+
+        return findUnlocatedPriceOptions(
+                priceListEntries,
+                findOffersForChains(listId, storesByChain, asOfDate),
+                shoppingList.items().size()
         );
     }
 

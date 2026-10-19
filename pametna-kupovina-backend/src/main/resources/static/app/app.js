@@ -1179,12 +1179,26 @@ async function showRecommendation() {
         && Date.now() - recommendationFor.at < PLAN_REMEMBERED_FOR) return renderRecommendation();
     screen({ title: 'Preporuke', back: '#/lokacija', html:
       '<p class="center muted">Računam tri scenarija…</p>' + '<div class="skeleton" aria-hidden="true"></div>'.repeat(3) });
-    recommendation = await api('GET', `shopping-lists/${listId}/recommendations?latitude=${origin.lat}&longitude=${origin.lng}${travel}`);
+    // Lanci bez adresa su najveći deo računanja, a nisu u planu: plan se
+    // prikaže bez njih, a oni stignu odmah zatim.
+    recommendation = await api('GET', `shopping-lists/${listId}/recommendations?latitude=${origin.lat}&longitude=${origin.lng}${travel}&unlocated=false`);
     recommendationFor = { key, at: Date.now() };
   } catch (error) {
     return failed('Preporuke', error, '#/preporuke');
   }
   renderRecommendation();
+  loadUnlocated(listId, recommendation);
+}
+
+async function loadUnlocated(listId, result) {
+  try {
+    result.unlocatedPriceOptions = await api('GET',
+      `shopping-lists/${listId}/recommendations/unlocated-price-options?date=${result.requestedDate}`);
+  } catch (error) {
+    return; // Samo poređenje: plan je već tu.
+  }
+  const section = document.getElementById('unlocated');
+  if (recommendation === result && section) section.innerHTML = unlocatedSummary(result.unlocatedPriceOptions);
 }
 
 function renderRecommendation() {
@@ -1256,7 +1270,7 @@ function renderRecommendation() {
       (unresolved.length ? `<div class="section">Bez ponude ${pill(unresolved.length)}</div>` + unresolved.map(item => `
         <div class="card"><div class="row top-align"><div class="grow name">${esc(item.requestedName)}</div>${pill(unresolvedStatus[item.resultStatus], 'warn')}</div>
         <p class="muted small">${esc(item.explanation)}</p></div>`).join('') : '') +
-      unlocatedSummary(result.unlocatedPriceOptions) +
+      `<div id="unlocated">${unlocatedSummary(result.unlocatedPriceOptions)}</div>` +
       `<details class="card"><summary>Kako je računato</summary>
         ${[
           s.dataAsOf ? `Cene su iz cenovnika od ${date(s.dataAsOf)}; cenovnik ne govori da li je artikal na polici.` : 'Za ovaj scenario nema važećih cena.',

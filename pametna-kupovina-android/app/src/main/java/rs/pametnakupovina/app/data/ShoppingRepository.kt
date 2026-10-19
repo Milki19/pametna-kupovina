@@ -47,6 +47,7 @@ import rs.pametnakupovina.app.data.network.ShoppingItemRuleDto
 import rs.pametnakupovina.app.data.network.ShoppingListItemDto
 import rs.pametnakupovina.app.data.network.ShoppingListMatchingDto
 import rs.pametnakupovina.app.data.network.ShoppingRecommendationDto
+import rs.pametnakupovina.app.data.network.UnlocatedPriceOptionDto
 import rs.pametnakupovina.app.data.network.UpdateShoppingListItemRequestDto
 import rs.pametnakupovina.app.data.preferences.ClientIdentityStore
 import rs.pametnakupovina.app.R
@@ -597,9 +598,15 @@ class ShoppingRepository @Inject constructor(
             latitude = latitude,
             longitude = longitude,
             date = date,
-            travelMode = if (walking) "WALKING" else null
+            travelMode = if (walking) "WALKING" else null,
+            // Lanci bez adresa su najveći deo računanja, a nisu u planu:
+            // stižu posebno, posle plana (getUnlocatedPriceOptions).
+            unlocated = false
         )
     }
+
+    suspend fun getUnlocatedPriceOptions(listId: Long, date: String): List<UnlocatedPriceOptionDto> =
+        api.getUnlocatedPriceOptions(listId = listId, date = date)
 
     private suspend fun ensureActiveList(): Long {
         val existing = clientIdentityStore.getActiveListId()
