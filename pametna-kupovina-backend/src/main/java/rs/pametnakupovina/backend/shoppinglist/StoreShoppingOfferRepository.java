@@ -1179,8 +1179,9 @@ public class StoreShoppingOfferRepository {
                                    )
                                    matched.*
                             FROM (
+                                -- Sorted by, first (see best_offer below).
                                 SELECT pricing_store.store_id,
-                                       price_source.*,
+                                       price_source.retailer_product_id,
                                        CASE
                                            WHEN price_source.source_store_id =
                                                 pricing_store.store_id
@@ -1201,7 +1202,18 @@ public class StoreShoppingOfferRepository {
                                             )
                                                THEN 2
                                            ELSE 3
-                                       END AS scope_priority
+                                       END AS scope_priority,
+                                       price_source.price_date,
+                                       price_source.source_priority,
+                                       price_source.id,
+                                       price_source.observed,
+                                       price_source.source_store_id,
+                                       price_source.scope_type,
+                                       price_source.format_key,
+                                       price_source.regular_price,
+                                       price_source.discounted_price,
+                                       price_source.effective_price,
+                                       price_source.price_scope
                                 FROM price_source
                                 JOIN (
                                     SELECT DISTINCT candidate_row.retailer_id,
@@ -1255,7 +1267,22 @@ public class StoreShoppingOfferRepository {
                                    )
                                    store_price.store_id,
                                    candidate_row.item_id,
+                                   -- What it is sorted by comes first, the whole
+                                   -- numbers before the prices. Behind the prices,
+                                   -- each comparison among an item's fifty or so
+                                   -- candidates read along the row to its ranks
+                                   -- again: the sort took 40 ms of a 313 ms plan.
+                                   candidate_row.kind_rank,
+                                   candidate_row.uncommon_rank,
+                                   candidate_row.loose_rank,
+                                   candidate_row.oversize_rank,
+                                   candidate_row.size_rank,
+                                   candidate_row.bought_rank,
                                    candidate_row.retailer_product_id,
+                                   store_price.effective_price * candidate_row.packages
+                                       * candidate_row.pack_weight AS weighted_price,
+                                   candidate_row.packages * candidate_row.package_size
+                                       AS offered_amount,
                                    candidate_row.package_size,
                                    candidate_row.package_unit,
                                    candidate_row.packages,
