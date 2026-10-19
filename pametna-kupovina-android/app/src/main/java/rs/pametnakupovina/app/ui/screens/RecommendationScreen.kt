@@ -18,7 +18,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Spacer
@@ -39,6 +38,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -420,6 +422,17 @@ internal fun RecommendationContent(
                         onSelect = { selectedTypeName = scenario.type.name },
                         modifier = Modifier.enter(entrance, index + 1)
                     )
+                }
+            }
+
+            balanceCostsMore(selected, result)?.let { (more, names) ->
+                item(key = "balance-explained") {
+                    val shown = if (names.size > 4) {
+                        stringResource(R.string.rec_balance_more_names, names.take(3).joinToString(", "), names.size - 3)
+                    } else {
+                        names.joinToString(", ")
+                    }
+                    NoticeBanner(text = stringResource(R.string.rec_balance_costs_more, wholeAmount(more), currency(), shown))
                 }
             }
 
@@ -960,17 +973,36 @@ private fun PlanItemRow(item: RecommendationItemDto, requestedDate: String, onWr
             if (manySmallPacks(item)) {
                 StatusPill(stringResource(R.string.rec_many_small_packs), StatusTone.WARNING)
             }
-            TextButton(
-                onClick = onWrongProduct,
-                contentPadding = PaddingValues(horizontal = 0.dp, vertical = AppSpacing.xs),
-                modifier = Modifier.testTag("wrong-product-${item.itemId}")
-            ) { Text(stringResource(R.string.rec_wrong_product)) }
         }
         Text(
             item.lineTotal?.let(::money) ?: stringResource(R.string.rec_no_price_short),
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.padding(start = AppSpacing.sm)
         )
+        // Retko potrebno, pa u meniju, kao u kupovini, a ne uz svaku stavku.
+        var menuOpen by remember { mutableStateOf(false) }
+        Box {
+            IconButton(
+                onClick = { menuOpen = true },
+                modifier = Modifier.testTag("plan-item-menu-${item.itemId}")
+            ) {
+                AppIcon(R.drawable.ic_more_vert, contentDescription = stringResource(R.string.rec_more_for_item, item.requestedName))
+            }
+            DropdownMenu(
+                expanded = menuOpen,
+                onDismissRequest = { menuOpen = false },
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+            ) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.rec_wrong_product)) },
+                    onClick = {
+                        menuOpen = false
+                        onWrongProduct()
+                    },
+                    modifier = Modifier.testTag("wrong-product-${item.itemId}")
+                )
+            }
+        }
     }
 }
 
@@ -1238,6 +1270,30 @@ private fun CalculationDetails(
             }
         }
     }
+}
+
+/**
+ * „Najbolje ukupno" skuplje od jedne prodavnice: koliko više i koje stavke
+ * pokriva samo ono, da se vidi šta se dobija za razliku. Null kad nije skuplje.
+ */
+internal fun balanceCostsMore(
+    scenario: OptimizationScenarioDto,
+    result: ShoppingRecommendationDto
+): Pair<Double, List<String>>? {
+    val single = result.singleStore
+    if (scenario.type != RecommendationScenarioTypeDto.RECOMMENDED_BALANCE || !scenario.available || !single.available) {
+        return null
+    }
+    val more = (scenario.totalCost ?: return null) - (single.totalCost ?: return null)
+    if (Math.round(more) <= 0L) return null
+    val inSingle = single.items
+        .filter { it.resultStatus == RecommendationItemStatusDto.AVAILABLE }
+        .map { it.itemId }
+        .toSet()
+    val extra = scenario.items
+        .filter { it.resultStatus == RecommendationItemStatusDto.AVAILABLE && it.itemId !in inSingle }
+        .map { it.requestedName }
+    return if (extra.isEmpty()) null else more to extra
 }
 
 private fun scenarioWarnings(

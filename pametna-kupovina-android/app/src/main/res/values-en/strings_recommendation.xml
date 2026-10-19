@@ -123,4 +123,7 @@
     <string name="rec_unlocated_price_lists">%1$d price lists, we don\'t know which applies near you</string>
     <string name="rec_unlocated_more">Show %1$d more</string>
     <string name="rec_unlocated_less">Show less</string>
+    <string name="rec_more_for_item">More for “%1$s”</string>
+    <string name="rec_balance_costs_more">+%1$s %2$s over One store, but it also covers: %3$s.</string>
+    <string name="rec_balance_more_names">%1$s and %2$d more</string>
 </resources>

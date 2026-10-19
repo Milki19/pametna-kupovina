@@ -148,6 +148,10 @@ class ShoppingListViewModel @Inject constructor(
         mutate { repository.deleteItem(item) }
     }
 
+    fun clearList() {
+        mutate { repository.deleteAllItems() }
+    }
+
     fun pasteItems(text: String, onSaved: () -> Unit) {
         viewModelScope.launch {
             try {

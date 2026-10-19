@@ -95,4 +95,6 @@
     <string name="purchase_report_missing">Javi da ovde nema</string>
     <string name="purchase_reported_missing">Javljeno. Kad javi još neko, plan ovde preskače ovaj proizvod.</string>
     <string name="purchase_report_missing_failed">Javljanje nije uspelo. Treba mreža, probaj ponovo.</string>
+    <string name="purchase_start_new_list">Započni nov spisak</string>
+    <string name="purchase_start_new_list_text">Sve stavke se brišu sa spiska, a ova kupovina ostaje u istoriji.</string>
 </resources>

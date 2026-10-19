@@ -314,6 +314,7 @@ fun PametnaKupovinaApp(
                     onBack = navController::popBackStack,
                     onOpen = { navController.navigate("purchase/$it") },
                     onOpenCards = { navController.navigate(Route.CARDS) },
+                    onStartNewList = { navController.openTab(Route.LIST) },
                     receiptViewModel = receiptViewModel)
             }
             composable(Route.LIST) {

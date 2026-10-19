@@ -487,6 +487,13 @@ class ShoppingRepository @Inject constructor(
         }
     }
 
+    /** Ceo spisak odjednom; svaka stavka odlazi serveru kao da je obrisana posebno. */
+    suspend fun deleteAllItems() {
+        dao.getAllItems()
+            .filter { it.syncState != SyncState.PENDING_DELETE.name }
+            .forEach { deleteItem(it) }
+    }
+
     suspend fun synchronizeAndRefresh(): Long = syncMutex.withLock {
         val listId = ensureActiveList()
         try {

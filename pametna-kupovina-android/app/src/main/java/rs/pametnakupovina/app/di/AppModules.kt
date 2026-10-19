@@ -25,6 +25,8 @@ import rs.pametnakupovina.app.data.local.MIGRATION_4_5
 import rs.pametnakupovina.app.data.local.PametnaKupovinaDatabase
 import rs.pametnakupovina.app.data.ShoppingRepository
 import rs.pametnakupovina.app.data.purchase.MissingProductReporter
+import rs.pametnakupovina.app.data.purchase.ShoppingListClearer
+import rs.pametnakupovina.app.sync.SyncScheduler
 import rs.pametnakupovina.app.data.network.SessionApiService
 import rs.pametnakupovina.app.data.network.SessionAuthenticator
 import rs.pametnakupovina.app.data.network.SessionInterceptor
@@ -98,6 +100,15 @@ object PurchaseModule {
     @Provides
     fun provideMissingProductReporter(repository: ShoppingRepository): MissingProductReporter =
         MissingProductReporter(repository::reportNotInStore)
+
+    @Provides
+    fun provideShoppingListClearer(
+        repository: ShoppingRepository,
+        syncScheduler: SyncScheduler
+    ): ShoppingListClearer = ShoppingListClearer {
+        repository.deleteAllItems()
+        syncScheduler.enqueue()
+    }
 }
 
 @Module
