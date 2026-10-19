@@ -130,4 +130,7 @@
     <string name="rec_unlocated_price_lists">%1$d cenovnika, ne znamo koji važi kod tebe</string>
     <string name="rec_unlocated_more">Prikaži još %1$d</string>
     <string name="rec_unlocated_less">Prikaži manje</string>
+    <string name="rec_more_for_item">Još za „%1$s“</string>
+    <string name="rec_balance_costs_more">+%1$s %2$s od Jedne prodavnice, ali pokriva još: %3$s.</string>
+    <string name="rec_balance_more_names">%1$s i još %2$d</string>
 </resources>

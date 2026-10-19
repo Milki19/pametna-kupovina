@@ -123,6 +123,7 @@ fun PurchaseScreen(
     onBack: () -> Unit,
     onOpen: (String) -> Unit,
     onOpenCards: () -> Unit = {},
+    onStartNewList: () -> Unit = {},
     viewModel: PurchaseViewModel = hiltViewModel(),
     // Zajednički sa početnim ekranom, pa skenirani račun odmah menja troškove.
     receiptViewModel: ReceiptViewModel? = null
@@ -135,7 +136,7 @@ fun PurchaseScreen(
     if (sessionId == null) {
         PurchaseHistory(sessions, message, onOpen, receiptViewModel ?: hiltViewModel())
     } else {
-        PurchaseInProgress(session, message, onBack, onOpenCards, viewModel, receiptViewModel)
+        PurchaseInProgress(session, message, onBack, onOpenCards, onStartNewList, viewModel, receiptViewModel)
     }
 }
 
@@ -422,6 +423,7 @@ private fun PurchaseInProgress(
     message: UiText?,
     onBack: () -> Unit,
     onOpenCards: () -> Unit,
+    onStartNewList: () -> Unit,
     viewModel: PurchaseViewModel,
     receiptViewModel: ReceiptViewModel?
 ) {
@@ -429,6 +431,7 @@ private fun PurchaseInProgress(
     val receipts = receiptViewModel?.uiState?.collectAsStateWithLifecycle()?.value
     var editingId by rememberSaveable(session?.id) { mutableStateOf<Long?>(null) }
     var confirmArchive by rememberSaveable(session?.id) { mutableStateOf(false) }
+    var confirmNewList by rememberSaveable(session?.id) { mutableStateOf(false) }
     val scenario = session?.snapshot?.scenario
     val stores = scenario?.stores?.sortedBy { it.stopOrder }.orEmpty()
     val entrance = rememberEntrance(session?.id)
@@ -524,8 +527,12 @@ private fun PurchaseInProgress(
             }
             if (archived) {
                 item(key = "archived") {
+                    // Spisak je i dalje pun; odavde se počinje nov.
                     NoticeBanner(
-                        text = stringResource(R.string.purchase_archived_notice)
+                        text = stringResource(R.string.purchase_archived_notice),
+                        actionLabel = stringResource(R.string.purchase_start_new_list),
+                        onAction = { confirmNewList = true },
+                        modifier = Modifier.testTag("purchase-start-new-list")
                     )
                 }
             }
@@ -607,6 +614,26 @@ private fun PurchaseInProgress(
                 }
             }
         }
+    }
+
+    if (confirmNewList) {
+        AlertDialog(
+            onDismissRequest = { confirmNewList = false },
+            title = { Text(stringResource(R.string.list_clear_all_title)) },
+            text = { Text(stringResource(R.string.purchase_start_new_list_text)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmNewList = false
+                        viewModel.startNewList(onStartNewList)
+                    },
+                    modifier = Modifier.testTag("purchase-start-new-list-confirm")
+                ) { Text(stringResource(R.string.purchase_start_new_list)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmNewList = false }) { Text(stringResource(R.string.common_cancel)) }
+            }
+        )
     }
 
     if (session != null && confirmArchive) {

@@ -118,6 +118,7 @@ fun ShoppingListScreen(
     var editedItem by remember { mutableStateOf<DraftItemEntity?>(null) }
     var showItemEditor by rememberSaveable { mutableStateOf(false) }
     var showPasteDialog by rememberSaveable { mutableStateOf(false) }
+    var confirmClear by rememberSaveable { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
@@ -303,6 +304,23 @@ fun ShoppingListScreen(
                         )
                     }
                 }
+                if (state.items.isNotEmpty()) {
+                    item(key = "clear-all") {
+                        TextButton(
+                            onClick = { confirmClear = true },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("clear-list")
+                        ) {
+                            AppIcon(R.drawable.ic_delete, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                            Text(
+                                stringResource(R.string.list_clear_all),
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.padding(start = AppSpacing.sm)
+                            )
+                        }
+                    }
+                }
             }
 
             // Jedino glavno dugme na ekranu, uvek na istom mestu iznad donje trake.
@@ -371,6 +389,33 @@ fun ShoppingListScreen(
             },
             dismissButton = {
                 TextButton(onClick = viewModel::dismissSkipped) { Text(stringResource(R.string.list_skipped_edit)) }
+            }
+        )
+    }
+
+    if (confirmClear) {
+        AlertDialog(
+            onDismissRequest = { confirmClear = false },
+            title = { Text(stringResource(R.string.list_clear_all_title)) },
+            text = {
+                Text(
+                    stringResource(
+                        R.string.list_clear_all_text,
+                        pluralStringResource(R.plurals.count_items, state.items.size, state.items.size)
+                    )
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmClear = false
+                        viewModel.clearList()
+                    },
+                    modifier = Modifier.testTag("clear-list-confirm")
+                ) { Text(stringResource(R.string.list_clear_all_confirm), color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmClear = false }) { Text(stringResource(R.string.common_cancel)) }
             }
         )
     }

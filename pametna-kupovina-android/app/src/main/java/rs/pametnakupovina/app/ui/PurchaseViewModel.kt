@@ -20,7 +20,8 @@ import rs.pametnakupovina.app.text.uiText
 @HiltViewModel
 class PurchaseViewModel @Inject constructor(
     private val repository: PurchaseRepository,
-    private val missingReporter: MissingProductReporter
+    private val missingReporter: MissingProductReporter,
+    private val listClearer: ShoppingListClearer
 ) : ViewModel() {
     private val _sessions = MutableStateFlow<List<rs.pametnakupovina.app.data.local.PurchaseSessionSummary>>(emptyList())
     val sessions = _sessions.asStateFlow()
@@ -84,6 +85,12 @@ class PurchaseViewModel @Inject constructor(
         onSaved()
     }
     fun archive(id: String, archived: Boolean) = action { repository.archive(id, archived) }
+
+    /** Posle kupovine: spisak se prazni, a kupac ide na njega da počne nov. */
+    fun startNewList(onDone: () -> Unit) = action {
+        listClearer.clearList()
+        onDone()
+    }
 
     /** Jednim dodirom: „nema u prodavnici" ide serveru, a stavka pamti da je javljeno. */
     fun reportMissing(id: String, item: RecommendationItemDto) {

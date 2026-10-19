@@ -42,6 +42,11 @@ class MissingProductReporter(
         send(canonicalProductId, retailerProductId, storeId)
 }
 
+/** Prazni spisak posle kupovine; kao [MissingProductReporter], bez celog ShoppingRepository-ja. */
+class ShoppingListClearer(private val clear: suspend () -> Unit) {
+    suspend fun clearList() = clear()
+}
+
 data class PurchaseSession(
     val id: String,
     val createdAt: Long,

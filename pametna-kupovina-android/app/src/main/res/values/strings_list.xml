@@ -168,4 +168,8 @@
     <string name="list_duplicate_merge_hint">„%1$s“ je na spisku više puta. Spoji ih u jednu stavku ili obriši višak.</string>
     <string name="list_duplicate_merge">Spoji</string>
     <string name="list_notice_merged">Spojeno: %1$s.</string>
+    <string name="list_clear_all">Obriši ceo spisak</string>
+    <string name="list_clear_all_title">Obrisati ceo spisak?</string>
+    <string name="list_clear_all_text">Sa spiska se briše %1$s. Ovo ne može da se vrati.</string>
+    <string name="list_clear_all_confirm">Obriši sve</string>
 </resources>

@@ -93,6 +93,39 @@ class RecommendationScreenTest {
              "disclaimer": "-"}
         """)
 
+    private fun planItem(id: Long, name: String, available: Boolean) = RecommendationItemDto(
+        itemId = id,
+        requestedName = name,
+        requestedQuantity = 1.0,
+        matchingRule = ShoppingItemRuleDto.FLEXIBLE_CATEGORY,
+        matchingStatus = ShoppingItemMatchingStatusDto.CONFIRMED,
+        resultStatus = if (available) RecommendationItemStatusDto.AVAILABLE else RecommendationItemStatusDto.NO_VALID_PRICE,
+        explanation = "-"
+    )
+
+    @Test
+    fun `najbolje ukupno skuplje od jedne prodavnice kaze sta jos pokriva`() {
+        val plans = recommendation(
+            scenario("SINGLE_STORE", 300.0, 722),
+            scenario("RECOMMENDED_BALANCE", 410.0, 722, 86),
+            scenario("LOWEST_PRICE", 410.0, 722, 86)
+        )
+        val single = plans.singleStore.copy(
+            items = listOf(planItem(1, "mleko", true), planItem(2, "hleb", true), planItem(3, "kečap", false))
+        )
+        val best = plans.recommendedBalance.copy(
+            items = listOf(planItem(1, "mleko", true), planItem(2, "hleb", true), planItem(3, "kečap", true))
+        )
+        val result = plans.copy(singleStore = single, recommendedBalance = best)
+
+        assertEquals(110.0 to listOf("kečap"), balanceCostsMore(best, result))
+        // Only the best overall plan explains itself, and only when it costs more.
+        assertNull(balanceCostsMore(single, result))
+        assertNull(balanceCostsMore(best.copy(totalCost = 500.0), result))
+        // Costing more without covering more is not explained by coverage.
+        assertNull(balanceCostsMore(best.copy(items = single.items), result.copy(recommendedBalance = best.copy(items = single.items))))
+    }
+
     @Test
     fun `isti plan se ne nudi dva puta`() {
         // The slava list: the best overall plan is also the cheapest basket.

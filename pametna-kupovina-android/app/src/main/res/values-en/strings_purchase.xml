@@ -91,4 +91,6 @@
     <string name="purchase_report_missing">Report it is missing here</string>
     <string name="purchase_reported_missing">Reported. Once someone else reports it too, plans skip this product here.</string>
     <string name="purchase_report_missing_failed">Could not send the report. It needs a connection; try again.</string>
+    <string name="purchase_start_new_list">Start a new list</string>
+    <string name="purchase_start_new_list_text">All items are removed from the list; this shopping trip stays in the history.</string>
 </resources>
