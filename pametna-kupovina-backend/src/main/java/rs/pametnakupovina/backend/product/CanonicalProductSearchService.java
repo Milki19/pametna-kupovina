@@ -28,8 +28,16 @@ public class CanonicalProductSearchService {
     private static final BigDecimal EXACT_EAN_SCORE =
             new BigDecimal("1.0000");
     private static final int FAR_AWAY = 4;
+    // "piletina oko 1kg" still names only chicken: "oko" and "cca" belong
+    // to the amount, not to the thing.
     private static final Pattern PACKAGE_WORD =
-            Pattern.compile("(?<= )([0-9]+|l|ml|lit|g|gr|kg|kom|x)(?= )");
+            Pattern.compile("(?<= )([0-9]+|l|ml|lit|g|gr|kg|kom|komad|komada|x|oko|cca|otprilike)(?= )");
+    // Food for a cat or a dog, and a pizza, share the words of what a shop
+    // sells fresh ("Whiskas sa piletinom", "pica sa piletinom"). They come
+    // after the rest unless the query asks for them.
+    private static final Pattern ANOTHER_AISLE_WORD = Pattern.compile(
+            "\\b(whiskas|felix|friskies|kitekat|sheba|pedigree|purina|chappi|dreamies|macke|macka|mace"
+                    + "|macje|maca|pse|psa|pas|pasa|psi|ljubim[a-z]*|cat|dog|pica|pizza|pizze)\\b");
 
     private final CanonicalProductSearchRepository searchRepository;
     private final ProductNameNormalizer productNameNormalizer;
@@ -241,6 +249,7 @@ public class CanonicalProductSearchService {
 
         Map<Long, Integer> typePriorities = typePriorities(normalizedQuery);
         Map<Long, Integer> nearness = nearness(rows, near);
+        Map<Long, Integer> anotherAisle = anotherAisle(rows, normalizedQuery);
         String rankedQuery = normalizedQuery;
 
         List<ScoredRow> scoredRows = rows.stream()
@@ -255,6 +264,10 @@ public class CanonicalProductSearchService {
                                 .thenComparing(row -> typeRank(
                                         typePriorities,
                                         row.source()
+                                ))
+                                .thenComparing(row -> anotherAisle.getOrDefault(
+                                        row.source().productFamilyId(),
+                                        0
                                 ))
                                 // Ono što je traženo ostaje ispred, a među
                                 // tim prvo proizvodi iz lanaca u blizini.
@@ -388,6 +401,23 @@ public class CanonicalProductSearchService {
                         row.productTypeId(),
                         Integer.MAX_VALUE
                 );
+    }
+
+    private Map<Long, Integer> anotherAisle(
+            List<CanonicalProductSearchRow> rows,
+            String normalizedQuery
+    ) {
+        if (ANOTHER_AISLE_WORD.matcher(normalizedQuery).find()) {
+            return Map.of();
+        }
+        return rows.stream()
+                .filter(row -> ANOTHER_AISLE_WORD.matcher(
+                        productNameNormalizer.normalize(row.name())).find())
+                .collect(Collectors.toMap(
+                        CanonicalProductSearchRow::productFamilyId,
+                        row -> 1,
+                        (left, right) -> left
+                ));
     }
 
     private ScoredRow score(
