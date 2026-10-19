@@ -33,7 +33,8 @@ public class CanonicalProductSearchRepository {
                     resultSet.getBoolean("exact_ean_match"),
                     resultSet.getBoolean("has_usable_price"),
                     resultSet.getObject("product_type_id", Long.class),
-                    resultSet.getInt("package_count")
+                    resultSet.getInt("package_count"),
+                    resultSet.getInt("chain_count")
             );
 
     private static final RowMapper<ProductAvailabilityRow>
@@ -60,6 +61,128 @@ public class CanonicalProductSearchRepository {
                             )
                     )
             );
+
+    // One family as a search shows it, for the families in "hit".
+    private static final String FAMILY_ROWS = """
+                        SELECT family.id AS product_family_id,
+                               representative.id AS canonical_product_id,
+                               -- Composed the way Cenoteka writes it (V84).
+                               COALESCE(family.composed_name, family.display_name) AS name,
+                               brand.display_name AS brand,
+                               representative.barcode,
+                               family.quantity_value,
+                               family.base_unit,
+                               category.code AS category_code,
+                               category.name AS category_name,
+                               family.product_type_id,
+                               -- Only rows stating the family's own size: chains
+                               -- that describe one barcode differently must not
+                               -- turn 45 g into "3 × 15 g".
+                               COALESCE((
+                                   SELECT MAX(member_product.package_count)
+                                   FROM app.retailer_product AS member_product
+                                   WHERE member_product.product_family_id = family.id
+                                     AND member_product.quantity_value =
+                                         family.quantity_value
+                               ), 1) AS package_count,
+                               usable.chains > 0 AS has_usable_price,
+                               -- In how many chains it sells today: with no
+                               -- location, the widely sold come first.
+                               usable.chains AS chain_count,
+                               GREATEST(
+                                   1,
+                                   (
+                                       SELECT COUNT(*)
+                                       FROM app.product_family_member AS member
+                                       WHERE member.family_id = family.id
+                                   )
+                               )::INTEGER AS variant_count,
+                               CASE
+                                   WHEN ? IS NOT NULL
+                                       AND EXISTS (
+                                           SELECT 1
+                                           FROM app.product_family_member AS member
+                                           JOIN app.canonical_product AS canonical
+                                             ON canonical.id =
+                                                 member.canonical_product_id
+                                           WHERE member.family_id = family.id
+                                             AND canonical.barcode = ?
+                                       )
+                                       THEN 1.0000::NUMERIC
+                                   ELSE ROUND(
+                                       public.similarity(
+                                           family.normalized_name,
+                                           ?
+                                       )::NUMERIC,
+                                       4
+                                   )
+                               END AS name_similarity,
+                               (
+                                   ? IS NOT NULL
+                                   AND EXISTS (
+                                       SELECT 1
+                                       FROM app.product_family_member AS member
+                                       JOIN app.canonical_product AS canonical
+                                         ON canonical.id =
+                                             member.canonical_product_id
+                                       WHERE member.family_id = family.id
+                                         AND canonical.barcode = ?
+                                   )
+                               ) AS exact_ean_match
+                        FROM hit
+                        JOIN app.product_family AS family
+                          ON family.id = hit.id
+                        -- Asked family by family: as one EXISTS the planner
+                        -- hashed all 283,000 presences first (0.36 s).
+                        LEFT JOIN LATERAL (
+                            SELECT COUNT(DISTINCT presence.retailer_id)::INTEGER AS chains
+                            FROM app.product_retailer_presence AS presence
+                            JOIN app.retailer AS presence_retailer
+                              ON presence_retailer.id = presence.retailer_id
+                            JOIN app.market AS presence_market
+                              ON presence_market.id = presence_retailer.market_id
+                            WHERE presence.product_family_id=family.id
+                              AND presence.current_offer_count > 0
+                              AND presence.minimum_effective_price > 0
+                              -- "Today" is the chain's market's today.
+                              AND presence.latest_price_date BETWEEN
+                                  (CURRENT_TIMESTAMP AT TIME ZONE presence_market.time_zone)::date - ?
+                                  AND (CURRENT_TIMESTAMP AT TIME ZONE presence_market.time_zone)::date
+                        ) AS usable ON TRUE
+                        LEFT JOIN app.brand AS brand
+                          ON brand.id = family.brand_id
+                        LEFT JOIN app.product_category AS category
+                          ON category.id = family.product_category_id
+                        LEFT JOIN LATERAL (
+                            SELECT canonical.id,
+                                   canonical.barcode
+                            FROM app.product_family_member AS member
+                            JOIN app.canonical_product AS canonical
+                              ON canonical.id = member.canonical_product_id
+                            WHERE member.family_id = family.id
+                            ORDER BY CASE
+                                         WHEN ? IS NOT NULL
+                                             AND canonical.barcode = ?
+                                             THEN 1
+                                         ELSE 2
+                                     END,
+                                     EXISTS (
+                                         SELECT 1
+                                         FROM app.retailer_product AS product
+                                         JOIN app.current_price_offer AS offer
+                                           ON offer.retailer_product_id =
+                                               product.id
+                                         WHERE product.canonical_product_id =
+                                             canonical.id
+                                     ) DESC,
+                                     canonical.id
+                            LIMIT 1
+                        ) AS representative ON TRUE
+                        WHERE family.review_status <> 'REJECTED'
+                        ORDER BY name_similarity DESC,
+                                 family.display_name ASC,
+                                 family.id ASC
+""";
 
     private final JdbcClient jdbcClient;
     private final int maxPriceAgeDays;
@@ -112,122 +235,7 @@ public class CanonicalProductSearchRepository {
                                   AND POSITION(token.value IN alias.normalized_alias) = 0
                             )
                         )
-                        SELECT family.id AS product_family_id,
-                               representative.id AS canonical_product_id,
-                               -- Composed the way Cenoteka writes it (V84).
-                               COALESCE(family.composed_name, family.display_name) AS name,
-                               brand.display_name AS brand,
-                               representative.barcode,
-                               family.quantity_value,
-                               family.base_unit,
-                               category.code AS category_code,
-                               category.name AS category_name,
-                               family.product_type_id,
-                               -- Only rows stating the family's own size: chains
-                               -- that describe one barcode differently must not
-                               -- turn 45 g into "3 × 15 g".
-                               COALESCE((
-                                   SELECT MAX(member_product.package_count)
-                                   FROM app.retailer_product AS member_product
-                                   WHERE member_product.product_family_id = family.id
-                                     AND member_product.quantity_value =
-                                         family.quantity_value
-                               ), 1) AS package_count,
-                               usable.family_id IS NOT NULL AS has_usable_price,
-                               GREATEST(
-                                   1,
-                                   (
-                                       SELECT COUNT(*)
-                                       FROM app.product_family_member AS member
-                                       WHERE member.family_id = family.id
-                                   )
-                               )::INTEGER AS variant_count,
-                               CASE
-                                   WHEN ? IS NOT NULL
-                                       AND EXISTS (
-                                           SELECT 1
-                                           FROM app.product_family_member AS member
-                                           JOIN app.canonical_product AS canonical
-                                             ON canonical.id =
-                                                 member.canonical_product_id
-                                           WHERE member.family_id = family.id
-                                             AND canonical.barcode = ?
-                                       )
-                                       THEN 1.0000::NUMERIC
-                                   ELSE ROUND(
-                                       public.similarity(
-                                           family.normalized_name,
-                                           ?
-                                       )::NUMERIC,
-                                       4
-                                   )
-                               END AS name_similarity,
-                               (
-                                   ? IS NOT NULL
-                                   AND EXISTS (
-                                       SELECT 1
-                                       FROM app.product_family_member AS member
-                                       JOIN app.canonical_product AS canonical
-                                         ON canonical.id =
-                                             member.canonical_product_id
-                                       WHERE member.family_id = family.id
-                                         AND canonical.barcode = ?
-                                   )
-                               ) AS exact_ean_match
-                        FROM hit
-                        JOIN app.product_family AS family
-                          ON family.id = hit.id
-                        -- Asked family by family: as one EXISTS the planner
-                        -- hashed all 283,000 presences first (0.36 s).
-                        LEFT JOIN LATERAL (
-                            SELECT presence.product_family_id AS family_id
-                            FROM app.product_retailer_presence AS presence
-                            JOIN app.retailer AS presence_retailer
-                              ON presence_retailer.id = presence.retailer_id
-                            JOIN app.market AS presence_market
-                              ON presence_market.id = presence_retailer.market_id
-                            WHERE presence.product_family_id=family.id
-                              AND presence.current_offer_count > 0
-                              AND presence.minimum_effective_price > 0
-                              -- "Today" is the chain's market's today.
-                              AND presence.latest_price_date BETWEEN
-                                  (CURRENT_TIMESTAMP AT TIME ZONE presence_market.time_zone)::date - ?
-                                  AND (CURRENT_TIMESTAMP AT TIME ZONE presence_market.time_zone)::date
-                            LIMIT 1
-                        ) AS usable ON TRUE
-                        LEFT JOIN app.brand AS brand
-                          ON brand.id = family.brand_id
-                        LEFT JOIN app.product_category AS category
-                          ON category.id = family.product_category_id
-                        LEFT JOIN LATERAL (
-                            SELECT canonical.id,
-                                   canonical.barcode
-                            FROM app.product_family_member AS member
-                            JOIN app.canonical_product AS canonical
-                              ON canonical.id = member.canonical_product_id
-                            WHERE member.family_id = family.id
-                            ORDER BY CASE
-                                         WHEN ? IS NOT NULL
-                                             AND canonical.barcode = ?
-                                             THEN 1
-                                         ELSE 2
-                                     END,
-                                     EXISTS (
-                                         SELECT 1
-                                         FROM app.retailer_product AS product
-                                         JOIN app.current_price_offer AS offer
-                                           ON offer.retailer_product_id =
-                                               product.id
-                                         WHERE product.canonical_product_id =
-                                             canonical.id
-                                     ) DESC,
-                                     canonical.id
-                            LIMIT 1
-                        ) AS representative ON TRUE
-                        WHERE family.review_status <> 'REJECTED'
-                        ORDER BY name_similarity DESC,
-                                 family.display_name ASC,
-                                 family.id ASC
+                        """ + FAMILY_ROWS + """
                         """)
                 .param(1, normalizedQuery)
                 .param(2, validEan, Types.VARCHAR)
@@ -243,6 +251,51 @@ public class CanonicalProductSearchRepository {
                 .param(12, maxPriceAgeDays)
                 .param(13, validEan, Types.VARCHAR)
                 .param(14, validEan, Types.VARCHAR)
+                .query(SEARCH_ROW_MAPPER)
+                .list();
+    }
+
+    /**
+     * The families of a kind of product, when the query is only that kind:
+     * "piletina" finds „Pileći batak“ and „Grudi pileće“ too, which share no
+     * word with it. The alias's own pattern keeps pork out of chicken.
+     */
+    public List<CanonicalProductSearchRow> findKindFamilies(
+            String normalizedQuery,
+            String normalizedAlias
+    ) {
+        return jdbcClient.sql("""
+                        WITH hit AS MATERIALIZED (
+                            SELECT DISTINCT family.id
+                            FROM app.shopping_intent_alias AS alias
+                            JOIN app.shopping_intent AS intent
+                              ON intent.id = alias.shopping_intent_id
+                             AND intent.active = TRUE
+                            JOIN app.shopping_intent_product_type AS allowed
+                              ON allowed.shopping_intent_id = intent.id
+                             AND allowed.enabled_by_default = TRUE
+                            JOIN app.product_family AS family
+                              ON family.product_type_id = allowed.product_type_id
+                            WHERE alias.normalized_alias = ?
+                              AND (alias.required_name_pattern IS NULL
+                                   OR family.normalized_name ~ alias.required_name_pattern)
+                              -- What the name finds is already there.
+                              AND NOT family.normalized_name OPERATOR(public.%) ?
+                              AND family.normalized_name NOT LIKE '%' || ? || '%'
+                        )
+                        """ + FAMILY_ROWS + """
+                        """)
+                .param(1, normalizedAlias)
+                .param(2, normalizedQuery)
+                .param(3, normalizedQuery)
+                .param(4, null, Types.VARCHAR)
+                .param(5, null, Types.VARCHAR)
+                .param(6, normalizedQuery)
+                .param(7, null, Types.VARCHAR)
+                .param(8, null, Types.VARCHAR)
+                .param(9, maxPriceAgeDays)
+                .param(10, null, Types.VARCHAR)
+                .param(11, null, Types.VARCHAR)
                 .query(SEARCH_ROW_MAPPER)
                 .list();
     }

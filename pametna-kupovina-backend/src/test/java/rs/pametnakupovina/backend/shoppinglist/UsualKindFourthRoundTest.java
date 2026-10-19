@@ -67,6 +67,13 @@ class UsualKindFourthRoundTest {
     private static final String CAT_FOOD = "WHISKAS PILETINA 85G";
     private static final String PIZZA = "PICA PILETINA 350G";
     private static final String CHICKEN = "PILETINA CELA 1KG";
+    private static final String DRUMSTICK = "PILECI BATAK 1KG";
+    private static final String SMALL_BREAST = "GRUDI PILECE MINI 300G";
+    private static final String READY_MEAL = "MEKSICKO JELO SA PILETINOM 350G";
+    private static final String SHOWER_BAR = "BALEA CVRSTI SAPUN TUSIRANJE 100G";
+    private static final String STAIN_BAR = "VANISH SAPUN 250G";
+    private static final String CHIP_STICKS = "CHIP.REBRASTI KECAP 60G";
+    private static final String KETCHUP_CUBES = "35G KUBETI-KECAP";
 
     private static final String CATALOGUE = "KATEGORIJA;NAZIV KATEGORIJE;"
             + "Naziv proizvoda;Robna marka;Barkod proizvoda;Jedinica mere;"
@@ -85,7 +92,14 @@ class UsualKindFourthRoundTest {
             + row(KETCHUP_CRISPS, "129,99")
             + row(CAT_FOOD, "79,99")
             + row(PIZZA, "299,99")
-            + row(CHICKEN, "699,99");
+            + row(CHICKEN, "699,99")
+            + row(DRUMSTICK, "499,99")
+            + row(SMALL_BREAST, "199,99")
+            + row(READY_MEAL, "249,99")
+            + row(SHOWER_BAR, "179,99")
+            + row(STAIN_BAR, "199,99")
+            + row(CHIP_STICKS, "59,99")
+            + row(KETCHUP_CUBES, "45,00");
 
     private static int barcode = 4000;
 
@@ -224,6 +238,10 @@ class UsualKindFourthRoundTest {
         assertThat(typeOf(KETCHUP)).isEqualTo("KETCHUP");
         assertThat(typeOf(HOT_KETCHUP)).isEqualTo("KETCHUP");
         assertThat(typeOf(KETCHUP_CRISPS)).isNull();
+        assertThat(typeOf(CHIP_STICKS)).isNull();
+        assertThat(typeOf(KETCHUP_CUBES)).isNull();
+        assertThat(typeOf(SHOWER_BAR)).isEqualTo("SOAP");
+        assertThat(typeOf(STAIN_BAR)).isNull();
 
         var list = shoppingListService.create(new CreateShoppingListRequest("Test 18.10."), callers.account(TOKEN));
         shoppingListService.addPastedItems(
@@ -234,6 +252,7 @@ class UsualKindFourthRoundTest {
                         tečni sapun
                         kečap
                         ljuti kečap
+                        piletina
                         """)
         );
 
@@ -243,7 +262,7 @@ class UsualKindFourthRoundTest {
                 PRICE_DATE
         );
         assertThat(offers).extracting(StoreItemOffer::productName)
-                .containsExactly(BAR_SOAP, LIQUID_SOAP, KETCHUP, HOT_KETCHUP);
+                .containsExactly(BAR_SOAP, LIQUID_SOAP, KETCHUP, HOT_KETCHUP, DRUMSTICK);
     }
 
     /** The test of 18.10.2026 found a pizza and Whiskas before chicken. */
@@ -254,8 +273,26 @@ class UsualKindFourthRoundTest {
         for (String query : List.of("piletina", "piletina oko 1kg")) {
             var page = searchService.search(query, 0, 10, true, null, false);
             assertThat(page.items()).as(query).isNotEmpty();
-            assertThat(page.items().get(0).name()).as(query).containsIgnoringCase("piletina cela");
+            assertThat(page.items().get(0).name()).as(query).containsIgnoringCase("pile");
         }
+
+        // „Pileći batak“ shares no word with "piletina", but it is chicken.
+        var kind = searchService.search("piletina", 0, 20, true, null, false);
+        assertThat(kind.items()).extracting(item -> item.name().toUpperCase())
+                .anyMatch(name -> name.contains("BATAK"))
+                .noneMatch(name -> name.contains("VANISH"));
+        List<String> names = kind.items().stream().map(item -> item.name().toUpperCase()).toList();
+        int lastChicken = 0;
+        int firstOther = names.size();
+        for (int index = 0; index < names.size(); index++) {
+            String name = names.get(index);
+            if (name.contains("JELO") || name.contains("PICA") || name.contains("WHISKAS")) {
+                firstOther = Math.min(firstOther, index);
+            } else if (name.contains("PILE")) {
+                lastChicken = index;
+            }
+        }
+        assertThat(lastChicken).as(names.toString()).isLessThan(firstOther);
 
         // Asked for, cat food still comes first.
         var page = searchService.search("whiskas piletina", 0, 10, true, null, false);

@@ -32,12 +32,17 @@ public class CanonicalProductSearchService {
     // to the amount, not to the thing.
     private static final Pattern PACKAGE_WORD =
             Pattern.compile("(?<= )([0-9]+|l|ml|lit|g|gr|kg|kom|komad|komada|x|oko|cca|otprilike)(?= )");
-    // Food for a cat or a dog, and a pizza, share the words of what a shop
-    // sells fresh ("Whiskas sa piletinom", "pica sa piletinom"). They come
-    // after the rest unless the query asks for them.
+    // Food for a cat or a dog, a pizza or a ready meal share the words of
+    // what a shop sells fresh ("Whiskas sa piletinom", "pica sa piletinom").
+    // They come after the rest unless the query asks for them.
     private static final Pattern ANOTHER_AISLE_WORD = Pattern.compile(
             "\\b(whiskas|felix|friskies|kitekat|sheba|pedigree|purina|chappi|dreamies|macke|macka|mace"
-                    + "|macje|maca|pse|psa|pas|pasa|psi|ljubim[a-z]*|cat|dog|pica|pizza|pizze)\\b");
+                    + "|macje|maca|pse|psa|pas|pasa|psi|ljubim[a-z]*|cat|dog|pica|pizza|pizze"
+                    // A ready meal or a cold cut made of it ("Carnex meksičko
+                    // jelo sa piletinom", "Meso rol piletina") is not the meat.
+                    + "|jelo|jela|obrok|gotov[a-z]*|mac|sendvic[a-z]*|burger[a-z]*|tortilj[a-z]*|wrap"
+                    + "|pastet[a-z]*|rol|narez[a-z]*|salam[a-z]*|virsl[a-z]*|parizer|hrenovk[a-z]*"
+                    + "|kobasic[a-z]*|supa|supe|corba|kroket[a-z]*|nuget[a-z]*|nuggets)\\b");
 
     private final CanonicalProductSearchRepository searchRepository;
     private final ProductNameNormalizer productNameNormalizer;
@@ -247,8 +252,19 @@ public class CanonicalProductSearchService {
         Optional<ParsedQuantity> queryQuantity =
                 productQuantityParser.parse(query);
 
-        Map<Long, Integer> typePriorities = typePriorities(normalizedQuery);
-        Map<Long, Integer> nearness = nearness(rows, near);
+        Optional<ShoppingIntentResolver.ResolvedShoppingIntent> kind =
+                bareKind(normalizedQuery);
+        Map<Long, Integer> typePriorities = kind
+                .map(intent -> searchRepository.findProductTypePriorities(
+                        intent.shoppingIntentId()
+                ))
+                .orElse(Map.of());
+        if (kind.isPresent()) {
+            rows = withKindFamilies(rows, normalizedQuery, kind.get(), includeWithoutPrice);
+        }
+        Map<Long, Integer> nearness = near == null && kind.isPresent()
+                ? spread(rows)
+                : nearness(rows, near);
         Map<Long, Integer> anotherAisle = anotherAisle(rows, normalizedQuery);
         String rankedQuery = normalizedQuery;
 
@@ -375,7 +391,7 @@ public class CanonicalProductSearchService {
     // that shares the word, so products of that type lead. Only when the
     // query names nothing but the thing and perhaps a size: "cokoladno mleko"
     // already says more than the type does and is left to the text.
-    private Map<Long, Integer> typePriorities(String normalizedQuery) {
+    private Optional<ShoppingIntentResolver.ResolvedShoppingIntent> bareKind(String normalizedQuery) {
         return shoppingIntentResolver.resolve(normalizedQuery)
                 .filter(intent -> PACKAGE_WORD.matcher(
                                 (" " + normalizedQuery + " ").replace(
@@ -384,11 +400,48 @@ public class CanonicalProductSearchService {
                                 )
                         )
                         .replaceAll(" ")
-                        .isBlank())
-                .map(intent -> searchRepository.findProductTypePriorities(
-                        intent.shoppingIntentId()
-                ))
-                .orElse(Map.of());
+                        .isBlank());
+    }
+
+    /**
+     * "piletina" names chicken, but „Pileći batak“ in the big chains shares
+     * no word with it: without the families of the kind, only small chains'
+     * „Sveža piletina“ was found, far from the shopper.
+     */
+    private List<CanonicalProductSearchRow> withKindFamilies(
+            List<CanonicalProductSearchRow> rows,
+            String normalizedQuery,
+            ShoppingIntentResolver.ResolvedShoppingIntent kind,
+            boolean includeWithoutPrice
+    ) {
+        java.util.Set<Long> found = rows.stream()
+                .map(CanonicalProductSearchRow::productFamilyId)
+                .collect(Collectors.toSet());
+        List<CanonicalProductSearchRow> more = searchRepository
+                .findKindFamilies(normalizedQuery, kind.normalizedAlias())
+                .stream()
+                .filter(row -> !found.contains(row.productFamilyId()))
+                .filter(row -> includeWithoutPrice || row.hasUsablePrice())
+                .toList();
+        if (more.isEmpty()) {
+            return rows;
+        }
+        List<CanonicalProductSearchRow> all = new java.util.ArrayList<>(rows);
+        all.addAll(more);
+        return all;
+    }
+
+    /**
+     * Where the shopper is not known yet (step 1 comes before the location),
+     * what many chains sell is more likely near them than what one small
+     * chain sells: a band, like distance, so the name still decides within it.
+     */
+    private static Map<Long, Integer> spread(List<CanonicalProductSearchRow> rows) {
+        return rows.stream().collect(Collectors.toMap(
+                CanonicalProductSearchRow::productFamilyId,
+                row -> row.chainCount() >= 5 ? 0 : row.chainCount() >= 2 ? 1 : 2,
+                (left, right) -> left
+        ));
     }
 
     private static int typeRank(

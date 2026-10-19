@@ -51,7 +51,8 @@ public class StoreShoppingOfferRepository {
                     new PurchaseQuantity(resultSet.getBigDecimal("packages"),
                             resultSet.getBigDecimal("package_size"), resultSet.getString("package_unit"),
                             resultSet.getBigDecimal("target_amount"), resultSet.getBigDecimal("supplied_amount"),
-                            resultSet.getBigDecimal("extra_amount"), resultSet.getBigDecimal("unit_price"))
+                            resultSet.getBigDecimal("extra_amount"), resultSet.getBigDecimal("unit_price")),
+                    resultSet.getBoolean("usual_choice")
             );
 
     private final JdbcClient jdbcClient;
@@ -1290,6 +1291,12 @@ public class StoreShoppingOfferRepository {
                                    candidate_row.oversize_rank,
                                    candidate_row.size_rank,
                                    candidate_row.bought_rank,
+                                   -- The usual kind in the usual size: a plan over
+                                   -- several shops takes it before a cheaper
+                                   -- 35 g sachet elsewhere, as one shop does.
+                                   (candidate_row.uncommon_rank + candidate_row.loose_rank
+                                       + candidate_row.oversize_rank + candidate_row.size_rank = 0)
+                                       AS usual_choice,
                                    candidate_row.retailer_product_id,
                                    store_price.effective_price * candidate_row.packages
                                        * candidate_row.pack_weight AS weighted_price,
@@ -1364,6 +1371,7 @@ public class StoreShoppingOfferRepository {
                                    2
                                ) AS line_total,
                                offer.price_scope,
+                               COALESCE(offer.usual_choice, TRUE) AS usual_choice,
                                offer.packages, offer.package_size, offer.package_unit,
                                item.target_quantity * item.quantity AS target_amount,
                                offer.packages * offer.package_size AS supplied_amount,
@@ -1407,6 +1415,7 @@ public class StoreShoppingOfferRepository {
                                priced.effective_price,
                                priced.line_total,
                                priced.price_scope,
+                               priced.usual_choice,
                                priced.packages, priced.package_size, priced.package_unit,
                                priced.target_amount,
                                priced.supplied_amount,
