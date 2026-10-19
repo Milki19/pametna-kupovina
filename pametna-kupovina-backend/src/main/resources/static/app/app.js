@@ -299,6 +299,7 @@ const icon = {
   route: '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M21.71 11.29l-9-9a1 1 0 0 0-1.42 0l-9 9a1 1 0 0 0 0 1.42l9 9a1 1 0 0 0 1.42 0l9-9a1 1 0 0 0 0-1.42zM14 14.5V12h-4v3H8v-4c0-.55.45-1 1-1h5V7.5l3.5 3.5-3.5 3.5z"/></svg>',
   card: '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20 4H4c-1.11 0-1.99.89-1.99 2L2 18c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V6c0-1.11-.89-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z"/></svg>',
   tag: '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58.55 0 1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.41 0-.55-.23-1.06-.59-1.42zM5.5 7C4.67 7 4 6.33 4 5.5S4.67 4 5.5 4 7 4.67 7 5.5 6.33 7 5.5 7z"/></svg>',
+  more: '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>',
   chevron: '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>'
 };
 
@@ -640,6 +641,30 @@ function lostListNotice() {
     </div></div>`;
 }
 
+/** Posle završene kupovine: spisak može da ostane ili da se počne ispočetka. */
+function purchaseDoneNotice(items) {
+  if (!saved.get('purchaseDone')) return '';
+  if (!items.length) { saved.set('purchaseDone', null); return ''; }
+  return `<div class="card">${notice('Kupovina je završena. Stavke su i dalje na spisku.', 'pos')}
+    <div class="btn-row">
+      <button class="btn" data-act="keep-list">Zadrži spisak</button>
+      <button class="btn primary" data-act="start-new-list">Započni nov spisak</button>
+    </div></div>`;
+}
+
+/** Sve stavke odjednom; spisak ostaje isti, pa ga ukućani i aplikacija i dalje vide. */
+async function clearList() {
+  await flushDelete();
+  const listId = listState.list.id;
+  await api('DELETE', `shopping-lists/${listId}/items`);
+  saved.set('purchaseDone', null);
+  const purchase = saved.get('purchase');
+  if (purchase?.listId === listId) saved.set('purchase', null);
+  listState.editing = null;
+  listState.list = await api('GET', `shopping-lists/${listId}`);
+  renderList();
+}
+
 function renderList() {
   const items = listState.list.items;
   let purchase = saved.get('purchase');
@@ -664,7 +689,7 @@ function renderList() {
   screen({
     title: 'Moj spisak',
     subtitle: items.length ? counted(items.length, 'stavka', 'stavke', 'stavki') : null,
-    html: lostListNotice() +
+    html: lostListNotice() + purchaseDoneNotice(items) +
       (purchase ? `<a class="card row" href="#/kupovina" style="text-decoration:none;color:inherit">
           <div class="grow"><div class="name">Kupovina u toku</div>
           <div class="muted small">Kupljeno ${purchaseBought(purchase)} od ${purchaseItems(purchase).length}</div></div>${icon.chevron}</a>` : '') +
@@ -684,7 +709,8 @@ function renderList() {
               <span class="amount">${esc(itemAmount(item))}</span>
               <button class="icon-action" data-act="delete" data-id="${item.id}" aria-label="Obriši ${esc(item.name)}">${icon.trash}</button>
             </div>
-          </div>`).join('')
+          </div>`).join('') +
+          `<button class="btn danger" data-act="clear-list">${icon.trash}Obriši ceo spisak</button>`
         : `<div class="card soft center"><div class="title">Spisak je prazan</div>
            <p class="muted">Nalepi spisak iz poruke ili beleške, ili dodaj stavku po stavku.</p></div>`),
     action: `<button class="btn primary main" data-act="calculate" ${items.length ? '' : 'disabled'}>Izračunaj</button>`
@@ -1152,6 +1178,23 @@ function scenarioWarnings(s, result) {
   return warnings;
 }
 
+/**
+ * „Najbolje ukupno" skuplje od „Jedne stanice": razlika i stavke koje samo
+ * ono pokriva, da se vidi šta se dobija za tu razliku.
+ */
+function balanceExplanation(s, result) {
+  const single = result.singleStore;
+  if (s.type !== 'RECOMMENDED_BALANCE' || !s.available || !single?.available
+      || s.totalCost == null || single.totalCost == null) return '';
+  const more = s.totalCost - single.totalCost;
+  if (Math.round(more) <= 0) return '';
+  const inSingle = new Set(single.items.filter(i => i.resultStatus === 'AVAILABLE').map(i => i.itemId));
+  const extra = s.items.filter(i => i.resultStatus === 'AVAILABLE' && !inSingle.has(i.itemId)).map(i => i.requestedName);
+  if (!extra.length) return '';
+  const names = extra.length > 4 ? `${extra.slice(0, 3).join(', ')} i još ${extra.length - 3}` : extra.join(', ');
+  return notice(`+${whole(more)} ${market.currency} od Jedne stanice, ali pokriva još: ${names}.`);
+}
+
 const storeAddress = store => [store.storeName,
   store.address && !store.storeName.toLowerCase().includes(store.address.toLowerCase()) ? store.address : null,
   store.city && !store.storeName.toLowerCase().includes(store.city.toLowerCase()) ? store.city : null
@@ -1246,7 +1289,7 @@ function renderRecommendation() {
           </div>
           <div class="row"><span class="grow">Pokrivenost korpe</span><b style="color:var(--primary)">${s.coveredItems} od ${s.items.length} ${plural(s.items.length, 'stavke', 'stavke', 'stavki')}</b></div>`
           : `<p>${esc(s.explanation)}</p>`}
-      </div>` +
+      </div>` + balanceExplanation(s, result) +
       scenarioWarnings(s, result).map(w => notice(w, 'warn')).join('') +
       (s.available && stores.length ? `
         <a class="btn" href="${esc(mapsUrl(origin, stores, result.assumptions?.travelMode === 'WALKING'))}" target="_blank" rel="noopener">${icon.route}${stores.length === 1 ? 'Pregled puta do prodavnice' : `Pregled rute kroz ${stores.length} ${plural(stores.length, 'prodavnicu', 'prodavnice', 'prodavnica')}`}</a>
@@ -1267,9 +1310,12 @@ function renderRecommendation() {
               ${quantityLine(item) ? `<div class="muted small">${esc(quantityLine(item))}</div>` : ''}
               ${stalePrice(item.priceDate, result.requestedDate) ? `<div class="muted small">Cena od ${date(item.priceDate)}</div>` : ''}
               ${manySmallPacks(item) ? pill('Mnogo malih pakovanja', 'warn') : ''}
-              <button class="btn text small" style="padding:8px 0" data-act="wrong-product" data-item="${item.itemId}"
-                aria-label="Pogrešan proizvod za „${esc(item.requestedName)}“">Pogrešan proizvod</button></div>
-            <span class="price">${item.lineTotal != null ? money(item.lineTotal) : 'nema'}</span></div>`).join('')}
+              <div class="item-menu" id="item-menu-${item.itemId}" hidden>
+                <button class="btn text small" style="padding:8px 0" data-act="wrong-product" data-item="${item.itemId}"
+                  aria-label="Pogrešan proizvod za „${esc(item.requestedName)}“">Pogrešan proizvod</button></div></div>
+            <span class="price">${item.lineTotal != null ? money(item.lineTotal) : 'nema'}</span>
+            <button class="icon-action" data-act="item-menu" aria-expanded="false" aria-controls="item-menu-${item.itemId}"
+              aria-label="Još za „${esc(item.requestedName)}“">${icon.more}</button></div>`).join('')}
         </div>`;
       }).join('') +
       (unresolved.length ? `<div class="section">Bez ponude ${pill(unresolved.length)}</div>` + unresolved.map(item => `
@@ -2029,6 +2075,11 @@ const actions = {
   scenario: el => { selectedType = el.dataset.type; renderRecommendation(); },
   'start-purchase': startPurchase,
   'wrong-product': el => wrongProduct(Number(el.dataset.item)),
+  'item-menu': el => {
+    const menu = document.getElementById(el.getAttribute('aria-controls'));
+    menu.hidden = !menu.hidden;
+    el.setAttribute('aria-expanded', String(!menu.hidden));
+  },
   'unlocated-more': () => { unlocatedOpen = !unlocatedOpen; renderRecommendation(); },
   'pick-open': el => openPick(Number(el.dataset.item)),
   'pick-cancel': () => { pickTyping.cancel(); picking = null; renderMatching(); },
@@ -2037,8 +2088,16 @@ const actions = {
   'finish-purchase': () => {
     if (!confirm('Završi kupovinu? Napredak se briše, a spisak ostaje.')) return;
     saved.set('purchase', null);
+    saved.set('purchaseDone', true);
     location.hash = '#/spisak';
   },
+  'clear-list': () => {
+    const count = listState.list.items.length;
+    if (!confirm(`Obrisati ceo spisak (${counted(count, 'stavka', 'stavke', 'stavki')})? Ovo ne može da se vrati.`)) return;
+    return clearList();
+  },
+  'start-new-list': clearList,
+  'keep-list': () => { saved.set('purchaseDone', null); renderList(); },
   more: () => runSearch(true),
   'add-product': el => addProduct(search.items[Number(el.dataset.index)]),
   'add-current': () => addProduct({ name: window.currentProduct.name, canonicalProductId: window.currentProduct.canonicalProductId }),

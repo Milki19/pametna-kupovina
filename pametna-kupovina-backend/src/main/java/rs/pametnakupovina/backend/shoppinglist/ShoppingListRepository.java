@@ -438,6 +438,16 @@ public class ShoppingListRepository {
         return deletedRows > 0;
     }
 
+    /** Ceo spisak odjednom; sam spisak ostaje, pa ga uređaj i ukućani i dalje otvaraju. */
+    public void deleteAllItems(Long listId) {
+        jdbcClient.sql("""
+                        DELETE FROM app.shopping_list_item
+                        WHERE shopping_list_id = ?
+                        """)
+                .param(1, listId)
+                .update();
+    }
+
     public boolean deactivateList(
             Long listId,
             long accountId
