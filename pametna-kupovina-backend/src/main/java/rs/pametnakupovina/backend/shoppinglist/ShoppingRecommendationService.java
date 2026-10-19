@@ -347,9 +347,8 @@ public class ShoppingRecommendationService {
 
     /**
      * The offer query works out each chain's candidate products on its own,
-     * so chains split into groups never repeat each other's work. On the
-     * two-core server the groups run side by side; with one core they run as
-     * one query, as before.
+     * so chains split into groups never repeat each other's work. The groups
+     * run side by side; with one core they run as one query, as before.
      */
     private List<StoreItemOffer> findOffersForChains(
             Long listId,
@@ -360,9 +359,12 @@ public class ShoppingRecommendationService {
             return List.of();
         }
 
+        // Four groups even on the server's two cores: two groups by shop
+        // count took 2.5 s and 4.6 s, one core idle for the last two seconds.
+        // Smaller groups keep both cores busy until the plan is done.
         int groupCount = Math.min(
                 storesByChain.size(),
-                Math.clamp(Runtime.getRuntime().availableProcessors(), 1, MAX_PARALLEL_OFFER_QUERIES)
+                Runtime.getRuntime().availableProcessors() > 1 ? MAX_PARALLEL_OFFER_QUERIES : 1
         );
         List<List<Long>> groups = new ArrayList<>();
         for (int index = 0; index < groupCount; index++) {
