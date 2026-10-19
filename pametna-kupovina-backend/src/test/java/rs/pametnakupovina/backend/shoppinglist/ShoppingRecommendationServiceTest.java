@@ -649,6 +649,55 @@ class ShoppingRecommendationServiceTest {
         );
     }
 
+    /** Proba 19.10.: "kečap" became METRO's 35 g at 45 RSD, beside 500 g at 99,99 (V139). */
+    @Test
+    void theUsualSizeElsewhereBeatsACheaperOddOne() {
+        ShoppingListRepository listRepository = mock(ShoppingListRepository.class);
+        NearbyStoreRepository nearbyRepository = mock(NearbyStoreRepository.class);
+        StoreShoppingOfferRepository offerRepository = mock(StoreShoppingOfferRepository.class);
+        RouteMatrixProvider routeProvider = mock(RouteMatrixProvider.class);
+        ShoppingRecommendationService service = new ShoppingRecommendationService(
+                listRepository,
+                nearbyRepository,
+                offerRepository,
+                routeProvider,
+                new ShoppingOptimizationProperties(),
+                markets()
+        );
+
+        ShoppingListItemResponse ketchup = item(1L, "kečap", 101L);
+        ShoppingListItemResponse bread = item(2L, "Hleb", 102L);
+        when(listRepository.findById(10L)).thenReturn(Optional.of(new ShoppingListResponse(
+                10L, "Test korpa", OffsetDateTime.now(), OffsetDateTime.now(), List.of(ketchup, bread))));
+
+        NearbyStore metro = store(1L, "A");
+        NearbyStore idea = store(2L, "B");
+        when(nearbyRepository.findPricingEligibleNearby(SERBIA, 44.0, 19.0, 15_000, 20))
+                .thenReturn(List.of(metro, idea));
+        when(offerRepository.findOffers(eq(10L), anyList(), eq(DATE), eq(true)))
+                .thenAnswer(call -> offersFor(call.getArgument(1), List.of(
+                        odd(offer(metro, ketchup, 45, 1001L)),
+                        offer(metro, bread, 60, 1002L),
+                        offer(idea, ketchup, 100, 2001L),
+                        offer(idea, bread, 70, 2002L)
+                )));
+        when(routeProvider.calculate(anyList())).thenReturn(routeMatrix());
+
+        ShoppingRecommendationResponse response = service.recommend(10L, 44.0, 19.0, DATE);
+
+        assertThat(response.lowestPrice().basketCost()).isEqualByComparingTo("160.00");
+        assertThat(response.lowestPrice().priceSources()).containsExactlyInAnyOrder("A", "B");
+    }
+
+    private static StoreItemOffer odd(StoreItemOffer o) {
+        return new StoreItemOffer(o.storeId(), o.retailerCode(), o.retailerName(), o.storeFormatCode(),
+                o.storeFormatName(), o.storeName(), o.address(), o.city(), o.latitude(), o.longitude(),
+                o.itemId(), o.requestedName(), o.requestedQuantity(), o.matchingRule(), o.matchingStatus(),
+                o.retailerProductId(), o.canonicalProductId(), o.productName(), o.productBrand(),
+                o.productBarcode(), o.priceDate(), o.regularPrice(), o.discountedPrice(), o.effectivePrice(),
+                o.lineTotal(), o.priceScope(), o.purchaseQuantity(), false);
+    }
+
     private StoreItemOffer offer(
             NearbyStore store,
             ShoppingListItemResponse item,

@@ -11,13 +11,15 @@
 
 -- Nove vrste proizvoda -----------------------------------------------------
 
--- Kečap lanci svrstavaju u sosove, začine ili prerađeno povrće: bez kategorije
--- vrste nijedan od tih izbora ne obara sigurnost ispod praga (-0,15).
+-- Kečap lanci svrstavaju u sosove, začine ili prerađeno povrće, a sapun u
+-- kozmetiku, bebe ili kućnu hemiju: bez kategorije vrste nijedan od tih izbora
+-- ne obara sigurnost ispod praga (-0,15). Proba 19.10.: „Balea čvrsti sapun“,
+-- „Camelia sapun med-mleko“ i „Baby sapun Merima“ su ostali bez vrste.
 INSERT INTO app.product_type (code, name, product_category_id)
 SELECT kind.code, kind.name, category.id
 FROM (
     VALUES
-        ('SOAP', 'Sapun', 'PERSONAL_CARE'),
+        ('SOAP', 'Sapun', NULL),
         ('KETCHUP', 'Kečap', NULL)
 ) AS kind (code, name, category_code)
 LEFT JOIN app.product_category AS category
@@ -38,8 +40,11 @@ FROM (
             'SOAP',
             -- „sapunica“ (mehurići) i „sapunjav“ nisu sapun.
             '\m(sapun|sapuna|sapuni|sapune|soap)\M|\mtec[a-z]* sap\M',
-            '\m(sampon[a-z]*|shampoo|tus[a-z]*|kupk[a-z]*|gel|brijanj[a-z]*|ves|vesa|deterdzent[a-z]*'
-                || '|sundjer[a-z]*|rukavic[a-z]*|maramic[a-z]*|kutij[a-z]*|posud[a-z]*|drzac[a-z]*'
+            -- Sapun za veš i za fleke (Merix, Axal, Vanish, marsejski) je deterdžent.
+            -- „Čvrsti sapun za tuširanje“ je sapun; gel za tuširanje nije.
+            '\m(sampon[a-z]*|shampoo|kupk[a-z]*|gel|brijanj[a-z]*|ves|vesa|rublj[a-z]*'
+                || '|deterdzent[a-z]*|det|detergent[a-z]*|merix|axal|vanish|marsej[a-z]*|odmasc[a-z]*|fleka|fleke'
+                || '|sudov[a-z]*|sudj[a-z]*|sundjer[a-z]*|rukavic[a-z]*|maramic[a-z]*|kutij[a-z]*|posud[a-z]*|drzac[a-z]*'
                 || '|dispenzer[a-z]*|kalup[a-z]*|mehur[a-z]*|balon[a-z]*|igrack[a-z]*|set|poklon[a-z]*'
                 || '|kesa|kese|torb[a-z]*|necesser|praznjen[a-z]*)\M'
                 -- Dozer ili pumpica bez sapuna: naziv počinje njima.
@@ -50,7 +55,8 @@ FROM (
             'KETCHUP',
             '\m(kecap[a-z]*|ketchup[a-z]*|kecup|ketcup)\M',
             -- Čips i smoki sa ukusom kečapa, pica i sendvič sa kečapom.
-            '\m(cips[a-z]*|chips|smoki|flips|bits|grickalic[a-z]*|kokic[a-z]*|stapic[a-z]*|kreker[a-z]*'
+            -- „CHIP.REBRASTI KECAP“, „Brrr“ i „Kubeti“ su grickalice (proba 19.10.).
+            '\m(cips[a-z]*|chips[a-z]*|chip|brrr|kubet[a-z]*|smoki|flips|bits|grickalic[a-z]*|kokic[a-z]*|stapic[a-z]*|kreker[a-z]*'
                 || '|ukus[a-z]*|arom[a-z]*|pica|pizza|sendvic[a-z]*|burger[a-z]*|tortilj[a-z]*|wrap'
                 || '|hot dog|hotdog|kobasic[a-z]*|virsl[a-z]*|pomfrit|krompiric[a-z]*|majonez[a-z]*|senf[a-z]*'
                 || '|set|poklon[a-z]*)\M',
@@ -144,6 +150,22 @@ FROM (
 JOIN app.shopping_intent AS intent
   ON intent.code = word.intent_code
 ON CONFLICT (normalized_alias) DO NOTHING;
+
+-- Piletina bez količine ------------------------------------------------------
+
+-- "piletina" bez količine je bila najjeftinije pakovanje: „GRUDI PILEĆE MINI
+-- 300G“ i METRO-ov „200G PERUTNINA PILECA V“ (proba 19.10.). Meso se obično
+-- kupuje od pola kilograma do kilogram i po; manje pakovanje dolazi posle
+-- mesa na meru, a ono posle pakovanja te veličine. Rangira se, ne filtrira.
+UPDATE app.shopping_intent
+SET default_min_package_quantity = 400,
+    default_max_package_quantity = 1500,
+    default_base_unit = 'g',
+    updated_at = NOW()
+WHERE code = 'MEAT'
+  AND default_min_package_quantity IS NULL
+  AND default_max_package_quantity IS NULL
+  AND default_base_unit IS NULL;
 
 -- Vrste po novim pravilima ---------------------------------------------------
 

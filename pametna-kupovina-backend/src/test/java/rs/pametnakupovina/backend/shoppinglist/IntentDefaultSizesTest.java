@@ -75,6 +75,10 @@ class IntentDefaultSizesTest {
                 .query(String.class)
                 .list();
         assertThat(withoutSize).containsExactly(
-                "BAKERY_ROLL", "FISH", "FRESH_FISH", "FRESH_MEAT", "FRUIT", "MEAT", "VEGETABLE");
+                "BAKERY_ROLL", "FISH", "FRESH_FISH", "FRESH_MEAT", "FRUIT", "VEGETABLE");
+        // "piletina" was a 200 g pack: meat is usually 0,4 to 1,5 kg (V139).
+        Map<String, Object> meat = usualSize("MEAT");
+        assertThat(meat.get("default_base_unit")).isEqualTo("g");
+        assertThat((BigDecimal) meat.get("default_min_package_quantity")).isEqualByComparingTo("400");
     }
 }

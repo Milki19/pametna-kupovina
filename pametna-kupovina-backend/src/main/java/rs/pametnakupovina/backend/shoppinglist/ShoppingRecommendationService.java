@@ -657,8 +657,12 @@ public class ShoppingRecommendationService {
                     continue;
                 }
 
+                // The usual kind and size anywhere before a cheaper odd
+                // one: a shop that has only the 35 g sachet still offers it.
                 if (cheapest == null
-                        || candidate.lineTotal().compareTo(
+                        || (candidate.usualChoice() && !cheapest.usualChoice())
+                        || (candidate.usualChoice() == cheapest.usualChoice()
+                        && (candidate.lineTotal().compareTo(
                         cheapest.lineTotal()
                 ) < 0
                         || (
@@ -667,7 +671,7 @@ public class ShoppingRecommendationService {
                         ) == 0
                                 && candidate.storeId()
                                 < cheapest.storeId()
-                )) {
+                )))) {
                     cheapest = candidate;
                 }
             }
@@ -870,9 +874,17 @@ public class ShoppingRecommendationService {
             if (best == null
                     || candidate.plan().coveredItems()
                     > best.plan().coveredItems()
+                    // The usual kind and size count before the price: the
+                    // lowest basket is not METRO's 35 g ketchup (V139).
                     || (
                     candidate.plan().coveredItems()
                             == best.plan().coveredItems()
+                            && usualItems(candidate) > usualItems(best)
+            )
+                    || (
+                    candidate.plan().coveredItems()
+                            == best.plan().coveredItems()
+                            && usualItems(candidate) == usualItems(best)
                             && candidate.plan().basketCost().compareTo(
                             best.plan().basketCost()
                     ) < 0
@@ -880,6 +892,7 @@ public class ShoppingRecommendationService {
                     || (
                     candidate.plan().coveredItems()
                             == best.plan().coveredItems()
+                            && usualItems(candidate) == usualItems(best)
                             && candidate.plan().basketCost().compareTo(
                             best.plan().basketCost()
                     ) == 0
@@ -892,6 +905,12 @@ public class ShoppingRecommendationService {
         }
 
         return best;
+    }
+
+    private static long usualItems(EvaluatedPlan evaluated) {
+        return evaluated.plan().assignments().values().stream()
+                .filter(StoreItemOffer::usualChoice)
+                .count();
     }
 
     private EvaluatedPlan chooseByTotalCost(
