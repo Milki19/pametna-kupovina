@@ -31,7 +31,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  * Sessions end: an access token after minutes, a refresh token after it is
  * used or after a long silence, and both the moment a phone signs out or is
  * removed from its account. Phones on app 1.8 keep working until they update,
- * and then their old number opens nothing.
+ * and then their old number works only to open their own session again.
  */
 @SpringBootTest(properties = {
         "price-import.minimum-snapshot-date=",
@@ -216,8 +216,27 @@ class DeviceSessionTest {
         assertThat(legacy.getResponse().getStatus()).isEqualTo(401);
         assertThat(legacy.getResponse().getContentAsString()).contains("Ažuriraj aplikaciju");
 
-        // ... nor, once the session is in use, for a second session.
-        openExpecting(oldNumber, 401);
+        // ... but it still opens the same session again.
+        JsonNode reopened = open(oldNumber);
+        assertThat(reopened.path("deviceId").asLong()).isEqualTo(session.path("deviceId").asLong());
+        assertThat(status(get("/api/v1/shopping-lists/" + listId), access(reopened))).isEqualTo(200);
+    }
+
+    @Test
+    void aBrowserThatLostItsRefreshTokenGetsItsListsBackWhileTheSessionIsAlive() throws Exception {
+        String number = newDeviceToken();
+        JsonNode first = open(number);
+        long listId = createList(access(first), "Za vikend");
+        JsonNode second = refresh(first.path("refreshToken").asText(), 200);
+        assertThat(status(get("/api/v1/accounts/me"), access(second))).isEqualTo(200);
+
+        JsonNode reopened = open(number);
+
+        assertThat(reopened.path("deviceId").asLong()).isEqualTo(first.path("deviceId").asLong());
+        assertThat(status(get("/api/v1/shopping-lists/" + listId), access(reopened))).isEqualTo(200);
+        // The tokens from before stop working, so a copy of them is worth nothing.
+        assertThat(status(get("/api/v1/accounts/me"), access(second))).isEqualTo(401);
+        refresh(second.path("refreshToken").asText(), 401);
     }
 
     @Test
