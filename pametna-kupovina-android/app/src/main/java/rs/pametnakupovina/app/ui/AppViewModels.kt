@@ -398,6 +398,8 @@ class MatchingViewModel @Inject constructor(
         }
     }
 
+    suspend fun requestedPackages(itemId: Long) = repository.requestedPackages(itemId)
+
     /** „Izaberi iz pretrage": [onDone] dobija grešku ili null kad je sačuvano. */
     fun pickFromSearch(
         item: ShoppingItemMatchResultDto,
@@ -485,6 +487,8 @@ class RecommendationViewModel @Inject constructor(
     val uiState: StateFlow<RecommendationUiState> = _uiState.asStateFlow()
 
     suspend fun alternativeQuery(itemId: Long) = repository.alternativeQuery(itemId)
+
+    suspend fun requestedPackages(itemId: Long) = repository.requestedPackages(itemId)
 
     /** „Pogrešan proizvod": odbijanje se pamti, a [onRejected] otvara izbor zamene. */
     fun rejectPlannedProduct(listId: Long, item: RecommendationItemDto, onRejected: (UiText?) -> Unit) {

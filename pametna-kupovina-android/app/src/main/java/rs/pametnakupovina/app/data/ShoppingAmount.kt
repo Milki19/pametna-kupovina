@@ -99,3 +99,20 @@ fun similarItem(
         requiredBaseUnit = amount?.unit
     )
 }
+
+/** Koliko je stavka tražila: broj pakovanja i, kad je napisana, ukupna količina. */
+data class RequestedPackages(val quantity: Double, val targetQuantity: Double?, val baseUnit: String?)
+
+/**
+ * Koliko pakovanja izabranog proizvoda traži stavka, isto kao na webu:
+ * „jogurte (3)" ostaju 3, „piletina oko 1kg" od 500 g su 2, a „pivo 6" u
+ * paketu od 6 je jedan paket. Do četvrtine manje je dovoljno.
+ */
+fun RequestedPackages.packagesOf(product: rs.pametnakupovina.app.data.network.CanonicalProductSearchItemDto): Double {
+    val size = product.quantityValue
+    if (targetQuantity != null && baseUnit != null && product.baseUnit == baseUnit && size != null && size > 0) {
+        return kotlin.math.ceil(targetQuantity * quantity / size - 0.25).coerceIn(1.0, 999.0)
+    }
+    val inPack = product.packageCount.coerceAtLeast(1)
+    return if (quantity % inPack == 0.0) quantity / inPack else quantity
+}

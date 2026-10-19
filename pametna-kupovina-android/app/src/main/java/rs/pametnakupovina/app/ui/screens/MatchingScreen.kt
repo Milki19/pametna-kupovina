@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import rs.pametnakupovina.app.R
+import rs.pametnakupovina.app.data.RequestedPackages
 import rs.pametnakupovina.app.data.amountLabel
 import rs.pametnakupovina.app.data.network.ProductCandidateDto
 import rs.pametnakupovina.app.data.network.ShoppingItemMatchResultDto
@@ -75,10 +76,15 @@ fun MatchingScreen(
     // „Izaberi iz pretrage": isti izbor proizvoda kao zamena u planu.
     var pickFor by remember { mutableStateOf<ShoppingItemMatchResultDto?>(null) }
     var pickError by remember { mutableStateOf<UiText?>(null) }
+    var pickRequested by remember { mutableStateOf<RequestedPackages?>(null) }
     LaunchedEffect(pickFor?.itemId) {
+        pickRequested = null
         pickFor?.let { item ->
             productSearchViewModel.clear()
             productSearchViewModel.updateQuery(item.requestedName)
+            pickRequested = runCatching { viewModel.requestedPackages(item.itemId) }
+                .onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
+                .getOrNull()
         }
     }
     pickFor?.let { item ->
@@ -96,6 +102,7 @@ fun MatchingScreen(
                     productSearchViewModel.clear()
                 }
             },
+            requested = pickRequested,
             onSave = { product, packages ->
                 pickError = null
                 viewModel.pickFromSearch(item, product, packages) { error ->

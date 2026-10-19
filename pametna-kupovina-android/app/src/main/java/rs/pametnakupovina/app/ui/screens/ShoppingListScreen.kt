@@ -78,6 +78,7 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import rs.pametnakupovina.app.R
+import rs.pametnakupovina.app.data.PastedListParser
 import rs.pametnakupovina.app.data.amountLabel
 import rs.pametnakupovina.app.data.MAX_ITEM_QUANTITY
 import rs.pametnakupovina.app.data.local.DraftItemEntity
@@ -466,6 +467,13 @@ private fun DraftItemRow(
     val texts: @Composable (Modifier) -> Unit = { textModifier ->
         Column(modifier = textModifier, verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(item.name, style = MaterialTheme.typography.titleMedium)
+            PastedListParser.noteOf(item.rawInput)?.let { note ->
+                Text(
+                    note,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
             draftRuleLabel(item)?.let { label ->
                 Text(
                     label.asString(),

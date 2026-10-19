@@ -13,6 +13,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -22,6 +23,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import rs.pametnakupovina.app.R
+import rs.pametnakupovina.app.data.RequestedPackages
+import rs.pametnakupovina.app.data.packagesOf
 import rs.pametnakupovina.app.data.network.CanonicalProductSearchItemDto
 import rs.pametnakupovina.app.ui.ProductSearchUiState
 import rs.pametnakupovina.app.ui.components.AppSpacing
@@ -40,10 +43,15 @@ internal fun AlternativePickerDialog(
     onRetry: () -> Unit,
     onMore: () -> Unit,
     onDismiss: () -> Unit,
-    onSave: (CanonicalProductSearchItemDto, Double) -> Unit
+    onSave: (CanonicalProductSearchItemDto, Double) -> Unit,
+    requested: RequestedPackages? = null
 ) {
     var selected by remember(name) { mutableStateOf<CanonicalProductSearchItemDto?>(null) }
     var packages by remember(name) { mutableStateOf("1") }
+    // Količina sa spiska ostaje: „jogurte (3)" su 3 i kad se izabere proizvod.
+    LaunchedEffect(requested) {
+        requested?.let { packages = formatQuantity(selected?.let(it::packagesOf) ?: it.quantity) }
+    }
     val amount = packages.replace(',', '.').toDoubleOrNull()
     val canSave = !saving &&
         selected?.hasUsablePrice == true &&
@@ -91,7 +99,10 @@ internal fun AlternativePickerDialog(
                     selected = null
                     onQuery(it)
                 },
-                onSelectProduct = { selected = it },
+                onSelectProduct = { product ->
+                    selected = product
+                    requested?.let { packages = formatQuantity(it.packagesOf(product)) }
+                },
                 onClearSelection = { selected = null },
                 onRetry = onRetry,
                 onLoadMore = onMore,

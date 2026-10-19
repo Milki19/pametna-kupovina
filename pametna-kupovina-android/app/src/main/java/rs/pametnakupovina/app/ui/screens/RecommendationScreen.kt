@@ -70,6 +70,7 @@ import kotlin.math.abs
 import java.time.LocalDate
 import java.time.format.DateTimeParseException
 import rs.pametnakupovina.app.R
+import rs.pametnakupovina.app.data.RequestedPackages
 import rs.pametnakupovina.app.data.amountLabel
 import rs.pametnakupovina.app.data.network.OptimizationScenarioDto
 import rs.pametnakupovina.app.data.network.PurchaseQuantityDto
@@ -142,6 +143,7 @@ fun RecommendationScreen(
     var alternativeItem by remember { mutableStateOf<RecommendationItemDto?>(null) }
     var replacing by remember { mutableStateOf(false) }
     var replacementError by remember { mutableStateOf<UiText?>(null) }
+    var alternativeRequested by remember { mutableStateOf<RequestedPackages?>(null) }
     var similarFor by remember { mutableStateOf<RecommendationItemDto?>(null) }
     var wrongFor by remember { mutableStateOf<RecommendationItemDto?>(null) }
     var changingTripCosts by rememberSaveable { mutableStateOf(false) }
@@ -214,7 +216,11 @@ fun RecommendationScreen(
     }
 
     LaunchedEffect(alternativeItem?.itemId) {
+        alternativeRequested = null
         alternativeItem?.let { item ->
+            alternativeRequested = runCatching { viewModel.requestedPackages(item.itemId) }
+                .onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
+                .getOrNull()
             productSearchViewModel.clear()
             val query = try {
                 viewModel.alternativeQuery(item.itemId)
@@ -232,6 +238,7 @@ fun RecommendationScreen(
             state = searchState,
             saving = replacing,
             error = replacementError?.asString(),
+            requested = alternativeRequested,
             onQuery = productSearchViewModel::updateQuery,
             onRetry = productSearchViewModel::retry,
             onMore = productSearchViewModel::loadNextPage,
