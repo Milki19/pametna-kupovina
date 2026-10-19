@@ -982,9 +982,39 @@ public class StoreShoppingOfferRepository {
                                    EXISTS (
                                        SELECT 1
                                        FROM app.price_observation AS loose
+                                       CROSS JOIN LATERAL (
+                                           SELECT CASE
+                                                      WHEN loose.store_id IS NOT NULL
+                                                          THEN 'STORE:' || loose.store_id::TEXT
+                                                      WHEN NULLIF(BTRIM(
+                                                          loose.retailer_format_name
+                                                      ), '') IS NOT NULL
+                                                          THEN 'STORE_FORMAT:' ||
+                                                               LOWER(BTRIM(
+                                                                   loose.retailer_format_name
+                                                               ))
+                                                      ELSE 'RETAILER'
+                                                  END AS scope_key
+                                       ) AS loose_scope
+                                       -- Only one in its chain's newest list can price
+                                       -- anything (V75). Without asking, IDEA's retired
+                                       -- zone lists opened the search below for a
+                                       -- quarter of the candidates, to find nothing.
+                                       LEFT JOIN app.price_list_snapshot AS loose_list
+                                         ON loose_list.retailer_id = candidate.retailer_id
+                                        AND loose_list.scope_key = loose_scope.scope_key
                                        WHERE loose.retailer_product_id =
                                                candidate.retailer_product_id
                                          AND loose.price_date <= :asOfDate
+                                         AND COALESCE(
+                                             CASE
+                                                 WHEN loose_list.latest_price_date > :asOfDate
+                                                     THEN TRUE
+                                                 ELSE loose_list.latest_price_date = loose.price_date
+                                                      AND NOT loose_list.retired
+                                             END,
+                                             TRUE
+                                         )
                                          AND NOT EXISTS (
                                              SELECT 1
                                              FROM app.current_price_offer
@@ -994,19 +1024,7 @@ public class StoreShoppingOfferRepository {
                                                AND loose_current.price_date <=
                                                    :asOfDate
                                                AND loose_current.scope_key =
-                                                   CASE
-                                                       WHEN loose.store_id IS NOT NULL
-                                                           THEN 'STORE:' ||
-                                                                loose.store_id::TEXT
-                                                       WHEN NULLIF(BTRIM(
-                                                           loose.retailer_format_name
-                                                       ), '') IS NOT NULL
-                                                           THEN 'STORE_FORMAT:' ||
-                                                                LOWER(BTRIM(
-                                                                    loose.retailer_format_name
-                                                                ))
-                                                       ELSE 'RETAILER'
-                                                   END
+                                                   loose_scope.scope_key
                                          )
                                    ) AS has_loose_observation
                             FROM candidate
@@ -1098,22 +1116,31 @@ public class StoreShoppingOfferRepository {
                                        1 AS source_priority,
                                        observation.id
                                 FROM app.price_observation AS observation
+                                -- The same test as app.in_latest_price_list,
+                                -- read as a join (see current offers above).
+                                LEFT JOIN app.price_list_snapshot AS observation_list
+                                  ON observation_list.retailer_id = wanted.retailer_id
+                                 AND observation_list.scope_key =
+                                     CASE
+                                         WHEN observation.store_id IS NOT NULL
+                                             THEN 'STORE:' || observation.store_id::TEXT
+                                         WHEN NULLIF(BTRIM(observation.retailer_format_name), '') IS NOT NULL
+                                             THEN 'STORE_FORMAT:' || LOWER(BTRIM(observation.retailer_format_name))
+                                         ELSE 'RETAILER'
+                                     END
                                 -- Almost never: see candidate_row above.
                                 WHERE wanted.has_loose_observation
                                   AND observation.retailer_product_id =
                                         wanted.retailer_product_id
                                   AND observation.price_date <= :asOfDate
-                                  AND app.in_latest_price_list(
-                                      wanted.retailer_id,
+                                  AND COALESCE(
                                       CASE
-                                          WHEN observation.store_id IS NOT NULL
-                                              THEN 'STORE:' || observation.store_id::TEXT
-                                          WHEN NULLIF(BTRIM(observation.retailer_format_name), '') IS NOT NULL
-                                              THEN 'STORE_FORMAT:' || LOWER(BTRIM(observation.retailer_format_name))
-                                          ELSE 'RETAILER'
+                                          WHEN observation_list.latest_price_date > :asOfDate
+                                              THEN TRUE
+                                          ELSE observation_list.latest_price_date = observation.price_date
+                                               AND NOT observation_list.retired
                                       END,
-                                      observation.price_date,
-                                      :asOfDate
+                                      TRUE
                                   )
                                   AND NOT EXISTS (
                                       SELECT 1
