@@ -1035,7 +1035,17 @@ public class StoreShoppingOfferRepository {
                         -- 13,600 products (2.5 s of a 4.6 s plan on the server).
                         price_source AS MATERIALIZED (
                             SELECT wanted.retailer_product_id,
-                                   source.*
+                                   source.observed,
+                                   source.source_store_id,
+                                   source.scope_type,
+                                   source.format_key,
+                                   source.price_date,
+                                   source.regular_price,
+                                   source.discounted_price,
+                                   source.effective_price,
+                                   source.price_scope,
+                                   source.source_priority,
+                                   source.id
                             FROM (
                                 SELECT candidate_row.retailer_product_id,
                                        MIN(candidate_row.retailer_id) AS retailer_id,
@@ -1064,28 +1074,12 @@ public class StoreShoppingOfferRepository {
                                        ) AS effective_price,
                                        current_offer.scope_type AS price_scope,
                                        0 AS source_priority,
-                                       current_offer.id
+                                       current_offer.id,
+                                       current_offer.scope_key
                                 FROM app.current_price_offer AS current_offer
-                                -- Only a price in the chain's newest list:
-                                -- a dropped product keeps its old price (V75).
-                                -- The same test as app.in_latest_price_list,
-                                -- read as a join: the function ran as a query
-                                -- of its own for every offer.
-                                LEFT JOIN app.price_list_snapshot AS snapshot
-                                  ON snapshot.retailer_id = wanted.retailer_id
-                                 AND snapshot.scope_key = current_offer.scope_key
                                 WHERE current_offer.retailer_product_id =
                                         wanted.retailer_product_id
                                   AND current_offer.price_date <= :asOfDate
-                                  AND COALESCE(
-                                      CASE
-                                          WHEN snapshot.latest_price_date > :asOfDate
-                                              THEN TRUE
-                                          ELSE snapshot.latest_price_date = current_offer.price_date
-                                               AND NOT snapshot.retired
-                                      END,
-                                      TRUE
-                                  )
                                 UNION ALL
                                 SELECT TRUE AS observed,
                                        observation.store_id AS source_store_id,
@@ -1114,34 +1108,23 @@ public class StoreShoppingOfferRepository {
                                            ELSE 'RETAILER'
                                        END AS price_scope,
                                        1 AS source_priority,
-                                       observation.id
+                                       observation.id,
+                                       observation_scope.scope_key
                                 FROM app.price_observation AS observation
-                                -- The same test as app.in_latest_price_list,
-                                -- read as a join (see current offers above).
-                                LEFT JOIN app.price_list_snapshot AS observation_list
-                                  ON observation_list.retailer_id = wanted.retailer_id
-                                 AND observation_list.scope_key =
-                                     CASE
-                                         WHEN observation.store_id IS NOT NULL
-                                             THEN 'STORE:' || observation.store_id::TEXT
-                                         WHEN NULLIF(BTRIM(observation.retailer_format_name), '') IS NOT NULL
-                                             THEN 'STORE_FORMAT:' || LOWER(BTRIM(observation.retailer_format_name))
-                                         ELSE 'RETAILER'
-                                     END
+                                CROSS JOIN LATERAL (
+                                    SELECT CASE
+                                               WHEN observation.store_id IS NOT NULL
+                                                   THEN 'STORE:' || observation.store_id::TEXT
+                                               WHEN NULLIF(BTRIM(observation.retailer_format_name), '') IS NOT NULL
+                                                   THEN 'STORE_FORMAT:' || LOWER(BTRIM(observation.retailer_format_name))
+                                               ELSE 'RETAILER'
+                                           END AS scope_key
+                                ) AS observation_scope
                                 -- Almost never: see candidate_row above.
                                 WHERE wanted.has_loose_observation
                                   AND observation.retailer_product_id =
                                         wanted.retailer_product_id
                                   AND observation.price_date <= :asOfDate
-                                  AND COALESCE(
-                                      CASE
-                                          WHEN observation_list.latest_price_date > :asOfDate
-                                              THEN TRUE
-                                          ELSE observation_list.latest_price_date = observation.price_date
-                                               AND NOT observation_list.retired
-                                      END,
-                                      TRUE
-                                  )
                                   AND NOT EXISTS (
                                       SELECT 1
                                       FROM app.current_price_offer
@@ -1151,23 +1134,27 @@ public class StoreShoppingOfferRepository {
                                         AND available_current.price_date <=
                                             :asOfDate
                                         AND available_current.scope_key =
-                                            CASE
-                                                WHEN observation.store_id
-                                                        IS NOT NULL
-                                                    THEN 'STORE:' ||
-                                                         observation.store_id::TEXT
-                                                WHEN NULLIF(BTRIM(
-                                                    observation.retailer_format_name
-                                                ), '') IS NOT NULL
-                                                    THEN 'STORE_FORMAT:' ||
-                                                         LOWER(BTRIM(
-                                                             observation.retailer_format_name
-                                                         ))
-                                                ELSE 'RETAILER'
-                                            END
+                                            observation_scope.scope_key
                                   )
                             ) AS source
+                            -- Only a price in the chain's newest list: a dropped
+                            -- product keeps its old price (V75). The same test as
+                            -- app.in_latest_price_list, asked once for all offers:
+                            -- inside each product's lookup the lists were read
+                            -- again for every offer.
+                            LEFT JOIN app.price_list_snapshot AS snapshot
+                              ON snapshot.retailer_id = wanted.retailer_id
+                             AND snapshot.scope_key = source.scope_key
                             WHERE source.effective_price > 0
+                              AND COALESCE(
+                                  CASE
+                                      WHEN snapshot.latest_price_date > :asOfDate
+                                          THEN TRUE
+                                      ELSE snapshot.latest_price_date = source.price_date
+                                           AND NOT snapshot.retired
+                                  END,
+                                  TRUE
+                              )
                         ),
                         -- Each shop's price of each candidate: its own price
                         -- first, then its format's, then the chain's; the
