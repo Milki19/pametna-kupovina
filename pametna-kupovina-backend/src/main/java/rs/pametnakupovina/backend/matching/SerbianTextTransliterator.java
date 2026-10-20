@@ -3,12 +3,12 @@ package rs.pametnakupovina.backend.matching;
 import java.text.Normalizer;
 import java.util.Locale;
 
-final class SerbianTextTransliterator {
+public final class SerbianTextTransliterator {
 
     private SerbianTextTransliterator() {
     }
 
-    static String toLatinAsciiLowercase(String value) {
+    public static String toLatinAsciiLowercase(String value) {
         if (value == null) {
             return "";
         }

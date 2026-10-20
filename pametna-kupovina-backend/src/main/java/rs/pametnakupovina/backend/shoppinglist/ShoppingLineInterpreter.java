@@ -59,17 +59,25 @@ public class ShoppingLineInterpreter {
         String name = line.name();
         ShoppingIntentResolver.ResolvedShoppingIntent intent =
                 intentResolver.resolve(name).orElse(null);
+        // The words as a dictionary has them, where the kind sits among them:
+        // "mlevenog mesa" holds "meso" only once read as "mleveno meso".
+        String kindPhrase = name;
 
-        if (intent == null) {
-            Optional<Spelled> dictionaryForm = dictionaryForm(name);
-            if (dictionaryForm.isPresent()) {
-                name = dictionaryForm.get().name();
-                intent = dictionaryForm.get().intent();
+        if (intent == null || !intent.exactAlias()) {
+            Optional<ShoppingIntentResolver.FormMatch> form =
+                    intentResolver.resolveForms(name);
+            if (form.isPresent() && form.get().intent().exactAlias()) {
+                name = respelled(name, form.get().phrase());
+                kindPhrase = form.get().phrase();
+                intent = form.get().intent();
+            } else if (intent == null && form.isPresent()) {
+                intent = form.get().intent();
+                kindPhrase = form.get().phrase();
             }
         }
 
         if (intent == null) {
-            return product(line);
+            return kindByName(line);
         }
 
         BigDecimal packages = line.quantity();
@@ -106,10 +114,18 @@ public class ShoppingLineInterpreter {
         }
 
         Optional<CategoryAndBrand> split =
-                brandBesideCategory(name, intent.normalizedAlias());
+                brandBesideCategory(kindPhrase, intent.normalizedAlias());
 
         if (split.isEmpty()) {
-            return product(line);
+            // "feta sir", "mleko 3,2%", "šampon za decu": the kind, and what
+            // the plan looks for among its products. Only where some product
+            // of the kind says it: "toaletna voda" is no water.
+            String wanted = WantedWords.pattern(kindPhrase, intent.normalizedAlias(), normalizer);
+            if (wanted != null
+                    && intentResolver.kindHasProductsMatching(intent.shoppingIntentId(), wanted)) {
+                return choice(name, kindPhrase, intent, null, packages, target, unit);
+            }
+            return kindByName(line);
         }
 
         return choice(
@@ -130,42 +146,112 @@ public class ShoppingLineInterpreter {
     }
 
     /**
-     * "2 mleka", "kisele vode": a list says how many of something, so its
-     * last word often comes in the genitive. A message asks for something in
-     * the accusative too: "jogurte (3)", "uzmi piletinu". Only a form that is exactly a
-     * kind of product counts, so a product's own name never turns into one.
+     * What no dictionary knows ("tortilje", "vlažne maramice", "hrana za
+     * pse") is any product whose name says its words, as "Neka aplikacija
+     * izabere" does, without a click (izveštaj 20.10.2026). Only where such
+     * products have a price; anything else is looked up as one product.
      */
-    private Optional<Spelled> dictionaryForm(String name) {
-        String trimmed = name.trim();
-        int lastSpace = trimmed.lastIndexOf(' ');
-        String head = lastSpace < 0 ? "" : trimmed.substring(0, lastSpace + 1);
-        String word = trimmed.substring(lastSpace + 1);
-        if (word.length() < 3) {
-            return Optional.empty();
-        }
-        String stem = word.substring(0, word.length() - 1);
-        List<String> forms = switch (Character.toLowerCase(word.charAt(word.length() - 1))) {
-            case 'a' -> List.of(stem, stem + "o", stem + "e");
-            case 'e' -> List.of(stem + "a", stem);
-            case 'u' -> List.of(stem + "a");
-            default -> List.of();
-        };
-        for (String form : forms) {
-            String candidate = head + form;
-            Optional<ShoppingIntentResolver.ResolvedShoppingIntent> intent =
-                    intentResolver.resolve(candidate)
-                            .filter(ShoppingIntentResolver.ResolvedShoppingIntent::exactAlias);
-            if (intent.isPresent()) {
-                return Optional.of(new Spelled(candidate, intent.get()));
+    private InterpretedLine kindByName(ParsedShoppingListLine line) {
+        String written = line.name() == null ? "" : line.name().trim();
+        // "pelene za bebu": diapers are for babies whether or not their
+        // names say it, so the purpose is dropped where nothing says it.
+        for (String name : List.of(written, ShoppingListTextParser.withoutPurpose(written))) {
+            if (name.isBlank()) {
+                continue;
+            }
+            BigDecimal packages = line.quantity();
+            String words = name;
+            if (line.bareNumber() != null) {
+                // "pelene 4" is size four where diapers say it; "tortilje 2"
+                // two packs.
+                String withNumber = name + " " + line.bareNumber().toPlainString();
+                String numbered = WantedWords.pattern(withNumber, null, normalizer);
+                if (numbered != null && intentResolver.productsMatch(numbered)) {
+                    words = withNumber;
+                } else if (isCount(line.bareNumber())) {
+                    packages = packages.multiply(line.bareNumber());
+                } else {
+                    continue;
+                }
+            }
+            String wanted = WantedWords.pattern(words, null, normalizer);
+            if (wanted != null && intentResolver.productsMatch(wanted)) {
+                return byName(line, written.equals(name) ? words : written, words, packages);
+            }
+            if (written.equals(ShoppingListTextParser.withoutPurpose(written))) {
+                break;
             }
         }
-        return Optional.empty();
+        return product(line);
     }
 
-    private record Spelled(
+    private InterpretedLine byName(
+            ParsedShoppingListLine line,
             String name,
-            ShoppingIntentResolver.ResolvedShoppingIntent intent
+            String words,
+            BigDecimal packages
     ) {
+        BigDecimal target = line.targetQuantity();
+        return new InterpretedLine(
+                name,
+                packages,
+                ShoppingItemRule.FLEXIBLE_CATEGORY,
+                words,
+                normalizer.normalize(words),
+                null,
+                null,
+                target != null && target.signum() > 0 ? target : null,
+                target != null && target.signum() > 0 ? line.baseUnit() : null
+        );
+    }
+
+    /**
+     * The dictionary's form in the shopper's own letters: "brašna T-500"
+     * read as "brasno t 500" is shown as "brašno T-500", "kisele vode" as
+     * "kisela voda". Only the endings change.
+     */
+    static String respelled(String written, String phrase) {
+        java.util.regex.Matcher words = java.util.regex.Pattern
+                .compile("\\p{L}+").matcher(written);
+        List<String> forms = new ArrayList<>(List.of(phrase.split(" ")));
+        StringBuilder result = new StringBuilder();
+        int last = 0;
+        while (words.find()) {
+            String word = words.group();
+            String folded = rs.pametnakupovina.backend.matching.SerbianTextTransliterator
+                    .toLatinAsciiLowercase(word);
+            String form = forms.stream()
+                    .filter(candidate -> sharesStem(folded, candidate))
+                    .findFirst()
+                    .orElse(null);
+            result.append(written, last, words.start());
+            if (form == null || form.equals(folded) || folded.length() != word.length()) {
+                result.append(form == null || folded.length() == word.length() ? word : form);
+            } else {
+                int same = 0;
+                while (same < folded.length() && same < form.length()
+                        && folded.charAt(same) == form.charAt(same)) {
+                    same++;
+                }
+                result.append(word, 0, same).append(form.substring(same));
+            }
+            if (form != null) {
+                forms.remove(form);
+            }
+            last = words.end();
+        }
+        result.append(written.substring(last));
+        return result.toString().trim();
+    }
+
+    private static boolean sharesStem(String word, String form) {
+        int same = 0;
+        while (same < word.length() && same < form.length()
+                && word.charAt(same) == form.charAt(same)) {
+            same++;
+        }
+        return same == word.length() && same == form.length()
+                || same >= Math.max(1, Math.min(word.length(), form.length()) - 2);
     }
 
     private InterpretedLine product(ParsedShoppingListLine line) {

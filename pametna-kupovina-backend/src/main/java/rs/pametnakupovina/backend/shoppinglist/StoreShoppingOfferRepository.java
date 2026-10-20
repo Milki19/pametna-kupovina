@@ -52,7 +52,8 @@ public class StoreShoppingOfferRepository {
                             resultSet.getBigDecimal("package_size"), resultSet.getString("package_unit"),
                             resultSet.getBigDecimal("target_amount"), resultSet.getBigDecimal("supplied_amount"),
                             resultSet.getBigDecimal("extra_amount"), resultSet.getBigDecimal("unit_price")),
-                    resultSet.getBoolean("usual_choice")
+                    resultSet.getBoolean("usual_choice"),
+                    resultSet.getBoolean("wanted_missing")
             );
 
     private final JdbcClient jdbcClient;
@@ -139,6 +140,17 @@ public class StoreShoppingOfferRepository {
                                              THEN 1
                                          ELSE 0
                                      END AS uncommon_rank,
+                                     -- What the line asks for beyond the kind:
+                                     -- "feta sir", "mleko 3,2%". A product that
+                                     -- does not say it comes after every one that
+                                     -- does, and the plan names it a substitute
+                                     -- (V140).
+                                     CASE
+                                         WHEN item.wanted_name_pattern IS NOT NULL
+                                          AND product.normalized_name !~ item.wanted_name_pattern
+                                             THEN 1
+                                         ELSE 0
+                                     END AS wanted_rank,
                                      -- Fruit and vegetables with no amount are a
                                      -- kilogram weighed out, not the smallest
                                      -- bag: "paradajz" is loose tomatoes before
@@ -476,6 +488,17 @@ public class StoreShoppingOfferRepository {
                                              THEN 1
                                          ELSE 0
                                      END AS uncommon_rank,
+                                     -- What the line asks for beyond the kind:
+                                     -- "feta sir", "mleko 3,2%". A product that
+                                     -- does not say it comes after every one that
+                                     -- does, and the plan names it a substitute
+                                     -- (V140).
+                                     CASE
+                                         WHEN item.wanted_name_pattern IS NOT NULL
+                                          AND product.normalized_name !~ item.wanted_name_pattern
+                                             THEN 1
+                                         ELSE 0
+                                     END AS wanted_rank,
                                      -- Fruit and vegetables with no amount are a
                                      -- kilogram weighed out, not the smallest
                                      -- bag: "paradajz" is loose tomatoes before
@@ -827,26 +850,34 @@ public class StoreShoppingOfferRepository {
                                           OR (
                                               requested_intent.shopping_intent_id
                                                   IS NULL
-                                              AND
-                                              NOT EXISTS (
-                                                  SELECT 1
-                                                  FROM app.retailer_product_type
-                                                      AS known_type
-                                                  WHERE known_type.retailer_product_id =
-                                                        product.id
-                                              )
-                                              AND (
-                                                  COALESCE(
-                                                      product.normalized_name,
-                                                      LOWER(product.name)
-                                                  ) = item.flexible_category_normalized
-                                                  OR COALESCE(
-                                                      product.normalized_name,
-                                                      LOWER(product.name)
-                                                  ) LIKE
-                                                      item.flexible_category_normalized
-                                                      || ' %'
-                                              )
+                                              AND CASE
+                                                  -- The line's words, wherever in the
+                                                  -- name and whatever the type:
+                                                  -- "vlažne maramice" are "MARAMICE
+                                                  -- VLAŽNE BABY" too (V140).
+                                                  WHEN item.wanted_name_pattern IS NOT NULL
+                                                      THEN product.normalized_name
+                                                           ~ item.wanted_name_pattern
+                                                  ELSE NOT EXISTS (
+                                                      SELECT 1
+                                                      FROM app.retailer_product_type
+                                                          AS known_type
+                                                      WHERE known_type.retailer_product_id =
+                                                            product.id
+                                                  )
+                                                  AND (
+                                                      COALESCE(
+                                                          product.normalized_name,
+                                                          LOWER(product.name)
+                                                      ) = item.flexible_category_normalized
+                                                      OR COALESCE(
+                                                          product.normalized_name,
+                                                          LOWER(product.name)
+                                                      ) LIKE
+                                                          item.flexible_category_normalized
+                                                          || ' %'
+                                                  )
+                                              END
                                           )
                                       )
                                   )
@@ -999,6 +1030,7 @@ public class StoreShoppingOfferRepository {
                                    candidate.packages,
                                    candidate.kind_rank,
                                    candidate.uncommon_rank,
+                                   candidate.wanted_rank,
                                    candidate.loose_rank,
                                    candidate.oversize_rank,
                                    candidate.size_rank,
@@ -1285,6 +1317,7 @@ public class StoreShoppingOfferRepository {
                                    -- each comparison among an item's fifty or so
                                    -- candidates read along the row to its ranks
                                    -- again: the sort took 40 ms of a 313 ms plan.
+                                   candidate_row.wanted_rank,
                                    candidate_row.kind_rank,
                                    candidate_row.uncommon_rank,
                                    candidate_row.loose_rank,
@@ -1294,7 +1327,7 @@ public class StoreShoppingOfferRepository {
                                    -- The usual kind in the usual size: a plan over
                                    -- several shops takes it before a cheaper
                                    -- 35 g sachet elsewhere, as one shop does.
-                                   (candidate_row.uncommon_rank + candidate_row.loose_rank
+                                   (candidate_row.wanted_rank + candidate_row.uncommon_rank + candidate_row.loose_rank
                                        + candidate_row.oversize_rank + candidate_row.size_rank = 0)
                                        AS usual_choice,
                                    candidate_row.retailer_product_id,
@@ -1335,6 +1368,7 @@ public class StoreShoppingOfferRepository {
                               )
                             ORDER BY store_price.store_id,
                                      candidate_row.item_id,
+                                     candidate_row.wanted_rank ASC,
                                      candidate_row.kind_rank ASC,
                                      candidate_row.uncommon_rank ASC,
                                      candidate_row.loose_rank ASC,
@@ -1372,6 +1406,7 @@ public class StoreShoppingOfferRepository {
                                ) AS line_total,
                                offer.price_scope,
                                COALESCE(offer.usual_choice, TRUE) AS usual_choice,
+                               COALESCE(offer.wanted_rank = 1, FALSE) AS wanted_missing,
                                offer.packages, offer.package_size, offer.package_unit,
                                item.target_quantity * item.quantity AS target_amount,
                                offer.packages * offer.package_size AS supplied_amount,
@@ -1416,6 +1451,7 @@ public class StoreShoppingOfferRepository {
                                priced.line_total,
                                priced.price_scope,
                                priced.usual_choice,
+                               priced.wanted_missing,
                                priced.packages, priced.package_size, priced.package_unit,
                                priced.target_amount,
                                priced.supplied_amount,

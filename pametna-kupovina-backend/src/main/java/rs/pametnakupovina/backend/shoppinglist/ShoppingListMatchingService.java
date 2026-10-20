@@ -432,6 +432,7 @@ public class ShoppingListMatchingService {
         if (item.matchingRule() == ShoppingItemRule.FLEXIBLE_CATEGORY) {
             status = shoppingListRepository.hasProductsNamed(
                     listId,
+                    item.id(),
                     item.flexibleConstraints() == null
                             || item.flexibleConstraints().category() == null
                             ? productNameNormalizer.normalize(item.name())
@@ -610,7 +611,7 @@ public class ShoppingListMatchingService {
 
             return switch (item.matchingStatus()) {
                 case CONFIRMED -> "Biramo najpovoljniju ponudu u prodavnicama u blizini.";
-                case AUTO_MATCHED -> "Biramo najpovoljniji proizvod čiji naziv počinje sa „"
+                case AUTO_MATCHED -> "Biramo najpovoljniji proizvod čiji naziv kaže „"
                         + category + "“.";
                 default -> "„" + category + "“ ne prepoznajemo kao vrstu proizvoda, "
                         + "pa neće ući u račun. Izaberi proizvod iz pretrage.";

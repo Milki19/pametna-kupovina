@@ -6,6 +6,7 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.MatchResult;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -122,10 +123,11 @@ public class ShoppingListTextParser {
     /**
      * "čokolada za malog", "pivo za utakmicu 6": who or what the item is for.
      * Only these words make a note, because "prašak za veš", "hrana za pse"
-     * and "kore za pitu" name what is bought.
+     * and "kore za pitu" name what is bought. "Šampon za decu" is a kind of
+     * shampoo, so "za decu" stays in the name (izveštaj 20.10.2026).
      */
     private static final String NOTE_WORDS =
-            "(?:malog|malu|male|mamu|tatu|baku|deku|dedu|decu|dete|sina|[cć]erku|[žz]enu|mu[žz]a"
+            "(?:malog|malu|male|mamu|tatu|baku|deku|dedu|sina|[cć]erku|[žz]enu|mu[žz]a"
                     + "|goste|gosta|kom[šs]ij[ue]|prijatelje|kuma|kumu|brata|sestru|nju|njega|sebe"
                     + "|utakmicu|ro[đd]j?endan|slavu|[žz]urku|proslavu|vikend|put|posao|[šs]kolu"
                     + "|vrti[ćc]|doru[čc]ak|ru[čc]ak|ve[čc]eru|u[žz]inu|sutra|danas|praznik"
@@ -139,6 +141,30 @@ public class ShoppingListTextParser {
     private static final Pattern NOTE_IN_BRACKETS = Pattern.compile(
             "\\s*\\((?<note>\\s*za\\s+[^()]+?)\\s*\\)", FLAGS
     );
+
+    /**
+     * "za decu", "za sudove", "za pse": what a product is made for, part of
+     * its name in brackets too ("šampon (za decu)").
+     */
+    private static final Pattern PURPOSE = Pattern.compile(
+            "^za\\s+(?:decu|dete|decicu|bebe|bebu|bebi|sudove|sud[jđ]e|posu[dđ]e|ma[sš]inu|ve[sš]"
+                    + "|pse|psa|pas|ma[cč]k[eu]|ma[cč]ke|ma[cč]ku|ljubimce|kosu|lice|ruke|telo|zube"
+                    + "|pranje\\b.*|[cč]i[sš][cć]enje\\b.*|kupatilo|kuhinju|pod|podove|wc|toalet)$", FLAGS
+    );
+
+    private static final Pattern TRAILING_NUMBER = Pattern.compile("\\s+[0-9]+(?:[.,][0-9]+)?$");
+
+    private static final Pattern PURPOSE_IN_NAME = Pattern.compile(
+            "\\s+za\\s+(?:decu|dete|decicu|bebe|bebu|bebi)(?![\\p{L}])", FLAGS
+    );
+
+    /** "pelene za bebu" without "za bebu": a purpose every such product has. */
+    public static String withoutPurpose(String name) {
+        return PURPOSE_IN_NAME.matcher(name).replaceAll("").trim();
+    }
+
+    /** "paradajz i krastavac": two things to buy on one line. */
+    private static final Pattern AND = Pattern.compile("\\s+(?:i|и)\\s+", FLAGS);
 
     public ParsedShoppingListText parse(String text) {
         if (text == null) {
@@ -161,8 +187,10 @@ public class ShoppingListTextParser {
             }
 
             for (String part : itemsOnLine(withoutHeading(rawLine))) {
-                items.add(parseLine(part));
-                lineNumbers.add(lineNumber);
+                for (String item : bothOf(part)) {
+                    items.add(parseLine(item));
+                    lineNumbers.add(lineNumber);
+                }
             }
         }
 
@@ -192,6 +220,56 @@ public class ShoppingListTextParser {
             }
         }
         return items;
+    }
+
+    /**
+     * "paradajz i krastavac" is two items, and "crni i beli luk" two kinds
+     * of onion. Only short parts are split: "tečni sapun med i mleko" and
+     * "kilo i po" are one thing.
+     */
+    static List<String> bothOf(String part) {
+        String line = withoutMarks(part);
+        Matcher and = AND.matcher(line);
+        if (!and.find()) {
+            return List.of(part);
+        }
+        String left = line.substring(0, and.start()).trim();
+        String right = line.substring(and.end()).trim();
+        if (and.find() || AND_A_HALF.matcher(line).find()
+                || right.matches("(?iu)^(?:po|pol|по)\\b.*")
+                || left.contains("(") || right.contains(")")) {
+            return List.of(part);
+        }
+        String[] leftWords = words(left);
+        String[] rightWords = words(right);
+        if (leftWords.length == 0 || rightWords.length == 0
+                || leftWords.length > 2 || rightWords.length > 2) {
+            return List.of(part);
+        }
+        // "crni i beli luk": two adjectives share the noun after them.
+        if (leftWords.length == 1 && rightWords.length == 2
+                && left.equals(leftWords[0]) && right.startsWith(rightWords[0])
+                && sameEnding(leftWords[0], rightWords[0])) {
+            left = left + " " + rightWords[1];
+        }
+        return List.of(left, right);
+    }
+
+    /** The words of a part, numbers and units left out. */
+    private static String[] words(String part) {
+        return WORD.matcher(part).results()
+                .map(MatchResult::group)
+                .filter(word -> word.length() >= 2
+                        && !word.matches("(?iu)kg|gr?|l|ml|kom|komad[a]?|x"))
+                .toArray(String[]::new);
+    }
+
+    private static boolean sameEnding(String first, String second) {
+        String a = first.toLowerCase(Locale.ROOT);
+        String b = second.toLowerCase(Locale.ROOT);
+        return a.length() > 2 && b.length() > 2
+                && a.charAt(a.length() - 1) == b.charAt(b.length() - 1)
+                && "aeiou".indexOf(a.charAt(a.length() - 1)) >= 0;
     }
 
     /** "Kupi:" over a message, with an emoji or a list mark around it. */
@@ -227,8 +305,19 @@ public class ShoppingListTextParser {
         String note = null;
         Matcher bracketed = NOTE_IN_BRACKETS.matcher(line);
         if (bracketed.find()) {
-            note = bracketed.group("note").trim();
-            line = (line.substring(0, bracketed.start()) + line.substring(bracketed.end())).trim();
+            String inBrackets = bracketed.group("note").trim();
+            boolean purpose = PURPOSE.matcher(inBrackets).matches();
+            note = purpose ? null : inBrackets;
+            String before = line.substring(0, bracketed.start()).trim();
+            if (purpose) {
+                // "pelene 4 (za bebu)": the purpose joins the name before
+                // the number, which stays the line's count or size.
+                Matcher number = TRAILING_NUMBER.matcher(before);
+                before = number.find()
+                        ? before.substring(0, number.start()) + " " + inBrackets + number.group()
+                        : before + " " + inBrackets;
+            }
+            line = (before + " " + line.substring(bracketed.end())).trim().replaceAll("\\s{2,}", " ");
         }
         Matcher written = NOTE.matcher(line);
         if (written.find() && hasLetter(line.substring(0, written.start()))) {

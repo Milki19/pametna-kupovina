@@ -219,6 +219,19 @@ public class CanonicalProductSearchService {
         String validEan = eanValidator.normalize(query.strip())
                 .orElse(null);
 
+        // "1,5l kisele vode x2" from a list is looked up as "kisela voda",
+        // the way the Cene screen is asked: votka and sona kiselina matched
+        // the amount and the form of the words (izveštaj 20.10.2026).
+        if (validEan == null) {
+            String thing = withoutAmount(normalizedQuery);
+            String amount = amountOf(normalizedQuery, thing);
+            String dictionary = dictionaryForm(thing);
+            if (!dictionary.equals(thing)) {
+                // The size still counts: "mleko 1l" before a 200 ml cup.
+                normalizedQuery = amount.isEmpty() ? dictionary : dictionary + " " + amount;
+            }
+        }
+
         List<CanonicalProductSearchRow> rows = findRows(
                 normalizedQuery,
                 validEan,
@@ -268,6 +281,9 @@ public class CanonicalProductSearchService {
                 : nearness(rows, near);
         Map<Long, Integer> anotherAisle = anotherAisle(rows, normalizedQuery);
         String rankedQuery = normalizedQuery;
+        List<Pattern> queryWords = wordStems(withoutAmount(normalizedQuery));
+        Map<CanonicalProductSearchRow, Integer> missing = new java.util.IdentityHashMap<>();
+        rows.forEach(row -> missing.put(row, missingWords(queryWords, row)));
 
         List<ScoredRow> scoredRows = rows.stream()
                 .map(row -> score(
@@ -278,6 +294,10 @@ public class CanonicalProductSearchService {
                 .sorted(
                         Comparator.<ScoredRow, Boolean>comparing(row -> row.source().exactEanMatch(), Comparator.reverseOrder())
                                 .thenComparing(row -> row.source().hasUsablePrice(), Comparator.reverseOrder())
+                                // A name with every word of the query, in any
+                                // form, before one sharing letters with it:
+                                // "mleveno meso" before „Mleveni keks“.
+                                .thenComparing(row -> missing.getOrDefault(row.source(), 0))
                                 .thenComparing(row -> typeRank(
                                         typePriorities,
                                         row.source()
@@ -308,6 +328,80 @@ public class CanonicalProductSearchService {
                 .toList();
 
         return new RankedQuery(correctedQuery, scoredRows);
+    }
+
+    /** Words that say how much, not what: "1 5 l", "x 2", "pola kg", "oko". */
+    private static final java.util.Set<String> AMOUNT_WORDS = java.util.Set.of(
+            "g", "gr", "grama", "kg", "kila", "kilo", "kile", "l", "lit", "litar", "litra",
+            "ml", "kom", "komad", "komada", "x", "pola", "oko", "cca", "otprilike"
+    );
+
+    private static final java.util.Set<String> JOINING_WORDS = java.util.Set.of(
+            "za", "sa", "od", "i", "u", "na", "po"
+    );
+
+    static String withoutAmount(String normalizedQuery) {
+        String[] words = normalizedQuery.split(" ");
+        List<String> kept = new java.util.ArrayList<>();
+        for (int index = 0; index < words.length; index++) {
+            String word = words[index];
+            boolean number = word.chars().allMatch(Character::isDigit);
+            boolean nextIsAmount = index + 1 < words.length
+                    && (AMOUNT_WORDS.contains(words[index + 1])
+                    || (words[index + 1].chars().allMatch(Character::isDigit)
+                    && index + 2 < words.length && AMOUNT_WORDS.contains(words[index + 2])));
+            boolean afterX = index > 0 && words[index - 1].equals("x");
+            if (AMOUNT_WORDS.contains(word) || (number && (nextIsAmount || afterX))) {
+                continue;
+            }
+            kept.add(word);
+        }
+        String cleaned = String.join(" ", kept).trim();
+        return cleaned.chars().anyMatch(Character::isLetter) ? cleaned : normalizedQuery;
+    }
+
+    /** The words the amount took: "1 l" of "katalog imlek mleko 1 l". */
+    private static String amountOf(String normalizedQuery, String thing) {
+        if (thing.equals(normalizedQuery)) {
+            return "";
+        }
+        List<String> left = new java.util.ArrayList<>(List.of(thing.split(" ")));
+        StringBuilder amount = new StringBuilder();
+        for (String word : normalizedQuery.split(" ")) {
+            if (!left.remove(word)) {
+                amount.append(amount.isEmpty() ? "" : " ").append(word);
+            }
+        }
+        return amount.toString();
+    }
+
+    /** "kisele vode" as the dictionary has it: "kisela voda". */
+    private String dictionaryForm(String normalizedQuery) {
+        if (normalizedQuery.split(" ").length > 4) {
+            return normalizedQuery;
+        }
+        return shoppingIntentResolver.resolveForms(normalizedQuery)
+                .filter(form -> form.intent().exactAlias())
+                .map(ShoppingIntentResolver.FormMatch::phrase)
+                .orElse(normalizedQuery);
+    }
+
+    private static List<Pattern> wordStems(String normalizedQuery) {
+        return java.util.Arrays.stream(normalizedQuery.split(" "))
+                .filter(word -> word.length() >= 3 && !JOINING_WORDS.contains(word))
+                .filter(word -> word.chars().anyMatch(Character::isLetter))
+                .map(rs.pametnakupovina.backend.matching.SerbianWordForms::stem)
+                .distinct()
+                .map(stem -> Pattern.compile("(?:^| )" + Pattern.quote(stem)))
+                .toList();
+    }
+
+    private int missingWords(List<Pattern> queryWords, CanonicalProductSearchRow row) {
+        if (queryWords.size() < 2) {
+            return 0;
+        }
+        String name = productNameNormalizer.normalize(row.name());
+        return (int) queryWords.stream().filter(word -> !word.matcher(name).find()).count();
     }
 
     /**
