@@ -43,6 +43,16 @@ interface ShoppingApiService {
         @Query("limit") limit: Int
     ): List<NearbyStoreDto>
 
+    @GET("api/v1/places")
+    suspend fun searchPlaces(@Query("query") query: String): List<PlaceDto>
+
+    /** 204 kad mapa na toj tački nema adresu. */
+    @GET("api/v1/places/reverse")
+    suspend fun placeAt(
+        @Query("latitude") latitude: Double,
+        @Query("longitude") longitude: Double
+    ): Response<PlaceDto>
+
     @GET("api/v1/products/families/{productFamilyId}")
     suspend fun getProductFamily(
         @Path("productFamilyId") productFamilyId: Long

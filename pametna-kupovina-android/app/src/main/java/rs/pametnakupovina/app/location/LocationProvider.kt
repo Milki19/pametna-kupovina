@@ -31,6 +31,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import rs.pametnakupovina.app.R
+import rs.pametnakupovina.app.data.network.ShoppingApiService
 import rs.pametnakupovina.app.text.UiText
 import rs.pametnakupovina.app.text.UserFacingException
 import rs.pametnakupovina.app.text.uiText
@@ -90,7 +91,8 @@ internal fun shortAddress(street: String?, number: String?, place: String?, full
 @Singleton
 class FusedLocationProvider @Inject constructor(
     @param:ApplicationContext private val context: Context,
-    private val client: FusedLocationProviderClient
+    private val client: FusedLocationProviderClient,
+    private val api: ShoppingApiService
 ) {
 
     @SuppressLint("MissingPermission")
@@ -215,30 +217,48 @@ class FusedLocationProvider @Inject constructor(
 
     /**
      * Kraj ili adresa („Karaburma", „Bulevar kralja Aleksandra 73") kao
-     * polazna tačka, bez mape i bez API ključa: Android-ov Geocoder, samo
-     * unutar Srbije, da „Karaburma" ne ode u drugu državu.
+     * polazna tačka. Prvo pita server (OpenStreetMap, isto kao web), jer
+     * Android-ov Geocoder na nekim telefonima ne postoji ili ne zna krajeve;
+     * Geocoder je rezerva kad server ne odgovori ili ne nađe ništa.
      */
-    @Suppress("DEPRECATION") // Verzija sa listener-om postoji tek od API 33.
-    suspend fun findAddress(query: String): Pair<Coordinates, String> = withContext(Dispatchers.IO) {
-        if (!Geocoder.isPresent()) {
-            throw LocationUnavailableException(
-                uiText(R.string.location_geocoder_missing)
-            )
+    suspend fun findAddress(query: String): Pair<Coordinates, String> {
+        var serverAnswered = true
+        val fromServer = try {
+            api.searchPlaces(query).firstOrNull()
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: retrofit2.HttpException) {
+            // 400 je odgovor („bar tri slova"), ostalo znači da server ne može da pita mapu.
+            serverAnswered = error.code() == 400
+            null
+        } catch (_: Exception) {
+            serverAnswered = false
+            null
         }
+        fromServer?.let { place ->
+            runCatching { Coordinates(place.latitude, place.longitude) }.getOrNull()
+                ?.let { return it to place.name }
+        }
+        return geocoderAddress(query) ?: throw LocationUnavailableException(
+            uiText(
+                if (serverAnswered) R.string.location_address_not_found
+                else R.string.location_geocoder_unavailable
+            )
+        )
+    }
+
+    /** Samo unutar Srbije, da „Karaburma" ne ode u drugu državu; null bez pogotka. */
+    @Suppress("DEPRECATION") // Verzija sa listener-om postoji tek od API 33.
+    private suspend fun geocoderAddress(query: String): Pair<Coordinates, String>? = withContext(Dispatchers.IO) {
+        if (!Geocoder.isPresent()) return@withContext null
         val geocoder = Geocoder(context, Locale.forLanguageTag("sr-Latn-RS"))
         val search = { geocoder.getFromLocationName(query, 1, 42.2, 18.8, 46.2, 23.1) }
         val found = runCatching(search)
             // Prvi poziv „na hladno" ume da vrati UNAVAILABLE, drugi prođe.
             .recoverCatching { search() }
-            .getOrElse {
-                throw LocationUnavailableException(
-                    uiText(R.string.location_geocoder_unavailable)
-                )
-            }
+            .getOrNull()
             ?.firstOrNull()
-            ?: throw LocationUnavailableException(
-                uiText(R.string.location_address_not_found)
-            )
+            ?: return@withContext null
         val label = shortAddress(
             street = found.thoroughfare,
             number = found.subThoroughfare,
@@ -250,11 +270,19 @@ class FusedLocationProvider @Inject constructor(
 
     /**
      * Adresa tačke za prikaz („Kneza Mihaila 10, Beograd") umesto brojeva.
-     * Samo za oznaku: bez Geocoder-a, mreže ili pogotka vraća null, pa se
-     * prikazuju koordinate.
+     * Prvo Geocoder telefona, pa server; null kad ni jedno ne zna adresu.
      */
+    suspend fun addressOf(coordinates: Coordinates): String? =
+        geocoderAddressOf(coordinates) ?: try {
+            api.placeAt(coordinates.latitude, coordinates.longitude).body()?.name?.takeIf(String::isNotBlank)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            null
+        }
+
     @Suppress("DEPRECATION") // Verzija sa listener-om postoji tek od API 33.
-    suspend fun addressOf(coordinates: Coordinates): String? = withContext(Dispatchers.IO) {
+    private suspend fun geocoderAddressOf(coordinates: Coordinates): String? = withContext(Dispatchers.IO) {
         if (!Geocoder.isPresent()) return@withContext null
         val geocoder = Geocoder(context, Locale.forLanguageTag("sr-Latn-RS"))
         runCatching { geocoder.getFromLocation(coordinates.latitude, coordinates.longitude, 1) }

@@ -400,6 +400,14 @@ data class CanonicalProductSearchPageDto(
 )
 
 /** Prodavnica u krugu oko korisnika; za alarm je dovoljno koja je i čija. */
+/** Polazna tačka iz adrese: ono što server nađe u OpenStreetMap-u. */
+@Serializable
+data class PlaceDto(
+    val name: String,
+    val latitude: Double,
+    val longitude: Double
+)
+
 @Serializable
 data class NearbyStoreDto(
     val storeId: Long,

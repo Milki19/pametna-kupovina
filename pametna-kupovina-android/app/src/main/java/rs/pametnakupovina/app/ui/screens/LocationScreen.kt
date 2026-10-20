@@ -22,7 +22,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Surface
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -30,7 +29,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -43,7 +41,6 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -62,9 +59,9 @@ import rs.pametnakupovina.app.ui.components.StatusTone
 import rs.pametnakupovina.app.ui.components.StepCard
 
 /**
- * One large action for the usual case. Typing coordinates is a fallback for a
- * phone without location, so it waits behind a fold instead of taking half
- * the screen.
+ * One large action for the usual case, and an address or a neighbourhood for
+ * a phone without location. The starting point always reads as a place,
+ * never as coordinates.
  */
 @Composable
 fun LocationScreen(
@@ -75,21 +72,11 @@ fun LocationScreen(
     val context = LocalContext.current
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val walking by viewModel.walking.collectAsStateWithLifecycle()
-    var latitudeText by rememberSaveable { mutableStateOf("") }
-    var longitudeText by rememberSaveable { mutableStateOf("") }
-    var showManual by rememberSaveable { mutableStateOf(false) }
     var address by rememberSaveable { mutableStateOf("") }
     val focusManager = LocalFocusManager.current
     val findAddress = {
         focusManager.clearFocus()
         viewModel.findAddress(address)
-    }
-
-    LaunchedEffect(state.coordinates) {
-        state.coordinates?.let { coordinates ->
-            latitudeText = coordinates.latitude.toString()
-            longitudeText = coordinates.longitude.toString()
-        }
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -104,26 +91,18 @@ fun LocationScreen(
         }
     }
 
-    val latitude = latitudeText.replace(',', '.').toDoubleOrNull()
-    val longitude = longitudeText.replace(',', '.').toDoubleOrNull()
-    val coordinatesValid = coordinatesAreValid(latitude, longitude)
-    // Adresa važi samo dok ručno upisani brojevi ne pomere tačku.
-    val label = state.label?.takeIf {
-        state.coordinates?.let { it.latitude == latitude && it.longitude == longitude } == true
-    }
-    val manualVisible = showManual ||
-        (!coordinatesValid && (latitudeText.isNotBlank() || longitudeText.isNotBlank()))
+    val point = state.coordinates
 
     Scaffold(
         containerColor = Color.Transparent,
         topBar = { AppTopBar(title = stringResource(R.string.location_title), onBack = onBack) },
         bottomBar = {
             BottomActionBar {
-                if (coordinatesValid) {
+                if (point != null) {
                     Text(
                         stringResource(
                             R.string.location_starting_point_value,
-                            label ?: coordinatesLabel(requireNotNull(latitude), requireNotNull(longitude))
+                            state.label ?: stringResource(R.string.location_current_place)
                         ),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -131,9 +110,9 @@ fun LocationScreen(
                 }
                 PrimaryActionButton(
                     text = stringResource(R.string.location_show_recommendations),
-                    enabled = coordinatesValid && !state.isResolving,
+                    enabled = point != null && !state.isResolving,
                     onClick = {
-                        onCalculate(requireNotNull(latitude), requireNotNull(longitude), label)
+                        point?.let { onCalculate(it.latitude, it.longitude, state.label) }
                     }
                 )
             }
@@ -295,61 +274,6 @@ fun LocationScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-
-            TextButton(onClick = { showManual = !manualVisible }) {
-                Text(stringResource(R.string.location_enter_manually))
-                AppIcon(
-                    if (manualVisible) R.drawable.ic_expand_less else R.drawable.ic_expand_more,
-                    contentDescription = null
-                )
-            }
-
-            if (manualVisible) {
-                OutlinedTextField(
-                    value = latitudeText,
-                    onValueChange = { latitudeText = it },
-                    label = { Text(stringResource(R.string.location_latitude)) },
-                    placeholder = { Text(stringResource(R.string.location_latitude_placeholder)) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    isError = latitudeText.isNotBlank() &&
-                        (latitude == null || latitude !in -90.0..90.0),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = longitudeText,
-                    onValueChange = { longitudeText = it },
-                    label = { Text(stringResource(R.string.location_longitude)) },
-                    placeholder = { Text(stringResource(R.string.location_longitude_placeholder)) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    isError = longitudeText.isNotBlank() &&
-                        (longitude == null || longitude !in -180.0..180.0),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm)
-                ) {
-                    Text(
-                        stringResource(R.string.location_coordinates_hint),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
         }
     }
 }
-
-internal fun coordinatesAreValid(
-    latitude: Double?,
-    longitude: Double?
-): Boolean = latitude != null && latitude in -90.0..90.0 &&
-    longitude != null && longitude in -180.0..180.0
-
-/** Keeps the dot Google Maps uses, because a comma already separates the pair. */
-internal fun coordinatesLabel(latitude: Double, longitude: Double): String =
-    String.format(java.util.Locale.ROOT, "%.4f, %.4f", latitude, longitude)

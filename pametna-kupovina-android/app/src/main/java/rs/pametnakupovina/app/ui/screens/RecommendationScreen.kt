@@ -636,7 +636,7 @@ private fun OriginCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    label ?: coordinatesLabel(origin.first, origin.second),
+                    label ?: stringResource(R.string.location_current_place),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Bold,
                     maxLines = 2,
