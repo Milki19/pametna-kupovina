@@ -584,7 +584,7 @@ class RecommendationViewModel @Inject constructor(
             val walking = travelModes.isWalking()
             val radius = nearOnlyRadius()
             // Cena vremena i stajanja može da se promeni i iz menija dok je plan u pozadini.
-            val key = listOf(listId, latitude, longitude, walking, radius, repository.tripCostsVersion.value)
+            val key: List<Any> = listOf(listId, latitude, longitude, walking, radius ?: 0, repository.tripCostsVersion.value)
             val loaded = loadedFor
             if (_uiState.value.result != null && loaded != null && loaded.first == key &&
                 System.currentTimeMillis() - loaded.second < REMEMBERED_FOR_MILLIS
