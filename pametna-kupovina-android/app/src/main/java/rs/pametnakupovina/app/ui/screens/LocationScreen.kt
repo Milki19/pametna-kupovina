@@ -135,6 +135,8 @@ fun LocationScreen(
             GlassCard(
                 enabled = !state.isResolving,
                 onClick = {
+                    // Staro „Liman“ u polju ne sme da liči na polaznu tačku.
+                    address = ""
                     if (hasLocationPermission(context)) {
                         viewModel.resolveCurrentLocation()
                     } else {
