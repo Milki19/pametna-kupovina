@@ -620,7 +620,24 @@ data class OptimizationScenarioDto(
     val dataAsOf: String? = null,
     val stores: List<RecommendationStoreDto> = emptyList(),
     val items: List<RecommendationItemDto> = emptyList(),
-    val disclaimer: String
+    val disclaimer: String,
+    val onTheWay: OnTheWayDto? = null
+) {
+    fun onTheWay(item: RecommendationItemDto) = onTheWay?.itemIds?.contains(item.itemId) == true
+}
+
+/**
+ * Sitne stavke zbog kojih ne vredi ići u još jednu prodavnicu: kupuju se
+ * usput, a plan ostaje sa manje prodavnica (izveštaj 20.10.).
+ */
+@Serializable
+data class OnTheWayDto(
+    val itemIds: List<Long> = emptyList(),
+    val itemNames: List<String> = emptyList(),
+    val itemsCost: Double,
+    val extraCost: Double,
+    val extraSeconds: Long,
+    val currency: String
 )
 
 /**

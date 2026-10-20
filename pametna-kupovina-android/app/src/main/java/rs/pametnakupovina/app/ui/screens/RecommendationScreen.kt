@@ -118,6 +118,8 @@ import rs.pametnakupovina.app.ui.duration
 import rs.pametnakupovina.app.ui.money
 import rs.pametnakupovina.app.ui.currency
 import rs.pametnakupovina.app.ui.wholeAmount
+import rs.pametnakupovina.app.ui.LONG_WALK_SECONDS
+import rs.pametnakupovina.app.ui.NEAR_ONLY_METERS
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
@@ -329,7 +331,12 @@ fun RecommendationScreen(
                     onChangeOrigin = onBack,
                     onSimilar = { item -> similarFor = item },
                     onWrongProduct = { item -> wrongFor = item },
-                    onChangeTripCosts = { changingTripCosts = true }
+                    onChangeTripCosts = { changingTripCosts = true },
+                    nearOnly = state.nearOnly,
+                    onNearOnly = { on ->
+                        val (latitude, longitude) = requireNotNull(location)
+                        viewModel.setNearOnly(listId, latitude, longitude, on)
+                    }
                 )
             }
         }
@@ -351,7 +358,9 @@ internal fun RecommendationContent(
     originLabel: String? = null,
     onSimilar: (RecommendationItemDto) -> Unit = {},
     onWrongProduct: (RecommendationItemDto) -> Unit = {},
-    onChangeTripCosts: () -> Unit = {}
+    onChangeTripCosts: () -> Unit = {},
+    nearOnly: Boolean = false,
+    onNearOnly: (Boolean) -> Unit = {}
 ) {
     val context = LocalContext.current
     var selectedTypeName by rememberSaveable {
@@ -361,7 +370,7 @@ internal fun RecommendationContent(
     val selected = scenarios.firstOrNull { it.type.name == selectedTypeName }
         ?: result.recommendedBalance
     val unresolved = selected.items.filter {
-        it.resultStatus != RecommendationItemStatusDto.AVAILABLE
+        it.resultStatus != RecommendationItemStatusDto.AVAILABLE && !selected.onTheWay(it)
     }
     val orderedStores = selected.stores.sortedBy { it.stopOrder }
     // Scenariji ulaze jedan za drugim kad stigne izračunat plan.
@@ -422,6 +431,40 @@ internal fun RecommendationContent(
                         selected = scenario.type == selected.type,
                         onSelect = { selectedTypeName = scenario.type.name },
                         modifier = Modifier.enter(entrance, index + 1)
+                    )
+                }
+            }
+
+            selected.onTheWay?.takeIf { it.itemNames.isNotEmpty() }?.let { onTheWay ->
+                item(key = "on-the-way-${selected.type}") {
+                    val names = onTheWay.itemNames.joinToString(", ").replaceFirstChar { it.uppercase() }
+                    NoticeBanner(
+                        text = stringResource(
+                            if (onTheWay.itemNames.size == 1) R.string.rec_on_the_way_one else R.string.rec_on_the_way_many,
+                            names, wholeAmount(onTheWay.extraCost), currency(), duration(onTheWay.extraSeconds)
+                        ),
+                        modifier = Modifier.testTag("on-the-way")
+                    )
+                }
+            }
+
+            if (result.assumptions.walking && (nearOnly ||
+                    (selected.available && selected.routeDurationSeconds > LONG_WALK_SECONDS))
+            ) {
+                item(key = "near-only") {
+                    NoticeBanner(
+                        text = if (nearOnly) {
+                            stringResource(R.string.rec_near_only_on, NEAR_ONLY_METERS / 1000)
+                        } else {
+                            stringResource(R.string.rec_long_walk, duration(selected.routeDurationSeconds))
+                        },
+                        actionLabel = if (nearOnly) {
+                            stringResource(R.string.rec_near_only_off)
+                        } else {
+                            stringResource(R.string.rec_near_only, NEAR_ONLY_METERS / 1000)
+                        },
+                        onAction = { onNearOnly(!nearOnly) },
+                        modifier = Modifier.testTag("near-only")
                     )
                 }
             }
@@ -1308,7 +1351,7 @@ private fun scenarioWarnings(
     result: ShoppingRecommendationDto
 ): List<UiText> = buildList {
     if (!scenario.available) return@buildList
-    val missing = scenario.items.size - scenario.coveredItems
+    val missing = scenario.items.size - scenario.coveredItems - (scenario.onTheWay?.itemIds?.size ?: 0)
     if (!scenario.complete && missing > 0) {
         // Not recognising an item and a shop not selling it ask for different
         // things: editing the item, or another shop.

@@ -595,7 +595,8 @@ class ShoppingRepository @Inject constructor(
         latitude: Double,
         longitude: Double,
         date: String? = null,
-        walking: Boolean = false
+        walking: Boolean = false,
+        radiusMeters: Int? = null
     ): ShoppingRecommendationDto {
         // Pre računanja guramo sve lokalne izmene. Ako je server u međuvremenu
         // obrisao spisak, synchronizePending kreira novi i vraća njegov ID.
@@ -613,7 +614,8 @@ class ShoppingRepository @Inject constructor(
             travelMode = if (walking) "WALKING" else null,
             // Lanci bez adresa su najveći deo računanja, a nisu u planu:
             // stižu posebno, posle plana (getUnlocatedPriceOptions).
-            unlocated = false
+            unlocated = false,
+            radiusMeters = radiusMeters
         )
     }
 

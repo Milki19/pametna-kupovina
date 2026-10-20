@@ -133,4 +133,13 @@
     <string name="rec_more_for_item">Još za „%1$s“</string>
     <string name="rec_balance_costs_more">+%1$s %2$s od Jedne prodavnice, ali pokriva još: %3$s.</string>
     <string name="rec_balance_more_names">%1$s i još %2$d</string>
+    <string name="rec_on_the_way_one">%1$s kupi usput. Zbog te stavke plan bi imao još jednu prodavnicu: +%2$s %3$s i oko %4$s više.</string>
+    <string name="rec_on_the_way_many">%1$s kupi usput. Zbog tih stavki plan bi imao još jednu prodavnicu: +%2$s %3$s i oko %4$s više.</string>
+    <string name="rec_long_walk">Ovo je oko %1$s hoda.</string>
+    <string name="rec_near_only">Samo radnje do %1$d km</string>
+    <string name="rec_near_only_on">Samo radnje do %1$d km.</string>
+    <string name="rec_near_only_off">Prikaži sve u blizini</string>
+    <string name="rec_smaller_packs_title">Treba ti %1$s, a izabrano pakovanje je %2$s (od %3$s).</string>
+    <string name="rec_smaller_packs">%1$s je od %2$s: %3$s. Zameni?</string>
+    <string name="rec_smaller_packs_replace">Zameni</string>
 </resources>
