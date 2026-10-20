@@ -28,7 +28,10 @@ public record OptimizationScenarioResponse(
         LocalDate dataAsOf,
         List<RecommendationStoreResponse> stores,
         List<RecommendationItemResponse> items,
-        String disclaimer
+        String disclaimer,
+        // Small items left for the way rather than a second shop; null when
+        // the plan leaves nothing out on purpose.
+        OnTheWay onTheWay
 ) {
     public OptimizationScenarioResponse {
         priceSources = List.copyOf(priceSources);

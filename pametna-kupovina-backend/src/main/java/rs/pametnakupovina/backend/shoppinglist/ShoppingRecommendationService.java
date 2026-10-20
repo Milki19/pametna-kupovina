@@ -45,6 +45,9 @@ public class ShoppingRecommendationService {
     /** Beyond four, the database rather than the query becomes the queue. */
     private static final int MAX_PARALLEL_OFFER_QUERIES = 4;
 
+    /** "Samo radnje do 1 km" and nothing tighter: below this nothing is left. */
+    private static final int MIN_RADIUS_METERS = 300;
+
     private final ShoppingListRepository shoppingListRepository;
     private final NearbyStoreRepository nearbyStoreRepository;
     private final StoreShoppingOfferRepository offerRepository;
@@ -106,8 +109,35 @@ public class ShoppingRecommendationService {
             TravelMode travelMode,
             boolean includeUnlocated
     ) {
+        return recommend(listId, latitude, longitude, requestedDate, travelMode, includeUnlocated, null);
+    }
+
+    /**
+     * @param radiusMeters only shops this close, for "Samo radnje do 1 km"
+     *                     after a plan on foot came out too long; nothing
+     *                     farther is looked for either. Without one, the
+     *                     usual circle for the way of travel.
+     */
+    public ShoppingRecommendationResponse recommend(
+            Long listId,
+            double latitude,
+            double longitude,
+            LocalDate requestedDate,
+            TravelMode travelMode,
+            boolean includeUnlocated,
+            Integer radiusMeters
+    ) {
         validate(latitude, longitude);
         boolean walking = travelMode == TravelMode.WALKING;
+        int usualRadius = walking
+                ? properties.getWalkingCandidateRadiusMeters()
+                : properties.getCandidateRadiusMeters();
+        if (radiusMeters != null
+                && (radiusMeters < MIN_RADIUS_METERS || radiusMeters > usualRadius)) {
+            throw badRequest("Krug mora biti između " + MIN_RADIUS_METERS
+                    + " i " + usualRadius + " m");
+        }
+        int candidateRadius = radiusMeters != null ? radiusMeters : usualRadius;
 
         ShoppingListResponse shoppingList = shoppingListRepository
                 .findById(listId)
@@ -153,9 +183,7 @@ public class ShoppingRecommendationService {
                         market.id(),
                         latitude,
                         longitude,
-                        walking
-                                ? properties.getWalkingCandidateRadiusMeters()
-                                : properties.getCandidateRadiusMeters(),
+                        candidateRadius,
                         properties.getMaxCandidateStores()
                 );
 
@@ -218,7 +246,8 @@ public class ShoppingRecommendationService {
         List<Long> missingProducts = missing.stream()
                 .map(ShoppingListItemResponse::matchedCanonicalProductId)
                 .filter(java.util.Objects::nonNull).distinct().toList();
-        if (!missingFamilies.isEmpty() || !missingProducts.isEmpty()) {
+        if (radiusMeters == null
+                && (!missingFamilies.isEmpty() || !missingProducts.isEmpty())) {
             List<NearbyStore> fartherStores = nearbyStoreRepository
                     .findNearestCarrying(market.id(), latitude, longitude,
                             missingFamilies, missingProducts,
@@ -318,13 +347,29 @@ public class ShoppingRecommendationService {
         EvaluatedPlan lowestPrice = chooseByBasket(evaluatedAll);
         EvaluatedPlan recommended = chooseByTotalCost(evaluatedAll);
 
+        // Test 20.10.: Najbolje ukupno was +238 RSD and half an hour longer
+        // than one shop, only to cover wet wipes at 25 RSD. An item worth
+        // less than a stop is bought on the way instead.
+        OnTheWay onTheWay = null;
+        if (recommended != null && bestSingle != null
+                && recommended.plan().coveredItems() > bestSingle.plan().coveredItems()) {
+            EvaluatedPlan withoutSmallOnes = chooseByTotalCost(evaluatedAll.stream()
+                    .filter(plan -> plan.plan().coveredItems() == bestSingle.plan().coveredItems())
+                    .toList());
+            onTheWay = smallItemsOnTheWay(recommended, withoutSmallOnes, market);
+            if (onTheWay != null) {
+                recommended = withoutSmallOnes;
+            }
+        }
+
         OptimizationScenarioResponse singleScenario = buildScenario(
                 RecommendationScenarioType.SINGLE_STORE,
                 bestSingle,
                 bestSingle,
                 shoppingList.items(),
                 itemsWithAnyNearbyOffer,
-                routeMatrix
+                routeMatrix,
+                null
         );
 
         OptimizationScenarioResponse recommendedScenario = buildScenario(
@@ -333,7 +378,8 @@ public class ShoppingRecommendationService {
                 bestSingle,
                 shoppingList.items(),
                 itemsWithAnyNearbyOffer,
-                routeMatrix
+                routeMatrix,
+                onTheWay
         );
 
         OptimizationScenarioResponse lowestPriceScenario = buildScenario(
@@ -342,7 +388,8 @@ public class ShoppingRecommendationService {
                 bestSingle,
                 shoppingList.items(),
                 itemsWithAnyNearbyOffer,
-                routeMatrix
+                routeMatrix,
+                null
         );
 
         return new ShoppingRecommendationResponse(
@@ -352,7 +399,7 @@ public class ShoppingRecommendationService {
                 nearbyStores.size(),
                 singleStorePlans.size(),
                 twoStorePlans.size(),
-                assumptions(market, walking),
+                assumptions(market, walking, candidateRadius),
                 singleScenario,
                 recommendedScenario,
                 lowestPriceScenario,
@@ -955,7 +1002,8 @@ public class ShoppingRecommendationService {
             EvaluatedPlan bestSingle,
             List<ShoppingListItemResponse> shoppingItems,
             Set<Long> itemsWithAnyNearbyOffer,
-            RouteMatrix routeMatrix
+            RouteMatrix routeMatrix,
+            OnTheWay onTheWay
     ) {
         Map<Long, StoreItemOffer> assignments = evaluated == null
                 ? Map.of()
@@ -991,7 +1039,13 @@ public class ShoppingRecommendationService {
                     + "“ kao vrstu proizvoda. Izmeni stavku i izaberi"
                     + " proizvod iz pretrage.";
 
-            if (item.matchingStatus()
+            if (onTheWay != null && onTheWay.itemIds().contains(item.id())) {
+                // Not missing: left out on purpose, and not counted as such.
+                status = RecommendationItemStatus.NO_VALID_PRICE;
+                explanation = "Kupi usput. Zbog ove stavke ne vredi ići u još jednu"
+                        + " prodavnicu: to bi bilo +" + wholeAmount(onTheWay.extraCost())
+                        + " " + onTheWay.currency() + " i oko " + minutes(onTheWay.extraSeconds()) + " više.";
+            } else if (item.matchingStatus()
                     == ShoppingItemMatchingStatus.NEEDS_CONFIRMATION
                     || item.matchingStatus()
                     == ShoppingItemMatchingStatus.PENDING) {
@@ -1086,7 +1140,8 @@ public class ShoppingRecommendationService {
                         available,
                         complete,
                         unmatchedItems,
-                        unavailableItems
+                        unavailableItems,
+                        onTheWay
                 ),
                 coveredItems,
                 unmatchedItems,
@@ -1123,8 +1178,60 @@ public class ShoppingRecommendationService {
                         ? List.of()
                         : evaluated.stops(),
                 itemResponses,
-                DISCLAIMER
+                DISCLAIMER,
+                onTheWay
         );
+    }
+
+    /**
+     * The items only {@code withAll} covers, when together they are worth
+     * less than a stop costs the shopper: one shop is the better plan, and
+     * they are bought on the way. Null when they are worth the stop, or when
+     * the smaller plan leaves out anything else.
+     */
+    private OnTheWay smallItemsOnTheWay(
+            EvaluatedPlan withAll,
+            EvaluatedPlan withoutSmallOnes,
+            Market market
+    ) {
+        if (withoutSmallOnes == null
+                || market.costPerStop().signum() <= 0
+                || !withAll.plan().assignments().keySet()
+                .containsAll(withoutSmallOnes.plan().assignments().keySet())) {
+            return null;
+        }
+
+        List<StoreItemOffer> extra = withAll.plan().assignments().values().stream()
+                .filter(offer -> !withoutSmallOnes.plan().assignments().containsKey(offer.itemId()))
+                .sorted(Comparator.comparing(StoreItemOffer::itemId))
+                .toList();
+        BigDecimal extraValue = extra.stream()
+                .map(StoreItemOffer::lineTotal)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal extraCost = withAll.totalCost().subtract(withoutSmallOnes.totalCost());
+
+        if (extra.isEmpty()
+                || extraValue.compareTo(market.costPerStop()) >= 0
+                || extraCost.compareTo(extraValue) <= 0) {
+            return null;
+        }
+
+        return new OnTheWay(
+                extra.stream().map(StoreItemOffer::itemId).toList(),
+                extra.stream().map(StoreItemOffer::requestedName).toList(),
+                money(extraValue),
+                money(extraCost),
+                Math.max(0, withAll.durationSeconds() - withoutSmallOnes.durationSeconds()),
+                market.currencyCode()
+        );
+    }
+
+    private static String wholeAmount(BigDecimal amount) {
+        return amount.setScale(0, RoundingMode.HALF_UP).toPlainString();
+    }
+
+    private static String minutes(long seconds) {
+        return Math.max(1, Math.round(seconds / 60.0)) + " min";
     }
 
     private RecommendationItemResponse availableItem(
@@ -1189,7 +1296,8 @@ public class ShoppingRecommendationService {
             boolean available,
             boolean complete,
             int unmatchedItems,
-            int unavailableItems
+            int unavailableItems,
+            OnTheWay onTheWay
     ) {
         if (!available) {
             return "Plan nije moguć: nijedna stavka nema cenu u obližnjim"
@@ -1205,7 +1313,14 @@ public class ShoppingRecommendationService {
                     "Najniža cena korpe među svim jednom i dvema prodavnicama; put nije kriterijum rangiranja.";
         };
 
-        if (complete) {
+        if (onTheWay != null) {
+            base = base + " " + String.join(", ", onTheWay.itemNames())
+                    + " kupi usput: druga prodavnica bi bila +"
+                    + wholeAmount(onTheWay.extraCost()) + " " + onTheWay.currency()
+                    + " i oko " + minutes(onTheWay.extraSeconds()) + " više.";
+        }
+
+        if (complete || unmatchedItems + unavailableItems == 0) {
             return base;
         }
 
@@ -1273,11 +1388,9 @@ public class ShoppingRecommendationService {
         return "STORE:" + store.storeId();
     }
 
-    private OptimizationAssumptions assumptions(Market market, boolean walking) {
+    private OptimizationAssumptions assumptions(Market market, boolean walking, int candidateRadius) {
         return new OptimizationAssumptions(
-                walking
-                        ? properties.getWalkingCandidateRadiusMeters()
-                        : properties.getCandidateRadiusMeters(),
+                candidateRadius,
                 properties.getMaxCandidateStores(),
                 properties.getMaxPriceAgeDays(),
                 money(market.travelCostPerKm()),
