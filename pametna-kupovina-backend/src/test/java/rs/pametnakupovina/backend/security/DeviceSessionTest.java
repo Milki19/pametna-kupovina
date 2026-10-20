@@ -154,16 +154,24 @@ class DeviceSessionTest {
     }
 
     @Test
-    void aPhoneWhoseTokenWasCopiedCannotOpenTheSessionAgainWithItsNumber() throws Exception {
+    void aPhoneWhoseTokenWasCopiedGetsItsListsBackWithItsNumberAndTheCopyStaysDead() throws Exception {
         String number = newDeviceToken();
         JsonNode first = open(number);
+        long listId = createList(access(first), "Za vikend");
         String firstRefresh = first.path("refreshToken").asText();
         JsonNode second = refresh(firstRefresh, 200);
         assertThat(status(get("/api/v1/accounts/me"), access(second))).isEqualTo(200);
 
         refresh(firstRefresh, 401);
 
-        openExpecting(number, 401);
+        // Test 20.10.: the same browser became device 196 with an empty list
+        // instead of getting device 179 back.
+        JsonNode reopened = open(number);
+        assertThat(reopened.path("deviceId").asLong()).isEqualTo(first.path("deviceId").asLong());
+        assertThat(status(get("/api/v1/shopping-lists/" + listId), access(reopened))).isEqualTo(200);
+        refresh(firstRefresh, 401);
+        refresh(second.path("refreshToken").asText(), 401);
+        assertThat(status(get("/api/v1/accounts/me"), access(second))).isEqualTo(401);
     }
 
     @Test
