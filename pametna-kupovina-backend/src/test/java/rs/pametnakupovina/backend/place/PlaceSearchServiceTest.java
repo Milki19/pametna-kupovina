@@ -32,7 +32,7 @@ class PlaceSearchServiceTest {
     @BeforeEach
     void start() throws IOException {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-        server.createContext("/search", exchange -> {
+        com.sun.net.httpserver.HttpHandler handler = exchange -> {
             asked.add(exchange.getRequestURI().getRawQuery() + " UA=" + exchange.getRequestHeaders().getFirst("User-Agent"));
             byte[] body = answer.getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().add("Content-Type", "application/json");
@@ -40,7 +40,9 @@ class PlaceSearchServiceTest {
             try (OutputStream out = exchange.getResponseBody()) {
                 out.write(body);
             }
-        });
+        };
+        server.createContext("/search", handler);
+        server.createContext("/reverse", handler);
         server.start();
 
         MarketRepository markets = mock(MarketRepository.class);
@@ -122,5 +124,30 @@ class PlaceSearchServiceTest {
         assertThatThrownBy(() -> service.search(7L, "Novi Sad"))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("ne radi");
+    }
+
+    @Test
+    void aPointFromThePhoneReadsAsAShortAddress() {
+        answer = """
+                {"lat":"45.2551","lon":"19.8452","display_name":"10, Bulevar oslobođenja, Novi Sad, Srbija",
+                 "address":{"house_number":"10","road":"Bulevar oslobođenja","city":"Novi Sad"}}
+                """;
+
+        var place = service.nameOf(7L, 45.255123, 19.845234);
+        service.nameOf(7L, 45.25511, 19.84519);
+
+        assertThat(place).isEqualTo(new PlaceSearchService.Place("Bulevar oslobođenja 10, Novi Sad", 45.255123, 19.845234));
+        // Rounded to about ten metres, so the second point is the same question.
+        assertThat(asked).hasSize(1);
+        assertThat(asked.getFirst()).contains("lat=45.2551").contains("lon=19.8452").contains("zoom=18");
+    }
+
+    @Test
+    void aPointWithoutAnAddressHasNoName() {
+        answer = "{\"error\":\"Unable to geocode\"}";
+
+        assertThat(service.nameOf(7L, 44.0, 21.0)).isNull();
+        assertThatThrownBy(() -> service.nameOf(7L, 91, 20))
+                .isInstanceOf(ResponseStatusException.class);
     }
 }

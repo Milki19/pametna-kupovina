@@ -67,8 +67,8 @@ const appleMobile = /iPhone|iPad|iPod/.test(navigator.userAgent)
   || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
 const browserName = appleMobile ? 'Safari' : 'Pregledač';
 const locationDenied = () => appleMobile
-  ? 'Safari nema dozvolu za lokaciju. Dozvoli je za ovaj sajt (Podešavanja → Aplikacije → Safari → Lokacija) ili upiši koordinate ručno.'
-  : 'Pregledač nema dozvolu za lokaciju. Dozvoli je u podešavanjima sajta (ikonica pored adrese) ili upiši koordinate ručno.';
+  ? 'Safari nema dozvolu za lokaciju. Dozvoli je za ovaj sajt (Podešavanja → Aplikacije → Safari → Lokacija) ili upiši adresu.'
+  : 'Pregledač nema dozvolu za lokaciju. Dozvoli je u podešavanjima sajta (ikonica pored adrese) ili upiši adresu.';
 
 /** Da se u spisku telefona na nalogu vidi koji je koji. */
 function webDeviceName() {
@@ -1063,13 +1063,9 @@ const originLabel = origin => origin.label || coordinates(origin.lat, origin.lng
 
 // Adrese iz pretrage ostaju na ekranu dok se ne izabere jedna.
 let places = { query: '', results: null };
-// Ručno upisane koordinate ostaju kad se ekran ponovo iscrta (Kolima/Peške, greška).
-let manual = { lat: '', lng: '', open: false };
 
 function showLocation(message = null, tone = 'err') {
   const last = saved.get('origin');
-  const typed = view.querySelector('[data-form=coordinates]');
-  if (typed) manual = { lat: typed.elements.lat.value, lng: typed.elements.lng.value, open: typed.closest('details').open };
   const placeField = view.querySelector('[data-form=place] input[name=q]');
   if (placeField) places.query = placeField.value;
   screen({
@@ -1106,35 +1102,35 @@ function showLocation(message = null, tone = 'err') {
         <span class="grow"><span class="label">Poslednja polazna tačka</span><span style="display:block">${esc(originLabel(last))}</span></span>
         <span class="btn">Koristi</span></button>` : ''}
       ${message ? notice(message, tone) : ''}
-      <p class="muted small">Lokacija služi samo za ovo računanje i za redosled pretrage. Ne prati se u pozadini, a server je ne čuva. Adresu server traži preko OpenStreetMap-a i ne upisuje je.</p>
-      <details class="card" ${manual.open ? 'open' : ''}>
-        <summary>Unesi koordinate ručno</summary>
-        <form data-form="coordinates">
-          <label class="label" for="lat">Geografska širina</label>
-          <input id="lat" name="lat" inputmode="decimal" placeholder="npr. 44.8170" value="${esc(manual.lat)}" required>
-          <label class="label" for="lng">Geografska dužina</label>
-          <input id="lng" name="lng" inputmode="decimal" placeholder="npr. 20.4930" value="${esc(manual.lng)}" required>
-          <p class="muted small">Koordinate dobijaš u Google mapama kad dugo pritisneš tačku na mapi.</p>
-          <button class="btn primary">Prikaži preporuke</button>
-        </form>
-      </details>`
+      <p class="muted small">Lokacija služi samo za ovo računanje i za redosled pretrage. Ne prati se u pozadini, a server je ne čuva. Adresu server traži preko OpenStreetMap-a i ne upisuje je.</p>`
   });
 }
 
-function useOrigin(lat, lng, label = null) {
+/** Adresa tačke („Bulevar oslobođenja 10, Novi Sad“) umesto brojeva; null kad je nema. */
+async function addressOf(lat, lng) {
+  try {
+    const place = await api('GET', `places/reverse?latitude=${lat}&longitude=${lng}`);
+    return place?.name || null;
+  } catch {
+    return null;
+  }
+}
+
+async function useOrigin(lat, lng, label = null) {
+  label = label || await addressOf(lat, lng);
   saved.set('origin', label ? { lat, lng, label } : { lat, lng });
   places = { query: '', results: null };
   location.hash = '#/preporuke';
 }
 
 function locate() {
-  if (!navigator.geolocation) return showLocation('Ovaj pregledač ne daje lokaciju. Upiši koordinate ručno.');
+  if (!navigator.geolocation) return showLocation('Ovaj pregledač ne daje lokaciju. Upiši adresu ili kraj.');
   showLocation('Tražim lokaciju…', '');
   navigator.geolocation.getCurrentPosition(
     position => useOrigin(position.coords.latitude, position.coords.longitude),
     error => showLocation(error.code === 1
       ? locationDenied()
-      : 'Lokacija trenutno nije dostupna. Probaj ponovo ili upiši koordinate ručno.'),
+      : 'Lokacija trenutno nije dostupna. Probaj ponovo ili upiši adresu.'),
     { enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 }
   );
 }
@@ -2162,13 +2158,6 @@ const forms = {
   'add-one': data => addText(data.get('text')),
   'add-many': data => addText(data.get('text')),
   'edit-item': (data, form) => saveItem(Number(form.dataset.id), data),
-  coordinates: data => {
-    const lat = Number(String(data.get('lat')).replace(',', '.'));
-    const lng = Number(String(data.get('lng')).replace(',', '.'));
-    if (!(Math.abs(lat) <= 90) || Number.isNaN(lat)) throw fieldError('lat', 'Širina nije ispravna. Primer: 44.8170.');
-    if (!(Math.abs(lng) <= 180) || Number.isNaN(lng)) throw fieldError('lng', 'Dužina nije ispravna. Primer: 20.4930.');
-    useOrigin(lat, lng);
-  },
   place: async data => {
     places.query = String(data.get('q') || '').trim();
     document.activeElement.blur();
