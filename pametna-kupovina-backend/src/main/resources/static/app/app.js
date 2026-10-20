@@ -1405,6 +1405,7 @@ function renderRecommendation() {
               ${quantityLine(item) ? `<div class="muted small">${esc(quantityLine(item))}</div>` : ''}
               ${stalePrice(item.priceDate, result.requestedDate) ? `<div class="muted small">Cena od ${date(item.priceDate)}</div>` : ''}
               ${manySmallPacks(item) ? pill('Mnogo malih pakovanja', 'warn') : ''}
+              ${item.substituteNote ? `<div class="small" style="color:var(--on-amber)">${esc(item.substituteNote)}</div>` : ''}
               <div class="item-menu" id="item-menu-${item.itemId}" hidden>
                 <button class="btn text small" style="padding:8px 0" data-act="wrong-product" data-item="${item.itemId}"
                   aria-label="Pogrešan proizvod za „${esc(item.requestedName)}“">Pogrešan proizvod</button></div></div>
@@ -1501,6 +1502,7 @@ function showPurchase() {
       <span class="grow"><span class="name ${done ? 'strike' : ''}" style="display:block">${esc(item.requestedName)}</span>
         ${item.productName && item.productName.toLowerCase() !== item.requestedName.toLowerCase() ? `<span class="muted small" style="display:block">${esc(item.productName)}</span>` : ''}
         ${quantityLine(item) ? `<span class="muted small" style="display:block">${esc(quantityLine(item))}</span>` : ''}
+        ${item.substituteNote ? `<span class="small" style="display:block;color:var(--on-amber)">${esc(item.substituteNote)}</span>` : ''}
         ${item.storeId == null ? `<span class="small ${onTheWay(s, item) ? 'muted' : ''}" style="display:block;${onTheWay(s, item) ? '' : 'color:var(--error)'}">${esc(item.explanation)}</span>` : ''}</span>
       ${item.lineTotal != null ? `<span class="price ${done ? 'strike' : ''}">${money(item.lineTotal)}</span>` : ''}
     </label>`;
