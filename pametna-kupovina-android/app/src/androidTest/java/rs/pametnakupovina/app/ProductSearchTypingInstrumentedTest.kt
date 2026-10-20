@@ -54,7 +54,7 @@ class ProductSearchTypingInstrumentedTest {
                 rs.pametnakupovina.app.data.market.MarketStore(context, kotlinx.serialization.json.Json)
             ),
             BarcodeScanner(),
-            FusedLocationProvider(context, LocationServices.getFusedLocationProviderClient(context))
+            FusedLocationProvider(context, LocationServices.getFusedLocationProviderClient(context), api)
         )
         try {
             compose.setContent {

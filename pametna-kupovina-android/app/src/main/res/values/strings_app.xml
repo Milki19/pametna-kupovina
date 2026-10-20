@@ -93,6 +93,7 @@
     <string name="location_starting_point">Polazna tačka</string>
     <string name="location_step_text">Put računamo od polazne tačke do prodavnica u blizini.</string>
     <string name="location_resolving">Tražim lokaciju…</string>
+    <string name="location_current_place">Trenutna lokacija</string>
     <string name="location_use_current">Koristi trenutnu lokaciju</string>
     <string name="location_use_current_hint">Samo za ovo računanje</string>
     <string name="location_travel_title">Kako ideš do prodavnica</string>
@@ -104,13 +105,7 @@
     <string name="location_find_address">Pronađi adresu</string>
     <string name="location_open_location_settings">Otvori podešavanja lokacije</string>
     <string name="location_open_app_permissions">Otvori dozvole aplikacije</string>
-    <string name="location_privacy_note">Lokacija služi za ovo računanje i za redosled pretrage. Aplikacija je ne prati u pozadini, a server je ne čuva.</string>
-    <string name="location_enter_manually">Unesi koordinate ručno</string>
-    <string name="location_latitude">Geografska širina</string>
-    <string name="location_latitude_placeholder">npr. 44.8170</string>
-    <string name="location_longitude">Geografska dužina</string>
-    <string name="location_longitude_placeholder">npr. 20.4930</string>
-    <string name="location_coordinates_hint">Koordinate dobijaš u Google mapama kad dugo pritisneš tačku na mapi.</string>
+    <string name="location_privacy_note">Lokacija služi za ovo računanje i za redosled pretrage. Aplikacija je ne prati u pozadini, a server je ne čuva. Adresu server traži preko OpenStreetMap-a i ne upisuje je.</string>
     <string name="location_found_current">Lokacija je pronađena. Proveri je i pokreni računanje.</string>
     <string name="location_found_address">Pronađeno: %1$s</string>
     <string name="location_not_found_type_address">Lokacija nije pronađena. Upiši adresu.</string>
@@ -118,7 +113,6 @@
     <string name="location_permission_missing">Dozvola za lokaciju nije odobrena.</string>
     <string name="location_services_off">Lokacijske usluge su isključene. Uključi ih u podešavanjima pa pokušaj ponovo.</string>
     <string name="location_not_found_enable_services">Lokacija nije pronađena. Uključi lokacijske usluge ili upiši adresu.</string>
-    <string name="location_geocoder_missing">Pretraga adrese ne radi na ovom telefonu. Unesi koordinate ručno.</string>
     <string name="location_geocoder_unavailable">Pretraga adrese trenutno ne radi. Probaj ponovo za koji trenutak.</string>
     <string name="location_address_not_found">Adresa nije pronađena. Dodaj grad, npr. „Karaburma, Beograd“.</string>
 </resources>

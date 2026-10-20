@@ -92,6 +92,7 @@
     <string name="location_starting_point">Starting point</string>
     <string name="location_step_text">We calculate the route from the starting point to nearby stores.</string>
     <string name="location_resolving">Finding location…</string>
+    <string name="location_current_place">Current location</string>
     <string name="location_use_current">Use current location</string>
     <string name="location_use_current_hint">Only for this calculation</string>
     <string name="location_travel_title">How you get to the shops</string>
@@ -103,13 +104,7 @@
     <string name="location_find_address">Find address</string>
     <string name="location_open_location_settings">Open location settings</string>
     <string name="location_open_app_permissions">Open app permissions</string>
-    <string name="location_privacy_note">Your location is used for this calculation and to order search results. The app doesn\'t track it in the background, and the server doesn\'t store it.</string>
-    <string name="location_enter_manually">Enter coordinates manually</string>
-    <string name="location_latitude">Latitude</string>
-    <string name="location_latitude_placeholder">e.g. 44.8170</string>
-    <string name="location_longitude">Longitude</string>
-    <string name="location_longitude_placeholder">e.g. 20.4930</string>
-    <string name="location_coordinates_hint">You can get coordinates in Google Maps by long-pressing a point on the map.</string>
+    <string name="location_privacy_note">Your location is used for this calculation and to order search results. The app doesn\'t track it in the background, and the server doesn\'t store it. The server looks up addresses through OpenStreetMap and doesn\'t save them.</string>
     <string name="location_found_current">Location found. Check it and start the calculation.</string>
     <string name="location_found_address">Found: %1$s</string>
     <string name="location_not_found_type_address">Location not found. Enter an address.</string>
@@ -117,7 +112,6 @@
     <string name="location_permission_missing">Location permission wasn\'t granted.</string>
     <string name="location_services_off">Location services are off. Turn them on in settings and try again.</string>
     <string name="location_not_found_enable_services">Location not found. Turn on location services or enter an address.</string>
-    <string name="location_geocoder_missing">Address search doesn\'t work on this phone. Enter coordinates manually.</string>
     <string name="location_geocoder_unavailable">Address search isn\'t working right now. Try again in a moment.</string>
     <string name="location_address_not_found">Address not found. Add the city, e.g. “Karaburma, Belgrade”.</string>
 </resources>
