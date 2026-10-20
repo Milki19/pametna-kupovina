@@ -60,12 +60,16 @@ public class DeviceSessionService {
 
     /**
      * A new phone, or an old one moving from its number to a session. A
-     * number that has already been exchanged opens its session again, live
-     * or not, and the tokens issued before stop working: a browser that lost
-     * its refresh token still holds the number beside it, and a phone
-     * without a Google sign-in has nothing else to get its lists back with.
-     * A session ended because a copy of its token turned up is gone, not
-     * expired, so the number stays shut for whoever holds the copy.
+     * number that has already been exchanged opens its session again, live,
+     * expired or ended, and the tokens issued before stop working: a browser
+     * that lost its refresh token still holds the number beside it, and a
+     * phone without a Google sign-in has nothing else to get its lists back
+     * with.
+     *
+     * <p>That includes a session ended because a copy of its refresh token
+     * turned up. The copy and every token beside it stay dead; the number
+     * lives next to the refresh token on the phone, so shutting it as well
+     * stopped nobody who had copied both and only cost the phone its lists.
      */
     @Transactional
     public SessionGrant open(String deviceToken, String deviceName) {
@@ -77,11 +81,8 @@ public class DeviceSessionService {
                     return repository.findDevice(hash).orElseThrow();
                 });
 
-        if (device.retired()) {
-            if (repository.lockSessionOfDevice(device.id()).isEmpty()) {
-                throw rejected("Ovaj telefon već ima sesiju. Otvori aplikaciju ponovo.");
-            }
-        }
+        // Two opens at once take turns, so the second replaces the first.
+        repository.lockSessionOfDevice(device.id());
 
         repository.retireLegacyToken(device.id(), cleanName(deviceName));
         DeviceSessionRepository.IssuedTokens tokens = issue();
