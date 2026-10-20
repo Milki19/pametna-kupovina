@@ -91,25 +91,11 @@ public class FiscalReceiptClient {
         }
     }
 
-    /**
-     * Objekat („1207756-PLEASURE PARK ČAIR") znači kupcu više od firme, jer je
-     * to prodavnica u koju je ušao; broj ispred njega ne znači nikome ništa.
-     */
     private static String shopName(JsonNode request) {
-        String location = request.path("locationName").asText("").strip();
-
-        if (!location.isEmpty()) {
-            int dash = location.indexOf('-');
-
-            if (dash > 0 && location.substring(0, dash).chars()
-                    .allMatch(Character::isDigit)) {
-                return location.substring(dash + 1).strip();
-            }
-
-            return location;
-        }
-
-        return blankToNull(request.path("businessName").asText(""));
+        return FiscalShopName.of(
+                request.path("locationName").asText(""),
+                request.path("businessName").asText("")
+        );
     }
 
     private static String blankToNull(String value) {

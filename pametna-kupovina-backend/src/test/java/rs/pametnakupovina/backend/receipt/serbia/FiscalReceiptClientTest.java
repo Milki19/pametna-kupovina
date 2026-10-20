@@ -86,6 +86,21 @@ class FiscalReceiptClientTest {
                 });
     }
 
+    /** Lidl objekat zove samo brojem; kupcu treba da piše Lidl. */
+    @Test
+    void aLocationThatIsOnlyANumberGivesWayToTheCompany() throws IOException {
+        start("""
+                {"isValid":true,"journal":"račun",
+                 "invoiceRequest":{"businessName":"Lidl Srbija KD",
+                                   "locationName":"1205981-Prodavnica 137"}}
+                """);
+
+        assertThat(client().fetch(url() + "?vl=x"))
+                .get()
+                .satisfies(fetched ->
+                        assertThat(fetched.shopName()).isEqualTo("Lidl Srbija KD"));
+    }
+
     private void start(String json) throws IOException {
         byte[] body = json.getBytes(StandardCharsets.UTF_8);
         server = HttpServer.create(new InetSocketAddress(0), 0);

@@ -46,23 +46,12 @@ public class FiscalReceiptJournalParser {
         );
     }
 
-    /**
-     * U zaglavlju su, redom: PIB, firma, pa „broj-naziv objekta". Kupcu znači
-     * objekat („PLEASURE PARK ČAIR"), ne firma, jer je to prodavnica u koju je
-     * ušao.
-     */
+    /** U zaglavlju su, redom: PIB, firma, pa „broj-naziv objekta". */
     private static String shopName(List<String> lines) {
         List<String> header = headerLines(lines);
 
         if (header.size() >= 3) {
-            String location = header.get(2);
-            int dash = location.indexOf('-');
-
-            if (dash > 0 && DIGITS_ONLY.matcher(location.substring(0, dash)).matches()) {
-                return location.substring(dash + 1).strip();
-            }
-
-            return location;
+            return FiscalShopName.of(header.get(2), header.get(1));
         }
 
         return header.size() >= 2 ? header.get(1) : null;
