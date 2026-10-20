@@ -841,7 +841,21 @@ function pickerCard(item) {
     </form>`;
 }
 
+function betterPackCard(item) {
+  const b = picking.better;
+  if (!b) return '';
+  const unit = b.chosen.baseUnit;
+  return `<div class="card soft" role="status">
+      <div class="name">Treba ti ${amountLabel(b.need, unit)}, a izabrano pakovanje je ${amountLabel(b.chosen.quantityValue, unit)} (od ${money(b.bigPrice)}).</div>
+      <p class="small">${b.packages === 1 ? '' : `${b.packages} × `}${esc(amountLabel(b.product.quantityValue, unit))} je od ${money(b.cost)}: ${esc(b.product.name)}. Zameni?</p>
+      <div class="row" style="gap:8px;flex-wrap:wrap">
+        <button type="button" class="btn primary" data-act="pick-better">Zameni</button>
+        <button type="button" class="btn" data-act="pick-keep">Zadrži ${amountLabel(b.chosen.quantityValue, unit)}</button>
+      </div></div>`;
+}
+
 function pickResults(item) {
+  if (picking.better) return betterPackCard(item);
   return `${picking.loading ? spinner('Tražim…') : ''}
       ${picking.error ? `<p class="small" role="alert" style="color:var(--error)">${esc(picking.error)}</p>` : ''}
       ${picking.results && !picking.results.length && !picking.loading ? `<p class="muted small">Nema proizvoda za „${esc(picking.query)}“. Probaj kraći naziv.</p>` : ''}
@@ -946,6 +960,7 @@ async function runPick(query) {
   const signal = pickTyping.signal();
   current.query = query.trim();
   current.error = null;
+  current.better = null;
   if (!searchable(current.query)) {
     current.results = [];
     current.loading = false;
@@ -982,13 +997,52 @@ function packagesFor(item, product) {
   return item.quantity % inPack === 0 ? item.quantity / inPack : item.quantity;
 }
 
+const lowestPrice = product => Math.min(...(product.availability || [])
+  .filter(a => a.minimumEffectivePrice != null && !a.priceNeedsCheck).map(a => a.minimumEffectivePrice));
+
+/**
+ * Izabrano pakovanje je mnogo veće od potrebnog („2 kg brašna“, a izabrano
+ * 5 kg): manja pakovanja iste vrste koja daju potrebnu količinu jeftinije,
+ * po najnižoj ceni u lancima. Izveštaj 20.10.: 5 kg za 244,99 RSD umesto 2 × 1 kg za oko 106.
+ */
+async function smallerPacks(item, product) {
+  const c = item.flexibleConstraints;
+  const need = c && c.targetQuantity ? c.targetQuantity * item.quantity : null;
+  if (!need || product.baseUnit !== c.requiredBaseUnit || !(product.quantityValue > need * 1.25)) return null;
+  const bigPrice = lowestPrice(product);
+  if (!Number.isFinite(bigPrice)) return null;
+  let page;
+  try {
+    page = await api('GET', `products/search?query=${encodeURIComponent(picking.query)}&page=0&limit=20${searchLocation()}`);
+  } catch { return null; } // Samo predlog: izbor ide i bez njega.
+  let best = null;
+  for (const p of page.items) {
+    if (p.baseUnit !== product.baseUnit || !(p.quantityValue > 0) || p.quantityValue >= product.quantityValue) continue;
+    if (product.categoryCode && p.categoryCode !== product.categoryCode) continue;
+    const price = lowestPrice(p);
+    if (!Number.isFinite(price)) continue;
+    const packages = Math.max(1, Math.ceil(need / p.quantityValue - 0.25));
+    if (packages > 10) continue;
+    const cost = packages * price;
+    if (!best || cost < best.cost) best = { product: p, packages, cost };
+  }
+  return best && best.cost < bigPrice * 0.9 ? { ...best, need, bigPrice } : null;
+}
+
 /** Izabrani proizvod iz pretrage postaje stavka: naziv i količina sa spiska ostaju, proizvod je tačan. */
-async function pickProduct(product) {
+async function pickProduct(product, keepAsChosen = false) {
   const listId = matching.listId;
   const itemId = picking.itemId;
   const list = await api('GET', `shopping-lists/${listId}`);
   const item = list.items.find(i => i.id === itemId);
   if (!item) throw new Error('Stavke više nema na spisku.');
+  if (!keepAsChosen) {
+    const better = await smallerPacks(item, product);
+    if (better && picking && picking.itemId === itemId) {
+      picking.better = { chosen: product, ...better };
+      return renderPick();
+    }
+  }
   const quantity = packagesFor(item, product);
   await api('PUT', `shopping-lists/${listId}/items/${itemId}`, {
     name: item.name,
@@ -1179,7 +1233,7 @@ function quantityLine(item) {
 function scenarioWarnings(s, result) {
   const warnings = [];
   if (!s.available) return warnings;
-  const missing = s.items.length - s.coveredItems;
+  const missing = s.items.length - s.coveredItems - (s.onTheWay?.itemIds.length || 0);
   if (!s.complete && missing > 0) {
     const unrecognised = Math.min(s.unmatchedItems, missing);
     const unpriced = missing - unrecognised;
@@ -1190,6 +1244,31 @@ function scenarioWarnings(s, result) {
   if (small.length) warnings.push(`Od mnogo malih pakovanja: ${small.join(', ')}. Proveri da li ti tako odgovara.`);
   if (s.dataAsOf && s.dataAsOf !== result.requestedDate) warnings.push(`Cene su iz cenovnika od ${date(s.dataAsOf)}, ne od danas. Proveri ih pre kupovine.`);
   return warnings;
+}
+
+const onTheWay = (s, item) => Boolean(s.onTheWay && s.onTheWay.itemIds.includes(item.itemId));
+
+/** Sitna stavka zbog koje ne vredi ići u još jednu prodavnicu (izveštaj 20.10.). */
+function onTheWayNotice(s) {
+  const o = s.onTheWay;
+  if (!o || !o.itemNames.length) return '';
+  const names = o.itemNames.join(', ');
+  return notice(`${names.charAt(0).toUpperCase() + names.slice(1)} kupi usput. Zbog ${o.itemNames.length === 1 ? 'te stavke' : 'tih stavki'}
+    bi plan imao još jednu prodavnicu: +${whole(o.extraCost)} ${market.currency} i oko ${duration(o.extraSeconds)} više.`);
+}
+
+// Peške duže od pola sata: ponuda da plan ostane u blizini (izveštaj 20.10.).
+const NEAR_ONLY_METERS = 1000;
+const LONG_WALK_SECONDS = 30 * 60;
+function nearOnlyOffer(s, result) {
+  if (result.assumptions?.travelMode !== 'WALKING') return '';
+  if (saved.get('nearOnly', false)) {
+    return `<div class="card soft row"><span class="grow small">Samo radnje do ${NEAR_ONLY_METERS / 1000} km.</span>
+      <button class="btn text small" data-act="near-only" data-value="off">Prikaži sve u blizini</button></div>`;
+  }
+  if (!s.available || s.routeDurationSeconds <= LONG_WALK_SECONDS) return '';
+  return `<div class="card soft row"><span class="grow small">Ovo je oko ${duration(s.routeDurationSeconds)} hoda.</span>
+    <button class="btn small" data-act="near-only" data-value="on">Samo radnje do ${NEAR_ONLY_METERS / 1000} km</button></div>`;
 }
 
 /**
@@ -1229,7 +1308,9 @@ async function showRecommendation() {
   if (!origin || !listId) { location.hash = '#/lokacija'; return; }
   // Obrisana stavka koja još čeka „Vrati“ prvo stiže do servera.
   await flushDelete();
-  const travel = saved.get('walking', false) ? '&travelMode=WALKING' : '';
+  const walking = saved.get('walking', false);
+  const travel = (walking ? '&travelMode=WALKING' : '')
+    + (walking && saved.get('nearOnly', false) ? `&radiusMeters=${NEAR_ONLY_METERS}` : '');
   try {
     // Plan se ne računa ponovo dok se spisak ne promeni. Stavke se pitaju
     // server, jer spisak može da se menja i u aplikaciji, a to je brzo.
@@ -1269,7 +1350,7 @@ function renderRecommendation() {
   const scenarios = distinctScenarios(result);
   const s = scenarios.find(x => x.type === selectedType) || result.recommendedBalance;
   const stores = [...s.stores].sort((a, b) => a.stopOrder - b.stopOrder);
-  const unresolved = s.items.filter(i => i.resultStatus !== 'AVAILABLE');
+  const unresolved = s.items.filter(i => i.resultStatus !== 'AVAILABLE' && !onTheWay(s, i));
   const a = result.assumptions;
   screen({
     title: 'Preporuke',
@@ -1303,7 +1384,7 @@ function renderRecommendation() {
           </div>
           <div class="row"><span class="grow">Pokrivenost korpe</span><b style="color:var(--primary)">${s.coveredItems} od ${s.items.length} ${plural(s.items.length, 'stavke', 'stavke', 'stavki')}</b></div>`
           : `<p>${esc(s.explanation)}</p>`}
-      </div>` + balanceExplanation(s, result) +
+      </div>` + onTheWayNotice(s) + nearOnlyOffer(s, result) + balanceExplanation(s, result) +
       scenarioWarnings(s, result).map(w => notice(w, 'warn')).join('') +
       (s.available && stores.length ? `
         <a class="btn" href="${esc(mapsUrl(origin, stores, result.assumptions?.travelMode === 'WALKING'))}" target="_blank" rel="noopener">${icon.route}${stores.length === 1 ? 'Pregled puta do prodavnice' : `Pregled rute kroz ${stores.length} ${plural(stores.length, 'prodavnicu', 'prodavnice', 'prodavnica')}`}</a>
@@ -1414,13 +1495,13 @@ function showPurchase() {
     const done = Boolean(purchase.checked[item.itemId]);
     // Bez prodavnice nema šta da se štiklira: stavka samo kaže zašto je nema.
     if (item.storeId == null) return `<div class="list-row"><span class="name" style="display:block">${esc(item.requestedName)}</span>
-      <span class="small" style="display:block;color:var(--error)">${esc(item.explanation)}</span></div>`;
+      <span class="small ${onTheWay(s, item) ? 'muted' : ''}" style="display:block;${onTheWay(s, item) ? '' : 'color:var(--error)'}">${esc(item.explanation)}</span></div>`;
     return `<label class="check">
       <input type="checkbox" data-check="${item.itemId}" ${done ? 'checked' : ''} aria-label="Kupljeno: ${esc(item.requestedName)}">
       <span class="grow"><span class="name ${done ? 'strike' : ''}" style="display:block">${esc(item.requestedName)}</span>
         ${item.productName && item.productName.toLowerCase() !== item.requestedName.toLowerCase() ? `<span class="muted small" style="display:block">${esc(item.productName)}</span>` : ''}
         ${quantityLine(item) ? `<span class="muted small" style="display:block">${esc(quantityLine(item))}</span>` : ''}
-        ${item.storeId == null ? `<span class="small" style="display:block;color:var(--error)">${esc(item.explanation)}</span>` : ''}</span>
+        ${item.storeId == null ? `<span class="small ${onTheWay(s, item) ? 'muted' : ''}" style="display:block;${onTheWay(s, item) ? '' : 'color:var(--error)'}">${esc(item.explanation)}</span>` : ''}</span>
       ${item.lineTotal != null ? `<span class="price ${done ? 'strike' : ''}">${money(item.lineTotal)}</span>` : ''}
     </label>`;
   };
@@ -1440,7 +1521,8 @@ function showPurchase() {
         <a class="card soft row" href="#/kartice" style="text-decoration:none;color:inherit;padding:10px 12px">
           <span style="color:var(--primary)">${icon.card}</span><span class="grow">Lojalti kartice za kasu — prikaži barkod</span>${icon.chevron}</a>
       </div>` +
-      (!s.complete ? notice('Plan nije potpun. Stavke bez ponude su na dnu.', 'warn') : '') +
+      (!s.complete && s.items.some(i => i.storeId == null && !onTheWay(s, i))
+        ? notice('Plan nije potpun. Stavke bez ponude su na dnu.', 'warn') : '') +
       stores.map(store => {
         const items = s.items.filter(i => i.storeId === store.storeId);
         const done = items.filter(i => purchase.checked[i.itemId]).length;
@@ -1454,7 +1536,7 @@ function showPurchase() {
           ${items.map(row).join('')}
         </div>`;
       }).join('') +
-      (unresolved.length ? `<div class="section">Bez prodavnice ${pill(unresolved.length)}</div><div class="card flush">${unresolved.map(row).join('')}</div>` : '') +
+      (unresolved.length ? `<div class="section">${unresolved.every(i => onTheWay(s, i)) ? 'Kupi usput' : 'Bez prodavnice'} ${pill(unresolved.length)}</div><div class="card flush">${unresolved.map(row).join('')}</div>` : '') +
       `<button class="btn" data-act="finish-purchase">Završi kupovinu</button>
        <p class="muted small">Napredak kupovine čuva ovaj pregledač; originalni spisak ostaje nepromenjen.</p>`
   });
@@ -2083,7 +2165,8 @@ const actions = {
   flexible: el => useAsFlexible(Number(el.dataset.item)),
   'to-location': () => { location.hash = '#/lokacija'; },
   locate,
-  travel: el => { saved.set('walking', el.dataset.value === 'WALKING'); showLocation(); },
+  travel: el => { saved.set('walking', el.dataset.value === 'WALKING'); saved.set('nearOnly', null); showLocation(); },
+  'near-only': el => { saved.set('nearOnly', el.dataset.value === 'on' ? true : null); showRecommendation(); },
   'use-last': () => { const o = saved.get('origin'); useOrigin(o.lat, o.lng, o.label); },
   'use-place': el => { const p = places.results[Number(el.dataset.index)]; useOrigin(p.latitude, p.longitude, p.name); },
   scenario: el => { selectedType = el.dataset.type; renderRecommendation(); },
@@ -2098,6 +2181,8 @@ const actions = {
   'pick-open': el => openPick(Number(el.dataset.item)),
   'pick-cancel': () => { pickTyping.cancel(); picking = null; renderMatching(); },
   pick: el => pickProduct(picking.results[Number(el.dataset.index)]),
+  'pick-better': () => pickProduct(picking.better.product, true),
+  'pick-keep': () => pickProduct(picking.better.chosen, true),
   'lost-list-ok': () => { saved.set('listLost', null); renderList(); },
   'finish-purchase': () => {
     if (!confirm('Završi kupovinu? Napredak se briše, a spisak ostaje.')) return;
