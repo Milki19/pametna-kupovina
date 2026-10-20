@@ -930,6 +930,9 @@ private fun PurchaseItemRow(
             itemQuantityLine(item)?.let {
                 Text(it, style = MaterialTheme.typography.bodySmall, color = muted)
             }
+            item.substituteNote?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer)
+            }
             purchaseStatus(progress, item)?.let { (text, tone) -> StatusPill(text, tone) }
             // Cenovnik ne zna šta je na polici; kad više kupaca javi, plan
             // tu ponudu u toj radnji preskače.

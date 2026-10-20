@@ -592,7 +592,10 @@ data class RecommendationItemDto(
     val lineTotal: Double? = null,
     val priceScope: String? = null,
     val explanation: String,
-    val purchaseQuantity: PurchaseQuantityDto? = null
+    val purchaseQuantity: PurchaseQuantityDto? = null,
+    // Proizvod je najsličniji koji radnja ima, ne ono što red traži
+    // („feta sir" plaćen mladim sirom).
+    val substituteNote: String? = null
 )
 
 @Serializable
