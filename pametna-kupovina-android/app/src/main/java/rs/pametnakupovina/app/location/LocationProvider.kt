@@ -6,7 +6,13 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Geocoder
 import android.location.Location
+import android.location.LocationManager
+import android.os.CancellationSignal
+import android.os.SystemClock
 import androidx.core.content.ContextCompat
+import androidx.core.location.LocationManagerCompat
+import com.google.android.gms.common.ConnectionResult
+import com.google.android.gms.common.GoogleApiAvailability
 import com.google.android.gms.location.CurrentLocationRequest
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.Priority
@@ -17,6 +23,8 @@ import javax.inject.Singleton
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -74,6 +82,11 @@ internal fun shortAddress(street: String?, number: String?, place: String?, full
         .ifBlank { null }
 }
 
+/**
+ * Lokacija preko Google Play usluga, a bez njih (GrapheneOS, LineageOS, telefoni
+ * bez Google-a) ili kad one ne vrate ništa, preko samog Android-a: GPS i mrežni
+ * provajder iz LocationManager-a.
+ */
 @Singleton
 class FusedLocationProvider @Inject constructor(
     @param:ApplicationContext private val context: Context,
@@ -88,18 +101,34 @@ class FusedLocationProvider @Inject constructor(
             )
         }
 
-        val manager = context.getSystemService(Context.LOCATION_SERVICE) as android.location.LocationManager
-        if (!androidx.core.location.LocationManagerCompat.isLocationEnabled(manager)) {
+        if (!LocationManagerCompat.isLocationEnabled(locationManager)) {
             throw LocationUnavailableException(uiText(R.string.location_services_off))
         }
 
+        val playServices = hasPlayServices()
+        val location = (if (playServices) fusedCurrentLocation() else null)
+            // Without Play services the fused client fails at once; with them sandboxed
+            // (GrapheneOS) it can come back empty. The OS providers answer either way.
+            ?: platformCurrentLocation(
+                if (playServices) PLATFORM_FALLBACK_TIMEOUT_MILLIS else PLATFORM_TIMEOUT_MILLIS
+            )
+            ?: platformLastLocation(FALLBACK_MAX_AGE_MILLIS)
+            ?: throw LocationUnavailableException(
+                uiText(R.string.location_not_found_enable_services)
+            )
+
+        return Coordinates(location.latitude, location.longitude)
+    }
+
+    @SuppressLint("MissingPermission")
+    private suspend fun fusedCurrentLocation(): Location? {
         val priority = if (hasFineLocationPermission(context)) {
             Priority.PRIORITY_HIGH_ACCURACY
         } else {
             Priority.PRIORITY_BALANCED_POWER_ACCURACY
         }
 
-        val location = resolveLocationWithFallback(
+        return resolveLocationWithFallback(
             freshLocation = {
                 withTimeoutOrNull(REQUEST_TIMEOUT_MILLIS + 1_000L) {
                     awaitCurrentLocation(
@@ -123,21 +152,17 @@ class FusedLocationProvider @Inject constructor(
             },
             isAcceptable = { location ->
                 hasUsableCoordinates(location) &&
-                    isRecentLocation(location.elapsedRealtimeNanos, android.os.SystemClock.elapsedRealtimeNanos())
+                    isRecentLocation(location.elapsedRealtimeNanos, SystemClock.elapsedRealtimeNanos())
             },
             isAcceptableFallback = { location ->
                 hasUsableCoordinates(location) &&
                     isUsableLocation(
                         location.elapsedRealtimeNanos,
-                        android.os.SystemClock.elapsedRealtimeNanos(),
+                        SystemClock.elapsedRealtimeNanos(),
                         FALLBACK_MAX_AGE_MILLIS * 1_000_000L
                     )
             }
-        ) ?: throw LocationUnavailableException(
-                uiText(R.string.location_not_found_enable_services)
-            )
-
-        return Coordinates(location.latitude, location.longitude)
+        )
     }
 
     /**
@@ -147,8 +172,7 @@ class FusedLocationProvider @Inject constructor(
      */
     suspend fun roughLocation(): Coordinates? {
         if (!hasLocationPermission(context)) return null
-        val location = runCatching { withTimeoutOrNull(1_000L) { awaitLastLocation() } }
-            .getOrNull() ?: return null
+        val location = lastKnownLocation() ?: return null
         return Coordinates(roughly(location.latitude), roughly(location.longitude))
     }
 
@@ -160,24 +184,29 @@ class FusedLocationProvider @Inject constructor(
      */
     suspend fun nearbyLocation(): Coordinates? {
         if (!hasLocationPermission(context)) return null
-        val now = android.os.SystemClock.elapsedRealtimeNanos()
+        val now = SystemClock.elapsedRealtimeNanos()
         val fresh = { location: Location ->
             hasUsableCoordinates(location) &&
                 isUsableLocation(location.elapsedRealtimeNanos, now, NEARBY_MAX_AGE_MILLIS * 1_000_000L)
         }
-        val location = runCatching { withTimeoutOrNull(1_000L) { awaitLastLocation() } }
-            .getOrNull()?.takeIf(fresh)
-            ?: runCatching {
-                withTimeoutOrNull(NEARBY_TIMEOUT_MILLIS + 1_000L) {
-                    awaitCurrentLocation(
-                        locationRequest(
-                            Priority.PRIORITY_BALANCED_POWER_ACCURACY,
-                            NEARBY_TIMEOUT_MILLIS,
-                            NEARBY_MAX_AGE_MILLIS
+        val playServices = hasPlayServices()
+        val location = lastKnownLocation()?.takeIf(fresh)
+            ?: (if (playServices) {
+                runCatching {
+                    withTimeoutOrNull(NEARBY_TIMEOUT_MILLIS + 1_000L) {
+                        awaitCurrentLocation(
+                            locationRequest(
+                                Priority.PRIORITY_BALANCED_POWER_ACCURACY,
+                                NEARBY_TIMEOUT_MILLIS,
+                                NEARBY_MAX_AGE_MILLIS
+                            )
                         )
-                    )
-                }
-            }.getOrNull()
+                    }
+                }.getOrNull()
+            } else {
+                null
+            })
+            ?: platformCurrentLocation(NEARBY_TIMEOUT_MILLIS, preciseProviders = false)
             ?: return null
         return Coordinates(roughly(location.latitude), roughly(location.longitude))
     }
@@ -283,6 +312,98 @@ class FusedLocationProvider @Inject constructor(
                 }
         }
 
+    private val locationManager: LocationManager
+        get() = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+
+    private fun hasPlayServices(): Boolean = runCatching {
+        GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(context) ==
+            ConnectionResult.SUCCESS
+    }.getOrDefault(false)
+
+    /** Poslednja poznata lokacija: od Play usluga ako ih ima, inače od Android-a. */
+    private suspend fun lastKnownLocation(): Location? {
+        if (hasPlayServices()) {
+            runCatching { withTimeoutOrNull(1_000L) { awaitLastLocation() } }
+                .getOrNull()
+                ?.takeIf(::hasUsableCoordinates)
+                ?.let { return it }
+        }
+        return platformLastLocation(Long.MAX_VALUE / 1_000_000L)
+    }
+
+    /** Najsvežija lokacija koju Android već ima, ako nije starija od [maxAgeMillis]. */
+    @SuppressLint("MissingPermission")
+    private fun platformLastLocation(maxAgeMillis: Long): Location? {
+        val manager = locationManager
+        val now = SystemClock.elapsedRealtimeNanos()
+        return (platformProviders(manager, preciseProviders = true) + LocationManager.PASSIVE_PROVIDER)
+            .distinct()
+            .mapNotNull { provider -> runCatching { manager.getLastKnownLocation(provider) }.getOrNull() }
+            .filter { location ->
+                hasUsableCoordinates(location) &&
+                    isUsableLocation(location.elapsedRealtimeNanos, now, maxAgeMillis * 1_000_000L)
+            }
+            .maxByOrNull { it.elapsedRealtimeNanos }
+    }
+
+    /**
+     * Nova lokacija od Android-a: GPS i mrežni provajder istovremeno, prva
+     * koja stigne. Null kad nijedan ne odgovori za [timeoutMillis].
+     */
+    @SuppressLint("MissingPermission")
+    private suspend fun platformCurrentLocation(
+        timeoutMillis: Long,
+        preciseProviders: Boolean = true
+    ): Location? {
+        val manager = locationManager
+        val providers = platformProviders(manager, preciseProviders).filter { provider ->
+            runCatching { manager.isProviderEnabled(provider) }.getOrDefault(false)
+        }
+        if (providers.isEmpty()) return null
+        return withTimeoutOrNull(timeoutMillis) {
+            withContext(Dispatchers.Main) {
+                suspendCancellableCoroutine { continuation ->
+                    val signals = providers.map { CancellationSignal() }
+                    val finished = AtomicBoolean(false)
+                    val remaining = AtomicInteger(providers.size)
+                    val finish: (Location?) -> Unit = { location ->
+                        if (finished.compareAndSet(false, true)) {
+                            signals.forEach(CancellationSignal::cancel)
+                            if (continuation.isActive) continuation.resume(location)
+                        }
+                    }
+                    val giveUpOne: () -> Unit = { if (remaining.decrementAndGet() == 0) finish(null) }
+                    continuation.invokeOnCancellation { signals.forEach(CancellationSignal::cancel) }
+                    providers.forEachIndexed { index, provider ->
+                        runCatching {
+                            LocationManagerCompat.getCurrentLocation(
+                                manager,
+                                provider,
+                                signals[index],
+                                ContextCompat.getMainExecutor(context)
+                            ) { location ->
+                                if (location != null && hasUsableCoordinates(location)) {
+                                    finish(location)
+                                } else {
+                                    giveUpOne()
+                                }
+                            }
+                        }.onFailure { giveUpOne() }
+                    }
+                }
+            }
+        }
+    }
+
+    /** GPS samo uz preciznu dozvolu i kad se traži tačna lokacija; mreža uvek. */
+    private fun platformProviders(manager: LocationManager, preciseProviders: Boolean): List<String> =
+        buildList {
+            if (preciseProviders && hasFineLocationPermission(context)) add(LocationManager.GPS_PROVIDER)
+            add(LocationManager.NETWORK_PROVIDER)
+        }.filter { provider ->
+            runCatching { LocationManagerCompat.hasProvider(manager, provider) }.getOrDefault(false)
+        }
+
     private companion object {
         const val REQUEST_TIMEOUT_MILLIS = 10_000L
         const val MAX_LOCATION_AGE_MILLIS = 30_000L
@@ -290,6 +411,8 @@ class FusedLocationProvider @Inject constructor(
         const val FALLBACK_MAX_AGE_MILLIS = 300_000L
         const val NEARBY_TIMEOUT_MILLIS = 5_000L
         const val NEARBY_MAX_AGE_MILLIS = 1_800_000L
+        const val PLATFORM_TIMEOUT_MILLIS = 20_000L
+        const val PLATFORM_FALLBACK_TIMEOUT_MILLIS = 10_000L
     }
 }
 
