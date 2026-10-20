@@ -44,6 +44,7 @@ public class PlaceSearchService {
     private final RestClient restClient;
     private final MarketRepository markets;
     private final String searchUrl;
+    private final String reverseUrl;
     private final long minimumGapMillis;
     private final Map<String, List<Place>> cache = new LinkedHashMap<>(64, 0.75f, true) {
         @Override
@@ -74,6 +75,7 @@ public class PlaceSearchService {
                 .build();
         this.markets = markets;
         this.searchUrl = searchUrl;
+        this.reverseUrl = searchUrl.replaceFirst("/search$", "/reverse");
         this.minimumGapMillis = minimumGapMillis;
     }
 
@@ -105,6 +107,57 @@ public class PlaceSearchService {
             cache.put(key, places);
         }
         return places;
+    }
+
+    /**
+     * "Bulevar oslobođenja 10, Novi Sad" for a point from the phone or the
+     * browser, so the starting point reads as an address and not as numbers.
+     * The point is rounded to about ten metres before it leaves, and null
+     * means the map knows no address there.
+     */
+    public Place nameOf(long accountId, double latitude, double longitude) {
+        if (!(latitude >= -90 && latitude <= 90) || !(longitude >= -180 && longitude <= 180)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Koordinate nisu ispravne.");
+        }
+        double lat = Math.round(latitude * 10_000) / 10_000.0;
+        double lon = Math.round(longitude * 10_000) / 10_000.0;
+        Market market = markets.forAccount(accountId);
+        String key = market.code() + "|@" + lat + "," + lon;
+
+        synchronized (cache) {
+            List<Place> known = cache.get(key);
+            if (known != null) {
+                return known.isEmpty() ? null : known.getFirst();
+            }
+        }
+
+        waitForTurn();
+        JsonNode answer;
+        try {
+            answer = restClient.get()
+                    .uri(reverseUrl, builder -> builder
+                            .queryParam("lat", lat)
+                            .queryParam("lon", lon)
+                            .queryParam("format", "jsonv2")
+                            .queryParam("zoom", 18)
+                            .queryParam("addressdetails", 1)
+                            .queryParam("accept-language", market.defaultLanguage())
+                            .build())
+                    .retrieve()
+                    .body(JsonNode.class);
+        } catch (RuntimeException exception) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "Pretraga adrese trenutno ne radi. Probaj ponovo za koji trenutak.");
+        }
+
+        String name = answer == null || answer.has("error") ? "" : shortName(answer);
+        // The point itself, not the map's centre of the building, is the start.
+        List<Place> found = name.isEmpty() ? List.of() : List.of(new Place(name, latitude, longitude));
+        synchronized (cache) {
+            cache.put(key, found);
+        }
+        return found.isEmpty() ? null : found.getFirst();
     }
 
     private List<Place> ask(String text, Market market) {
