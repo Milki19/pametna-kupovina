@@ -109,6 +109,25 @@ public class ShoppingListTextParser {
             FLAGS
     );
 
+    /** "uzmi 2 hleba i pola kile sira": what to do with the items, not an item. */
+    private static final Pattern VERB_BEFORE_ITEMS = Pattern.compile(
+            "^(?:uzmi|kupi|donesi|pokupi|treba(?:ju)?\\s+(?:nam|mi)"
+                    + "|узми|купи|донеси|покупи|треба(?:ју)?\\s+(?:нам|ми))\\s+(?=\\S)",
+            FLAGS
+    );
+
+    /** "voda 6x1,5l", "pivo 6x0,5": a pack of six bottles of a size. */
+    private static final Pattern MULTIPACK_AFTER = Pattern.compile(
+            "^(?<name>.*\\p{L}.*?)\\s+(?<count>[0-9]{1,2})\\s*[x×]\\s*(?<size>[0-9]+(?:[.,][0-9]+)?\\s*"
+                    + AMOUNT_UNIT.replace("(?<unit>", "(?:") + "?)$", FLAGS
+    );
+
+    /** "6x1,5l vode": the same pack written first. */
+    private static final Pattern MULTIPACK_BEFORE = Pattern.compile(
+            "^(?<count>[0-9]{1,2})\\s*[x×]\\s*(?<size>[0-9]+(?:[.,][0-9]+)?\\s*"
+                    + AMOUNT_UNIT.replace("(?<unit>", "(?:") + ")\\s+(?<name>\\p{L}.*)$", FLAGS
+    );
+
     /** "piletina oko 1kg", "cca 2 kom": an approximate amount is still the amount. */
     private static final Pattern APPROXIMATELY = Pattern.compile(
             "(?<![\\p{L}0-9])(?:oko|otprilike|cca\\.?|около|отприлике|~)\\s*(?=[0-9])", FLAGS
@@ -260,7 +279,8 @@ public class ShoppingListTextParser {
         return WORD.matcher(part).results()
                 .map(MatchResult::group)
                 .filter(word -> word.length() >= 2
-                        && !word.matches("(?iu)kg|gr?|l|ml|kom|komad[a]?|x"))
+                        && !word.matches("(?iu)kg|gr?|l|ml|kom|komad[a]?|x|pola|kil[aeou]|kilograma?"
+                                + "|grama?|lit(?:ar|ra|re)|пола|кил[аеоу]|литар|литр[ае]"))
                 .toArray(String[]::new);
     }
 
@@ -281,7 +301,10 @@ public class ShoppingListTextParser {
     private static String withoutHeading(String rawLine) {
         String line = rawLine.trim();
         Matcher heading = HEADING_BEFORE_ITEMS.matcher(line);
-        return heading.find() ? line.substring(heading.end()) : rawLine;
+        String items = heading.find() ? line.substring(heading.end()) : rawLine;
+        String item = withoutMarks(items);
+        Matcher verb = VERB_BEFORE_ITEMS.matcher(item);
+        return verb.find() ? item.substring(verb.end()) : items;
     }
 
     private static String withoutMarks(String rawLine) {
@@ -357,6 +380,7 @@ public class ShoppingListTextParser {
         line = withNote(line).line();
         line = amountFromBrackets(line);
         line = amountInWords(line);
+        line = multipackFirst(line);
 
         BigDecimal quantity = BigDecimal.ONE;
         String rest = line;
@@ -396,6 +420,18 @@ public class ShoppingListTextParser {
         return new ParsedShoppingListLine(
                 rest, rawLine, quantity, null, null, rest, null
         );
+    }
+
+    /** "voda 6x1,5l" reads as "6x voda 1,5l": six packages of 1,5 l. */
+    private static String multipackFirst(String line) {
+        for (Pattern pattern : List.of(MULTIPACK_AFTER, MULTIPACK_BEFORE)) {
+            Matcher pack = pattern.matcher(line);
+            if (pack.matches()) {
+                return pack.group("count") + "x " + pack.group("name").trim() + " "
+                        + pack.group("size").replaceAll("\\s+", "");
+            }
+        }
+        return line;
     }
 
     /**

@@ -292,4 +292,32 @@ class ShoppingListTextParserTest {
             assertThat(ShoppingListTextParser.noteOf(product)).as(product).isNull();
         }
     }
+
+    @Test
+    void aPackOfBottlesIsHowManyOfWhichSize() {
+        ParsedShoppingListLine water = parseOne("negazirana voda 6x1,5l");
+        assertThat(water.name()).isEqualTo("negazirana voda");
+        assertThat(water.quantity()).isEqualByComparingTo("6");
+        assertThat(water.targetQuantity()).isEqualByComparingTo("1500");
+        assertThat(water.baseUnit()).isEqualTo("ml");
+
+        ParsedShoppingListLine beer = parseOne("pivo 6x0,5");
+        assertThat(beer.name()).isEqualTo("pivo");
+        assertThat(beer.quantity()).isEqualByComparingTo("6");
+        assertThat(beer.bareNumber()).isEqualByComparingTo("0.5");
+
+        ParsedShoppingListLine first = parseOne("6x1,5l kisele vode");
+        assertThat(first.name()).isEqualTo("kisele vode");
+        assertThat(first.quantity()).isEqualByComparingTo("6");
+        assertThat(first.targetQuantity()).isEqualByComparingTo("1500");
+    }
+
+    @Test
+    void aMessageSaysWhatToDoBeforeTheItems() {
+        ParsedShoppingListText text = parser.parse("uzmi 2 hleba i pola kile sira\n- kupi mleko\nkupus");
+        assertThat(text.items()).extracting(ParsedShoppingListLine::name)
+                .containsExactly("hleba", "sira", "mleko", "kupus");
+        assertThat(text.items().get(0).bareNumber()).isEqualByComparingTo("2");
+        assertThat(text.items().get(1).targetQuantity()).isEqualByComparingTo("500");
+    }
 }
