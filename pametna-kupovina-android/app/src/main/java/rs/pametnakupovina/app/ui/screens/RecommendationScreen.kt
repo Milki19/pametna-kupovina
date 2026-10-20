@@ -1026,6 +1026,13 @@ private fun PlanItemRow(item: RecommendationItemDto, requestedDate: String, onWr
             if (manySmallPacks(item)) {
                 StatusPill(stringResource(R.string.rec_many_small_packs), StatusTone.WARNING)
             }
+            item.substituteNote?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                )
+            }
             if (largeFont) price(Modifier)
         }
         if (!largeFont) price(Modifier.padding(start = AppSpacing.sm))
