@@ -609,6 +609,104 @@ class ShoppingRecommendationServiceTest {
         assertThat(response.recommendedBalance().routeDurationSeconds()).isEqualTo(1_600L);
     }
 
+    /** Test 20.10.: +238 RSD and half an hour more only for wet wipes at 25 RSD. */
+    @Test
+    void anItemWorthLessThanAStopIsBoughtOnTheWayInsteadOfInASecondShop() {
+        ShoppingRecommendationResponse response = wipesPlan(25, TravelMode.DRIVING);
+
+        OptimizationScenarioResponse best = response.recommendedBalance();
+        assertThat(best.stopCount()).isEqualTo(1);
+        assertThat(best.priceSources()).containsExactly("A");
+        assertThat(best.unavailableItems()).isZero();
+        assertThat(best.onTheWay()).isNotNull();
+        assertThat(best.onTheWay().itemNames()).containsExactly("vlažne maramice");
+        assertThat(best.onTheWay().itemsCost()).isEqualByComparingTo("25.00");
+        assertThat(best.onTheWay().extraCost()).isGreaterThan(new BigDecimal("80"));
+        assertThat(best.explanation()).contains("vlažne maramice kupi usput").doesNotContain("Nije sve");
+        assertThat(best.items())
+                .filteredOn(line -> line.itemId() == 3L)
+                .singleElement()
+                .satisfies(line -> assertThat(line.explanation()).startsWith("Kupi usput."));
+        // Whoever wants everything in one go still sees it.
+        assertThat(response.lowestPrice().stopCount()).isEqualTo(2);
+        assertThat(response.lowestPrice().onTheWay()).isNull();
+    }
+
+    @Test
+    void anItemWorthTheStopStillGetsItsShop() {
+        OptimizationScenarioResponse best = wipesPlan(90, TravelMode.DRIVING).recommendedBalance();
+
+        assertThat(best.stopCount()).isEqualTo(2);
+        assertThat(best.coveredItems()).isEqualTo(3);
+        assertThat(best.onTheWay()).isNull();
+    }
+
+    private ShoppingRecommendationResponse wipesPlan(int wipesPrice, TravelMode travelMode) {
+        ShoppingListRepository listRepository = mock(ShoppingListRepository.class);
+        NearbyStoreRepository nearbyRepository = mock(NearbyStoreRepository.class);
+        StoreShoppingOfferRepository offerRepository = mock(StoreShoppingOfferRepository.class);
+        RouteMatrixProvider routeProvider = mock(RouteMatrixProvider.class);
+        ShoppingRecommendationService service = new ShoppingRecommendationService(
+                listRepository, nearbyRepository, offerRepository, routeProvider,
+                new ShoppingOptimizationProperties(), markets());
+
+        ShoppingListItemResponse milk = item(1L, "Mleko", 101L);
+        ShoppingListItemResponse bread = item(2L, "Hleb", 102L);
+        ShoppingListItemResponse wipes = item(3L, "vlažne maramice", 103L);
+        when(listRepository.findById(10L)).thenReturn(Optional.of(new ShoppingListResponse(
+                10L, "Test korpa", OffsetDateTime.now(), OffsetDateTime.now(), List.of(milk, bread, wipes))));
+
+        NearbyStore idea = store(1L, "A");
+        NearbyStore maxi = store(2L, "B");
+        when(nearbyRepository.findPricingEligibleNearby(eq(SERBIA), eq(44.0), eq(19.0), org.mockito.ArgumentMatchers.anyInt(), eq(20)))
+                .thenReturn(List.of(idea, maxi));
+        when(offerRepository.findOffers(eq(10L), anyList(), eq(DATE), eq(true)))
+                .thenAnswer(call -> offersFor(call.getArgument(1), List.of(
+                        offer(idea, milk, 120, 1001L),
+                        offer(idea, bread, 70, 1002L),
+                        offer(maxi, wipes, wipesPrice, 2003L)
+                )));
+        when(routeProvider.calculate(anyList())).thenReturn(routeMatrix());
+
+        return service.recommend(10L, 44.0, 19.0, DATE, travelMode);
+    }
+
+    /** "Samo radnje do 1 km": only that circle, and nothing farther is looked for. */
+    @Test
+    void aTighterCircleKeepsThePlanToShopsCloseBy() {
+        ShoppingListRepository listRepository = mock(ShoppingListRepository.class);
+        NearbyStoreRepository nearbyRepository = mock(NearbyStoreRepository.class);
+        StoreShoppingOfferRepository offerRepository = mock(StoreShoppingOfferRepository.class);
+        RouteMatrixProvider routeProvider = mock(RouteMatrixProvider.class);
+        ShoppingRecommendationService service = new ShoppingRecommendationService(
+                listRepository, nearbyRepository, offerRepository, routeProvider,
+                new ShoppingOptimizationProperties(), markets());
+
+        ShoppingListItemResponse milk = item(1L, "Mleko", 101L);
+        ShoppingListItemResponse rare = item(2L, "Retkost", 102L);
+        when(listRepository.findById(10L)).thenReturn(Optional.of(new ShoppingListResponse(
+                10L, "Test korpa", OffsetDateTime.now(), OffsetDateTime.now(), List.of(milk, rare))));
+        NearbyStore near = store(1L, "A");
+        when(nearbyRepository.findPricingEligibleNearby(SERBIA, 44.0, 19.0, 1_000, 20))
+                .thenReturn(List.of(near));
+        when(offerRepository.findOffers(eq(10L), anyList(), eq(DATE), eq(true)))
+                .thenAnswer(call -> offersFor(call.getArgument(1), List.of(offer(near, milk, 100, 1001L))));
+        when(routeProvider.calculate(anyList())).thenReturn(routeMatrix(List.of(1L)));
+
+        ShoppingRecommendationResponse response =
+                service.recommend(10L, 44.0, 19.0, DATE, TravelMode.WALKING, false, 1_000);
+
+        assertThat(response.assumptions().candidateRadiusMeters()).isEqualTo(1_000);
+        assertThat(response.recommendedBalance().stopCount()).isEqualTo(1);
+        org.mockito.Mockito.verify(nearbyRepository, org.mockito.Mockito.never())
+                .findNearestCarrying(org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.anyDouble(),
+                        org.mockito.ArgumentMatchers.anyDouble(), anyList(), anyList(),
+                        org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.anyInt());
+        // On foot the usual circle is 3 km; a wider one is not "close by".
+        assertThatThrownBy(() -> service.recommend(10L, 44.0, 19.0, DATE, TravelMode.WALKING, false, 5_000))
+                .isInstanceOf(ResponseStatusException.class);
+    }
+
     private ShoppingListItemResponse item(
             Long itemId,
             String name,

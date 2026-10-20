@@ -48,7 +48,10 @@ public class ShoppingRecommendationController {
             // Without the chains that publish no shop addresses: the web asks
             // for them separately, so the plan shows without waiting for them.
             @RequestParam(name = "unlocated", defaultValue = "true")
-            boolean unlocated
+            boolean unlocated,
+            // "Samo radnje do 1 km", when a plan on foot came out too long.
+            @RequestParam(name = "radiusMeters", required = false)
+            Integer radiusMeters
     ) {
         shoppingListService.requireOwnedList(listId, caller.accountId());
 
@@ -62,7 +65,8 @@ public class ShoppingRecommendationController {
                         location.longitude(),
                         date,
                         travelMode,
-                        unlocated
+                        unlocated,
+                        radiusMeters
                 )
         );
     }
