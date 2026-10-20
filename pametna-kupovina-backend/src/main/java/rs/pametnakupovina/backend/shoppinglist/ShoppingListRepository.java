@@ -98,6 +98,12 @@ public class ShoppingListRepository {
         this.normalizer = normalizer;
     }
 
+    /**
+     * A word most of a kind's products say is the kind itself ("pivo",
+     * "jaja"); a word fewer say narrows it.
+     */
+    private static final double NARROWER_WORD_SHARE = 0.5;
+
     /** What a flexible item asks for beyond its kind, kept with it (V140). */
     private String wantedPattern(
             ShoppingItemRule matchingRule,
@@ -108,11 +114,38 @@ public class ShoppingListRepository {
         if (matchingRule != ShoppingItemRule.FLEXIBLE_CATEGORY) {
             return null;
         }
-        return WantedWords.pattern(
+        String beyondKind = WantedWords.pattern(
                 flexibleCategory,
                 shoppingIntentId == null ? null : flexibleCategoryNormalized,
                 normalizer
         );
+        if (beyondKind != null || shoppingIntentId == null) {
+            return beyondKind;
+        }
+        // The dictionary's word can be narrower than its kind: "kajmak" is
+        // one of the creams, "špagete" one of the pastas (proba V140: kajmak
+        // bought as sour cream, špagete as fusilli). Where only some of the
+        // kind's products say the word, the plan looks for those.
+        String narrower = WantedWords.pattern(flexibleCategory, null, normalizer);
+        if (narrower == null) {
+            return null;
+        }
+        Double share = jdbcClient.sql("""
+                        SELECT AVG(CASE WHEN product.normalized_name ~ ? THEN 1.0 ELSE 0.0 END)
+                        FROM app.shopping_intent_product_type AS allowed
+                        JOIN app.retailer_product_type AS assignment
+                          ON assignment.product_type_id = allowed.product_type_id
+                        JOIN app.retailer_product AS product
+                          ON product.id = assignment.retailer_product_id
+                        WHERE allowed.shopping_intent_id = ?
+                          AND allowed.enabled_by_default = TRUE
+                        """)
+                .param(1, narrower)
+                .param(2, shoppingIntentId)
+                .query(Double.class)
+                .optional()
+                .orElse(null);
+        return share != null && share > 0 && share < NARROWER_WORD_SHARE ? narrower : null;
     }
 
     public ShoppingListSummary create(

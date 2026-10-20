@@ -132,7 +132,40 @@ class UsualKindFifthRoundTest {
             + row(YOUNG_CHEESE, "189,99")
             + row(LIGHT_MILK, "119,99");
 
+    /**
+     * Proba V140 on a copy of the catalogue: a word found anywhere in a name
+     * bought cat food for "losos", a wafer for "kakao", a baguette for
+     * "semenke", AAA for AA, 12 % cream for 20 % (Lidl's "MK20") and sour
+     * cream for "kajmak".
+     */
+    private static final String SALMON_CAT_FOOD = "VLAZNA HRANA ZA MACKE LOSOS 100G";
+    private static final String SALMON = "LOSOS DIMLJENI 100G";
+    private static final String COCOA_WAFER = "ROGER VAFEL PROIZ. KAKAO 40G";
+    private static final String COCOA = "KAKAO PRAH 100G";
+    private static final String SEED_BAGUETTE = "MINI BAGET SA SEMENKAMA 110G";
+    private static final String SEEDS = "SEMENKE SUNCOKRETA 200G";
+    private static final String AAA = "ALKALNE BATERIJE AAA MK60 12KOM";
+    private static final String AA = "ALKALNE BATERIJE AA 4KOM";
+    private static final String CREAM_12 = "KISELA PAVLAKA 12% MK20 180G";
+    private static final String CREAM_20 = "PAVLAKA 20% 200G";
+    private static final String COOKING_CREAM = "PAVLAKA ZA KUVANJE 200ML";
+    private static final String KAJMAK = "KAJMAK 200G";
+
     private static int barcode = 5000;
+
+    private static final String PROBE_CATALOGUE = HEADER
+            + row(SALMON_CAT_FOOD, "59,99")
+            + row(SALMON, "399,99")
+            + row(COCOA_WAFER, "39,99")
+            + row(COCOA, "149,99")
+            + row(SEED_BAGUETTE, "49,99")
+            + row(SEEDS, "99,99")
+            + row(AAA, "299,99")
+            + row(AA, "349,99")
+            + row(CREAM_12, "79,99")
+            + row(CREAM_20, "129,99")
+            + row(COOKING_CREAM, "99,99")
+            + row(KAJMAK, "299,99");
 
     private static String row(String name, String price) {
         barcode++;
@@ -168,7 +201,8 @@ class UsualKindFifthRoundTest {
         csvServer = HttpServer.create(new InetSocketAddress(0), 0);
         for (Map.Entry<String, String> list : Map.of(
                 "/round5.csv", CATALOGUE,
-                "/round5b.csv", SMALL_CATALOGUE).entrySet()) {
+                "/round5b.csv", SMALL_CATALOGUE,
+                "/round5c.csv", PROBE_CATALOGUE).entrySet()) {
             csvServer.createContext(list.getKey(), exchange -> {
                 byte[] body = list.getValue().getBytes(StandardCharsets.UTF_8);
                 exchange.sendResponseHeaders(200, body.length);
@@ -326,6 +360,32 @@ class UsualKindFifthRoundTest {
 
         var meat = searchService.search("0,5 kg mlevenog mesa", 0, 5, true, null, false);
         assertThat(meat.items().getFirst().name()).containsIgnoringCase("mleveno meso");
+    }
+
+    /** What the probe on a copy bought wrongly, each from a name that says it in passing. */
+    @Test
+    void aWordInPassingIsNotTheThingAsked() {
+        long probe = shop("ROUND5C", "/round5c.csv");
+        long listId = pasted("losos\nkakao\nsemenke\nbaterije AA\npavlaka 20%\nkajmak");
+        matchingService.match(listId, callers.caller(TOKEN), true);
+
+        Map<String, StoreItemOffer> offers = offerRepository
+                .findPriceListOffers(listId, List.of(probe), PRICE_DATE)
+                .stream()
+                .collect(Collectors.toMap(StoreItemOffer::requestedName, offer -> offer, (a, b) -> a));
+        String seen = offers.values().stream()
+                .map(offer -> offer.requestedName() + " -> " + offer.productName()
+                        + (offer.wantedMissing() ? " (zamena)" : ""))
+                .sorted()
+                .collect(Collectors.joining("\n"));
+
+        assertThat(productFor(offers, "losos")).as(seen).isEqualTo(SALMON);
+        assertThat(productFor(offers, "kakao")).as(seen).isEqualTo(COCOA);
+        assertThat(productFor(offers, "semenke")).as(seen).isEqualTo(SEEDS);
+        assertThat(productFor(offers, "baterije")).as(seen).isEqualTo(AA);
+        assertThat(productFor(offers, "pavlaka")).as(seen).isEqualTo(CREAM_20);
+        assertThat(productFor(offers, "kajmak")).as(seen).isEqualTo(KAJMAK);
+        assertThat(offers.values()).as(seen).noneMatch(StoreItemOffer::wantedMissing);
     }
 
     private static StoreItemOffer offerFor(Map<String, StoreItemOffer> offers, String word) {

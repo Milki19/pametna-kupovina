@@ -26,6 +26,11 @@ public final class WantedWords {
 
     private static final int MAX_LENGTH = 600;
 
+    /** The codes a chain writes into its names: Lidl's "MK20", "SK6", "RFA". */
+    private static final String NOT_A_CODE = "(?<!mk )(?<!sk )(?<!rfa )";
+
+    private static final String NOT_A_WEIGHT = "(?! ?(g|gr|kg|ml|l|kom)\\M)";
+
     /** Words that only join the others. */
     private static final Set<String> JOINING_WORDS = Set.of(
             "za", "sa", "od", "i", "u", "na", "po", "s", "the", "and", "with", "of"
@@ -80,7 +85,18 @@ public final class WantedWords {
             return null;
         }
         String pattern;
-        if (terms.size() == 1) {
+        if (kindAlias == null || kindAlias.isBlank()) {
+            // Without a kind the first word is the thing itself, so it opens
+            // the name: "losos" is no "hrana za mačke losos", "kakao" no
+            // "vafel proiz. kakao", "semenke" no "baget sa semenkama"
+            // (proba V140, 20.10.2026). A brand may come first.
+            StringBuilder all = new StringBuilder("^(?=([^ ]+ ){0,2}")
+                    .append(terms.getFirst()).append(')');
+            for (String term : terms.subList(1, terms.size())) {
+                all.append("(?=.*").append(term).append(')');
+            }
+            pattern = all.toString();
+        } else if (terms.size() == 1) {
             pattern = terms.getFirst();
         } else {
             StringBuilder all = new StringBuilder("^");
@@ -141,7 +157,9 @@ public final class WantedWords {
                     String letter = terms.removeLast().substring(2, 3);
                     number = letter + " " + number;
                 }
-                terms.add("\\m" + number + "\\M");
+                // Not a chain's code ("MK20" in "Kisela pavlaka 12% MK20" is
+                // no 20 %) and not a weight ("20 g").
+                terms.add(NOT_A_CODE + "\\m" + number + "\\M" + NOT_A_WEIGHT);
                 index = end;
                 continue;
             }
@@ -157,7 +175,14 @@ public final class WantedWords {
             }
             String stem = SerbianWordForms.stem(word);
             String purpose = purpose(word, stem);
-            terms.add(purpose != null ? "\\m" + purpose : "\\m" + stem);
+            if (purpose != null) {
+                terms.add("\\m" + purpose);
+            } else if (word.length() < 4) {
+                // A short word is the whole word: "AA" batteries are no "AAA".
+                terms.add("\\m" + word + "\\M");
+            } else {
+                terms.add("\\m" + stem);
+            }
         }
         return terms.stream().distinct().toList();
     }
