@@ -126,4 +126,13 @@
     <string name="rec_more_for_item">More for “%1$s”</string>
     <string name="rec_balance_costs_more">+%1$s %2$s over One store, but it also covers: %3$s.</string>
     <string name="rec_balance_more_names">%1$s and %2$d more</string>
+    <string name="rec_on_the_way_one">Buy %1$s on the way. For that item the plan would need another shop: +%2$s %3$s and about %4$s more.</string>
+    <string name="rec_on_the_way_many">Buy %1$s on the way. For those items the plan would need another shop: +%2$s %3$s and about %4$s more.</string>
+    <string name="rec_long_walk">This is about %1$s on foot.</string>
+    <string name="rec_near_only">Only shops within %1$d km</string>
+    <string name="rec_near_only_on">Only shops within %1$d km.</string>
+    <string name="rec_near_only_off">Show everything nearby</string>
+    <string name="rec_smaller_packs_title">You need %1$s, and the chosen pack is %2$s (from %3$s).</string>
+    <string name="rec_smaller_packs">%1$s is from %2$s: %3$s. Replace?</string>
+    <string name="rec_smaller_packs_replace">Replace</string>
 </resources>

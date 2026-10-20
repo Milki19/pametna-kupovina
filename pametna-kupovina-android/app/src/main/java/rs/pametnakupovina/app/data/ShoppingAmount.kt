@@ -116,3 +116,40 @@ fun RequestedPackages.packagesOf(product: rs.pametnakupovina.app.data.network.Ca
     val inPack = product.packageCount.coerceAtLeast(1)
     return if (quantity % inPack == 0.0) quantity / inPack else quantity
 }
+
+/** Manja pakovanja koja daju traženu količinu jeftinije od izabranog većeg. */
+data class SmallerPacks(
+    val product: rs.pametnakupovina.app.data.network.CanonicalProductSearchItemDto,
+    val packages: Int,
+    val cost: Double,
+    val need: Double,
+    val chosenPrice: Double
+)
+
+private fun rs.pametnakupovina.app.data.network.CanonicalProductSearchItemDto.lowestPrice(): Double? =
+    availability.filter { !it.priceNeedsCheck }.mapNotNull { it.minimumEffectivePrice }.minOrNull()
+
+/**
+ * Izabrano pakovanje je mnogo veće od potrebnog („2 kg brašna", a izabrano
+ * 5 kg): najjeftinija manja pakovanja iste vrste iz istih rezultata, po
+ * najnižoj ceni u lancima, kad su bar za desetinu jeftinija. Isto kao na webu.
+ */
+fun RequestedPackages.smallerPacks(
+    chosen: rs.pametnakupovina.app.data.network.CanonicalProductSearchItemDto,
+    results: List<rs.pametnakupovina.app.data.network.CanonicalProductSearchItemDto>
+): SmallerPacks? {
+    val need = (targetQuantity ?: return null) * quantity
+    val size = chosen.quantityValue ?: return null
+    if (baseUnit == null || chosen.baseUnit != baseUnit || size <= need * 1.25) return null
+    val chosenPrice = chosen.lowestPrice() ?: return null
+    return results.asSequence()
+        .filter { it.baseUnit == chosen.baseUnit && (it.quantityValue ?: 0.0) > 0 && it.quantityValue!! < size }
+        .filter { chosen.categoryCode == null || it.categoryCode == chosen.categoryCode }
+        .mapNotNull { candidate ->
+            val price = candidate.lowestPrice() ?: return@mapNotNull null
+            val packages = kotlin.math.ceil(need / candidate.quantityValue!! - 0.25).toInt().coerceAtLeast(1)
+            if (packages > 10) null else SmallerPacks(candidate, packages, packages * price, need, chosenPrice)
+        }
+        .minByOrNull { it.cost }
+        ?.takeIf { it.cost < chosenPrice * 0.9 }
+}

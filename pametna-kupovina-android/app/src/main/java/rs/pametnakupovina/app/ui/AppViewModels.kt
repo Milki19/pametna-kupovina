@@ -455,7 +455,9 @@ class MatchingViewModel @Inject constructor(
 data class RecommendationUiState(
     val isLoading: Boolean = false,
     val result: ShoppingRecommendationDto? = null,
-    val errorMessage: UiText? = null
+    val errorMessage: UiText? = null,
+    // „Samo radnje do 1 km" posle plana peške dužeg od pola sata.
+    val nearOnly: Boolean = false
 )
 
 @HiltViewModel
@@ -515,7 +517,9 @@ class RecommendationViewModel @Inject constructor(
                 repository.replaceWithSimilar(itemId, kind)
                 _uiState.value = RecommendationUiState(isLoading = true)
                 _uiState.value = RecommendationUiState(
-                    result = repository.getRecommendations(listId, latitude, longitude, walking = travelModes.isWalking())
+                    result = repository.getRecommendations(listId, latitude, longitude,
+                        walking = travelModes.isWalking(), radiusMeters = nearOnlyRadius()),
+                    nearOnly = nearOnlyRadius() != null
                 )
                 loadUnlocated()
             } catch (error: kotlinx.coroutines.CancellationException) { throw error }
@@ -537,8 +541,9 @@ class RecommendationViewModel @Inject constructor(
                 savedLocally = true
                 // The displayed allocation no longer describes the edited list.
                 _uiState.value = RecommendationUiState(isLoading = true)
-                val result = repository.getRecommendations(listId, latitude, longitude, walking = travelModes.isWalking())
-                _uiState.value=RecommendationUiState(result=result)
+                val result = repository.getRecommendations(listId, latitude, longitude,
+                    walking = travelModes.isWalking(), radiusMeters = nearOnlyRadius())
+                _uiState.value=RecommendationUiState(result=result, nearOnly = nearOnlyRadius() != null)
                 loadUnlocated()
                 onDone(null)
             } catch(error: kotlinx.coroutines.CancellationException) { throw error }
@@ -564,11 +569,22 @@ class RecommendationViewModel @Inject constructor(
         load(listId, latitude, longitude)
     }
 
+    private var nearOnly = false
+
+    private suspend fun nearOnlyRadius(): Int? = if (nearOnly && travelModes.isWalking()) NEAR_ONLY_METERS else null
+
+    /** „Samo radnje do 1 km" ili nazad na sve u blizini; plan se računa ponovo. */
+    fun setNearOnly(listId: Long, latitude: Double, longitude: Double, on: Boolean) {
+        nearOnly = on
+        load(listId, latitude, longitude)
+    }
+
     fun load(listId: Long, latitude: Double, longitude: Double) {
         viewModelScope.launch {
             val walking = travelModes.isWalking()
+            val radius = nearOnlyRadius()
             // Cena vremena i stajanja može da se promeni i iz menija dok je plan u pozadini.
-            val key = listOf(listId, latitude, longitude, walking, repository.tripCostsVersion.value)
+            val key = listOf(listId, latitude, longitude, walking, radius, repository.tripCostsVersion.value)
             val loaded = loadedFor
             if (_uiState.value.result != null && loaded != null && loaded.first == key &&
                 System.currentTimeMillis() - loaded.second < REMEMBERED_FOR_MILLIS
@@ -582,8 +598,10 @@ class RecommendationViewModel @Inject constructor(
                         listId = listId,
                         latitude = latitude,
                         longitude = longitude,
-                        walking = walking
-                    )
+                        walking = walking,
+                        radiusMeters = radius
+                    ),
+                    nearOnly = radius != null
                 ).also { loadedFor = key to System.currentTimeMillis() }
             } catch (error: Exception) {
                 RecommendationUiState(
@@ -639,3 +657,7 @@ internal fun Throwable.toUserMessage(@StringRes fallback: Int): UiText = when (t
 
 private const val RETURN_REFRESH_INTERVAL_MS = 30_000L
 private const val REMEMBERED_FOR_MILLIS = 10 * 60 * 1000L
+
+/** „Samo radnje do 1 km": nudi se kad je plan peške duži od pola sata. */
+internal const val NEAR_ONLY_METERS = 1_000
+internal const val LONG_WALK_SECONDS = 30 * 60L

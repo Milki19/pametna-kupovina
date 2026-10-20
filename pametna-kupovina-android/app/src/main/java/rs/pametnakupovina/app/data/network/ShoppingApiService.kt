@@ -208,7 +208,8 @@ interface ShoppingApiService {
         @Query("longitude") longitude: Double,
         @Query("date") date: String? = null,
         @Query("travelMode") travelMode: String? = null,
-        @Query("unlocated") unlocated: Boolean? = null
+        @Query("unlocated") unlocated: Boolean? = null,
+        @Query("radiusMeters") radiusMeters: Int? = null
     ): ShoppingRecommendationDto
 
     @GET("api/v1/shopping-lists/{listId}/recommendations/unlocated-price-options")

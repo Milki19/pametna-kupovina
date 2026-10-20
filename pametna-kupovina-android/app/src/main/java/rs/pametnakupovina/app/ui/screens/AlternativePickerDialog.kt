@@ -24,7 +24,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import rs.pametnakupovina.app.R
 import rs.pametnakupovina.app.data.RequestedPackages
+import rs.pametnakupovina.app.data.amountLabel
 import rs.pametnakupovina.app.data.packagesOf
+import rs.pametnakupovina.app.data.smallerPacks
+import rs.pametnakupovina.app.ui.money
 import rs.pametnakupovina.app.data.network.CanonicalProductSearchItemDto
 import rs.pametnakupovina.app.ui.ProductSearchUiState
 import rs.pametnakupovina.app.ui.components.AppSpacing
@@ -108,6 +111,34 @@ internal fun AlternativePickerDialog(
                 onLoadMore = onMore,
                 showWithoutPriceFilter = false
             )
+            val chosen = selected
+            val better = if (chosen == null) null else requested?.smallerPacks(chosen, state.results)
+            if (chosen != null && better != null) {
+                item(key = "alternative-smaller-packs") {
+                    val unit = chosen.baseUnit
+                    NoticeBanner(
+                        title = stringResource(
+                            R.string.rec_smaller_packs_title,
+                            amountLabel(better.need, unit),
+                            amountLabel(requireNotNull(chosen.quantityValue), unit),
+                            money(better.chosenPrice)
+                        ),
+                        text = stringResource(
+                            R.string.rec_smaller_packs,
+                            (if (better.packages == 1) "" else "${better.packages} × ") +
+                                amountLabel(requireNotNull(better.product.quantityValue), unit),
+                            money(better.cost),
+                            better.product.name
+                        ),
+                        actionLabel = stringResource(R.string.rec_smaller_packs_replace),
+                        onAction = {
+                            selected = better.product
+                            packages = formatQuantity(better.packages.toDouble())
+                        },
+                        modifier = Modifier.testTag("smaller-packs")
+                    )
+                }
+            }
             item(key = "alternative-packages") {
                 OutlinedTextField(
                     value = packages,
