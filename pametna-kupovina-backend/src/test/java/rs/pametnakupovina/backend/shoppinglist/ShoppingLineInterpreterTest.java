@@ -27,12 +27,35 @@ class ShoppingLineInterpreterTest {
                     new ProductNameNormalizer()
             );
 
+    private final java.util.Map<String, String> units = new java.util.LinkedHashMap<>();
+
+    {
+        // The dictionary's own reading of word forms, as the database does it.
+        when(resolver.resolveForms(anyString())).thenAnswer(call -> {
+            String normalized = new ProductNameNormalizer().normalize(call.getArgument(0));
+            List<String> candidates = rs.pametnakupovina.backend.matching.SerbianWordForms
+                    .phraseCandidates(normalized);
+            for (String candidate : candidates) {
+                if (units.containsKey(candidate)) {
+                    return Optional.of(new ShoppingIntentResolver.FormMatch(
+                            new ShoppingIntentResolver.ResolvedShoppingIntent(
+                                    7L, "CODE", "Naziv", candidate, true, units.get(candidate)),
+                            candidate));
+                }
+            }
+            return Optional.empty();
+        });
+    }
+
     private void kind(String written, String alias, boolean exact, String unit) {
         when(resolver.resolve(written)).thenReturn(Optional.of(
                 new ShoppingIntentResolver.ResolvedShoppingIntent(
                         7L, "CODE", "Naziv", alias, exact, unit
                 )
         ));
+        if (exact) {
+            units.put(alias, unit);
+        }
     }
 
     @Test
@@ -167,8 +190,12 @@ class ShoppingLineInterpreterTest {
         assertThat(potatoes.name()).isEqualTo("krompir");
         assertThat(potatoes.targetQuantity()).isEqualByComparingTo("2000");
 
-        var water = interpreter.interpret("kisele vode");
-        assertThat(water.matchingRule()).isEqualTo(ShoppingItemRule.EXACT_PRODUCT);
+        // Both words in the genitive (izveštaj 20.10.2026).
+        var water = interpreter.interpret("1,5l kisele vode x2");
+        assertThat(water.matchingRule()).isEqualTo(ShoppingItemRule.FLEXIBLE_CATEGORY);
+        assertThat(water.name()).isEqualTo("kisela voda");
+        assertThat(water.quantity()).isEqualByComparingTo("2");
+        assertThat(water.targetQuantity()).isEqualByComparingTo("1500");
     }
 
     @Test

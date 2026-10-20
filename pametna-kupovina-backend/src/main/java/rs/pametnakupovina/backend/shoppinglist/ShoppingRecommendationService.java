@@ -1259,7 +1259,11 @@ public class ShoppingRecommendationService {
                 offer.priceScope(),
                 "Važeća cena je izabrana po scope prioritetu "
                         + "objekat, format, pa lanac.",
-                offer.purchaseQuantity()
+                offer.purchaseQuantity(),
+                offer.wantedMissing()
+                        ? "Zamena: ovde nema „" + item.name()
+                                + "“, ovo je najsličnije."
+                        : null
         );
     }
 

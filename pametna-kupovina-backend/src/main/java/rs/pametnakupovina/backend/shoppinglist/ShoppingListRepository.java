@@ -3,6 +3,7 @@ package rs.pametnakupovina.backend.shoppinglist;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
+import rs.pametnakupovina.backend.matching.ProductNameNormalizer;
 
 import java.sql.Types;
 import java.time.OffsetDateTime;
@@ -90,8 +91,28 @@ public class ShoppingListRepository {
 
     private final JdbcClient jdbcClient;
 
-    public ShoppingListRepository(JdbcClient jdbcClient) {
+    private final ProductNameNormalizer normalizer;
+
+    public ShoppingListRepository(JdbcClient jdbcClient, ProductNameNormalizer normalizer) {
         this.jdbcClient = jdbcClient;
+        this.normalizer = normalizer;
+    }
+
+    /** What a flexible item asks for beyond its kind, kept with it (V140). */
+    private String wantedPattern(
+            ShoppingItemRule matchingRule,
+            String flexibleCategory,
+            String flexibleCategoryNormalized,
+            Long shoppingIntentId
+    ) {
+        if (matchingRule != ShoppingItemRule.FLEXIBLE_CATEGORY) {
+            return null;
+        }
+        return WantedWords.pattern(
+                flexibleCategory,
+                shoppingIntentId == null ? null : flexibleCategoryNormalized,
+                normalizer
+        );
     }
 
     public ShoppingListSummary create(
@@ -373,9 +394,10 @@ public class ShoppingListRepository {
                             required_brand,
                             min_package_quantity,
                             max_package_quantity,
-                            required_base_unit, target_quantity
+                            required_base_unit, target_quantity,
+                            wanted_name_pattern
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         RETURNING id,
                                   name,
                                   raw_input,
@@ -421,6 +443,8 @@ public class ShoppingListRepository {
                 .param(15, maxPackageQuantity, Types.NUMERIC)
                 .param(16, requiredBaseUnit, Types.VARCHAR)
                 .param(17, targetQuantity, Types.NUMERIC)
+                .param(18, wantedPattern(matchingRule, flexibleCategory,
+                        flexibleCategoryNormalized, shoppingIntentId), Types.VARCHAR)
                 .query(ITEM_ROW_MAPPER)
                 .single();
     }
@@ -559,6 +583,7 @@ public class ShoppingListRepository {
                         max_package_quantity = ?,
                         required_base_unit = ?,
                         target_quantity = ?,
+                        wanted_name_pattern = ?,
                         updated_at = NOW()
                     WHERE id = ?
                       AND shopping_list_id = ?
@@ -606,18 +631,21 @@ public class ShoppingListRepository {
                 .param(14, maxPackageQuantity, Types.NUMERIC)
                 .param(15, requiredBaseUnit, Types.VARCHAR)
                 .param(16, targetQuantity, Types.NUMERIC)
-                .param(17, itemId)
-                .param(18, listId)
+                .param(17, wantedPattern(matchingRule, flexibleCategory,
+                        flexibleCategoryNormalized, shoppingIntentId), Types.VARCHAR)
+                .param(18, itemId)
+                .param(19, listId)
                 .query(ITEM_ROW_MAPPER)
                 .optional();
     }
 
     /**
      * Whether the plan could price a kind of product nobody taught us: the
-     * same rule the store offers use, a product of no known type whose name
-     * is the words or starts with them, in a chain of the list's market.
+     * same rule the store offers use, a product whose name says the item's
+     * words (an older item: of no known type, named the words or starting
+     * with them), in a chain of the list's market.
      */
-    public boolean hasProductsNamed(Long listId, String normalizedCategory) {
+    public boolean hasProductsNamed(Long listId, Long itemId, String normalizedCategory) {
         if (normalizedCategory == null || normalizedCategory.isBlank()) {
             return false;
         }
@@ -625,6 +653,9 @@ public class ShoppingListRepository {
                         SELECT EXISTS (
                             SELECT 1
                             FROM app.shopping_list AS list
+                            JOIN app.shopping_list_item AS item
+                              ON item.shopping_list_id = list.id
+                             AND item.id = :itemId
                             JOIN app.account AS account
                               ON account.id = list.account_id
                             JOIN app.retailer AS retailer
@@ -632,20 +663,27 @@ public class ShoppingListRepository {
                             JOIN app.retailer_product AS product
                               ON product.retailer_id = retailer.id
                             WHERE list.id = :listId
-                              AND NOT EXISTS (
-                                  SELECT 1
-                                  FROM app.retailer_product_type AS known_type
-                                  WHERE known_type.retailer_product_id = product.id
-                              )
-                              AND (
-                                  COALESCE(product.normalized_name, LOWER(product.name))
-                                      = :category
-                                  OR COALESCE(product.normalized_name, LOWER(product.name))
-                                      LIKE :category || ' %'
-                              )
+                              AND CASE
+                                      -- The words a line asks for, wherever in
+                                      -- the name and whatever the type (V140).
+                                      WHEN item.wanted_name_pattern IS NOT NULL
+                                          THEN product.normalized_name ~ item.wanted_name_pattern
+                                      ELSE NOT EXISTS (
+                                               SELECT 1
+                                               FROM app.retailer_product_type AS known_type
+                                               WHERE known_type.retailer_product_id = product.id
+                                           )
+                                           AND (
+                                               COALESCE(product.normalized_name, LOWER(product.name))
+                                                   = :category
+                                               OR COALESCE(product.normalized_name, LOWER(product.name))
+                                                   LIKE :category || ' %'
+                                           )
+                                  END
                         )
                         """)
                 .param("listId", listId)
+                .param("itemId", itemId)
                 .param("category", normalizedCategory)
                 .query(Boolean.class)
                 .single();
