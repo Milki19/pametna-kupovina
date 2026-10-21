@@ -150,6 +150,10 @@ class UsualKindFifthRoundTest {
     private static final String CREAM_20 = "PAVLAKA 20% 200G";
     private static final String COOKING_CREAM = "PAVLAKA ZA KUVANJE 200ML";
     private static final String KAJMAK = "KAJMAK 200G";
+    private static final String SALMON_PATE = "PASTETA OD LOSOSA 60G";
+    private static final String COCOA_DONUT = "DONUT SA KAKAO GLAZUROM 49G";
+    private static final String SPARKLING_WATER = "MINERALNA GAZIRANA VODA 1,5L";
+    private static final String STILL_WATER = "MINERALNA NEGAZIRANA VODA 1,5L";
 
     private static int barcode = 5000;
 
@@ -165,7 +169,11 @@ class UsualKindFifthRoundTest {
             + row(CREAM_12, "79,99")
             + row(CREAM_20, "129,99")
             + row(COOKING_CREAM, "99,99")
-            + row(KAJMAK, "299,99");
+            + row(KAJMAK, "299,99")
+            + row(SALMON_PATE, "89,99")
+            + row(COCOA_DONUT, "49,99")
+            + row(SPARKLING_WATER, "49,99")
+            + row(STILL_WATER, "39,99");
 
     private static String row(String name, String price) {
         barcode++;
@@ -366,7 +374,7 @@ class UsualKindFifthRoundTest {
     @Test
     void aWordInPassingIsNotTheThingAsked() {
         long probe = shop("ROUND5C", "/round5c.csv");
-        long listId = pasted("losos\nkakao\nsemenke\nbaterije AA\npavlaka 20%\nkajmak");
+        long listId = pasted("losos\nkakao\nsemenke\nbaterije AA\npavlaka 20%\nkajmak\nkisela voda");
         matchingService.match(listId, callers.caller(TOKEN), true);
 
         Map<String, StoreItemOffer> offers = offerRepository
@@ -385,6 +393,8 @@ class UsualKindFifthRoundTest {
         assertThat(productFor(offers, "baterije")).as(seen).isEqualTo(AA);
         assertThat(productFor(offers, "pavlaka")).as(seen).isEqualTo(CREAM_20);
         assertThat(productFor(offers, "kajmak")).as(seen).isEqualTo(KAJMAK);
+        // Kisela voda is mineral water by another name, not a substitute.
+        assertThat(productFor(offers, "kisela")).as(seen).isEqualTo(SPARKLING_WATER);
         assertThat(offers.values()).as(seen).noneMatch(StoreItemOffer::wantedMissing);
     }
 
