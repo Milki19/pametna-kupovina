@@ -29,6 +29,16 @@ public final class WantedWords {
     /** The codes a chain writes into its names: Lidl's "MK20", "SK6", "RFA". */
     private static final String NOT_A_CODE = "(?<!mk )(?<!sk )(?<!rfa )";
 
+    /**
+     * How a pattern without a kind opens. The offers read it: a product that
+     * misses such a pattern is a lesser choice, not a substitute.
+     */
+    static final String HEAD = "^(?=([^ ]+ ){0,2}";
+
+    /** "pašteta od lososa", "donut sa kakao glazurom": the word is an ingredient. */
+    private static final String AFTER_NO_JOINING_WORD =
+            "(?<!\\msa )(?<!\\mod )(?<!\\mza )(?<!\\ms )(?<!\\mu )(?<!\\mi )";
+
     private static final String NOT_A_WEIGHT = "(?! ?(g|gr|kg|ml|l|kom)\\M)";
 
     /** Words that only join the others. */
@@ -89,9 +99,10 @@ public final class WantedWords {
             // Without a kind the first word is the thing itself, so it opens
             // the name: "losos" is no "hrana za mačke losos", "kakao" no
             // "vafel proiz. kakao", "semenke" no "baget sa semenkama"
-            // (proba V140, 20.10.2026). A brand may come first.
-            StringBuilder all = new StringBuilder("^(?=([^ ]+ ){0,2}")
-                    .append(terms.getFirst()).append(')');
+            // (proba V140, 20.10.2026). A brand may come first, but not a
+            // word it is made with: "pašteta od lososa", "pašteta sa šunkom".
+            StringBuilder all = new StringBuilder(HEAD)
+                    .append(AFTER_NO_JOINING_WORD).append(terms.getFirst()).append(')');
             for (String term : terms.subList(1, terms.size())) {
                 all.append("(?=.*").append(term).append(')');
             }
