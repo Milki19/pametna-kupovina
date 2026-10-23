@@ -8,6 +8,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * What a line asks for beyond the kind of product: "feta" in "feta sir",
@@ -38,6 +39,16 @@ public final class WantedWords {
     /** "pašteta od lososa", "donut sa kakao glazurom": the word is an ingredient. */
     private static final String AFTER_NO_JOINING_WORD =
             "(?<!\\msa )(?<!\\mod )(?<!\\mza )(?<!\\ms )(?<!\\mu )(?<!\\mi )";
+
+    /**
+     * Names opening with what is made of the word: "pašteta Patelina losos"
+     * is no salmon, "kroasan Monster kakao" no cocoa (provera uživo 23.10.).
+     */
+    private static final List<String> MADE_OF_IT = List.of(
+            "pastet", "pate", "namaz", "cips", "sos", "supa", "corba", "puding",
+            "sladoled", "kroasan", "bombon", "cokolad", "napolitank", "vafli", "vafel",
+            "krofn", "donut", "biskvit"
+    );
 
     private static final String NOT_A_WEIGHT = "(?! ?(g|gr|kg|ml|l|kom)\\M)";
 
@@ -119,6 +130,13 @@ public final class WantedWords {
             // word it is made with: "pašteta od lososa", "pašteta sa šunkom".
             StringBuilder all = new StringBuilder(HEAD)
                     .append(AFTER_NO_JOINING_WORD).append(terms.getFirst()).append(')');
+            String madeOfIt = MADE_OF_IT.stream()
+                    .filter(word -> terms.stream()
+                            .noneMatch(term -> term.contains(word)))
+                    .map(word -> word.length() > 4 ? word + "[a-z]*" : word)
+                    .collect(Collectors.joining("|"));
+            // Short words whole, longer ones in any form: "sos" is no "sosiske".
+            all.append("(?!(").append(madeOfIt).append(")\\M)");
             for (String term : terms.subList(1, terms.size())) {
                 all.append("(?=.*").append(term).append(')');
             }
