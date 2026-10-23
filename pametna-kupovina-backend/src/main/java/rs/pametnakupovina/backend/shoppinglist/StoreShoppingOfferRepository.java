@@ -146,17 +146,29 @@ public class StoreShoppingOfferRepository {
                                      -- does, and the plan names it a substitute
                                      -- (V140).
                                      -- A dictionary word narrower than its kind
-                                     -- ("kajmak") only orders: "kisela voda" is
-                                     -- mineral water too, "pečurke" šampinjoni, so
-                                     -- another name is no substitute (proba V140).
+                                     -- ("kajmak") and a line without a kind only
+                                     -- order: "kisela voda" is mineral water too,
+                                     -- "pečurke" šampinjoni, so another name is no
+                                     -- substitute (proba V140).
+                                     -- Such a word opening the name comes before
+                                     -- the same word after a brand or another
+                                     -- thing: "LOSOS DIMLJENI" before "PAŠTETA
+                                     -- PATELINA LOSOS", "KAKAO PRAH" before
+                                     -- "KROASAN MONSTER KAKAO" (provera uživo V140).
                                      CASE
-                                         WHEN item.wanted_name_pattern IS NOT NULL
-                                          AND product.normalized_name !~ item.wanted_name_pattern
+                                         WHEN item.wanted_name_pattern IS NULL
+                                             THEN 0
+                                         WHEN STARTS_WITH(item.wanted_name_pattern, '^(?=([^ ]+ ){0,2}')
                                              THEN CASE
-                                                 WHEN STARTS_WITH(item.wanted_name_pattern, '^(?=([^ ]+ ){0,2}')
+                                                 WHEN product.normalized_name
+                                                      ~ REPLACE(item.wanted_name_pattern, '([^ ]+ ){0,2}', '')
+                                                     THEN 0
+                                                 WHEN product.normalized_name ~ item.wanted_name_pattern
                                                      THEN 2
-                                                 ELSE 1
+                                                 ELSE 3
                                              END
+                                         WHEN product.normalized_name !~ item.wanted_name_pattern
+                                             THEN 1
                                          ELSE 0
                                      END AS wanted_rank,
                                      -- Fruit and vegetables with no amount are a
@@ -502,17 +514,29 @@ public class StoreShoppingOfferRepository {
                                      -- does, and the plan names it a substitute
                                      -- (V140).
                                      -- A dictionary word narrower than its kind
-                                     -- ("kajmak") only orders: "kisela voda" is
-                                     -- mineral water too, "pečurke" šampinjoni, so
-                                     -- another name is no substitute (proba V140).
+                                     -- ("kajmak") and a line without a kind only
+                                     -- order: "kisela voda" is mineral water too,
+                                     -- "pečurke" šampinjoni, so another name is no
+                                     -- substitute (proba V140).
+                                     -- Such a word opening the name comes before
+                                     -- the same word after a brand or another
+                                     -- thing: "LOSOS DIMLJENI" before "PAŠTETA
+                                     -- PATELINA LOSOS", "KAKAO PRAH" before
+                                     -- "KROASAN MONSTER KAKAO" (provera uživo V140).
                                      CASE
-                                         WHEN item.wanted_name_pattern IS NOT NULL
-                                          AND product.normalized_name !~ item.wanted_name_pattern
+                                         WHEN item.wanted_name_pattern IS NULL
+                                             THEN 0
+                                         WHEN STARTS_WITH(item.wanted_name_pattern, '^(?=([^ ]+ ){0,2}')
                                              THEN CASE
-                                                 WHEN STARTS_WITH(item.wanted_name_pattern, '^(?=([^ ]+ ){0,2}')
+                                                 WHEN product.normalized_name
+                                                      ~ REPLACE(item.wanted_name_pattern, '([^ ]+ ){0,2}', '')
+                                                     THEN 0
+                                                 WHEN product.normalized_name ~ item.wanted_name_pattern
                                                      THEN 2
-                                                 ELSE 1
+                                                 ELSE 3
                                              END
+                                         WHEN product.normalized_name !~ item.wanted_name_pattern
+                                             THEN 1
                                          ELSE 0
                                      END AS wanted_rank,
                                      -- Fruit and vegetables with no amount are a

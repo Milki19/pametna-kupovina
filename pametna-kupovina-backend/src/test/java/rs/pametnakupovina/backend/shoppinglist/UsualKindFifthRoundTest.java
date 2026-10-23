@@ -152,6 +152,8 @@ class UsualKindFifthRoundTest {
     private static final String KAJMAK = "KAJMAK 200G";
     private static final String SALMON_PATE = "PASTETA OD LOSOSA 60G";
     private static final String COCOA_DONUT = "DONUT SA KAKAO GLAZUROM 49G";
+    private static final String BRANDED_SALMON_PATE = "PASTETA PATELINA LOSOS 60G";
+    private static final String COCOA_CROISSANT = "KROASAN MONSTER KAKAO 50G";
     private static final String SPARKLING_WATER = "MINERALNA GAZIRANA VODA 1,5L";
     private static final String STILL_WATER = "MINERALNA NEGAZIRANA VODA 1,5L";
 
@@ -172,6 +174,8 @@ class UsualKindFifthRoundTest {
             + row(KAJMAK, "299,99")
             + row(SALMON_PATE, "89,99")
             + row(COCOA_DONUT, "49,99")
+            + row(BRANDED_SALMON_PATE, "79,99")
+            + row(COCOA_CROISSANT, "59,99")
             + row(SPARKLING_WATER, "49,99")
             + row(STILL_WATER, "39,99");
 
