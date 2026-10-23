@@ -192,6 +192,17 @@ class UsualKindFifthRoundTest {
             + row(BRANDED_SALMON_PATE, "79,99")
             + row(COCOA_CROISSANT, "59,99");
 
+    private static final String CREAM_CHEESE = "KREM SIR PHILADELPHIA 175G";
+    private static final String SUGAR = "SECER KRISTAL 1KG";
+    private static final String VANILLA_SUGAR = "VANILIN SECER 10G";
+
+    /** Provera uživo 23.10.: "krem sir" and "vanilin šećer" had no price. */
+    private static final String QUALIFIED_CATALOGUE = HEADER
+            + row(CREAM_CHEESE, "249,99")
+            + row(YOUNG_CHEESE, "199,99")
+            + row(SUGAR, "119,99")
+            + row(VANILLA_SUGAR, "19,99");
+
     private static String row(String name, String price) {
         barcode++;
         return ";;" + name + ";Testna;86000000" + barcode + ";KOM"
@@ -228,7 +239,8 @@ class UsualKindFifthRoundTest {
                 "/round5.csv", CATALOGUE,
                 "/round5b.csv", SMALL_CATALOGUE,
                 "/round5c.csv", PROBE_CATALOGUE,
-                "/round5d.csv", MADE_OF_IT_CATALOGUE).entrySet()) {
+                "/round5d.csv", MADE_OF_IT_CATALOGUE,
+                "/round5e.csv", QUALIFIED_CATALOGUE).entrySet()) {
             csvServer.createContext(list.getKey(), exchange -> {
                 byte[] body = list.getValue().getBytes(StandardCharsets.UTF_8);
                 exchange.sendResponseHeaders(200, body.length);
@@ -433,6 +445,39 @@ class UsualKindFifthRoundTest {
         assertThat(offers)
                 .as(offers.stream().map(StoreItemOffer::productName).toList().toString())
                 .allMatch(offer -> offer.productName() == null || offer.wantedMissing());
+    }
+
+    /** "Krem sir" is cream cheese and "vanilin šećer" vanilla sugar, not plain ones. */
+    @Test
+    void theWordBeforeTheKindSaysWhichOne() {
+        long shop = shop("ROUND5E", "/round5e.csv");
+        // Brands somewhere in the catalogue, as on the server.
+        jdbcClient.sql("""
+                        INSERT INTO app.brand (normalized_name, display_name)
+                        VALUES ('krem', 'Krem'), ('vanilin', 'Vanilin')
+                        ON CONFLICT (normalized_name) DO NOTHING
+                        """).update();
+        long listId = pasted("krem sir\nvanilin šećer");
+        matchingService.match(listId, callers.caller(TOKEN), true);
+
+        Map<String, StoreItemOffer> offers = offerRepository
+                .findPriceListOffers(listId, List.of(shop), PRICE_DATE)
+                .stream()
+                .collect(Collectors.toMap(StoreItemOffer::requestedName, offer -> offer, (a, b) -> a));
+        String seen = offers.values().stream()
+                .map(offer -> offer.requestedName() + " -> " + offer.productName()
+                        + (offer.wantedMissing() ? " (zamena)" : ""))
+                .sorted()
+                .collect(Collectors.joining("\n"))
+                + "\n" + jdbcClient.sql("""
+                        SELECT string_agg(name || ' | ' || flexible_category || ' | '
+                               || COALESCE(wanted_name_pattern, '-') || ' | ' || matching_status, E'\n')
+                        FROM app.shopping_list_item WHERE shopping_list_id = ?
+                        """).param(listId).query(String.class).single();
+
+        assertThat(productFor(offers, "krem")).as(seen).isEqualTo(CREAM_CHEESE);
+        assertThat(productFor(offers, "vanilin")).as(seen).isEqualTo(VANILLA_SUGAR);
+        assertThat(offers.values()).as(seen).noneMatch(StoreItemOffer::wantedMissing);
     }
 
     private static StoreItemOffer offerFor(Map<String, StoreItemOffer> offers, String word) {

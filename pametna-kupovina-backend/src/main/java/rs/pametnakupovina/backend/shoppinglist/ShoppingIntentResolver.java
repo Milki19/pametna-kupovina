@@ -230,6 +230,43 @@ public class ShoppingIntentResolver {
      * Whether these words are a brand some chain sells under ("Zaječarsko",
      * "Rubin"), not a counter of a shop like "povrće" or Lidl's "Brend".
      */
+    /**
+     * Whether products of the kind with a price carry the brand: "Krem" and
+     * "Vanilin" are brands somewhere, but no cheese or sugar is sold under
+     * them (provera uživo 23.10.).
+     */
+    public boolean kindHasProductsOfBrand(long shoppingIntentId, String brand) {
+        return jdbcClient.sql("""
+                        SELECT EXISTS (
+                            SELECT 1
+                            FROM app.shopping_intent_product_type AS allowed
+                            JOIN app.retailer_product_type AS assignment
+                              ON assignment.product_type_id = allowed.product_type_id
+                            JOIN app.retailer_product AS product
+                              ON product.id = assignment.retailer_product_id
+                            LEFT JOIN app.canonical_product AS canonical
+                              ON canonical.id = product.canonical_product_id
+                            WHERE allowed.shopping_intent_id = ?
+                              AND allowed.enabled_by_default = TRUE
+                              AND app.product_match_brand_key(?) <> ''
+                              AND app.product_match_brand_key(?) IN (
+                                  app.product_match_brand_key(canonical.brand),
+                                  app.product_match_brand_key(product.brand)
+                              )
+                              AND EXISTS (
+                                  SELECT 1
+                                  FROM app.current_price_offer AS offer
+                                  WHERE offer.retailer_product_id = product.id
+                              )
+                        )
+                        """)
+                .param(1, shoppingIntentId)
+                .param(2, brand)
+                .param(3, brand)
+                .query(Boolean.class)
+                .single();
+    }
+
     public boolean isKnownBrand(String value) {
         String normalized = normalizer.normalize(value);
 
