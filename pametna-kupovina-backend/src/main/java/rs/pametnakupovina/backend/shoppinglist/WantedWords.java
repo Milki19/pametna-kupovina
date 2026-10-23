@@ -76,6 +76,22 @@ public final class WantedWords {
             Map.entry("ruk", "(ruk|hand)")
     );
 
+    /**
+     * Words product names write otherwise: "sojino mleko" is "napitak od
+     * soje" or "soja drink", "kukuruzne pahuljice" "corn flakes" (proba V140).
+     */
+    private static final Map<String, String> SAME_THING = Map.of(
+            "sojin", "(soj|soy)",
+            "mlek", "(mlek|napit|drink|milk)",
+            "kukuruzn", "(kukuruz|corn)",
+            "pahuljic", "(pahulj|flake)"
+    );
+
+    private static final Set<String> FOR_FOOD = Set.of("hran", "namirnic");
+
+    private static final String FOOD_WRAP =
+            "(hran|namirn|alu|aluminij|stretch|prijanj|frigo|kuhinj|pvc)";
+
     private WantedWords() {
     }
 
@@ -185,8 +201,17 @@ public final class WantedWords {
                 continue;
             }
             String stem = SerbianWordForms.stem(word);
+            // "folija za hranu" is a kitchen foil, named for its metal or
+            // its cling as often as for the food (proba V140).
+            if (index > 0 && "za".equals(words.get(index - 1)) && FOR_FOOD.contains(stem)) {
+                terms.add("\\m" + FOOD_WRAP);
+                continue;
+            }
             String purpose = purpose(word, stem);
-            if (purpose != null) {
+            String synonym = SAME_THING.get(stem);
+            if (synonym != null) {
+                terms.add("\\m" + synonym);
+            } else if (purpose != null) {
                 terms.add("\\m" + purpose);
             } else if (word.length() < 4) {
                 // A short word is the whole word: "AA" batteries are no "AAA".

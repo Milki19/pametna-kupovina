@@ -110,6 +110,10 @@ public class ShoppingLineInterpreter {
         }
 
         if (intent.exactAlias()) {
+            String named = WantedWords.pattern(name, null, normalizer);
+            if (named != null && intentResolver.kindIsBarelyTyped(intent.shoppingIntentId(), named)) {
+                return kindByName(line);
+            }
             return choice(name, name, intent, null, packages, target, unit);
         }
 

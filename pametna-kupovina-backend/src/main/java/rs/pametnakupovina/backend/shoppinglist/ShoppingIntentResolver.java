@@ -124,8 +124,10 @@ public class ShoppingIntentResolver {
     }
 
     /**
-     * Whether some product of the kind says these words too: there is feta
-     * among the cheeses, while "toaletna voda" is no water.
+     * Whether some product of the kind with a price says these words too:
+     * there is feta among the cheeses, while "toaletna voda" is no water.
+     * Without a price it is no kind to buy from: "krem sir" and "vanilin
+     * šećer" stayed without a price as cheese and sugar (proba V140).
      */
     public boolean kindHasProductsMatching(long shoppingIntentId, String pattern) {
         return jdbcClient.sql("""
@@ -139,6 +141,11 @@ public class ShoppingIntentResolver {
                             WHERE allowed.shopping_intent_id = ?
                               AND allowed.enabled_by_default = TRUE
                               AND product.normalized_name ~ ?
+                              AND EXISTS (
+                                  SELECT 1
+                                  FROM app.current_price_offer AS offer
+                                  WHERE offer.retailer_product_id = product.id
+                              )
                         )
                         """)
                 .param(1, shoppingIntentId)
@@ -166,6 +173,52 @@ public class ShoppingIntentResolver {
                         )
                         """)
                 .param(1, pattern)
+                .query(Boolean.class)
+                .single();
+    }
+
+    /**
+     * Whether a kind has barely any products with a price while many
+     * products' names say the word: "majonez" had one, in one shop, with
+     * hundreds of mayonnaises in every chain (provera 23.10.2026). Such a
+     * word is found by the names, as a word no dictionary knows.
+     */
+    public boolean kindIsBarelyTyped(long shoppingIntentId, String namePattern) {
+        return jdbcClient.sql("""
+                        SELECT (
+                                   SELECT COUNT(*)
+                                   FROM (
+                                       SELECT 1
+                                       FROM app.shopping_intent_product_type AS allowed
+                                       JOIN app.retailer_product_type AS assignment
+                                         ON assignment.product_type_id = allowed.product_type_id
+                                       WHERE allowed.shopping_intent_id = ?
+                                         AND allowed.enabled_by_default = TRUE
+                                         AND EXISTS (
+                                             SELECT 1
+                                             FROM app.current_price_offer AS offer
+                                             WHERE offer.retailer_product_id = assignment.retailer_product_id
+                                         )
+                                       LIMIT 5
+                                   ) AS typed
+                               ) < 5
+                           AND (
+                                   SELECT COUNT(*)
+                                   FROM (
+                                       SELECT 1
+                                       FROM app.retailer_product AS product
+                                       WHERE product.normalized_name ~ ?
+                                         AND EXISTS (
+                                             SELECT 1
+                                             FROM app.current_price_offer AS offer
+                                             WHERE offer.retailer_product_id = product.id
+                                         )
+                                       LIMIT 20
+                                   ) AS named
+                               ) >= 20
+                        """)
+                .param(1, shoppingIntentId)
+                .param(2, namePattern)
                 .query(Boolean.class)
                 .single();
     }
