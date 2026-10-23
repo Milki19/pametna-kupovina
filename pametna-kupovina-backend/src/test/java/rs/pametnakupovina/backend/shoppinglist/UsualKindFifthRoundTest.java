@@ -154,6 +154,10 @@ class UsualKindFifthRoundTest {
     private static final String COCOA_DONUT = "DONUT SA KAKAO GLAZUROM 49G";
     private static final String BRANDED_SALMON_PATE = "PASTETA PATELINA LOSOS 60G";
     private static final String COCOA_CROISSANT = "KROASAN MONSTER KAKAO 50G";
+    private static final String SOY_DRINK = "NAPITAK SOJA VANILA 250ML ALPRO";
+    private static final String FOIL = "ALUMINIJUMSKA FOLIJA 20M";
+    private static final String HAM_IN_FOIL = "SUNKA U FOLIJI 5KG";
+    private static final String CORN_FLAKES = "CORN FLAKES 375G";
     private static final String SPARKLING_WATER = "MINERALNA GAZIRANA VODA 1,5L";
     private static final String STILL_WATER = "MINERALNA NEGAZIRANA VODA 1,5L";
 
@@ -176,6 +180,10 @@ class UsualKindFifthRoundTest {
             + row(COCOA_DONUT, "49,99")
             + row(BRANDED_SALMON_PATE, "79,99")
             + row(COCOA_CROISSANT, "59,99")
+            + row(SOY_DRINK, "189,99")
+            + row(FOIL, "149,99")
+            + row(HAM_IN_FOIL, "4999,99")
+            + row(CORN_FLAKES, "229,99")
             + row(SPARKLING_WATER, "49,99")
             + row(STILL_WATER, "39,99");
 
@@ -378,7 +386,8 @@ class UsualKindFifthRoundTest {
     @Test
     void aWordInPassingIsNotTheThingAsked() {
         long probe = shop("ROUND5C", "/round5c.csv");
-        long listId = pasted("losos\nkakao\nsemenke\nbaterije AA\npavlaka 20%\nkajmak\nkisela voda");
+        long listId = pasted("losos\nkakao\nsemenke\nbaterije AA\npavlaka 20%\nkajmak\nkisela voda"
+                + "\nsojino mleko\nfolija za hranu\nkukuruzne pahuljice");
         matchingService.match(listId, callers.caller(TOKEN), true);
 
         Map<String, StoreItemOffer> offers = offerRepository
@@ -397,6 +406,10 @@ class UsualKindFifthRoundTest {
         assertThat(productFor(offers, "baterije")).as(seen).isEqualTo(AA);
         assertThat(productFor(offers, "pavlaka")).as(seen).isEqualTo(CREAM_20);
         assertThat(productFor(offers, "kajmak")).as(seen).isEqualTo(KAJMAK);
+        // Names that say it otherwise (proba V140, no price before).
+        assertThat(productFor(offers, "sojino")).as(seen).isEqualTo(SOY_DRINK);
+        assertThat(productFor(offers, "folija")).as(seen).isEqualTo(FOIL);
+        assertThat(productFor(offers, "pahuljice")).as(seen).isEqualTo(CORN_FLAKES);
         // Kisela voda is mineral water by another name, not a substitute.
         assertThat(productFor(offers, "kisela")).as(seen).isEqualTo(SPARKLING_WATER);
         assertThat(offers.values()).as(seen).noneMatch(StoreItemOffer::wantedMissing);
