@@ -190,7 +190,10 @@ class UsualKindFifthRoundTest {
     /** Maxi in the live check: only a pâté and a croissant say salmon and cocoa. */
     private static final String MADE_OF_IT_CATALOGUE = HEADER
             + row(BRANDED_SALMON_PATE, "79,99")
-            + row(COCOA_CROISSANT, "59,99");
+            + row(COCOA_CROISSANT, "59,99")
+            + row("KESICA LOSOS WHISKAS 85G", "89,99")
+            + row("KAKAO KREM TABLA NOISETTE 100G", "129,99")
+            + row("TORTILJA CHIPS SLANI 50G", "69,99");
 
     private static final String CREAM_CHEESE = "KREM SIR PHILADELPHIA 175G";
     private static final String SUGAR = "SECER KRISTAL 1KG";
@@ -433,11 +436,14 @@ class UsualKindFifthRoundTest {
         assertThat(offers.values()).as(seen).noneMatch(StoreItemOffer::wantedMissing);
     }
 
-    /** "Pasteta Patelina losos" is a pâté, not the salmon asked (provera uživo 23.10.). */
+    /**
+     * "Pasteta Patelina losos" is a pâté, "Kesica losos Whiskas" cat food,
+     * "Kakao krem tabla" chocolate and "Tortilja chips" crisps (provera uživo 23.10.).
+     */
     @Test
     void whatIsMadeOfTheWordIsNotTheWord() {
         long shop = shop("ROUND5D", "/round5d.csv");
-        long listId = pasted("losos\nkakao");
+        long listId = pasted("losos\nkakao\ntortilje");
         matchingService.match(listId, callers.caller(TOKEN), true);
 
         var offers = offerRepository.findPriceListOffers(listId, List.of(shop), PRICE_DATE);

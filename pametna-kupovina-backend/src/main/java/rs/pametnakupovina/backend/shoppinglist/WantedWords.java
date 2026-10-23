@@ -45,9 +45,23 @@ public final class WantedWords {
      * is no salmon, "kroasan Monster kakao" no cocoa (provera uživo 23.10.).
      */
     private static final List<String> MADE_OF_IT = List.of(
-            "pastet", "pate", "namaz", "cips", "sos", "supa", "corba", "puding",
-            "sladoled", "kroasan", "bombon", "cokolad", "napolitank", "vafli", "vafel",
+            "pastet", "pate", "namaz", "sos", "supa", "corba", "puding",
+            "sladoled", "kroasan", "bombon", "napolitank", "vafli", "vafel",
             "krofn", "donut", "biskvit"
+    );
+
+    /**
+     * Words that make a name something else wherever they stand: "Kesica
+     * losos Whiskas" is cat food, "Kakao krem tabla" chocolate, "Tortilja
+     * chips" crisps (provera uživo 23.10.).
+     */
+    private static final List<String> SOMETHING_ELSE = List.of(
+            "chips", "cips", "tabla", "kesic", "cokolad"
+    );
+
+    /** Pet food, unless the line asks for a pet's: "hrana za pse". */
+    private static final List<String> PET_FOOD = List.of(
+            "whiskas", "felix", "friskies", "pedigree", "macke", "pse", "cat", "dog"
     );
 
     private static final String NOT_A_WEIGHT = "(?! ?(g|gr|kg|ml|l|kom)\\M)";
@@ -106,6 +120,13 @@ public final class WantedWords {
     private WantedWords() {
     }
 
+    private static String notAsked(List<String> words, List<String> terms) {
+        return words.stream()
+                .filter(word -> terms.stream().noneMatch(term -> term.contains(word)))
+                .map(word -> word.length() > 4 ? word + "[a-z]*" : word)
+                .collect(Collectors.joining("|"));
+    }
+
     /**
      * @param category       the words of the line, as kept on the item
      * @param kindAlias      the dictionary words of its kind, or null when
@@ -130,13 +151,14 @@ public final class WantedWords {
             // word it is made with: "pašteta od lososa", "pašteta sa šunkom".
             StringBuilder all = new StringBuilder(HEAD)
                     .append(AFTER_NO_JOINING_WORD).append(terms.getFirst()).append(')');
-            String madeOfIt = MADE_OF_IT.stream()
-                    .filter(word -> terms.stream()
-                            .noneMatch(term -> term.contains(word)))
-                    .map(word -> word.length() > 4 ? word + "[a-z]*" : word)
-                    .collect(Collectors.joining("|"));
             // Short words whole, longer ones in any form: "sos" is no "sosiske".
-            all.append("(?!(").append(madeOfIt).append(")\\M)");
+            all.append("(?!(").append(notAsked(MADE_OF_IT, terms)).append(")\\M)");
+            boolean forAPet = terms.stream().anyMatch(term -> term.contains("dog") || term.contains("cat"));
+            List<String> somethingElse = new ArrayList<>(SOMETHING_ELSE);
+            if (!forAPet) {
+                somethingElse.addAll(PET_FOOD);
+            }
+            all.append("(?!.*\\m(").append(notAsked(somethingElse, terms)).append(")\\M)");
             for (String term : terms.subList(1, terms.size())) {
                 all.append("(?=.*").append(term).append(')');
             }
