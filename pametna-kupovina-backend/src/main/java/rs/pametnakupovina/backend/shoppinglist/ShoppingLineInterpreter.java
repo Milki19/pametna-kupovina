@@ -117,8 +117,13 @@ public class ShoppingLineInterpreter {
             return choice(name, name, intent, null, packages, target, unit);
         }
 
+        // A brand only where products of the kind are sold under it: "krem
+        // sir" is cream cheese and "vanilin šećer" vanilla sugar, not the
+        // brands "Krem" and "Vanilin" (provera uživo 23.10.).
+        long kind = intent.shoppingIntentId();
         Optional<CategoryAndBrand> split =
-                brandBesideCategory(kindPhrase, intent.normalizedAlias());
+                brandBesideCategory(kindPhrase, intent.normalizedAlias())
+                        .filter(found -> intentResolver.kindHasProductsOfBrand(kind, found.brand()));
 
         if (split.isEmpty()) {
             // "feta sir", "mleko 3,2%", "šampon za decu": the kind, and what

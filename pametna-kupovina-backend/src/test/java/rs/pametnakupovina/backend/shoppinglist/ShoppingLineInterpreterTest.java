@@ -7,7 +7,9 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -62,6 +64,7 @@ class ShoppingLineInterpreterTest {
     void aBrandBesideTheKindOfProductNarrowsTheChoice() {
         kind("Pivo Zaječarsko", "pivo", false, "ml");
         when(resolver.isKnownBrand("Zaječarsko")).thenReturn(true);
+        when(resolver.kindHasProductsOfBrand(anyLong(), eq("Zaječarsko"))).thenReturn(true);
 
         var line = interpreter.interpret("Pivo Zaječarsko 0.5");
 
@@ -104,6 +107,7 @@ class ShoppingLineInterpreterTest {
     void aColourOfWineWithABrandIsThatBrandsWine() {
         kind("Rubin roze", "roze", false, "ml");
         when(resolver.isKnownBrand("Rubin")).thenReturn(true);
+        when(resolver.kindHasProductsOfBrand(anyLong(), eq("Rubin"))).thenReturn(true);
 
         var wine = interpreter.interpret("Rubin roze 1l");
 
