@@ -53,10 +53,10 @@ public final class WantedWords {
     /**
      * Words that make a name something else wherever they stand: "Kesica
      * losos Whiskas" is cat food, "Kakao krem tabla" chocolate, "Tortilja
-     * chips" crisps (provera uživo 23.10.).
+     * chips" and "Tortilja morska so" crisps (provera uživo 23.10.).
      */
     private static final List<String> SOMETHING_ELSE = List.of(
-            "chips", "cips", "tabla", "kesic", "cokolad"
+            "chips", "cips", "nachos", "morska", "tabla", "kesic", "cokolad"
     );
 
     /** Pet food, unless the line asks for a pet's: "hrana za pse". */

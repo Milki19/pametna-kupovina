@@ -704,11 +704,17 @@ public class ShoppingRecommendationService {
                     continue;
                 }
 
-                // The usual kind and size anywhere before a cheaper odd
-                // one: a shop that has only the 35 g sachet still offers it.
+                // What was asked anywhere before a substitute, then the
+                // usual kind and size before a cheaper odd one: a shop that
+                // has only the 35 g sachet still offers it. Lidl's young
+                // cheese is no "krem sir" while IDEA has one (provera uživo
+                // 23.10.).
                 if (cheapest == null
-                        || (candidate.usualChoice() && !cheapest.usualChoice())
-                        || (candidate.usualChoice() == cheapest.usualChoice()
+                        || (!candidate.wantedMissing() && cheapest.wantedMissing())
+                        || (candidate.wantedMissing() == cheapest.wantedMissing()
+                        && candidate.usualChoice() && !cheapest.usualChoice())
+                        || (candidate.wantedMissing() == cheapest.wantedMissing()
+                        && candidate.usualChoice() == cheapest.usualChoice()
                         && (candidate.lineTotal().compareTo(
                         cheapest.lineTotal()
                 ) < 0
@@ -921,16 +927,25 @@ public class ShoppingRecommendationService {
             if (best == null
                     || candidate.plan().coveredItems()
                     > best.plan().coveredItems()
-                    // The usual kind and size count before the price: the
-                    // lowest basket is not METRO's 35 g ketchup (V139).
+                    // What was asked counts before a substitute, and the
+                    // usual kind and size before the price: the lowest
+                    // basket is not METRO's 35 g ketchup (V139), nor young
+                    // cheese for "krem sir" (provera uživo 23.10.).
                     || (
                     candidate.plan().coveredItems()
                             == best.plan().coveredItems()
+                            && wantedItems(candidate) > wantedItems(best)
+            )
+                    || (
+                    candidate.plan().coveredItems()
+                            == best.plan().coveredItems()
+                            && wantedItems(candidate) == wantedItems(best)
                             && usualItems(candidate) > usualItems(best)
             )
                     || (
                     candidate.plan().coveredItems()
                             == best.plan().coveredItems()
+                            && wantedItems(candidate) == wantedItems(best)
                             && usualItems(candidate) == usualItems(best)
                             && candidate.plan().basketCost().compareTo(
                             best.plan().basketCost()
@@ -939,6 +954,7 @@ public class ShoppingRecommendationService {
                     || (
                     candidate.plan().coveredItems()
                             == best.plan().coveredItems()
+                            && wantedItems(candidate) == wantedItems(best)
                             && usualItems(candidate) == usualItems(best)
                             && candidate.plan().basketCost().compareTo(
                             best.plan().basketCost()
@@ -952,6 +968,12 @@ public class ShoppingRecommendationService {
         }
 
         return best;
+    }
+
+    private static long wantedItems(EvaluatedPlan evaluated) {
+        return evaluated.plan().assignments().values().stream()
+                .filter(offer -> !offer.wantedMissing())
+                .count();
     }
 
     private static long usualItems(EvaluatedPlan evaluated) {
@@ -976,6 +998,12 @@ public class ShoppingRecommendationService {
                     || (
                     candidate.plan().coveredItems()
                             == best.plan().coveredItems()
+                            && wantedItems(candidate) > wantedItems(best)
+            )
+                    || (
+                    candidate.plan().coveredItems()
+                            == best.plan().coveredItems()
+                            && wantedItems(candidate) == wantedItems(best)
                             && candidate.totalCost().compareTo(
                             best.totalCost()
                     ) < 0
@@ -983,6 +1011,7 @@ public class ShoppingRecommendationService {
                     || (
                     candidate.plan().coveredItems()
                             == best.plan().coveredItems()
+                            && wantedItems(candidate) == wantedItems(best)
                             && candidate.totalCost().compareTo(
                             best.totalCost()
                     ) == 0

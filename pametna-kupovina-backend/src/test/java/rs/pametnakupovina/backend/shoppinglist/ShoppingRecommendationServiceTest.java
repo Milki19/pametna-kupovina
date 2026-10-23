@@ -787,6 +787,60 @@ class ShoppingRecommendationServiceTest {
         assertThat(response.lowestPrice().priceSources()).containsExactlyInAnyOrder("A", "B");
     }
 
+    /**
+     * Provera uživo 23.10.: a plan with Lidl and IDEA took Lidl's young cheese
+     * for "krem sir" though IDEA had one, and cow's milk for "sojino mleko"
+     * though another shop had soy.
+     */
+    @Test
+    void whatWasAskedElsewhereBeatsACheaperSubstitute() {
+        ShoppingListRepository listRepository = mock(ShoppingListRepository.class);
+        NearbyStoreRepository nearbyRepository = mock(NearbyStoreRepository.class);
+        StoreShoppingOfferRepository offerRepository = mock(StoreShoppingOfferRepository.class);
+        RouteMatrixProvider routeProvider = mock(RouteMatrixProvider.class);
+        ShoppingRecommendationService service = new ShoppingRecommendationService(
+                listRepository,
+                nearbyRepository,
+                offerRepository,
+                routeProvider,
+                new ShoppingOptimizationProperties(),
+                markets()
+        );
+
+        ShoppingListItemResponse creamCheese = item(1L, "krem sir", 101L);
+        ShoppingListItemResponse soyMilk = item(2L, "sojino mleko", 102L);
+        when(listRepository.findById(10L)).thenReturn(Optional.of(new ShoppingListResponse(
+                10L, "Test korpa", OffsetDateTime.now(), OffsetDateTime.now(), List.of(creamCheese, soyMilk))));
+
+        NearbyStore lidl = store(1L, "A");
+        NearbyStore idea = store(2L, "B");
+        when(nearbyRepository.findPricingEligibleNearby(SERBIA, 44.0, 19.0, 15_000, 20))
+                .thenReturn(List.of(lidl, idea));
+        when(offerRepository.findOffers(eq(10L), anyList(), eq(DATE), eq(true)))
+                .thenAnswer(call -> offersFor(call.getArgument(1), List.of(
+                        substitute(offer(lidl, creamCheese, 150, 1001L)),
+                        substitute(offer(lidl, soyMilk, 100, 1002L)),
+                        offer(idea, creamCheese, 250, 2001L),
+                        offer(idea, soyMilk, 200, 2002L)
+                )));
+        when(routeProvider.calculate(anyList())).thenReturn(routeMatrix());
+
+        ShoppingRecommendationResponse response = service.recommend(10L, 44.0, 19.0, DATE);
+
+        assertThat(response.lowestPrice().basketCost()).isEqualByComparingTo("450.00");
+        assertThat(response.lowestPrice().priceSources()).containsExactly("B");
+        assertThat(response.recommendedBalance().basketCost()).isEqualByComparingTo("450.00");
+    }
+
+    private static StoreItemOffer substitute(StoreItemOffer o) {
+        return new StoreItemOffer(o.storeId(), o.retailerCode(), o.retailerName(), o.storeFormatCode(),
+                o.storeFormatName(), o.storeName(), o.address(), o.city(), o.latitude(), o.longitude(),
+                o.itemId(), o.requestedName(), o.requestedQuantity(), o.matchingRule(), o.matchingStatus(),
+                o.retailerProductId(), o.canonicalProductId(), o.productName(), o.productBrand(),
+                o.productBarcode(), o.priceDate(), o.regularPrice(), o.discountedPrice(), o.effectivePrice(),
+                o.lineTotal(), o.priceScope(), o.purchaseQuantity(), true, true);
+    }
+
     private static StoreItemOffer odd(StoreItemOffer o) {
         return new StoreItemOffer(o.storeId(), o.retailerCode(), o.retailerName(), o.storeFormatCode(),
                 o.storeFormatName(), o.storeName(), o.address(), o.city(), o.latitude(), o.longitude(),
