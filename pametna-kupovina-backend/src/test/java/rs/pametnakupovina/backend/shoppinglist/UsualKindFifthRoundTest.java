@@ -187,6 +187,11 @@ class UsualKindFifthRoundTest {
             + row(SPARKLING_WATER, "49,99")
             + row(STILL_WATER, "39,99");
 
+    /** Maxi in the live check: only a pâté and a croissant say salmon and cocoa. */
+    private static final String MADE_OF_IT_CATALOGUE = HEADER
+            + row(BRANDED_SALMON_PATE, "79,99")
+            + row(COCOA_CROISSANT, "59,99");
+
     private static String row(String name, String price) {
         barcode++;
         return ";;" + name + ";Testna;86000000" + barcode + ";KOM"
@@ -222,7 +227,8 @@ class UsualKindFifthRoundTest {
         for (Map.Entry<String, String> list : Map.of(
                 "/round5.csv", CATALOGUE,
                 "/round5b.csv", SMALL_CATALOGUE,
-                "/round5c.csv", PROBE_CATALOGUE).entrySet()) {
+                "/round5c.csv", PROBE_CATALOGUE,
+                "/round5d.csv", MADE_OF_IT_CATALOGUE).entrySet()) {
             csvServer.createContext(list.getKey(), exchange -> {
                 byte[] body = list.getValue().getBytes(StandardCharsets.UTF_8);
                 exchange.sendResponseHeaders(200, body.length);
@@ -413,6 +419,20 @@ class UsualKindFifthRoundTest {
         // Kisela voda is mineral water by another name, not a substitute.
         assertThat(productFor(offers, "kisela")).as(seen).isEqualTo(SPARKLING_WATER);
         assertThat(offers.values()).as(seen).noneMatch(StoreItemOffer::wantedMissing);
+    }
+
+    /** "Pasteta Patelina losos" is a pâté, not the salmon asked (provera uživo 23.10.). */
+    @Test
+    void whatIsMadeOfTheWordIsNotTheWord() {
+        long shop = shop("ROUND5D", "/round5d.csv");
+        long listId = pasted("losos\nkakao");
+        matchingService.match(listId, callers.caller(TOKEN), true);
+
+        var offers = offerRepository.findPriceListOffers(listId, List.of(shop), PRICE_DATE);
+
+        assertThat(offers)
+                .as(offers.stream().map(StoreItemOffer::productName).toList().toString())
+                .allMatch(offer -> offer.productName() == null || offer.wantedMissing());
     }
 
     private static StoreItemOffer offerFor(Map<String, StoreItemOffer> offers, String word) {
