@@ -65,8 +65,8 @@ android {
         applicationId = "rs.pametnakupovina.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 18
-        versionName = "2.0.6"
+        versionCode = 19
+        versionName = "2.0.7"
 
         testInstrumentationRunner =
             "rs.pametnakupovina.app.testing.HiltTestRunner"
