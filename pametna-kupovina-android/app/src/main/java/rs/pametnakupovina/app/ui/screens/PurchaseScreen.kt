@@ -527,13 +527,19 @@ private fun PurchaseInProgress(
             }
             if (archived) {
                 item(key = "archived") {
-                    // Spisak je i dalje pun; odavde se počinje nov.
-                    NoticeBanner(
-                        text = stringResource(R.string.purchase_archived_notice),
-                        actionLabel = stringResource(R.string.purchase_start_new_list),
-                        onAction = { confirmNewList = true },
-                        modifier = Modifier.testTag("purchase-start-new-list")
-                    )
+                    // Spisak je i dalje pun; odavde se počinje nov, glavnim
+                    // dugmetom kao na webu, ne tekstom u poruci.
+                    Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)) {
+                        NoticeBanner(text = stringResource(R.string.purchase_archived_notice))
+                        TonalActionButton(
+                            text = stringResource(R.string.purchase_start_new_list),
+                            primary = true,
+                            onClick = { confirmNewList = true },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("purchase-start-new-list")
+                        )
+                    }
                 }
             }
             if (!scenario.complete) {
