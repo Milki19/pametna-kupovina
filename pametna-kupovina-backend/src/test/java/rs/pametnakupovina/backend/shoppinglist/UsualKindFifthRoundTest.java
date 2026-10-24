@@ -193,7 +193,8 @@ class UsualKindFifthRoundTest {
             + row(COCOA_CROISSANT, "59,99")
             + row("KESICA LOSOS WHISKAS 85G", "89,99")
             + row("KAKAO KREM TABLA NOISETTE 100G", "129,99")
-            + row("TORTILJA CHIPS SLANI 50G", "69,99");
+            + row("TORTILJA CHIPS SLANI 50G", "69,99")
+            + row("KAKAO NAPITAK CIPIRIPI 230ML", "99,99");
 
     private static final String CREAM_CHEESE = "KREM SIR PHILADELPHIA 175G";
     private static final String SUGAR = "SECER KRISTAL 1KG";
