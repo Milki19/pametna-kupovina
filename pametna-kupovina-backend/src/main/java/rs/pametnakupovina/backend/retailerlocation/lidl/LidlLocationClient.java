@@ -58,6 +58,12 @@ class LidlLocationClient {
     }
 
     List<LidlApiLocation> fetchLocations() {
+        if (apiKey == null || apiKey.isBlank()) {
+            throw new IllegalStateException(
+                    "LIDL_LOCATION_IMPORT_API_KEY nije postavljen."
+            );
+        }
+
         LidlLocationResponse response = restClient.get()
                 .uri(sourceUrl)
                 .header("x-apikey", apiKey)

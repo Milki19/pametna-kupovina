@@ -54,6 +54,7 @@ services:
       # Without a key the administrative endpoints answer nobody.
       ADMIN_API_KEY: ${ADMIN_API_KEY:?ADMIN_API_KEY is required}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      LIDL_LOCATION_IMPORT_API_KEY: ${LIDL_LOCATION_IMPORT_API_KEY:-}
       SHOPPING_MAX_PRICE_AGE_DAYS: ${SHOPPING_MAX_PRICE_AGE_DAYS:-30}
       PRICE_IMPORT_ARCHIVE_DIRECTORY: /data/import-archive
       # ops/name-model.sh puts the model here; without it pairs are scored by letters only.
