@@ -109,4 +109,23 @@ class LidlLocationClientTest {
                 .hasMessageContaining("1/86");
         server.verify();
     }
+
+    @Test
+    void refusesToCallLidlWithoutConfiguredKey() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer
+                .bindTo(builder)
+                .build();
+
+        LidlLocationClient client = new LidlLocationClient(
+                builder.build(),
+                "https://live.api/stores",
+                ""
+        );
+
+        assertThatThrownBy(client::fetchLocations)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("LIDL_LOCATION_IMPORT_API_KEY");
+        server.verify();
+    }
 }
