@@ -149,8 +149,10 @@ public class AccountRepository {
     public TripCostService.Stored tripCosts(long accountId) {
         return jdbcClient.sql("""
                         SELECT account.value_per_hour, account.cost_per_stop,
+                               account.travel_cost_per_km,
                                market.value_per_hour AS market_value_per_hour,
                                market.cost_per_stop AS market_cost_per_stop,
+                               market.travel_cost_per_km AS market_travel_cost_per_km,
                                market.currency_code, market.currency_minor_units
                         FROM app.account AS account
                         JOIN app.market AS market ON market.id = account.market_id
@@ -160,28 +162,33 @@ public class AccountRepository {
                 .query((row, number) -> new TripCostService.Stored(
                         row.getBigDecimal("value_per_hour"),
                         row.getBigDecimal("cost_per_stop"),
+                        row.getBigDecimal("travel_cost_per_km"),
                         row.getBigDecimal("market_value_per_hour"),
                         row.getBigDecimal("market_cost_per_stop"),
+                        row.getBigDecimal("market_travel_cost_per_km"),
                         row.getString("currency_code"),
                         row.getInt("currency_minor_units")
                 ))
                 .single();
     }
 
-    /** @param valuePerHour NULL leaves the market's own, as does costPerStop */
+    /** @param valuePerHour NULL leaves the market's own, as do costPerStop and costPerKm */
     public void saveTripCosts(
             long accountId,
             BigDecimal valuePerHour,
-            BigDecimal costPerStop
+            BigDecimal costPerStop,
+            BigDecimal costPerKm
     ) {
         jdbcClient.sql("""
                         UPDATE app.account
                            SET value_per_hour = :valuePerHour,
-                               cost_per_stop = :costPerStop
+                               cost_per_stop = :costPerStop,
+                               travel_cost_per_km = :costPerKm
                          WHERE id = :accountId
                         """)
                 .param("valuePerHour", valuePerHour)
                 .param("costPerStop", costPerStop)
+                .param("costPerKm", costPerKm)
                 .param("accountId", accountId)
                 .update();
     }

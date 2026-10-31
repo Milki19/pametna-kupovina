@@ -1143,6 +1143,7 @@ function showLocation(message = null, tone = 'err') {
         <button class="chip" data-act="travel" data-value="WALKING" aria-pressed="${saved.get('walking', false)}">Peške</button>
       </div>
       ${saved.get('walking', false) ? '<p class="muted small">Peške: radnje do 3 km, put ne košta gorivo, a vreme se računa hodom.</p>' : ''}
+      <a class="btn text small" href="#/vreme">Promeni cenu vremena i prevoza</a>
       ${places.results ? (places.results.length ? `<div class="card flush">${places.results.map((p, index) => `
         <button class="list-row row" style="width:100%;text-align:left;cursor:pointer;background:none;border:0" data-act="use-place" data-index="${index}" aria-label="Polazna tačka: ${esc(p.name)}">
           <span style="color:var(--primary)">${icon.pin}</span><span class="grow">${esc(p.name)}</span>${icon.chevron}</button>`).join('')}</div>`
@@ -1314,10 +1315,10 @@ async function showRecommendation() {
   try {
     // Plan se ne računa ponovo dok se spisak ne promeni. Stavke se pitaju
     // server, jer spisak može da se menja i u aplikaciji, a to je brzo.
-    // Cena vremena i stajanja može da se promeni i u aplikaciji ili kod ukućanina.
+    // Cena vremena, kilometra i stajanja može da se promeni i u aplikaciji ili kod ukućanina.
     const [list, trip] = await Promise.all([api('GET', `shopping-lists/${listId}`),
       api('GET', 'accounts/me/trip-costs').catch(() => null)]);
-    const key = `${listId}|${origin.lat}|${origin.lng}|${travel}|${new Date().toDateString()}|${planInputs(list)}|${trip?.valuePerHour}|${trip?.costPerStop}`;
+    const key = `${listId}|${origin.lat}|${origin.lng}|${travel}|${new Date().toDateString()}|${planInputs(list)}|${trip?.valuePerHour}|${trip?.costPerStop}|${trip?.costPerKm}`;
     if (recommendation && recommendationFor && recommendationFor.key === key
         && Date.now() - recommendationFor.at < PLAN_REMEMBERED_FOR) return renderRecommendation();
     screen({ title: 'Preporuke', back: '#/lokacija', html:
@@ -1427,7 +1428,7 @@ function renderRecommendation() {
           s.approximateRoute ? 'Udaljenosti su procena: vazdušna linija uvećana za ulice, bez saobraćaja.' : null,
           `Razmotreno ${counted(result.candidateStoreCount, 'prodavnica', 'prodavnice', 'prodavnica')} u krugu od ${decimal(a.candidateRadiusMeters / 1000, 1)} km.`
         ].filter(Boolean).map(line => `<p class="small">${esc(line)}</p>`).join('')}
-        <a class="btn text small" href="#/vreme">Promeni cenu vremena i stajanja</a>
+        <a class="btn text small" href="#/vreme">Promeni cenu vremena i prevoza</a>
       </details>`,
     action: s.available ? `<button class="btn primary main" data-act="start-purchase">Započni kupovinu po ovom planu</button>` : ''
   });
@@ -1978,7 +1979,7 @@ function showMore(_, __, loaded = false) {
         <span class="muted small">Screenshot ili PDF digitalnog računa</span></span>${icon.chevron}</a>` +
       link('#/potrosnja', 'Potrošnja', 'Koliko trošiš mesečno, po prodavnicama i kategorijama') +
       link('#/domacinstvo', 'Domaćinstvo', account.state?.household ? 'Delite spisak, račune i kartice' : 'Pozovi ukućanina da delite spisak') +
-      link('#/vreme', 'Vreme i stajanja', 'Koliko plan računa sat u putu i jedno stajanje') +
+      link('#/vreme', 'Vreme i prevoz', 'Koliko plan računa sat u putu, kilometar kolima i stajanje') +
       themeCard() +
       `<div class="card">
         <div class="title">O aplikaciji</div>
@@ -2008,15 +2009,15 @@ function themeCard() {
   </div>`;
 }
 
-// Cena vremena i stajanja: plan njima meri da li se isplati vožnja do jeftinije radnje.
+// Cena vremena, kilometra i stajanja: plan njima meri da li se isplati vožnja do jeftinije radnje.
 let tripCosts = null;
 let tripFrom = '#/vise';
 async function showTripCosts() {
-  screen({ title: 'Vreme i stajanja', back: tripFrom, html: spinner('Učitavam…') });
+  screen({ title: 'Vreme i prevoz', back: tripFrom, html: spinner('Učitavam…') });
   try {
     tripCosts = await api('GET', 'accounts/me/trip-costs');
   } catch (error) {
-    if (currentRoute === 'vreme') failed('Vreme i stajanja', error, '#/vreme');
+    if (currentRoute === 'vreme') failed('Vreme i prevoz', error, '#/vreme');
     return;
   }
   // Ko je u međuvremenu otišao na drugi ekran, ostaje tamo.
@@ -2037,7 +2038,7 @@ function parseTripAmount(text) {
 function renderTripCosts(message = null) {
   const t = tripCosts;
   screen({
-    title: 'Vreme i stajanja',
+    title: 'Vreme i prevoz',
     back: tripFrom,
     html: `
       <div class="card soft">
@@ -2047,24 +2048,27 @@ function renderTripCosts(message = null) {
       <form class="card" data-form="trip-costs">
         <label class="label" for="trip-hour">Sat u putu (${esc(t.currency)})</label>
         <input id="trip-hour" name="hour" inputmode="decimal" value="${esc(tripInput(t.valuePerHour))}" required>
+        <label class="label" for="trip-km">Kilometar kolima (${esc(t.currency)})</label>
+        <input id="trip-km" name="km" inputmode="decimal" value="${esc(tripInput(t.costPerKm))}" required>
+        <p class="muted small">Gorivo i trošak auta. Peške kilometar ne košta ništa.</p>
         <label class="label" for="trip-stop">Jedno stajanje (${esc(t.currency)})</label>
         <input id="trip-stop" name="stop" inputmode="decimal" value="${esc(tripInput(t.costPerStop))}" required>
-        <p class="muted small">Podrazumevano je ${money(t.defaultValuePerHour)} po satu i ${money(t.defaultCostPerStop)} po stajanju. Veći iznos znači manje vožnje i manje radnji, a 0 znači da plan gleda samo cenu korpe i goriva.</p>
+        <p class="muted small">Podrazumevano je ${money(t.defaultValuePerHour)} po satu, ${money(t.defaultCostPerKm)} po kilometru i ${money(t.defaultCostPerStop)} po stajanju. Veći iznos znači manje vožnje i manje radnji, a 0 znači da plan to ne računa.</p>
         <div class="btn-row">${t.customized ? '<button type="button" class="btn" data-act="trip-reset">Vrati podrazumevano</button>' : ''}<button class="btn primary">Sačuvaj</button></div>
       </form>
       ${message ? `<div class="notice pos" role="status" data-trip-saved>${esc(message)}</div>` : ''}`
   });
 }
 
-async function saveTripCosts(valuePerHour, costPerStop) {
-  tripCosts = await api('PUT', 'accounts/me/trip-costs', { valuePerHour, costPerStop });
+async function saveTripCosts(valuePerHour, costPerStop, costPerKm) {
+  tripCosts = await api('PUT', 'accounts/me/trip-costs', { valuePerHour, costPerStop, costPerKm });
   // Plan je računat po staroj ceni.
   recommendation = null;
   recommendationFor = null;
   if (currentRoute !== 'vreme') return;
   renderTripCosts(tripCosts.customized
-    ? `Sačuvano. Plan računa ${money(tripCosts.valuePerHour)} po satu i ${money(tripCosts.costPerStop)} po stajanju.`
-    : 'Sačuvano. Plan opet računa podrazumevano vreme i stajanja.');
+    ? `Sačuvano. Plan računa ${money(tripCosts.valuePerHour)} po satu, ${money(tripCosts.costPerKm)} po kilometru i ${money(tripCosts.costPerStop)} po stajanju.`
+    : 'Sačuvano. Plan opet računa podrazumevano vreme, kilometar i stajanja.');
 }
 
 function tripAmount(data, name, max) {
@@ -2124,7 +2128,7 @@ function route() {
   currentRoute = name;
   const handler = routes[name] || routes.spisak;
   if (name === 'cene' || name === 'akcije') productFrom = '#/' + name;
-  if (name === 'vreme' && currentFrom !== 'vreme') tripFrom = currentFrom === 'preporuke' ? '#/preporuke' : '#/vise';
+  if (name === 'vreme' && currentFrom !== 'vreme') tripFrom = currentFrom === 'preporuke' || currentFrom === 'lokacija' ? '#/' + currentFrom : '#/vise';
   if (name === 'akcije' && (currentFrom === 'spisak' || currentFrom === 'cene')) salesFrom = '#/' + currentFrom;
   // Obaveštenje pripada ekranu na kome je nastalo.
   if (name !== currentFrom) { document.getElementById('toast').hidden = true; flushDelete(); }
@@ -2213,7 +2217,7 @@ const actions = {
     await showCards();
   },
   'delete-account': deleteAccount,
-  'trip-reset': () => saveTripCosts(null, null),
+  'trip-reset': () => saveTripCosts(null, null, null),
   theme: el => {
     const value = el.dataset.value || null;
     saved.set('theme', value);
@@ -2241,7 +2245,8 @@ const forms = {
   'pick-search': data => runPick(String(data.get('q') || '')),
   'trip-costs': data => (view.querySelector('[data-trip-saved]')?.remove(), saveTripCosts(
     tripAmount(data, 'hour', tripCosts.maxValuePerHour),
-    tripAmount(data, 'stop', tripCosts.maxCostPerStop))),
+    tripAmount(data, 'stop', tripCosts.maxCostPerStop),
+    tripAmount(data, 'km', tripCosts.maxCostPerKm))),
   'add-one': data => addText(data.get('text')),
   'add-many': data => addText(data.get('text')),
   'edit-item': (data, form) => saveItem(Number(form.dataset.id), data),

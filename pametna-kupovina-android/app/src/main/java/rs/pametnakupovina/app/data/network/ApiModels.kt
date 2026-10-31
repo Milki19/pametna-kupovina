@@ -323,14 +323,19 @@ data class TripCostsDto(
     val maxValuePerHour: Double,
     val maxCostPerStop: Double,
     val customized: Boolean = false,
-    val currency: String
+    val currency: String,
+    /** Kilometar kolima; server pre V141 ga ne šalje, pa polja nema. */
+    val costPerKm: Double? = null,
+    val defaultCostPerKm: Double? = null,
+    val maxCostPerKm: Double? = null
 )
 
 /** Iznos koji nedostaje vraća cenu tržišta. */
 @Serializable
 data class TripCostRequestDto(
     val valuePerHour: Double? = null,
-    val costPerStop: Double? = null
+    val costPerStop: Double? = null,
+    val costPerKm: Double? = null
 )
 
 @Serializable

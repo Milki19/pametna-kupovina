@@ -29,18 +29,19 @@ class TripCostServiceTest {
     @Test
     void theCeilingFollowsTheMarketsOwnValueInItsCurrency() {
         when(repository.tripCosts(7L)).thenReturn(new TripCostService.Stored(
-                null, null, new BigDecimal("8.00"), new BigDecimal("1.00"), "EUR", 2));
+                null, null, null, new BigDecimal("8.00"), new BigDecimal("1.00"), new BigDecimal("0.30"), "EUR", 2));
 
         var costs = service.get(CALLER);
 
         assertThat(costs.maxValuePerHour()).isEqualByComparingTo("200");
         assertThat(costs.maxCostPerStop()).isEqualByComparingTo("25");
+        assertThat(costs.maxCostPerKm()).isEqualByComparingTo("25");
         assertThat(costs.currency()).isEqualTo("EUR");
         assertThatThrownBy(() -> service.save(CALLER,
-                new TripCostService.TripCostRequest(new BigDecimal("200.01"), null)))
+                new TripCostService.TripCostRequest(new BigDecimal("200.01"), null, null)))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("od 0 do 200 EUR");
-        verify(repository, never()).saveTripCosts(anyLong(), any(), any());
+        verify(repository, never()).saveTripCosts(anyLong(), any(), any(), any());
     }
 
     /** Kratak broj sa ogromnim eksponentom se odbija odmah, a ne zaokružuje sekundama. */
@@ -48,25 +49,26 @@ class TripCostServiceTest {
     @Timeout(2)
     void aHugeOrTinyExponentIsRefusedBeforeAnyRounding() {
         when(repository.tripCosts(7L)).thenReturn(new TripCostService.Stored(
-                null, null, new BigDecimal("400.00"), new BigDecimal("80.00"), "RSD", 2));
+                null, null, null, new BigDecimal("400.00"), new BigDecimal("80.00"), new BigDecimal("20.00"), "RSD", 2));
 
         for (String amount : new String[]{"1e10000000", "1e-10000000", "1e999999999"}) {
             assertThatThrownBy(() -> service.save(CALLER,
-                    new TripCostService.TripCostRequest(new BigDecimal(amount), null)))
+                    new TripCostService.TripCostRequest(new BigDecimal(amount), null, null)))
                     .isInstanceOf(ResponseStatusException.class)
                     .hasMessageContaining("od 0 do 10000 RSD");
         }
-        verify(repository, never()).saveTripCosts(anyLong(), any(), any());
+        verify(repository, never()).saveTripCosts(anyLong(), any(), any(), any());
     }
 
     @Test
     void anAmountIsRoundedToTheCurrencyAndTheMarketsOwnIsNotStored() {
         when(repository.tripCosts(7L)).thenReturn(new TripCostService.Stored(
-                null, null, new BigDecimal("400.00"), new BigDecimal("80.00"), "RSD", 2));
+                null, null, null, new BigDecimal("400.00"), new BigDecimal("80.00"), new BigDecimal("20.00"), "RSD", 2));
 
         service.save(CALLER, new TripCostService.TripCostRequest(
-                new BigDecimal("650.555"), new BigDecimal("80")));
+                new BigDecimal("650.555"), new BigDecimal("80"), new BigDecimal("27.499")));
 
-        verify(repository).saveTripCosts(eq(7L), eq(new BigDecimal("650.56")), isNull());
+        verify(repository).saveTripCosts(
+                eq(7L), eq(new BigDecimal("650.56")), isNull(), eq(new BigDecimal("27.50")));
     }
 }

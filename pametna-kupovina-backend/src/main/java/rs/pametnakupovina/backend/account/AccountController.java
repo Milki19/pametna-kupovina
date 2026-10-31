@@ -79,7 +79,7 @@ public class AccountController {
         return signInService.join(caller, request.code());
     }
 
-    /** Koliko plan računa sat u putu i jedno stajanje. */
+    /** Koliko plan računa sat u putu, jedno stajanje i kilometar kolima. */
     @GetMapping("/me/trip-costs")
     public TripCostService.TripCosts tripCosts(DeviceCaller caller) {
         return tripCostService.get(caller);

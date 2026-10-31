@@ -134,6 +134,8 @@ fun RecommendationScreen(
     onBack: () -> Unit,
     originLabel: String? = null,
     onOpenPurchase: (String) -> Unit = {},
+    // Posle izmene plan se računa ponovo kad se vrati ovde: sačuvana cena podiže verziju u repozitorijumu.
+    onChangeTripCosts: () -> Unit = {},
     purchaseViewModel: PurchaseViewModel = hiltViewModel(),
     productSearchViewModel: ProductSearchViewModel = hiltViewModel(),
     viewModel: RecommendationViewModel = hiltViewModel()
@@ -151,16 +153,6 @@ fun RecommendationScreen(
     var alternativeRequested by remember { mutableStateOf<RequestedPackages?>(null) }
     var similarFor by remember { mutableStateOf<RecommendationItemDto?>(null) }
     var wrongFor by remember { mutableStateOf<RecommendationItemDto?>(null) }
-    var changingTripCosts by rememberSaveable { mutableStateOf(false) }
-    if (changingTripCosts) {
-        TripCostDialog(
-            onDismiss = { changingTripCosts = false },
-            // Plan je računat po staroj ceni vremena i stajanja.
-            onSaved = {
-                location?.let { (latitude, longitude) -> viewModel.recalculate(listId, latitude, longitude) }
-            }
-        )
-    }
     wrongFor?.let { item ->
         AlertDialog(
             onDismissRequest = { wrongFor = null },
@@ -331,7 +323,7 @@ fun RecommendationScreen(
                     onChangeOrigin = onBack,
                     onSimilar = { item -> similarFor = item },
                     onWrongProduct = { item -> wrongFor = item },
-                    onChangeTripCosts = { changingTripCosts = true },
+                    onChangeTripCosts = onChangeTripCosts,
                     nearOnly = state.nearOnly,
                     onNearOnly = { on ->
                         val (latitude, longitude) = requireNotNull(location)

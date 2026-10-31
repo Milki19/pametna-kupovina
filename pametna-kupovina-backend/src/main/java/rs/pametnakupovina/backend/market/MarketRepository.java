@@ -27,7 +27,7 @@ public class MarketRepository {
             market.id, market.code, market.name, market.currency_code,
             market.currency_minor_units, market.locale,
             market.default_language, market.time_zone,
-            market.travel_cost_per_km,
+            COALESCE(account.travel_cost_per_km, market.travel_cost_per_km) AS travel_cost_per_km,
             COALESCE(account.value_per_hour, market.value_per_hour) AS value_per_hour,
             COALESCE(account.cost_per_stop, market.cost_per_stop) AS cost_per_stop
             """;

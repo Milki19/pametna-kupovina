@@ -94,7 +94,7 @@
     <string name="rec_calc_data_as_of">Cene su iz cenovnika od %1$s; cenovnik ne govori da li je artikal na polici.</string>
     <string name="rec_calc_no_prices">Za ovaj scenario nema važećih cena.</string>
     <string name="rec_calc_costs">Korpa %1$s, put %2$s, vreme %3$s, stajanja %4$s.</string>
-    <string name="rec_calc_change_trip">Promeni cenu vremena i stajanja</string>
+    <string name="rec_calc_change_trip">Promeni cenu vremena i prevoza</string>
     <string name="rec_calc_rates">Put računamo %1$s po kilometru, vreme %2$s po satu i %3$s po stajanju.</string>
     <string name="rec_item_price_from">Cena od %1$s</string>
     <string name="rec_calc_approximate">Udaljenosti su procena: vazdušna linija uvećana za ulice, bez saobraćaja.</string>

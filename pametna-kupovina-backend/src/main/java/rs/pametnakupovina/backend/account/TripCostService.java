@@ -9,9 +9,10 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 
 /**
- * How much an hour on the road and one more shop are worth to a shopper.
- * The plan weighs a cheaper basket against them, so someone who would
- * rather drive across town for a bargain says so here.
+ * How much an hour on the road, one more shop and a kilometre by car are
+ * worth to a shopper. The plan weighs a cheaper basket against them, so
+ * someone who would rather drive across town for a bargain, or whose car
+ * burns more than most, says so here.
  *
  * <p>Amounts are in the account's market currency. A value equal to the
  * market's is not stored, so the account keeps following the market.
@@ -46,8 +47,10 @@ public class TripCostService {
                 request.valuePerHour(), stored.marketValuePerHour(), stored, "Sat");
         BigDecimal costPerStop = own(
                 request.costPerStop(), stored.marketCostPerStop(), stored, "Stajanje");
+        BigDecimal costPerKm = own(
+                request.costPerKm(), stored.marketCostPerKm(), stored, "Kilometar");
 
-        accountRepository.saveTripCosts(caller.accountId(), valuePerHour, costPerStop);
+        accountRepository.saveTripCosts(caller.accountId(), valuePerHour, costPerStop, costPerKm);
 
         return accountRepository.tripCosts(caller.accountId()).costs();
     }
@@ -90,8 +93,10 @@ public class TripCostService {
     public record Stored(
             BigDecimal valuePerHour,
             BigDecimal costPerStop,
+            BigDecimal costPerKm,
             BigDecimal marketValuePerHour,
             BigDecimal marketCostPerStop,
+            BigDecimal marketCostPerKm,
             String currencyCode,
             int currencyMinorUnits
     ) {
@@ -100,11 +105,14 @@ public class TripCostService {
             return new TripCosts(
                     valuePerHour != null ? valuePerHour : marketValuePerHour,
                     costPerStop != null ? costPerStop : marketCostPerStop,
+                    costPerKm != null ? costPerKm : marketCostPerKm,
                     marketValuePerHour,
                     marketCostPerStop,
+                    marketCostPerKm,
                     max(marketValuePerHour, currencyMinorUnits),
                     max(marketCostPerStop, currencyMinorUnits),
-                    valuePerHour != null || costPerStop != null,
+                    max(marketCostPerKm, currencyMinorUnits),
+                    valuePerHour != null || costPerStop != null || costPerKm != null,
                     currencyCode
             );
         }
@@ -112,21 +120,26 @@ public class TripCostService {
 
     /**
      * @param valuePerHour what the plan uses now
-     * @param customized   whether either amount differs from the market's
+     * @param costPerKm    by car; on foot a kilometre costs nothing
+     * @param customized   whether any amount differs from the market's
      * @param currency     ISO 4217, the account's market
      */
     public record TripCosts(
             BigDecimal valuePerHour,
             BigDecimal costPerStop,
+            BigDecimal costPerKm,
             BigDecimal defaultValuePerHour,
             BigDecimal defaultCostPerStop,
+            BigDecimal defaultCostPerKm,
             BigDecimal maxValuePerHour,
             BigDecimal maxCostPerStop,
+            BigDecimal maxCostPerKm,
             boolean customized,
             String currency
     ) {
     }
 
-    public record TripCostRequest(BigDecimal valuePerHour, BigDecimal costPerStop) {
+    /** A version that does not send costPerKm puts the kilometre back on the market's. */
+    public record TripCostRequest(BigDecimal valuePerHour, BigDecimal costPerStop, BigDecimal costPerKm) {
     }
 }
