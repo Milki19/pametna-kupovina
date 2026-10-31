@@ -12,13 +12,16 @@ public class ProductCatalogMaintenanceService {
     private final JdbcClient jdbcClient;
     private final SaleListRefresher saleListRefresher;
     private final MergeSuggestionMeaningScorer meaningScorer;
+    private final CatalogMemo catalogMemo;
 
     public ProductCatalogMaintenanceService(
             JdbcClient jdbcClient,
             SaleListRefresher saleListRefresher,
-            MergeSuggestionMeaningScorer meaningScorer
+            MergeSuggestionMeaningScorer meaningScorer,
+            CatalogMemo catalogMemo
     ) {
         this.jdbcClient = jdbcClient;
+        this.catalogMemo = catalogMemo;
         this.saleListRefresher = saleListRefresher;
         this.meaningScorer = meaningScorer;
     }
@@ -57,6 +60,8 @@ public class ProductCatalogMaintenanceService {
         synchronizeTypicalPrices();
         synchronizeMergeSuggestions();
         saleListRefresher.pricesChanged();
+        // What the words find is worked out again from the new catalogue.
+        catalogMemo.catalogChanged();
 
         return readResult(retailerId, retailerCode);
     }

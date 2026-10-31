@@ -264,6 +264,117 @@ public final class WantedWords {
         return terms.stream().distinct().toList();
     }
 
+    /** Fewer letters in a row give no trigram for the index to look up. */
+    private static final int MIN_HINT_LETTERS = 3;
+
+    /**
+     * One word every name the expression accepts says, as an expression the
+     * trigram index of the names can look up: the expression itself opens
+     * with look-arounds, which no index reads, so each match read every
+     * product's name (0.6 s for "pesak za mačke", profil 31.10.2026). The
+     * hint narrows the names to read; the expression still decides.
+     *
+     * @return null when no word is long enough to look up
+     */
+    public static String hint(String pattern) {
+        if (pattern == null || pattern.isBlank()) {
+            return null;
+        }
+        List<String> terms = new ArrayList<>();
+        int index = pattern.startsWith("^") ? 1 : 0;
+        while (index < pattern.length()) {
+            int end = groupEnd(pattern, index);
+            if (end < 0) {
+                return null;
+            }
+            if (pattern.startsWith("(?=", index)) {
+                String inner = pattern.substring(index + 3, end - 1);
+                if (inner.startsWith(".*")) {
+                    terms.add(inner.substring(2));
+                } else if (inner.startsWith("([^ ]+ ){0,2}")) {
+                    terms.add(inner.substring("([^ ]+ ){0,2}".length()));
+                }
+            }
+            index = end;
+        }
+        if (terms.isEmpty()) {
+            // A kind's one word, perhaps with the guards of a number.
+            terms.add(pattern);
+        }
+        String best = null;
+        int bestLetters = MIN_HINT_LETTERS - 1;
+        for (String term : terms) {
+            String plain = withoutGuards(term);
+            int letters = fewestLetters(plain);
+            if (letters > bestLetters) {
+                best = plain;
+                bestLetters = letters;
+            }
+        }
+        return best;
+    }
+
+    /** Where the group or the single token starting at index ends. */
+    private static int groupEnd(String pattern, int index) {
+        char first = pattern.charAt(index);
+        if (first == '\\') {
+            return Math.min(index + 2, pattern.length());
+        }
+        if (first != '(') {
+            return index + 1;
+        }
+        int depth = 0;
+        for (int at = index; at < pattern.length(); at++) {
+            char c = pattern.charAt(at);
+            if (c == '\\') {
+                at++;
+            } else if (c == '(') {
+                depth++;
+            } else if (c == ')' && --depth == 0) {
+                return at + 1;
+            }
+        }
+        return -1;
+    }
+
+    /** The term without look-arounds and word edges: what it must contain. */
+    private static String withoutGuards(String term) {
+        StringBuilder plain = new StringBuilder();
+        int index = 0;
+        while (index < term.length()) {
+            if (term.startsWith("(?", index)) {
+                int end = groupEnd(term, index);
+                if (end < 0) {
+                    return "";
+                }
+                index = end;
+            } else if (term.startsWith("\\m", index) || term.startsWith("\\M", index)) {
+                index += 2;
+            } else {
+                plain.append(term.charAt(index));
+                index++;
+            }
+        }
+        return plain.toString();
+    }
+
+    /**
+     * Letters every match has in a row: "pesak" 5, "(mac|cat)" 3; anything
+     * more involved counts none.
+     */
+    private static int fewestLetters(String plain) {
+        if (plain.matches("[a-z0-9]+")) {
+            return plain.length();
+        }
+        if (plain.matches("\\(([a-z0-9]+\\|)*[a-z0-9]+\\)")) {
+            return java.util.Arrays.stream(plain.substring(1, plain.length() - 1).split("\\|"))
+                    .mapToInt(String::length)
+                    .min()
+                    .orElse(0);
+        }
+        return 0;
+    }
+
     private static String purpose(String word, String stem) {
         String withoutVowel = word.length() > 2 && "aeiou".indexOf(word.charAt(word.length() - 1)) >= 0
                 ? word.substring(0, word.length() - 1)

@@ -5,6 +5,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import rs.pametnakupovina.backend.product.CatalogMemo;
 
 import java.time.OffsetDateTime;
 import java.util.LinkedHashSet;
@@ -20,9 +21,11 @@ public class ProductReviewService {
     private static final int MAX_BATCH = 500;
 
     private final JdbcClient jdbcClient;
+    private final CatalogMemo catalogMemo;
 
-    public ProductReviewService(JdbcClient jdbcClient) {
+    public ProductReviewService(JdbcClient jdbcClient, CatalogMemo catalogMemo) {
         this.jdbcClient = jdbcClient;
+        this.catalogMemo = catalogMemo;
     }
 
     public List<ProductMergeSuggestionReview> reviewMergeSuggestions(int limit) {
@@ -323,6 +326,7 @@ public class ProductReviewService {
      */
     @Transactional
     public ProductTypeRejectionResult rejectTypeAssignment(long retailerProductId, ProductTypeRejectionRequest request) {
+        catalogMemo.catalogChanged();
         String code = requireTypeCode(request == null ? null : request.productTypeCode());
         long typeId = jdbcClient.sql("""
                         DELETE FROM app.retailer_product_type AS assignment
