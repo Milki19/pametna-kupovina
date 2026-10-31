@@ -707,8 +707,74 @@ public class StoreShoppingOfferRepository {
                               AND intent.id = item.shopping_intent_id
                               AND intent.active = TRUE
                         ) AS requested_intent ON TRUE
+                            -- The chain's products that can answer the item,
+                            -- each way by its own index; the conditions below
+                            -- still decide. Read whole, the chain's 30,000
+                            -- products were tried against every such item
+                            -- (0.95 s of a 1.05 s plan, profil 31.10.2026).
+                            CROSS JOIN LATERAL (
+                                SELECT exact.id
+                                FROM app.retailer_product AS exact
+                                WHERE item.matching_rule = 'EXACT_PRODUCT'
+                                  AND exact.canonical_product_id = item.matched_canonical_product_id
+                                  AND exact.retailer_id = chain.retailer_id
+                                UNION
+                                SELECT same_family.id
+                                FROM app.retailer_product AS same_family
+                                WHERE item.matching_rule = 'EXACT_PRODUCT'
+                                  AND same_family.retailer_id = chain.retailer_id
+                                  AND same_family.product_family_id IN (
+                                      SELECT member.family_id
+                                      FROM app.product_family_member AS member
+                                      WHERE member.canonical_product_id =
+                                          item.matched_canonical_product_id
+                                  )
+                                UNION
+                                SELECT same_barcode.id
+                                FROM app.retailer_product AS same_barcode
+                                WHERE item.matching_rule = 'EXACT_PRODUCT'
+                                  AND item.barcode IS NOT NULL
+                                  AND same_barcode.retailer_id = chain.retailer_id
+                                  AND same_barcode.barcode = item.barcode
+                                UNION
+                                SELECT family_product.id
+                                FROM app.retailer_product AS family_product
+                                WHERE item.matching_rule = 'PRODUCT_FAMILY'
+                                  AND family_product.product_family_id = item.matched_product_family_id
+                                  AND family_product.retailer_id = chain.retailer_id
+                                UNION
+                                SELECT named.id
+                                FROM app.retailer_product AS named
+                                WHERE item.matching_rule = 'FLEXIBLE_CATEGORY'
+                                  AND item.wanted_name_hint IS NOT NULL
+                                  AND named.retailer_id = chain.retailer_id
+                                  AND named.normalized_name ~ item.wanted_name_hint
+                                UNION
+                                SELECT any_product.id
+                                FROM app.retailer_product AS any_product
+                                WHERE item.matching_rule = 'FLEXIBLE_CATEGORY'
+                                  AND item.wanted_name_pattern IS NOT NULL
+                                  AND item.wanted_name_hint IS NULL
+                                  AND any_product.retailer_id = chain.retailer_id
+                                UNION
+                                SELECT named.id
+                                FROM app.retailer_product AS named
+                                WHERE item.matching_rule = 'FLEXIBLE_CATEGORY'
+                                  AND item.wanted_name_pattern IS NULL
+                                  AND named.retailer_id = chain.retailer_id
+                                  AND (named.normalized_name = item.flexible_category_normalized
+                                       OR named.normalized_name LIKE
+                                          item.flexible_category_normalized || ' %')
+                                UNION
+                                SELECT unnamed.id
+                                FROM app.retailer_product AS unnamed
+                                WHERE item.matching_rule = 'FLEXIBLE_CATEGORY'
+                                  AND item.wanted_name_pattern IS NULL
+                                  AND unnamed.retailer_id = chain.retailer_id
+                                  AND unnamed.normalized_name IS NULL
+                            ) AS found
                             JOIN app.retailer_product AS product
-                              ON product.retailer_id = chain.retailer_id
+                              ON product.id = found.id
                             LEFT JOIN app.canonical_product AS canonical
                               ON canonical.id = product.canonical_product_id
                             CROSS JOIN LATERAL (

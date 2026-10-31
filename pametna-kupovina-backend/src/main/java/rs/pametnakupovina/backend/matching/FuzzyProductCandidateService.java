@@ -2,6 +2,8 @@ package rs.pametnakupovina.backend.matching;
 
 import org.springframework.stereotype.Service;
 import rs.pametnakupovina.backend.product.CanonicalProductSearchService;
+import rs.pametnakupovina.backend.product.CatalogMemo;
+import rs.pametnakupovina.backend.product.ProductSearchCandidate;
 
 import java.util.Comparator;
 import java.util.List;
@@ -19,14 +21,17 @@ public class FuzzyProductCandidateService {
     private final ProductQuantityParser productQuantityParser;
     private final ProductMatchScorer productMatchScorer;
     private final CanonicalProductSearchService productSearchService;
+    private final CatalogMemo memo;
 
     public FuzzyProductCandidateService(
             FuzzyProductCandidateRepository candidateRepository,
             ProductNameNormalizer productNameNormalizer,
             ProductQuantityParser productQuantityParser,
             ProductMatchScorer productMatchScorer,
-            CanonicalProductSearchService productSearchService
+            CanonicalProductSearchService productSearchService,
+            CatalogMemo memo
     ) {
+        this.memo = memo;
         this.candidateRepository = candidateRepository;
         this.productNameNormalizer = productNameNormalizer;
         this.productQuantityParser = productQuantityParser;
@@ -86,10 +91,17 @@ public class FuzzyProductCandidateService {
         Optional<ParsedQuantity> queryQuantity =
                 productQuantityParser.parse(query);
 
-        return productSearchService.candidates(
+        // What a word finds is the same for every list until the catalogue
+        // changes; the order by price nearby is the plan's, not this.
+        List<ProductSearchCandidate> found = memo.remember(
+                List.of("productSearchCandidates", query),
+                () -> productSearchService.candidates(
                         query,
                         CANDIDATE_POOL_LIMIT
-                ).stream()
+                )
+        );
+
+        return found.stream()
                 .filter(candidate -> includeWithoutBarcode
                         || candidate.canonicalProductId() != null)
                 .map(candidate -> new FuzzyProductCandidate(

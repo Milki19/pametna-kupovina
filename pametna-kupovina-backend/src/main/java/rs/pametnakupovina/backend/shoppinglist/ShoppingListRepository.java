@@ -4,6 +4,7 @@ import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import rs.pametnakupovina.backend.matching.ProductNameNormalizer;
+import rs.pametnakupovina.backend.product.CatalogMemo;
 
 import java.sql.Types;
 import java.time.OffsetDateTime;
@@ -93,9 +94,12 @@ public class ShoppingListRepository {
 
     private final ProductNameNormalizer normalizer;
 
-    public ShoppingListRepository(JdbcClient jdbcClient, ProductNameNormalizer normalizer) {
+    private final CatalogMemo memo;
+
+    public ShoppingListRepository(JdbcClient jdbcClient, ProductNameNormalizer normalizer, CatalogMemo memo) {
         this.jdbcClient = jdbcClient;
         this.normalizer = normalizer;
+        this.memo = memo;
     }
 
     /**
@@ -130,7 +134,7 @@ public class ShoppingListRepository {
         if (narrower == null) {
             return null;
         }
-        Double share = jdbcClient.sql("""
+        Double share = memo.remember(List.of("narrowerWordShare", narrower, shoppingIntentId), () -> jdbcClient.sql("""
                         SELECT AVG(CASE WHEN product.normalized_name ~ ? THEN 1.0 ELSE 0.0 END)
                         FROM app.shopping_intent_product_type AS allowed
                         JOIN app.retailer_product_type AS assignment
@@ -144,7 +148,7 @@ public class ShoppingListRepository {
                 .param(2, shoppingIntentId)
                 .query(Double.class)
                 .optional()
-                .orElse(null);
+                .orElse(null));
         return share != null && share > 0 && share < NARROWER_WORD_SHARE ? narrower : null;
     }
 
@@ -410,6 +414,9 @@ public class ShoppingListRepository {
                         ? ShoppingItemMatchingStatus.PENDING
                         : ShoppingItemMatchingStatus.CONFIRMED;
 
+        String wanted = wantedPattern(matchingRule, flexibleCategory,
+                flexibleCategoryNormalized, shoppingIntentId);
+
         return jdbcClient.sql("""
                         INSERT INTO app.shopping_list_item (
                             shopping_list_id,
@@ -428,9 +435,9 @@ public class ShoppingListRepository {
                             min_package_quantity,
                             max_package_quantity,
                             required_base_unit, target_quantity,
-                            wanted_name_pattern
+                            wanted_name_pattern, wanted_name_hint
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         RETURNING id,
                                   name,
                                   raw_input,
@@ -476,8 +483,8 @@ public class ShoppingListRepository {
                 .param(15, maxPackageQuantity, Types.NUMERIC)
                 .param(16, requiredBaseUnit, Types.VARCHAR)
                 .param(17, targetQuantity, Types.NUMERIC)
-                .param(18, wantedPattern(matchingRule, flexibleCategory,
-                        flexibleCategoryNormalized, shoppingIntentId), Types.VARCHAR)
+                .param(18, wanted, Types.VARCHAR)
+                .param(19, WantedWords.hint(wanted), Types.VARCHAR)
                 .query(ITEM_ROW_MAPPER)
                 .single();
     }
@@ -595,6 +602,9 @@ public class ShoppingListRepository {
                         ? ShoppingItemMatchingStatus.PENDING
                         : ShoppingItemMatchingStatus.CONFIRMED;
 
+        String wanted = wantedPattern(matchingRule, flexibleCategory,
+                flexibleCategoryNormalized, shoppingIntentId);
+
         return jdbcClient.sql("""
                     UPDATE app.shopping_list_item
                     SET name = ?,
@@ -617,6 +627,7 @@ public class ShoppingListRepository {
                         required_base_unit = ?,
                         target_quantity = ?,
                         wanted_name_pattern = ?,
+                        wanted_name_hint = ?,
                         updated_at = NOW()
                     WHERE id = ?
                       AND shopping_list_id = ?
@@ -664,10 +675,10 @@ public class ShoppingListRepository {
                 .param(14, maxPackageQuantity, Types.NUMERIC)
                 .param(15, requiredBaseUnit, Types.VARCHAR)
                 .param(16, targetQuantity, Types.NUMERIC)
-                .param(17, wantedPattern(matchingRule, flexibleCategory,
-                        flexibleCategoryNormalized, shoppingIntentId), Types.VARCHAR)
-                .param(18, itemId)
-                .param(19, listId)
+                .param(17, wanted, Types.VARCHAR)
+                .param(18, WantedWords.hint(wanted), Types.VARCHAR)
+                .param(19, itemId)
+                .param(20, listId)
                 .query(ITEM_ROW_MAPPER)
                 .optional();
     }
@@ -693,8 +704,37 @@ public class ShoppingListRepository {
                               ON account.id = list.account_id
                             JOIN app.retailer AS retailer
                               ON retailer.market_id = account.market_id
+                            -- The names that can say the words, found by the
+                            -- index (V142): read chain by chain, every product
+                            -- of the market was read (0.3 s, profil 31.10.).
+                            CROSS JOIN LATERAL (
+                                SELECT named.id
+                                FROM app.retailer_product AS named
+                                WHERE item.wanted_name_hint IS NOT NULL
+                                  AND named.retailer_id = retailer.id
+                                  AND named.normalized_name ~ item.wanted_name_hint
+                                UNION ALL
+                                SELECT any_product.id
+                                FROM app.retailer_product AS any_product
+                                WHERE item.wanted_name_pattern IS NOT NULL
+                                  AND item.wanted_name_hint IS NULL
+                                  AND any_product.retailer_id = retailer.id
+                                UNION ALL
+                                SELECT named.id
+                                FROM app.retailer_product AS named
+                                WHERE item.wanted_name_pattern IS NULL
+                                  AND named.retailer_id = retailer.id
+                                  AND (named.normalized_name = :category
+                                       OR named.normalized_name LIKE :category || ' %')
+                                UNION ALL
+                                SELECT unnamed.id
+                                FROM app.retailer_product AS unnamed
+                                WHERE item.wanted_name_pattern IS NULL
+                                  AND unnamed.retailer_id = retailer.id
+                                  AND unnamed.normalized_name IS NULL
+                            ) AS found
                             JOIN app.retailer_product AS product
-                              ON product.retailer_id = retailer.id
+                              ON product.id = found.id
                             WHERE list.id = :listId
                               AND CASE
                                       -- The words a line asks for, wherever in

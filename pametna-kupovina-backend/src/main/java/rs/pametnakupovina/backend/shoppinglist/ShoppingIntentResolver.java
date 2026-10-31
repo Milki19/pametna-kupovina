@@ -4,6 +4,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
 import rs.pametnakupovina.backend.matching.ProductNameNormalizer;
 import rs.pametnakupovina.backend.matching.SerbianWordForms;
+import rs.pametnakupovina.backend.product.CatalogMemo;
 
 import java.util.List;
 import java.util.Optional;
@@ -13,16 +14,27 @@ public class ShoppingIntentResolver {
 
     private final JdbcClient jdbcClient;
     private final ProductNameNormalizer normalizer;
+    // A word's kind and what the names say change only with the catalogue.
+    private final CatalogMemo memo;
 
     public ShoppingIntentResolver(
             JdbcClient jdbcClient,
-            ProductNameNormalizer normalizer
+            ProductNameNormalizer normalizer,
+            CatalogMemo memo
     ) {
         this.jdbcClient = jdbcClient;
         this.normalizer = normalizer;
+        this.memo = memo;
     }
 
     public Optional<ResolvedShoppingIntent> resolve(String value) {
+        return memo.remember(
+                List.of("resolve", String.valueOf(value)),
+                () -> readResolve(value)
+        );
+    }
+
+    private Optional<ResolvedShoppingIntent> readResolve(String value) {
         String normalized = normalizer.normalize(value);
 
         if (normalized.isBlank()) {
@@ -78,6 +90,13 @@ public class ShoppingIntentResolver {
      * then the longest dictionary words.
      */
     public Optional<FormMatch> resolveForms(String value) {
+        return memo.remember(
+                List.of("resolveForms", String.valueOf(value)),
+                () -> readResolveForms(value)
+        );
+    }
+
+    private Optional<FormMatch> readResolveForms(String value) {
         String normalized = normalizer.normalize(value);
         if (normalized.isBlank()) {
             return Optional.empty();
@@ -130,6 +149,13 @@ public class ShoppingIntentResolver {
      * šećer" stayed without a price as cheese and sugar (proba V140).
      */
     public boolean kindHasProductsMatching(long shoppingIntentId, String pattern) {
+        return memo.remember(
+                List.of("kindHasProductsMatching", String.valueOf(shoppingIntentId), String.valueOf(pattern)),
+                () -> readKindHasProductsMatching(shoppingIntentId, pattern)
+        );
+    }
+
+    private boolean readKindHasProductsMatching(long shoppingIntentId, String pattern) {
         return jdbcClient.sql("""
                         SELECT EXISTS (
                             SELECT 1
@@ -160,11 +186,19 @@ public class ShoppingIntentResolver {
      * by the products' own names.
      */
     public boolean productsMatch(String pattern) {
+        return memo.remember(
+                List.of("productsMatch", String.valueOf(pattern)),
+                () -> readProductsMatch(pattern)
+        );
+    }
+
+    private boolean readProductsMatch(String pattern) {
         return jdbcClient.sql("""
                         SELECT EXISTS (
                             SELECT 1
                             FROM app.retailer_product AS product
-                            WHERE product.normalized_name ~ ?
+                            WHERE """ + byHint(WantedWords.hint(pattern)) + """
+                              product.normalized_name ~ ?
                               AND EXISTS (
                                   SELECT 1
                                   FROM app.current_price_offer AS offer
@@ -184,6 +218,13 @@ public class ShoppingIntentResolver {
      * word is found by the names, as a word no dictionary knows.
      */
     public boolean kindIsBarelyTyped(long shoppingIntentId, String namePattern) {
+        return memo.remember(
+                List.of("kindIsBarelyTyped", String.valueOf(shoppingIntentId), String.valueOf(namePattern)),
+                () -> readKindIsBarelyTyped(shoppingIntentId, namePattern)
+        );
+    }
+
+    private boolean readKindIsBarelyTyped(long shoppingIntentId, String namePattern) {
         return jdbcClient.sql("""
                         SELECT (
                                    SELECT COUNT(*)
@@ -207,7 +248,8 @@ public class ShoppingIntentResolver {
                                    FROM (
                                        SELECT 1
                                        FROM app.retailer_product AS product
-                                       WHERE product.normalized_name ~ ?
+                                       WHERE """ + byHint(WantedWords.hint(namePattern)) + """
+                                         product.normalized_name ~ ?
                                          AND EXISTS (
                                              SELECT 1
                                              FROM app.current_price_offer AS offer
@@ -223,6 +265,18 @@ public class ShoppingIntentResolver {
                 .single();
     }
 
+    /**
+     * A word the expression's names all say, which the trigram index finds
+     * (V142): the expression alone, with its look-arounds, read every name.
+     * Single quotes cannot occur in it: the words are letters and digits.
+     */
+    private static String byHint(String hint) {
+        // Spaces around: a text block drops the ones at its line ends.
+        return hint == null || hint.indexOf('\'') >= 0
+                ? " "
+                : " product.normalized_name ~ '" + hint + "' AND ";
+    }
+
     public record FormMatch(ResolvedShoppingIntent intent, String phrase) {
     }
 
@@ -236,6 +290,13 @@ public class ShoppingIntentResolver {
      * them (provera uživo 23.10.).
      */
     public boolean kindHasProductsOfBrand(long shoppingIntentId, String brand) {
+        return memo.remember(
+                List.of("kindHasProductsOfBrand", String.valueOf(shoppingIntentId), String.valueOf(brand)),
+                () -> readKindHasProductsOfBrand(shoppingIntentId, brand)
+        );
+    }
+
+    private boolean readKindHasProductsOfBrand(long shoppingIntentId, String brand) {
         return jdbcClient.sql("""
                         SELECT EXISTS (
                             SELECT 1
@@ -268,6 +329,13 @@ public class ShoppingIntentResolver {
     }
 
     public boolean isKnownBrand(String value) {
+        return memo.remember(
+                List.of("isKnownBrand", String.valueOf(value)),
+                () -> readIsKnownBrand(value)
+        );
+    }
+
+    private boolean readIsKnownBrand(String value) {
         String normalized = normalizer.normalize(value);
 
         if (normalized.isBlank()) {
@@ -278,19 +346,22 @@ public class ShoppingIntentResolver {
                         SELECT EXISTS (
                             SELECT 1
                             FROM app.brand AS brand
-                            WHERE brand.active = TRUE
+                            -- The brands of that name first, by their indexes:
+                            -- asked with OR, the key was worked out for each
+                            -- of 10,500 brands (60 ms a word, profil 31.10.).
+                            WHERE brand.id IN (
+                                      SELECT named.id
+                                      FROM app.brand AS named
+                                      WHERE named.normalized_name = ?
+                                      UNION
+                                      SELECT alias.brand_id
+                                      FROM app.brand_alias AS alias
+                                      WHERE alias.normalized_alias = ?
+                                  )
+                              AND brand.active = TRUE
                               AND app.product_match_brand_key(
                                       brand.display_name
                                   ) <> ''
-                              AND (
-                                  brand.normalized_name = ?
-                                  OR EXISTS (
-                                      SELECT 1
-                                      FROM app.brand_alias AS alias
-                                      WHERE alias.brand_id = brand.id
-                                        AND alias.normalized_alias = ?
-                                  )
-                              )
                         )
                         """)
                 .param(1, normalized)

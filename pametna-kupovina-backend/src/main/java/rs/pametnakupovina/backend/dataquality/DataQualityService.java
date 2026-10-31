@@ -5,6 +5,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import rs.pametnakupovina.backend.product.CatalogMemo;
 
 import java.math.BigDecimal;
 import java.sql.Timestamp;
@@ -23,8 +24,11 @@ public class DataQualityService {
 
     private final JdbcClient jdbcClient;
 
-    public DataQualityService(JdbcClient jdbcClient) {
+    private final CatalogMemo catalogMemo;
+
+    public DataQualityService(JdbcClient jdbcClient, CatalogMemo catalogMemo) {
         this.jdbcClient = jdbcClient;
+        this.catalogMemo = catalogMemo;
     }
 
     public DataQualityReport report() {
@@ -182,6 +186,7 @@ public class DataQualityService {
         if (retailerProductId <= 0) {
             throw badRequest("retailerProductId mora biti pozitivan");
         }
+        catalogMemo.catalogChanged();
 
         String action = normalizedRequired(
                 request == null ? null : request.action(),

@@ -130,8 +130,15 @@ public class CanonicalProductSearchRepository {
                                    )
                                ) AS exact_ean_match
                         FROM hit
-                        JOIN app.product_family AS family
-                          ON family.id = hit.id
+                        -- Each family looked up by its key: a few hundred
+                        -- found, but the planner guessed 65,000 and hashed
+                        -- the whole table (25 ms a word, profil 31.10.2026).
+                        CROSS JOIN LATERAL (
+                            SELECT found_family.*
+                            FROM app.product_family AS found_family
+                            WHERE found_family.id = hit.id
+                            OFFSET 0
+                        ) AS family
                         -- Asked family by family: as one EXISTS the planner
                         -- hashed all 283,000 presences first (0.36 s).
                         LEFT JOIN LATERAL (
@@ -227,8 +234,14 @@ public class CanonicalProductSearchRepository {
                             UNION
                             SELECT family.id
                             FROM matching_brands AS alias
-                            JOIN app.product_family AS family
-                              ON family.brand_id = alias.brand_id
+                            -- Brand by brand (V142): hashed, the whole table
+                            -- of families was read for a brand found or none.
+                            CROSS JOIN LATERAL (
+                                SELECT branded.id, branded.normalized_name
+                                FROM app.product_family AS branded
+                                WHERE branded.brand_id = alias.brand_id
+                                OFFSET 0
+                            ) AS family
                             WHERE NOT EXISTS (
                                 SELECT 1 FROM unnest(string_to_array(?, ' ')) AS token(value)
                                 WHERE POSITION(token.value IN family.normalized_name) = 0
