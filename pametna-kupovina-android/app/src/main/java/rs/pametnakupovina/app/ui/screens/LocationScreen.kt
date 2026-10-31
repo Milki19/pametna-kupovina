@@ -51,6 +51,7 @@ import rs.pametnakupovina.app.ui.LocationViewModel
 import rs.pametnakupovina.app.ui.components.AppIcon
 import rs.pametnakupovina.app.ui.components.AppSpacing
 import rs.pametnakupovina.app.ui.components.GlassCard
+import rs.pametnakupovina.app.ui.components.IconTile
 import rs.pametnakupovina.app.ui.components.AppTopBar
 import rs.pametnakupovina.app.ui.components.BottomActionBar
 import rs.pametnakupovina.app.ui.components.NoticeBanner
@@ -66,6 +67,7 @@ import rs.pametnakupovina.app.ui.components.StepCard
 @Composable
 fun LocationScreen(
     onBack: () -> Unit,
+    onTripCosts: () -> Unit,
     onCalculate: (latitude: Double, longitude: Double, label: String?) -> Unit,
     viewModel: LocationViewModel = hiltViewModel()
 ) {
@@ -236,6 +238,35 @@ fun LocationScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+
+            // Uz izbor kolima ili peške: koliko plan računa sat u putu i kilometar.
+            GlassCard(
+                onClick = onTripCosts,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("location-trip-costs")
+            ) {
+                Row(
+                    modifier = Modifier.padding(AppSpacing.lg),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(AppSpacing.md)
+                ) {
+                    IconTile(R.drawable.ic_directions)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(stringResource(R.string.location_trip_costs), style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            stringResource(R.string.location_trip_costs_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    AppIcon(
+                        R.drawable.ic_chevron_right,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
 
             state.message?.let { message ->

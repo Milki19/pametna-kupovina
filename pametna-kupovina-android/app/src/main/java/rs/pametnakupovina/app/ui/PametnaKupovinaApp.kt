@@ -107,7 +107,7 @@ import rs.pametnakupovina.app.R
 import rs.pametnakupovina.app.ui.components.AppSpacing
 import rs.pametnakupovina.app.ui.screens.AboutDialog
 import rs.pametnakupovina.app.ui.screens.HouseholdDialog
-import rs.pametnakupovina.app.ui.screens.TripCostDialog
+import rs.pametnakupovina.app.ui.screens.TripCostScreen
 import rs.pametnakupovina.app.ui.screens.DashboardScreen
 import rs.pametnakupovina.app.ui.screens.LocationScreen
 import rs.pametnakupovina.app.ui.screens.LoyaltyCardsScreen
@@ -130,6 +130,7 @@ private object Route {
     const val CARDS = "cards"
     const val HISTORY = "purchases"
     const val SALES = "sales"
+    const val TRIP_COSTS = "trip-costs"
 
     fun matching(listId: Long) = "matching/$listId"
     fun location(listId: Long) = "location/$listId"
@@ -177,7 +178,6 @@ fun PametnaKupovinaApp(
     var showMenu by rememberSaveable { mutableStateOf(false) }
     var showAbout by rememberSaveable { mutableStateOf(false) }
     var showHousehold by rememberSaveable { mutableStateOf(false) }
-    var showTripCosts by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
     // Ishod učitavanja računa se javlja na početnom ekranu, kao i skeniranje.
     val pickReceiptFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -216,10 +216,6 @@ fun PametnaKupovinaApp(
         )
     }
 
-    if (showTripCosts) {
-        TripCostDialog(onDismiss = { showTripCosts = false })
-    }
-
     BackHandler(enabled = showMenu) { showMenu = false }
     val menuContent: @Composable () -> Unit = {
             AppMenuContent(
@@ -245,7 +241,7 @@ fun PametnaKupovinaApp(
                 },
                 onTripCosts = {
                     showMenu = false
-                    showTripCosts = true
+                    navController.navigate(Route.TRIP_COSTS) { launchSingleTop = true }
                 },
                 onAbout = {
                     showMenu = false
@@ -285,6 +281,11 @@ fun PametnaKupovinaApp(
                     onOpenSales = { navController.navigate(Route.SALES) },
                     receiptViewModel = receiptViewModel
                 )
+            }
+
+            // Cena vremena, kilometra i stajanja: iz menija, sa polazne tačke i iz plana.
+            composable(Route.TRIP_COSTS) {
+                TripCostScreen(onBack = navController::popBackStack)
             }
 
             composable(Route.SALES) {
@@ -373,6 +374,7 @@ fun PametnaKupovinaApp(
                 val listId = requireNotNull(entry.arguments?.getLong("listId"))
                 LocationScreen(
                     onBack = navController::popBackStack,
+                    onTripCosts = { navController.navigate(Route.TRIP_COSTS) { launchSingleTop = true } },
                     onCalculate = { latitude, longitude, label ->
                         calculationSession.useLocation(latitude, longitude, label)
                         navController.navigate(Route.recommendation(listId))
@@ -391,6 +393,7 @@ fun PametnaKupovinaApp(
                     location = calculationLocation,
                     originLabel = calculationOriginLabel,
                     onOpenPurchase = { navController.navigate("purchase/$it") },
+                    onChangeTripCosts = { navController.navigate(Route.TRIP_COSTS) { launchSingleTop = true } },
                     onBack = navController::popBackStack
                 )
             }

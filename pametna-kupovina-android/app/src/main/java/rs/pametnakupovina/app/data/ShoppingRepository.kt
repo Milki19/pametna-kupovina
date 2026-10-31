@@ -234,12 +234,12 @@ class ShoppingRepository @Inject constructor(
 
     private val _tripCostsVersion = MutableStateFlow(0)
 
-    /** Raste sa svakom sačuvanom cenom vremena i stajanja; zapamćen plan stariji od nje ne važi. */
+    /** Raste sa svakom sačuvanom cenom vremena, kilometra i stajanja; zapamćen plan stariji od nje ne važi. */
     val tripCostsVersion: StateFlow<Int> = _tripCostsVersion.asStateFlow()
 
     /** Null vraća cenu tržišta; plan posle ovoga treba izračunati ponovo. */
-    suspend fun saveTripCosts(valuePerHour: Double?, costPerStop: Double?): TripCostsDto =
-        api.saveTripCosts(TripCostRequestDto(valuePerHour, costPerStop))
+    suspend fun saveTripCosts(valuePerHour: Double?, costPerStop: Double?, costPerKm: Double?): TripCostsDto =
+        api.saveTripCosts(TripCostRequestDto(valuePerHour, costPerStop, costPerKm))
             .also { _tripCostsVersion.update { version -> version + 1 } }
 
     /** Proizvod čije cene se otvaraju za stavku „isti proizvod, sve varijante". */
