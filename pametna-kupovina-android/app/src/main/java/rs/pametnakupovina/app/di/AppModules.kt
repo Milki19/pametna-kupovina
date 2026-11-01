@@ -26,6 +26,9 @@ import rs.pametnakupovina.app.data.local.PametnaKupovinaDatabase
 import rs.pametnakupovina.app.data.ShoppingRepository
 import rs.pametnakupovina.app.data.purchase.MissingProductReporter
 import rs.pametnakupovina.app.data.purchase.ShoppingListClearer
+import rs.pametnakupovina.app.data.purchase.ShoppingListItems
+import rs.pametnakupovina.app.data.purchase.ListEntry
+import kotlinx.coroutines.flow.map
 import rs.pametnakupovina.app.sync.SyncScheduler
 import rs.pametnakupovina.app.data.network.SessionApiService
 import rs.pametnakupovina.app.data.network.SessionAuthenticator
@@ -109,6 +112,18 @@ object PurchaseModule {
         repository.deleteAllItems()
         syncScheduler.enqueue()
     }
+
+    @Provides
+    fun provideShoppingListItems(
+        repository: ShoppingRepository,
+        syncScheduler: SyncScheduler
+    ): ShoppingListItems = ShoppingListItems(
+        entries = { repository.draftItems.map { items -> items.map { ListEntry(it.remoteId, it.name) } } },
+        remove = { itemIds ->
+            repository.deleteItemsOnServer(itemIds)
+            syncScheduler.enqueue()
+        }
+    )
 }
 
 @Module

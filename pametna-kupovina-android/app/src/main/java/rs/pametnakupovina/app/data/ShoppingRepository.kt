@@ -487,6 +487,13 @@ class ShoppingRepository @Inject constructor(
         }
     }
 
+    /** Stavke po id-u sa servera (iz kupovine); one kojih više nema se preskaču. */
+    suspend fun deleteItemsOnServer(remoteIds: Set<Long>) {
+        dao.getAllItems()
+            .filter { it.remoteId != null && it.remoteId in remoteIds && it.syncState != SyncState.PENDING_DELETE.name }
+            .forEach { deleteItem(it) }
+    }
+
     /** Ceo spisak odjednom; svaka stavka odlazi serveru kao da je obrisana posebno. */
     suspend fun deleteAllItems() {
         dao.getAllItems()

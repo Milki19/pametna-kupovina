@@ -3,6 +3,34 @@ package rs.pametnakupovina.app.ui.screens
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
+import rs.pametnakupovina.app.data.purchase.PurchaseGroup
+import rs.pametnakupovina.app.data.purchase.boughtOnList
+import rs.pametnakupovina.app.data.purchase.group
+import rs.pametnakupovina.app.ui.components.LocalBottomBarInset
 import androidx.compose.animation.core.EaseOutCubic
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -432,12 +460,38 @@ private fun PurchaseInProgress(
     var editingId by rememberSaveable(session?.id) { mutableStateOf<Long?>(null) }
     var confirmArchive by rememberSaveable(session?.id) { mutableStateOf(false) }
     var confirmNewList by rememberSaveable(session?.id) { mutableStateOf(false) }
+    var confirmRemoveId by rememberSaveable(session?.id) { mutableStateOf<Long?>(null) }
+    val listEntries by viewModel.listEntries.collectAsStateWithLifecycle()
+    val onList = listEntries?.let { entries -> session?.boughtOnList(entries) }
+    val snackbar = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val resources = context.resources
+    // Račun zaveden dok je kupovina otvorena: ponudi da se kupljeno skloni sa spiska.
+    // Brojač se pamti, pa okretanje ekrana ne pita ponovo za isti račun.
+    val savedReceipts = receipts?.savedCount ?: 0
+    var seenReceipts by rememberSaveable(session?.id) { mutableStateOf(savedReceipts) }
+    var offerRemoveBought by rememberSaveable(session?.id) { mutableStateOf(false) }
+    LaunchedEffect(savedReceipts) {
+        if (savedReceipts > seenReceipts) {
+            seenReceipts = savedReceipts
+            offerRemoveBought = true
+        }
+    }
+    val removeBought: (Set<Long>) -> Unit = { ids ->
+        viewModel.removeBought(ids) { count ->
+            scope.launch {
+                snackbar.currentSnackbarData?.dismiss()
+                snackbar.showSnackbar(resources.getQuantityString(R.plurals.purchase_removed_bought, count, count))
+            }
+        }
+    }
     val scenario = session?.snapshot?.scenario
     val stores = scenario?.stores?.sortedBy { it.stopOrder }.orEmpty()
     val entrance = rememberEntrance(session?.id)
 
     Scaffold(
         containerColor = Color.Transparent,
+        snackbarHost = { SnackbarHost(snackbar, modifier = Modifier.padding(bottom = LocalBottomBarInset.current)) },
         topBar = {
             AppTopBar(
                 title = stringResource(R.string.purchase_in_progress_title),
@@ -488,9 +542,29 @@ private fun PurchaseInProgress(
         }
 
         val archived = session.archivedAt != null
+        // Kupljeno i preskočeno odlaze dole u sklopljen odeljak, pa red nestaje
+        // ispod prsta; „Poništi" ga vraća tačno kakav je bio.
         val onStatus: (Long, PurchaseStatus) -> Unit = { itemId, status ->
+            val previous = session.progress[itemId] ?: PurchaseItemProgress()
             viewModel.status(session.id, itemId, status)
+            val moved = PurchaseItemProgress(status = status).group()
+            val name = scenario.items.firstOrNull { it.itemId == itemId }?.requestedName
+            if (name != null && moved != PurchaseGroup.ACTIVE && previous.group() != moved) {
+                scope.launch {
+                    snackbar.currentSnackbarData?.dismiss()
+                    val result = snackbar.showSnackbar(
+                        message = resources.getString(
+                            if (moved == PurchaseGroup.BOUGHT) R.string.purchase_moved_bought else R.string.purchase_moved_skipped,
+                            name
+                        ),
+                        actionLabel = resources.getString(R.string.purchase_undo),
+                        duration = SnackbarDuration.Short
+                    )
+                    if (result == SnackbarResult.ActionPerformed) viewModel.restore(session.id, itemId, previous)
+                }
+            }
         }
+        val onRemoveFromList: (Long) -> Unit = { confirmRemoveId = it }
         val onReportMissing: (RecommendationItemDto) -> Unit = { viewModel.reportMissing(session.id, it) }
         val unresolved = scenario.items.filter { it.storeId == null }
 
@@ -527,18 +601,36 @@ private fun PurchaseInProgress(
             }
             if (archived) {
                 item(key = "archived") {
-                    // Spisak je i dalje pun; odavde se počinje nov, glavnim
-                    // dugmetom kao na webu, ne tekstom u poruci.
+                    // Posle kupovine glavno dugme sklanja samo kupljeno; ostalo
+                    // (preskočeno, nema u prodavnici) čeka sledeću kupovinu.
                     Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)) {
                         NoticeBanner(text = stringResource(R.string.purchase_archived_notice))
-                        TonalActionButton(
-                            text = stringResource(R.string.purchase_start_new_list),
-                            primary = true,
-                            onClick = { confirmNewList = true },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("purchase-start-new-list")
-                        )
+                        if (onList != null && onList.removable.isNotEmpty()) {
+                            TonalActionButton(
+                                text = stringResource(R.string.purchase_remove_bought_count, onList.removable.size),
+                                icon = R.drawable.ic_check_circle,
+                                primary = true,
+                                onClick = { removeBought(onList.removable) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("purchase-remove-bought")
+                            )
+                            Text(
+                                remainingText(onList.remaining),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        if (!listEntries.isNullOrEmpty()) {
+                            TonalActionButton(
+                                text = stringResource(R.string.purchase_clear_whole_list),
+                                icon = R.drawable.ic_delete,
+                                onClick = { confirmNewList = true },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("purchase-start-new-list")
+                            )
+                        }
                     }
                 }
             }
@@ -562,6 +654,7 @@ private fun PurchaseInProgress(
                         archived = archived,
                         onStatus = onStatus,
                         onDetails = { editingId = it },
+                        onRemoveFromList = onRemoveFromList,
                         onReportMissing = onReportMissing,
                         onRoute = {
                             launchGoogleMapsDirections(
@@ -581,7 +674,7 @@ private fun PurchaseInProgress(
                 item(key = "unresolved") {
                     Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)) {
                         SectionHeader(stringResource(R.string.purchase_no_store_header), trailing = unresolved.size.toString())
-                        ItemGroup(unresolved, session, archived, onStatus) { editingId = it }
+                        ItemGroup(unresolved, session, archived, onStatus, onRemoveFromList) { editingId = it }
                     }
                 }
             }
@@ -642,6 +735,56 @@ private fun PurchaseInProgress(
         )
     }
 
+    session?.snapshot?.scenario?.items?.firstOrNull { it.itemId == confirmRemoveId }?.let { product ->
+        AlertDialog(
+            onDismissRequest = { confirmRemoveId = null },
+            title = { Text(stringResource(R.string.purchase_remove_from_list_title, product.requestedName)) },
+            text = { Text(stringResource(R.string.purchase_remove_from_list_text)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmRemoveId = null
+                        viewModel.removeFromList(session.id, product.itemId)
+                    },
+                    modifier = Modifier.testTag("purchase-remove-from-list-confirm")
+                ) { Text(stringResource(R.string.purchase_remove_from_list)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmRemoveId = null }) { Text(stringResource(R.string.common_cancel)) }
+            }
+        )
+    }
+
+    // Posle zavedenog računa, samo ako ima šta da se skloni.
+    if (offerRemoveBought && onList != null) {
+        if (onList.removable.isEmpty()) {
+            LaunchedEffect(Unit) { offerRemoveBought = false }
+        } else {
+            AlertDialog(
+                onDismissRequest = { offerRemoveBought = false },
+                title = { Text(stringResource(R.string.purchase_receipt_saved_title)) },
+                text = {
+                    Text(
+                        stringResource(R.string.purchase_remove_bought_question, onList.removable.size) +
+                            "\n\n" + remainingText(onList.remaining)
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            offerRemoveBought = false
+                            removeBought(onList.removable)
+                        },
+                        modifier = Modifier.testTag("receipt-remove-bought")
+                    ) { Text(stringResource(R.string.purchase_remove_bought)) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { offerRemoveBought = false }) { Text(stringResource(R.string.purchase_keep_all)) }
+                }
+            )
+        }
+    }
+
     if (session != null && confirmArchive) {
         AlertDialog(
             onDismissRequest = { confirmArchive = false },
@@ -695,6 +838,14 @@ private fun PurchaseInProgress(
             onSave = { viewModel.details(session.id, product.itemId, it) { editingId = null } }
         )
     }
+}
+
+/** „Ostaje na spisku 3: jaja, hleb, sir" ili „Spisak ostaje prazan". Najviše tri naziva. */
+@Composable
+private fun remainingText(remaining: List<String>): String = when {
+    remaining.isEmpty() -> stringResource(R.string.purchase_list_left_empty)
+    remaining.size <= 3 -> stringResource(R.string.purchase_list_left, remaining.size, remaining.joinToString(", "))
+    else -> stringResource(R.string.purchase_list_left, remaining.size, remaining.take(3).joinToString(", ") + ", …")
 }
 
 @Composable
@@ -813,6 +964,7 @@ private fun PurchaseStoreSection(
     archived: Boolean,
     onStatus: (Long, PurchaseStatus) -> Unit,
     onDetails: (Long) -> Unit,
+    onRemoveFromList: (Long) -> Unit,
     onReportMissing: (RecommendationItemDto) -> Unit,
     onRoute: () -> Unit,
     modifier: Modifier = Modifier
@@ -850,7 +1002,9 @@ private fun PurchaseStoreSection(
             }
         }
         GlassCard(modifier = Modifier.fillMaxWidth()) {
-            Column { ItemRows(products, session, archived, onStatus, onDetails, onReportMissing) }
+            Column {
+                GroupedItemRows("store-${store.storeId}", products, session, archived, onStatus, onDetails, onRemoveFromList, onReportMissing)
+            }
         }
     }
 }
@@ -861,12 +1015,73 @@ private fun ItemGroup(
     session: PurchaseSession,
     archived: Boolean,
     onStatus: (Long, PurchaseStatus) -> Unit,
+    onRemoveFromList: (Long) -> Unit,
     onDetails: (Long) -> Unit
 ) {
     GlassCard(
         modifier = Modifier.fillMaxWidth()
     ) {
-        Column { ItemRows(items, session, archived, onStatus, onDetails) }
+        Column { GroupedItemRows("unresolved", items, session, archived, onStatus, onDetails, onRemoveFromList) }
+    }
+}
+
+/**
+ * Gore ono što još treba uzeti; kupljeno i preskočeno idu na dno, u
+ * sklopljene odeljke, da se u radnji ne traži po već rešenim stavkama.
+ */
+@Composable
+private fun GroupedItemRows(
+    groupKey: String,
+    items: List<RecommendationItemDto>,
+    session: PurchaseSession,
+    archived: Boolean,
+    onStatus: (Long, PurchaseStatus) -> Unit,
+    onDetails: (Long) -> Unit,
+    onRemoveFromList: (Long) -> Unit,
+    onReportMissing: ((RecommendationItemDto) -> Unit)? = null
+) {
+    val groups = items.groupBy { (session.progress[it.itemId] ?: PurchaseItemProgress()).group() }
+    val active = groups[PurchaseGroup.ACTIVE].orEmpty()
+    ItemRows(active, session, archived, onStatus, onDetails, onRemoveFromList, onReportMissing)
+    var above = active.isNotEmpty()
+    for ((group, label) in listOf(
+        PurchaseGroup.BOUGHT to R.string.purchase_group_bought,
+        PurchaseGroup.SKIPPED to R.string.purchase_group_skipped
+    )) {
+        val rows = groups[group].orEmpty()
+        if (rows.isNotEmpty()) key(group) {
+            var open by rememberSaveable(groupKey, group.name) { mutableStateOf(false) }
+            if (above) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            above = true
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .toggleable(value = open, role = Role.Button, onValueChange = { open = it })
+                    .testTag("group-${group.name.lowercase()}-$groupKey")
+                    .padding(horizontal = AppSpacing.lg, vertical = AppSpacing.sm)
+            ) {
+                Text(
+                    stringResource(label, rows.size),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f)
+                )
+                AppIcon(
+                    if (open) R.drawable.ic_expand_less else R.drawable.ic_expand_more,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            if (open) {
+                HorizontalDivider(
+                    modifier = Modifier.padding(start = 56.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant
+                )
+                ItemRows(rows, session, archived, onStatus, onDetails, onRemoveFromList, onReportMissing)
+            }
+        }
     }
 }
 
@@ -877,17 +1092,22 @@ private fun ItemRows(
     archived: Boolean,
     onStatus: (Long, PurchaseStatus) -> Unit,
     onDetails: (Long) -> Unit,
+    onRemoveFromList: (Long) -> Unit,
     onReportMissing: ((RecommendationItemDto) -> Unit)? = null
 ) {
     items.forEachIndexed { index, product ->
-        PurchaseItemRow(
-            item = product,
-            progress = session.progress[product.itemId] ?: PurchaseItemProgress(),
-            archived = archived,
-            onStatus = { onStatus(product.itemId, it) },
-            onDetails = { onDetails(product.itemId) },
-            onReportMissing = onReportMissing?.let { report -> { report(product) } }
-        )
+        // Ključ drži stanje prevlačenja uz stavku kad ona pređe u drugi odeljak.
+        key(product.itemId) {
+            PurchaseItemRow(
+                item = product,
+                progress = session.progress[product.itemId] ?: PurchaseItemProgress(),
+                archived = archived,
+                onStatus = { onStatus(product.itemId, it) },
+                onDetails = { onDetails(product.itemId) },
+                onRemoveFromList = { onRemoveFromList(product.itemId) },
+                onReportMissing = onReportMissing?.let { report -> { report(product) } }
+            )
+        }
         if (index < items.lastIndex) {
             HorizontalDivider(
                 modifier = Modifier.padding(start = 56.dp),
@@ -904,6 +1124,7 @@ private fun PurchaseItemRow(
     archived: Boolean,
     onStatus: (PurchaseStatus) -> Unit,
     onDetails: () -> Unit,
+    onRemoveFromList: () -> Unit,
     onReportMissing: (() -> Unit)? = null
 ) {
     val purchased = progress.status == PurchaseStatus.PURCHASED
@@ -911,133 +1132,254 @@ private fun PurchaseItemRow(
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     // Sa krupnim slovima cena ide ispod naziva, da naziv ne ostane u uskoj koloni.
     val largeFont = LocalDensity.current.fontScale >= 1.5f
+    val press = remember { MutableInteractionSource() }
+    val skipLabel = stringResource(R.string.purchase_skip)
+    val boughtLabel = stringResource(R.string.purchase_mark_bought)
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag("purchase-item-${item.itemId}")
-            .padding(start = AppSpacing.xs, end = AppSpacing.xs, top = AppSpacing.sm, bottom = AppSpacing.sm),
-        verticalAlignment = Alignment.CenterVertically
+    // Prevuci desno = kupljeno, levo = preskoči; isto i čitaču ekrana kao radnje reda.
+    SwipeRow(
+        enabled = !archived,
+        onSwipeRight = { if (!purchased) onStatus(PurchaseStatus.PURCHASED) },
+        onSwipeLeft = { if (progress.status != PurchaseStatus.SKIPPED) onStatus(PurchaseStatus.SKIPPED) },
+        rightLabel = boughtLabel,
+        leftLabel = skipLabel,
+        modifier = Modifier.testTag("purchase-item-${item.itemId}")
     ) {
-        BoughtCheck(
-            checked = purchased,
-            enabled = !archived,
-            onCheckedChange = { onStatus(if (it) PurchaseStatus.PURCHASED else PurchaseStatus.TO_BUY) },
-            modifier = Modifier.testTag("bought-${item.itemId}")
-        )
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
-        ) {
-            StrikeText(item.requestedName, struck = purchased)
-            item.productName
-                ?.takeUnless { it.equals(item.requestedName, ignoreCase = true) }
-                ?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = muted) }
-            itemQuantityLine(item)?.let {
-                Text(it, style = MaterialTheme.typography.bodySmall, color = muted)
-            }
-            item.substituteNote?.let {
-                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer)
-            }
-            purchaseStatus(progress, item)?.let { (text, tone) -> StatusPill(text, tone) }
-            // Cenovnik ne zna šta je na polici; kad više kupaca javi, plan
-            // tu ponudu u toj radnji preskače.
-            if (
-                progress.status == PurchaseStatus.NOT_FOUND && onReportMissing != null &&
-                item.canonicalProductId != null && item.retailerProductId != null && item.storeId != null
-            ) {
-                if (progress.reportedMissing) {
-                    Text(stringResource(R.string.purchase_reported_missing), style = MaterialTheme.typography.bodySmall, color = muted)
-                } else if (!archived) {
-                    TextButton(
-                        onClick = onReportMissing,
-                        contentPadding = PaddingValues(0.dp),
-                        modifier = Modifier.testTag("report-missing-${item.itemId}")
-                    ) {
-                        Text(stringResource(R.string.purchase_report_missing))
+        // Ceo red je kućica: dodir bilo gde na stavku je kupljeno, ne samo na kvadrat levo.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .toggleable(
+                    value = purchased,
+                    interactionSource = press,
+                    indication = LocalIndication.current,
+                    enabled = !archived,
+                    role = Role.Checkbox,
+                    onValueChange = { onStatus(if (it) PurchaseStatus.PURCHASED else PurchaseStatus.TO_BUY) }
+                )
+                .semantics {
+                    if (!archived) {
+                        customActions = listOfNotNull(
+                            CustomAccessibilityAction(skipLabel) { onStatus(PurchaseStatus.SKIPPED); true }
+                                .takeIf { progress.status != PurchaseStatus.SKIPPED }
+                        )
                     }
                 }
+                .testTag("bought-${item.itemId}")
+                .padding(start = AppSpacing.xs, end = AppSpacing.xs, top = AppSpacing.sm, bottom = AppSpacing.sm),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            BoughtCheck(checked = purchased, interactionSource = press)
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                StrikeText(item.requestedName, struck = purchased)
+                item.productName
+                    ?.takeUnless { it.equals(item.requestedName, ignoreCase = true) }
+                    ?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = muted) }
+                itemQuantityLine(item)?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = muted)
+                }
+                item.substituteNote?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer)
+                }
+                purchaseStatus(progress, item)?.let { (text, tone) -> StatusPill(text, tone) }
+                // Cenovnik ne zna šta je na polici; kad više kupaca javi, plan
+                // tu ponudu u toj radnji preskače.
+                if (
+                    progress.status == PurchaseStatus.NOT_FOUND && onReportMissing != null &&
+                    item.canonicalProductId != null && item.retailerProductId != null && item.storeId != null
+                ) {
+                    if (progress.reportedMissing) {
+                        Text(stringResource(R.string.purchase_reported_missing), style = MaterialTheme.typography.bodySmall, color = muted)
+                    } else if (!archived) {
+                        TextButton(
+                            onClick = onReportMissing,
+                            contentPadding = PaddingValues(0.dp),
+                            modifier = Modifier.testTag("report-missing-${item.itemId}")
+                        ) {
+                            Text(stringResource(R.string.purchase_report_missing))
+                        }
+                    }
+                }
+                if (progress.note.isNotBlank()) {
+                    Text(stringResource(R.string.purchase_note_value, progress.note), style = MaterialTheme.typography.bodySmall)
+                }
+                progress.actualLineTotal?.toDoubleOrNull()?.let {
+                    Text(stringResource(R.string.purchase_paid_value, money(it)), style = MaterialTheme.typography.bodySmall)
+                }
+                if (largeFont) {
+                    item.lineTotal?.let {
+                        Text(
+                            money(it),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = if (purchased) muted else MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+                if (item.storeId == null) {
+                    Text(
+                        item.explanation,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
             }
-            if (progress.note.isNotBlank()) {
-                Text(stringResource(R.string.purchase_note_value, progress.note), style = MaterialTheme.typography.bodySmall)
-            }
-            progress.actualLineTotal?.toDoubleOrNull()?.let {
-                Text(stringResource(R.string.purchase_paid_value, money(it)), style = MaterialTheme.typography.bodySmall)
-            }
-            if (largeFont) {
+            if (!largeFont) {
                 item.lineTotal?.let {
                     Text(
                         money(it),
                         style = MaterialTheme.typography.titleMedium,
-                        color = if (purchased) muted else MaterialTheme.colorScheme.onSurface
+                        color = if (purchased) muted else MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(horizontal = AppSpacing.sm)
                     )
                 }
             }
-            if (item.storeId == null) {
-                Text(
-                    item.explanation,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error
-                )
-            }
-        }
-        if (!largeFont) {
-            item.lineTotal?.let {
-                Text(
-                    money(it),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = if (purchased) muted else MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(horizontal = AppSpacing.sm)
-                )
-            }
-        }
-        if (!archived) {
-            Box {
-                IconButton(
-                    onClick = { menuOpen = true },
-                    modifier = Modifier.testTag("item-menu-${item.itemId}")
-                ) {
-                    AppIcon(R.drawable.ic_more_vert, contentDescription = stringResource(R.string.purchase_more_for_item, item.requestedName))
-                }
-                DropdownMenu(
-                    expanded = menuOpen,
-                    onDismissRequest = { menuOpen = false },
-                    // Meni je preko sadržaja, pa ne sme da bude providan.
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-                ) {
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.purchase_not_in_store)) },
-                        onClick = {
-                            menuOpen = false
-                            onStatus(PurchaseStatus.NOT_FOUND)
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.purchase_skip)) },
-                        onClick = {
-                            menuOpen = false
-                            onStatus(PurchaseStatus.SKIPPED)
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.purchase_details)) },
-                        onClick = {
-                            menuOpen = false
-                            onDetails()
-                        }
-                    )
-                    if (progress.status != PurchaseStatus.TO_BUY || progress.boughtPackages > 0) {
+            if (!archived) {
+                Box {
+                    IconButton(
+                        onClick = { menuOpen = true },
+                        modifier = Modifier.testTag("item-menu-${item.itemId}")
+                    ) {
+                        AppIcon(R.drawable.ic_more_vert, contentDescription = stringResource(R.string.purchase_more_for_item, item.requestedName))
+                    }
+                    DropdownMenu(
+                        expanded = menuOpen,
+                        onDismissRequest = { menuOpen = false },
+                        // Meni je preko sadržaja, pa ne sme da bude providan.
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                    ) {
                         DropdownMenuItem(
-                            text = { Text(stringResource(R.string.purchase_back_to_list)) },
+                            text = { Text(stringResource(R.string.purchase_not_in_store)) },
                             onClick = {
                                 menuOpen = false
-                                onStatus(PurchaseStatus.TO_BUY)
+                                onStatus(PurchaseStatus.NOT_FOUND)
                             }
                         )
+                        if (progress.status != PurchaseStatus.SKIPPED) {
+                            DropdownMenuItem(
+                                text = { Text(skipLabel) },
+                                onClick = {
+                                    menuOpen = false
+                                    onStatus(PurchaseStatus.SKIPPED)
+                                },
+                                modifier = Modifier.testTag("skip-${item.itemId}")
+                            )
+                        }
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.purchase_details)) },
+                            onClick = {
+                                menuOpen = false
+                                onDetails()
+                            }
+                        )
+                        if (progress.status != PurchaseStatus.TO_BUY || progress.boughtPackages > 0) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.purchase_back_to_list)) },
+                                onClick = {
+                                    menuOpen = false
+                                    onStatus(PurchaseStatus.TO_BUY)
+                                }
+                            )
+                        }
+                        // „Ne treba više uopšte": preskočeno ostaje na spisku za sledeći put, ovo ne.
+                        if (!progress.removedFromList) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.purchase_remove_from_list)) },
+                                onClick = {
+                                    menuOpen = false
+                                    onRemoveFromList()
+                                },
+                                modifier = Modifier.testTag("remove-from-list-${item.itemId}")
+                            )
+                        }
                     }
                 }
             }
         }
+    }
+}
+
+/**
+ * Red koji se prevlači: desno otkriva zeleno „Kupljeno", levo „Preskoči".
+ * Pušten preko trećine širine izvrši radnju i vrati se na mesto; red zatim
+ * pređe u svoj odeljak. Samo vodoravni pokret, pa lista i dalje skroluje.
+ */
+@Composable
+private fun SwipeRow(
+    enabled: Boolean,
+    onSwipeRight: () -> Unit,
+    onSwipeLeft: () -> Unit,
+    rightLabel: String,
+    leftLabel: String,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit
+) {
+    val offset = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+    var width by remember { mutableIntStateOf(0) }
+    val right by rememberUpdatedState(onSwipeRight)
+    val left by rememberUpdatedState(onSwipeLeft)
+    val scheme = MaterialTheme.colorScheme
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .onSizeChanged { width = it.width }
+            .then(
+                if (!enabled) Modifier else Modifier.pointerInput(Unit) {
+                    detectHorizontalDragGestures(
+                        onDragEnd = {
+                            val x = offset.value
+                            val threshold = width / 3f
+                            when {
+                                x > threshold -> right()
+                                x < -threshold -> left()
+                            }
+                            scope.launch { offset.animateTo(0f, tween(200)) }
+                        },
+                        onDragCancel = { scope.launch { offset.animateTo(0f, tween(200)) } },
+                        onHorizontalDrag = { change, amount ->
+                            change.consume()
+                            scope.launch { offset.snapTo((offset.value + amount).coerceIn(-width.toFloat(), width.toFloat())) }
+                        }
+                    )
+                }
+            )
+    ) {
+        val x = offset.value
+        if (x != 0f) {
+            val toRight = x > 0
+            val strip = with(LocalDensity.current) { kotlin.math.abs(x).toDp() }
+            // Boji se samo otkriveni deo, jer red iznad nema svoju pozadinu.
+            Box(Modifier.matchParentSize()) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm, if (toRight) Alignment.Start else Alignment.End),
+                    modifier = Modifier
+                        .align(if (toRight) Alignment.CenterStart else Alignment.CenterEnd)
+                        .fillMaxHeight()
+                        .width(strip)
+                        .clipToBounds()
+                        .background(if (toRight) scheme.primaryContainer else scheme.surfaceContainerHighest)
+                        .padding(horizontal = AppSpacing.lg)
+                ) {
+                    AppIcon(
+                        if (toRight) R.drawable.ic_check else R.drawable.ic_close,
+                        contentDescription = null,
+                        tint = if (toRight) scheme.onPrimaryContainer else scheme.onSurfaceVariant
+                    )
+                    Text(
+                        if (toRight) rightLabel else leftLabel,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = if (toRight) scheme.onPrimaryContainer else scheme.onSurfaceVariant,
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                }
+            }
+        }
+        Box(Modifier.offset { IntOffset(offset.value.roundToInt(), 0) }) { content() }
     }
 }
 
@@ -1081,14 +1423,12 @@ private fun StrikeText(text: String, struck: Boolean) {
 
 /**
  * Kućica iz nacrta: zaobljen kvadrat koji se popuni, a kvačica se iscrta.
- * Dodirna površina je 48 dp, za ruku koja gura kolica.
+ * Dodiruje se ceo red, pa je meta za ruku koja gura kolica šira od 48 dp.
  */
 @Composable
 private fun BoughtCheck(
     checked: Boolean,
-    enabled: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    modifier: Modifier = Modifier
+    interactionSource: MutableInteractionSource
 ) {
     val scheme = MaterialTheme.colorScheme
     val fill by animateColorAsState(if (checked) scheme.primary else Color.Transparent, label = "checkFill")
@@ -1098,8 +1438,8 @@ private fun BoughtCheck(
         animationSpec = tween(300, delayMillis = if (checked) 80 else 0),
         label = "checkMark"
     )
-    val source = remember { MutableInteractionSource() }
-    val pressed by source.collectIsPressedAsState()
+    // Dodir ide na ceo red; kućica samo pokazuje pritisak i stanje.
+    val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
         targetValue = if (pressed) 0.85f else 1f,
         animationSpec = spring(dampingRatio = 0.45f, stiffness = 500f),
@@ -1108,16 +1448,7 @@ private fun BoughtCheck(
     val markColor = scheme.onPrimary
     Box(
         contentAlignment = Alignment.Center,
-        modifier = modifier
-            .size(48.dp)
-            .toggleable(
-                value = checked,
-                enabled = enabled,
-                role = Role.Checkbox,
-                interactionSource = source,
-                indication = null,
-                onValueChange = onCheckedChange
-            )
+        modifier = Modifier.size(48.dp)
     ) {
         Canvas(
             Modifier
@@ -1171,7 +1502,9 @@ private fun purchaseStatus(
             text to StatusTone.WARNING
         }
         PurchaseStatus.SKIPPED -> {
-            val text = if (bought == null) {
+            val text = if (progress.removedFromList) {
+                stringResource(R.string.purchase_status_removed_from_list)
+            } else if (bought == null) {
                 stringResource(R.string.purchase_status_skipped)
             } else {
                 stringResource(R.string.purchase_status_skipped_partial, bought, decimal(planned))

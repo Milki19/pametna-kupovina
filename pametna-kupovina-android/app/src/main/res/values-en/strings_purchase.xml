@@ -31,7 +31,7 @@
     <string name="purchase_no_store_header">No store</string>
     <string name="purchase_reopen">Reopen shopping trip</string>
     <string name="purchase_finish">Finish shopping</string>
-    <string name="purchase_footer_note">The original list stays unchanged. Maps need a connection or a map downloaded in advance.</string>
+    <string name="purchase_footer_note">The main list changes only when you choose “Delete from list” or “Take off bought”. Swipe an item right for bought, left to skip. Maps need a connection or a map downloaded in advance.</string>
     <string name="purchase_finish_confirm_title">Finish shopping?</string>
     <string name="purchase_finish_confirm_text">Bought %1$d of %2$d. Items you didn\'t buy won\'t be marked as bought. The plan and notes stay in your history.\n\nSpending counts the scanned receipt, not the shopping trip itself.</string>
     <string name="purchase_finish_and_scan">Finish and scan receipt</string>
@@ -56,7 +56,7 @@
     <string name="purchase_not_in_store">Not in store</string>
     <string name="purchase_skip">Skip</string>
     <string name="purchase_details">Details</string>
-    <string name="purchase_back_to_list">Put back on list</string>
+    <string name="purchase_back_to_list">Back to shopping</string>
     <string name="purchase_note_value">Note: %1$s</string>
     <string name="purchase_paid_value">Paid %1$s</string>
     <string name="purchase_status_not_found_partial">Not in store, bought %1$s of %2$s</string>
@@ -93,4 +93,28 @@
     <string name="purchase_report_missing_failed">Could not send the report. It needs a connection; try again.</string>
     <string name="purchase_start_new_list">Start a new list</string>
     <string name="purchase_start_new_list_text">All items are removed from the list; this shopping trip stays in the history.</string>
+
+    <!-- Clearing bought and skipped -->
+    <string name="purchase_mark_bought">Bought</string>
+    <string name="purchase_undo">Undo</string>
+    <string name="purchase_moved_bought">Bought: %1$s</string>
+    <string name="purchase_moved_skipped">Skipped: %1$s. It stays on the list for next time.</string>
+    <string name="purchase_group_bought">Bought (%1$d)</string>
+    <string name="purchase_group_skipped">Skipped (%1$d)</string>
+    <string name="purchase_remove_from_list">Delete from list</string>
+    <string name="purchase_remove_from_list_title">Delete “%1$s” from the list?</string>
+    <string name="purchase_remove_from_list_text">The item leaves the main list too, not just this trip. Skip it instead if you need it next time.</string>
+    <string name="purchase_status_removed_from_list">Deleted from list</string>
+    <string name="purchase_receipt_saved_title">Receipt saved</string>
+    <string name="purchase_remove_bought_question">Take what you bought (%1$d) off the list?</string>
+    <string name="purchase_remove_bought">Take off bought</string>
+    <string name="purchase_remove_bought_count">Take bought off the list (%1$d)</string>
+    <string name="purchase_keep_all">Keep all</string>
+    <string name="purchase_list_left">%1$d left on the list: %2$s</string>
+    <string name="purchase_list_left_empty">The list will be empty after that.</string>
+    <string name="purchase_clear_whole_list">Delete whole list</string>
+    <plurals name="purchase_removed_bought">
+        <item quantity="one">%d item taken off the list</item>
+        <item quantity="other">%d items taken off the list</item>
+    </plurals>
 </resources>

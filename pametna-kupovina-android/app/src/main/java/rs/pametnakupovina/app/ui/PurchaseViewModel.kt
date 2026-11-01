@@ -7,6 +7,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
@@ -21,8 +23,13 @@ import rs.pametnakupovina.app.text.uiText
 class PurchaseViewModel @Inject constructor(
     private val repository: PurchaseRepository,
     private val missingReporter: MissingProductReporter,
-    private val listClearer: ShoppingListClearer
+    private val listClearer: ShoppingListClearer,
+    private val listItems: ShoppingListItems
 ) : ViewModel() {
+    /** Glavni spisak kakav je sada; null dok se ne učita, da se dugme ne pojavi pa nestane. */
+    val listEntries = listItems.observe()
+        .catch { emit(emptyList()) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
     private val _sessions = MutableStateFlow<List<rs.pametnakupovina.app.data.local.PurchaseSessionSummary>>(emptyList())
     val sessions = _sessions.asStateFlow()
     private val _session = MutableStateFlow<PurchaseSession?>(null)
@@ -84,6 +91,23 @@ class PurchaseViewModel @Inject constructor(
         repository.update(id, itemId) { progress }
         onSaved()
     }
+    /** „Poništi": stavka se vraća tačno kakva je bila, sa delimičnom količinom i napomenom. */
+    fun restore(id: String, itemId: Long, previous: PurchaseItemProgress) = action {
+        repository.update(id, itemId) { previous }
+    }
+
+    /** „Ne treba više": stavka nestaje sa glavnog spiska, a u kupovini se sklanja kao preskočena. */
+    fun removeFromList(id: String, itemId: Long) = action {
+        listItems.remove(setOf(itemId))
+        repository.update(id, itemId) { it.copy(status = PurchaseStatus.SKIPPED, removedFromList = true) }
+    }
+
+    /** Posle računa ili završetka: sa spiska odlazi samo kupljeno, ostalo čeka sledeću kupovinu. */
+    fun removeBought(itemIds: Set<Long>, onDone: (Int) -> Unit = {}) = action {
+        listItems.remove(itemIds)
+        onDone(itemIds.size)
+    }
+
     fun archive(id: String, archived: Boolean) = action { repository.archive(id, archived) }
 
     /** Posle kupovine: spisak se prazni, a kupac ide na njega da počne nov. */
