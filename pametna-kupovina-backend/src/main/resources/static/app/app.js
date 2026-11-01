@@ -419,12 +419,29 @@ function itemAmount(item) {
   return c && c.targetQuantity ? amountLabel(c.targetQuantity * item.quantity, c.requiredBaseUnit) : `${decimal(item.quantity)} kom`;
 }
 
+// „mlevenog mesa“ i „mleveno meso“, „mleka 2,8%“ i „mleko 2 8“: iste reči u
+// drugom padežu ili bez znakova nisu nova kategorija (peti test, 1.11.2026).
+function sameKindWords(first, second) {
+  const words = text => String(text || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/gi, 'dj').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().split(' ').filter(Boolean);
+  const a = words(first);
+  const b = words(second);
+  if (a.length !== b.length) return false;
+  return a.every((word, i) => {
+    const other = b[i];
+    if (word === other) return true;
+    if (/[0-9]/.test(word) || /[0-9]/.test(other)) return false;
+    const keep = Math.max(3, Math.min(word.length, other.length) - 2);
+    return word.length >= 3 && other.length >= 3 && word.slice(0, keep) === other.slice(0, keep);
+  });
+}
+
 function itemRule(item) {
   if (item.matchingRule === 'EXACT_PRODUCT') return item.matchedCanonicalProductId || item.barcode ? 'Tačan barkod' : null;
   if (item.matchingRule === 'PRODUCT_FAMILY') return 'Isti proizvod, sve varijante';
   const c = item.flexibleConstraints || {};
   const parts = [];
-  if (c.category && c.category.trim().toLowerCase() !== item.name.trim().toLowerCase()) parts.push('kategorija ' + c.category);
+  if (c.category && !sameKindWords(c.category, item.name)) parts.push('kategorija ' + c.category);
   if (c.requiredBrand) parts.push('brend ' + c.requiredBrand);
   const text = parts.join(', ');
   return text ? text[0].toUpperCase() + text.slice(1) : null;

@@ -32,6 +32,13 @@ class DraftItemRowTest {
     }
 
     @Test
+    fun `ista vrsta u drugom padezu ili bez znakova se ne ponavlja`() {
+        assertNull(draftRuleLabel(flexible("mlevenog mesa", category = "mlevenog meso")))
+        assertNull(draftRuleLabel(flexible("mleka 2,8%", category = "mleko 2 8")))
+        assertNull(draftRuleLabel(flexible("glavice luka", category = "glavice luk")))
+    }
+
+    @Test
     fun `drugacija kategorija i brend se navode`() {
         assertEquals(
             uiText(R.string.list_rule_category_brand, "jogurt", "Moja kravica"),

@@ -678,13 +678,40 @@ internal fun draftRuleLabel(item: DraftItemEntity): UiText? = when (item.matchin
     ShoppingItemRuleDto.PRODUCT_FAMILY.name -> uiText(R.string.list_rule_same_product)
     else -> {
         val category = item.category?.trim().orEmpty()
-            .takeUnless { it.isEmpty() || it.equals(item.name.trim(), ignoreCase = true) }
+            .takeUnless { it.isEmpty() || sameKindWords(it, item.name) }
         val brand = item.requiredBrand?.takeIf(String::isNotBlank)
         when {
             category != null && brand != null -> uiText(R.string.list_rule_category_brand, category, brand)
             category != null -> uiText(R.string.list_rule_category, category)
             brand != null -> uiText(R.string.list_rule_brand, brand)
             else -> null
+        }
+    }
+}
+
+/**
+ * „mlevenog mesa“ i „mleveno meso“, „mleka 2,8%“ i „mleko 2 8“: iste reči u
+ * drugom padežu ili bez znakova nisu nova kategorija (peti test, 1.11.2026).
+ */
+internal fun sameKindWords(first: String, second: String): Boolean {
+    fun words(text: String) = java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFD)
+        .replace(Regex("\\p{Mn}+"), "")
+        .replace("đ", "dj").replace("Đ", "dj")
+        .lowercase()
+        .split(Regex("[^a-z0-9]+"))
+        .filter(String::isNotEmpty)
+    val a = words(first)
+    val b = words(second)
+    if (a.size != b.size) return false
+    return a.zip(b).all { (word, other) ->
+        when {
+            word == other -> true
+            word.any(Char::isDigit) || other.any(Char::isDigit) -> false
+            word.length < 3 || other.length < 3 -> false
+            else -> {
+                val keep = maxOf(3, minOf(word.length, other.length) - 2)
+                word.take(keep) == other.take(keep)
+            }
         }
     }
 }

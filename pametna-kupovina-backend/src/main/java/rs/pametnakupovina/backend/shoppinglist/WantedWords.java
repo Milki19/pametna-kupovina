@@ -25,7 +25,8 @@ import java.util.stream.Collectors;
  */
 public final class WantedWords {
 
-    private static final int MAX_LENGTH = 600;
+    /** The item keeps the expression in 1000 characters (V146). */
+    private static final int MAX_LENGTH = 1000;
 
     /** The codes a chain writes into its names: Lidl's "MK20", "SK6", "RFA". */
     private static final String NOT_A_CODE = "(?<!mk )(?<!sk )(?<!rfa )";
@@ -54,10 +55,12 @@ public final class WantedWords {
      * Words that make a name something else wherever they stand: "Kesica
      * losos Whiskas" is cat food, "Kakao krem tabla" chocolate, "Tortilja
      * chips" and "Tortilja morska so" crisps, "Kakao napitak" a drink
-     * (provera uživo 23.10.).
+     * (provera uživo 23.10.). "Parmezan salama slajs" is a salami and
+     * "tortilja sa ukusom kečapa" crisps (peti test, 1.11.2026).
      */
     private static final List<String> SOMETHING_ELSE = List.of(
-            "chips", "cips", "nachos", "morska", "tabla", "kesic", "cokolad", "napit"
+            "chips", "cips", "nachos", "morska", "tabla", "kesic", "cokolad", "napit",
+            "salam", "kobasic", "virsl", "sunka", "ukus", "ukusom"
     );
 
     /** Pet food, unless the line asks for a pet's: "hrana za pse". */
@@ -114,6 +117,29 @@ public final class WantedWords {
     );
 
     private static final Set<String> FOR_FOOD = Set.of("hran", "namirnic");
+
+    /**
+     * A size written as a letter, not after a number: "6 jaja L" asks for
+     * large eggs (peti test, 1.11.2026). After a number "l" is a litre.
+     */
+    private static final Map<String, String> SIZE_LETTERS = Map.of(
+            "s", "(s|small)",
+            "m", "(m|medium)",
+            "l", "(l|large)",
+            "xl", "(xl)",
+            "xxl", "(xxl)"
+    );
+
+    /** A guard that keeps a size letter from reading a litre or a metre. */
+    static final String SIZE_GUARD = "(?<![0-9] )(?<![0-9])\\m";
+
+    /**
+     * What a pack holds, counted: "toalet papir 10 rolni" is a pack of ten,
+     * named "10/1" or "10 rolni" by the shops (peti test, 1.11.2026).
+     */
+    private static final Set<String> PIECES_IN_A_PACK = Set.of(
+            "rolni", "rolne", "rolna", "rola", "role", "rolnica", "rolnice"
+    );
 
     private static final String FOOD_WRAP =
             "(hran|namirn|alu|aluminij|stretch|prijanj|frigo|kuhinj|pvc)";
@@ -215,6 +241,12 @@ public final class WantedWords {
                     end++;
                 }
                 boolean amount = end + 1 < words.size() && AMOUNT_WORDS.contains(words.get(end + 1));
+                if (end == index && end + 1 < words.size() && PIECES_IN_A_PACK.contains(words.get(end + 1))) {
+                    // "10 rolni" is "10/1", "10 rolni" or "10 kom" in a name.
+                    terms.add("\\m" + word + " (1|rol[a-z]*|kom[a-z]*)\\M");
+                    index = end + 1;
+                    continue;
+                }
                 if (amount) {
                     index = end + 1;
                     continue;
@@ -229,6 +261,11 @@ public final class WantedWords {
                 // no 20 %) and not a weight ("20 g").
                 terms.add(NOT_A_CODE + "\\m" + number + "\\M" + NOT_A_WEIGHT);
                 index = end;
+                continue;
+            }
+            String size = SIZE_LETTERS.get(word);
+            if (size != null && (index == 0 || !isNumber(words.get(index - 1)))) {
+                terms.add(SIZE_GUARD + size + "\\M");
                 continue;
             }
             if (AMOUNT_WORDS.contains(word)) {
@@ -373,6 +410,18 @@ public final class WantedWords {
                     .orElse(0);
         }
         return 0;
+    }
+
+    /**
+     * The words without a size written as a letter: "jaja L" is eggs. A shop
+     * without large eggs still sells eggs, named as a substitute.
+     */
+    public static String withoutSizeLetters(String category) {
+        if (category == null) {
+            return null;
+        }
+        return category.replaceAll("(?iu)(?<=\\p{L})\\s+(s|m|l|xl|xxl)(?![\\p{L}0-9])", "")
+                .trim();
     }
 
     private static String purpose(String word, String stem) {
