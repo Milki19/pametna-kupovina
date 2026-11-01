@@ -256,9 +256,10 @@ class GenericProductTypeTest {
         assertThat(typeOf(CARROT)).isEqualTo("VEGETABLE");
         assertThat(typeOf(GALETTES)).isNull();
         assertThat(typeOf(PADS)).isNull();
-        assertThat(typeOf(CAT_FOOD)).isNull();
+        // Since V144 pet food is its own kind, never fish or meat.
+        assertThat(typeOf(CAT_FOOD)).isEqualTo("CAT_FOOD");
         assertThat(typeOf(SALAMI)).isNull();
-        assertThat(typeOf(DOG_PATE)).isNull();
+        assertThat(typeOf(DOG_PATE)).isEqualTo("DOG_FOOD");
         assertThat(typeOf(SAUERKRAUT)).isNull();
         assertThat(typeOf(FROZEN_HAKE)).isEqualTo("FROZEN_FISH");
         assertThat(typeOf(FROZEN_CHICKEN)).isEqualTo("FROZEN_MEAT");
