@@ -25,14 +25,56 @@ const saved = {
   }
 };
 
+// Ključ je jedini put nazad do naloga i spiska, pa se nikad ne menja sam od
+// sebe. Zapis koji nije JSON (ručno izmenjen, npr. bez navodnika) čita se
+// kakav jeste, a kad pregledač ništa ne pamti, ključ ostaje bar u memoriji.
+let tokenInMemory = null;
 function clientToken() {
   let token = saved.get('token');
+  if (token == null) {
+    try {
+      const raw = (localStorage.getItem('pk.token') || '').trim();
+      if (/^[A-Za-z0-9_-]{8,100}$/.test(raw)) token = raw;
+    } catch { /* privatni prozor */ }
+  }
+  token = token == null ? '' : String(token).trim();
+  if (!token && !storageWorks()) token = tokenInMemory || '';
   if (!token) {
     token = crypto.randomUUID ? crypto.randomUUID()
       : [...crypto.getRandomValues(new Uint8Array(16))].map(b => b.toString(16).padStart(2, '0')).join('');
-    saved.set('token', token);
   }
+  if (saved.get('token') !== token) saved.set('token', token);
+  tokenInMemory = token;
   return token;
+}
+
+function storageWorks() {
+  try {
+    localStorage.setItem('pk.probe', '1');
+    localStorage.removeItem('pk.probe');
+    return true;
+  } catch { return false; }
+}
+
+/**
+ * Greška koju kupac vidi samo kao poruku (sesija, brisanje spiska) ide i na
+ * /admin, kao pad u aplikaciji: bez ključa, tokena i sadržaja spiska. Jednom
+ * po vrsti dok je stranica otvorena.
+ */
+const reported = new Set();
+function reportProblem(where, error) {
+  if (reported.has(where)) return;
+  reported.add(where);
+  fetch('/api/v1/crash-reports', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      appVersion: 'web ' + VERSION,
+      androidVersion: 'web',
+      device: webDeviceName(),
+      stackTrace: `web ${where}: HTTP ${error.status ?? '-'} ${error.message}\n${navigator.userAgent}`
+    })
+  }).catch(() => { /* bez veze nema ni izveštaja */ });
 }
 
 // ---------- Sesija ----------
@@ -87,15 +129,14 @@ async function renewSession() {
       if (error.status !== 401) throw error;
     }
   }
+  // Server ključ nikad ne odbija (uklonjen telefon uz isti ključ dobija nov
+  // nalog), pa 401 ovde dolazi sa puta: Wi-Fi sa prijavom, proxy, stara
+  // kopija stranice. Ključ zato ostaje, a sledeći pokušaj vraća isti nalog.
   try {
     return await sessionCall('sessions', { deviceToken: clientToken(), deviceName: webDeviceName() });
   } catch (error) {
-    if (error.status !== 401) throw error;
-    // Ključ ovog pregledača više ne otvara nalog: počinje se kao nov uređaj.
-    saved.set('token', null);
-    saved.set('session', null);
-    if (saved.get('listId')) forgetLostList();
-    return sessionCall('sessions', { deviceToken: clientToken(), deviceName: webDeviceName() });
+    if (error.status) reportProblem('sessions', error);
+    throw error;
   }
 }
 
@@ -193,20 +234,38 @@ function forgetLostList() {
   saved.set('listLost', true);
 }
 
+/**
+ * Spisak se serveru predstavlja nasumičnim ID-jem (publicId), a ne rednim
+ * brojem, koji otkriva koliko spiskova ima i ne krije se u linku. Broj i
+ * dalje radi (Android 2.0.6), pa server bez publicId ostaje na broju.
+ */
+const listRef = list => list.publicId || list.id;
+
+/** Pregledač koji je pamtio broj prelazi na nasumičan ID; kupovina u toku ide za njim. */
+function rememberListRef(known, list) {
+  const ref = listRef(list);
+  if (known === ref) return;
+  saved.set('listId', ref);
+  const purchase = saved.get('purchase');
+  if (purchase && purchase.listId === list.id) saved.set('purchase', { ...purchase, listId: ref });
+}
+
 async function loadListOnce() {
   await flushDelete();
   const id = saved.get('listId');
   if (id) {
     try {
-      return await api('GET', `shopping-lists/${id}`);
+      const list = await api('GET', `shopping-lists/${id}`);
+      rememberListRef(id, list);
+      return list;
     } catch (error) {
       if (error.status !== 404) throw error;
       forgetLostList();
     }
   }
   const created = await api('POST', 'shopping-lists', { name: 'Moja kupovina' });
-  saved.set('listId', created.id);
-  return api('GET', `shopping-lists/${created.id}`);
+  saved.set('listId', listRef(created));
+  return api('GET', `shopping-lists/${listRef(created)}`);
 }
 
 // ---------- Oblik brojeva i datuma (1.086,92 RSD, 24.09.2026.) ----------
@@ -501,7 +560,7 @@ function itemEditor(item) {
 }
 
 async function saveItem(id, data) {
-  const listId = listState.list.id;
+  const listId = listRef(listState.list);
   const item = listState.list.items.find(i => i.id === id);
   const quantity = parseNumber(data.get('quantity'));
   if (!(quantity >= MIN_QUANTITY && quantity <= MAX_QUANTITY)) throw fieldError('quantity', quantityProblem);
@@ -611,7 +670,7 @@ function duplicateNotice(items) {
 /** Prva stavka dobija zbir, ostale se brišu; spisak se zatim čita sa servera. */
 async function mergeDuplicates(id) {
   await flushDelete();
-  const listId = listState.list.id;
+  const listId = listRef(listState.list);
   const group = duplicateGroups(listState.list.items).find(g => g[0].id === id);
   const plan = group && mergePlan(group);
   if (!plan) return renderList();
@@ -709,12 +768,22 @@ async function removeBought() {
 
 /** Sve stavke odjednom; spisak ostaje isti, pa ga ukućani i aplikacija i dalje vide. */
 async function clearList() {
-  await flushDelete();
-  const listId = listState.list.id;
-  await api('DELETE', `shopping-lists/${listId}/items`);
+  // Brisanje jedne stavke koje čeka „Vrati“ ovde je suvišno: ide ceo spisak.
+  // Čekanje na njega je jednom zadržalo i ovaj zahtev, pa se samo otkazuje.
+  if (pendingDelete) {
+    clearTimeout(pendingDelete.timer);
+    pendingDelete = null;
+  }
+  const listId = listRef(listState.list);
+  try {
+    await api('DELETE', `shopping-lists/${listId}/items`);
+  } catch (error) {
+    reportProblem('clear-list', error);
+    throw error;
+  }
   saved.set('purchaseDone', null);
   const purchase = saved.get('purchase');
-  if (purchase?.listId === listId) saved.set('purchase', null);
+  if (purchase?.listId === listId || purchase?.listId === listState.list.id) saved.set('purchase', null);
   listState.editing = null;
   listState.list = await api('GET', `shopping-lists/${listId}`);
   renderList();
@@ -724,7 +793,7 @@ function renderList() {
   const items = listState.list.items;
   let purchase = saved.get('purchase');
   // Kupovina po spisku koji ovaj pregledač više nema (stari, ili drugi u domaćinstvu).
-  if (purchase?.listId != null && purchase.listId !== listState.list.id) {
+  if (purchase?.listId != null && purchase.listId !== listRef(listState.list) && purchase.listId !== listState.list.id) {
     saved.set('purchase', null);
     purchase = null;
   }
@@ -913,7 +982,7 @@ function rejectedNote() {
 }
 
 async function addText(text) {
-  const listId = listState.list.id;
+  const listId = listRef(listState.list);
   const result = await api('POST', `shopping-lists/${listId}/items/paste`, { text });
   const rejected = result.rejectedLines || [];
   // Iz polja „Nalepi spisak“ (i posle „Dodaj na spisak“ / „Zameni spisak“).
@@ -956,7 +1025,7 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) flush
 
 async function deleteItem(id) {
   await flushDelete();
-  const listId = listState.list.id;
+  const listId = listRef(listState.list);
   const index = listState.list.items.findIndex(i => i.id === id);
   const item = listState.list.items[index];
   listState.list.items = listState.list.items.filter(i => i.id !== id);
@@ -1002,6 +1071,8 @@ async function showMatching() {
     await flushDelete();
     if (!(matching && remembered(matchingFor, `${listId}|${listVersion}`))) {
       matching = await api('POST', `shopping-lists/${listId}/matching?includeProductsWithoutBarcode=true`);
+      // Dalje se spisak zove onako kako ga ovaj pregledač pamti (nasumičan ID).
+      matching.listId = listId;
       matchingFor = { key: `${listId}|${listVersion}`, at: Date.now() };
     }
   } catch (error) {
@@ -1913,7 +1984,7 @@ document.addEventListener('input', event => {
 
 async function addProduct(product) {
   await loadList().then(list => { listState.list = list; });
-  const added = await api('POST', `shopping-lists/${listState.list.id}/items`, {
+  const added = await api('POST', `shopping-lists/${listRef(listState.list)}/items`, {
     name: product.name,
     canonicalProductId: product.productFamilyId ? null : product.canonicalProductId,
     productFamilyId: product.productFamilyId || null,

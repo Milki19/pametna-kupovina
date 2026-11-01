@@ -5,7 +5,6 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
 import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Test
 import retrofit2.HttpException
 import retrofit2.Response
@@ -62,18 +61,25 @@ class SessionManagerTest {
     }
 
     @Test
-    fun `uklonjen telefon pocinje kao nov`() = runBlocking {
-        storage.clientToken = "uklonjen"
+    fun `odbijeno otvaranje ne baca broj telefona`() = runBlocking {
+        // Test 1.11.: jedan 401 sa puta (Wi-Fi sa prijavom) ne sme da napravi nov uređaj.
+        storage.clientToken = "broj"
         storage.activeListId = 5L
         manager.accessToken()
         api.refreshRejected = true
-        api.rejectedTokens += "uklonjen"
+        api.rejectedTokens += "broj"
         now += 60 * 60 * 1000L
 
-        manager.accessToken()
+        val refused = runCatching { manager.accessToken() }.exceptionOrNull()
 
-        assertEquals("open:novi-broj", api.calls.last())
-        assertNull(storage.activeListId)
+        assertEquals(401, (refused as HttpException).code())
+        assertEquals("broj", storage.clientToken)
+        assertEquals(5L, storage.activeListId)
+
+        api.rejectedTokens.clear()
+        manager.accessToken()
+        assertEquals("open:broj", api.calls.last())
+        assertEquals(listOf("open:broj", "refresh:pkr_1", "open:broj", "refresh:pkr_1", "open:broj"), api.calls)
     }
 
     private class FakeStorage : SessionStorage {
@@ -95,13 +101,6 @@ class SessionManagerTest {
         ) {
             session = StoredSession(accessToken, accessExpiresAtMillis, refreshToken)
             this.deviceId = deviceId
-        }
-
-        override suspend fun startOver() {
-            clientToken = null
-            session = null
-            deviceId = null
-            activeListId = null
         }
     }
 

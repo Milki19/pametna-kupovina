@@ -54,7 +54,7 @@ public class ShoppingListController {
 
     @GetMapping("/{listId}")
     public ShoppingListResponse findById(
-            @PathVariable("listId") Long listId,
+            @ListRef Long listId,
             DeviceCaller caller
     ) {
         return service.findById(listId, caller.accountId());
@@ -62,7 +62,7 @@ public class ShoppingListController {
 
     @PutMapping("/{listId}")
     public ShoppingListResponse updateList(
-            @PathVariable("listId") Long listId,
+            @ListRef Long listId,
             DeviceCaller caller,
             @RequestBody UpdateShoppingListRequest request
     ) {
@@ -72,7 +72,7 @@ public class ShoppingListController {
     @PostMapping("/{listId}/items")
     @ResponseStatus(HttpStatus.CREATED)
     public ShoppingListItemResponse addItem(
-            @PathVariable("listId") Long listId,
+            @ListRef Long listId,
             DeviceCaller caller,
             @RequestBody AddShoppingListItemRequest request
     ) {
@@ -82,7 +82,7 @@ public class ShoppingListController {
     @PostMapping("/{listId}/items/paste")
     @ResponseStatus(HttpStatus.CREATED)
     public PasteShoppingListItemsResponse pasteItems(
-            @PathVariable("listId") Long listId,
+            @ListRef Long listId,
             DeviceCaller caller,
             @RequestBody PasteShoppingListItemsRequest request
     ) {
@@ -95,7 +95,7 @@ public class ShoppingListController {
 
     @GetMapping("/{listId}/best-prices")
     public ShoppingListBestPriceResponse calculateBestPrices(
-            @PathVariable("listId") Long listId,
+            @ListRef Long listId,
             DeviceCaller caller
     ) {
         service.requireOwnedList(listId, caller.accountId());
@@ -104,7 +104,7 @@ public class ShoppingListController {
 
     @PostMapping("/{listId}/matching")
     public ShoppingListMatchingResponse matchItems(
-            @PathVariable("listId") Long listId,
+            @ListRef Long listId,
             DeviceCaller caller,
             @RequestParam(
                     name = "includeProductsWithoutBarcode",
@@ -120,7 +120,7 @@ public class ShoppingListController {
 
     @PostMapping("/{listId}/items/{itemId}/matching")
     public ShoppingItemMatchResult matchItem(
-            @PathVariable("listId") Long listId,
+            @ListRef Long listId,
             @PathVariable("itemId") Long itemId,
             DeviceCaller caller,
             @RequestParam(
@@ -138,7 +138,7 @@ public class ShoppingListController {
 
     @PutMapping("/{listId}/items/{itemId}/match")
     public ShoppingListItemResponse resolveItemMatch(
-            @PathVariable("listId") Long listId,
+            @ListRef Long listId,
             @PathVariable("itemId") Long itemId,
             DeviceCaller caller,
             @RequestBody ResolveShoppingItemMatchRequest request
@@ -154,7 +154,7 @@ public class ShoppingListController {
     /** „Neka aplikacija izabere najpovoljnije": bilo koji proizvod te vrste. */
     @PutMapping("/{listId}/items/{itemId}/any-of-kind")
     public ShoppingListItemResponse useAnyOfTheKind(
-            @PathVariable("listId") Long listId,
+            @ListRef Long listId,
             @PathVariable("itemId") Long itemId,
             DeviceCaller caller
     ) {
@@ -167,7 +167,7 @@ public class ShoppingListController {
 
     @GetMapping("/{listId}/optimization")
     public ShoppingListOptimizationResponse optimize(
-            @PathVariable("listId") Long listId,
+            @ListRef Long listId,
             DeviceCaller caller
     ) {
         service.requireOwnedList(listId, caller.accountId());
@@ -176,7 +176,7 @@ public class ShoppingListController {
 
     @PutMapping("/{listId}/items/{itemId}")
     public ShoppingListItemResponse updateItem(
-            @PathVariable("listId") Long listId,
+            @ListRef Long listId,
             @PathVariable("itemId") Long itemId,
             DeviceCaller caller,
             @RequestBody UpdateShoppingListItemRequest request
@@ -192,7 +192,7 @@ public class ShoppingListController {
     @DeleteMapping("/{listId}/items/{itemId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteItem(
-            @PathVariable("listId") Long listId,
+            @ListRef Long listId,
             @PathVariable("itemId") Long itemId,
             DeviceCaller caller
     ) {
@@ -202,7 +202,7 @@ public class ShoppingListController {
     @DeleteMapping("/{listId}/items")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteAllItems(
-            @PathVariable("listId") Long listId,
+            @ListRef Long listId,
             DeviceCaller caller
     ) {
         service.deleteAllItems(listId, caller.accountId());
@@ -211,7 +211,7 @@ public class ShoppingListController {
     @DeleteMapping("/{listId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteList(
-            @PathVariable("listId") Long listId,
+            @ListRef Long listId,
             DeviceCaller caller
     ) {
         service.deleteList(listId, caller.accountId());

@@ -69,15 +69,11 @@ class SessionManager internal constructor(
             }
         }
 
-        return try {
-            open()
-        } catch (error: HttpException) {
-            if (error.code() != 401) throw error
-            // Ni stari broj telefona više ne otvara nalog: telefon je uklonjen
-            // ili je broj već zamenjen za sesiju koja je u međuvremenu pala.
-            identityStore.startOver()
-            open()
-        }
+        // Broj telefona je jedini put nazad do naloga i spiska, pa se ne baca
+        // ni kad otvaranje ne uspe. Server ga nikad ne odbija (uklonjen telefon
+        // istim brojem dobija nov nalog), pa odbijanje dolazi sa puta (Wi-Fi sa
+        // prijavom, proxy) i sledeći pokušaj vraća isti nalog.
+        return open()
     }
 
     private suspend fun open(): String = save(
