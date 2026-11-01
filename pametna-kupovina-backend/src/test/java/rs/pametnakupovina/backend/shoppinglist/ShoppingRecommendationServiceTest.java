@@ -344,6 +344,49 @@ class ShoppingRecommendationServiceTest {
     }
 
     @Test
+    void oneStopMissesWhatFewShopsSellRatherThanWhatEveryShopHas() {
+        ShoppingListRepository listRepository = mock(ShoppingListRepository.class);
+        NearbyStoreRepository nearbyRepository = mock(NearbyStoreRepository.class);
+        StoreShoppingOfferRepository offerRepository = mock(StoreShoppingOfferRepository.class);
+        RouteMatrixProvider routeProvider = mock(RouteMatrixProvider.class);
+        ShoppingRecommendationService service = new ShoppingRecommendationService(
+                listRepository, nearbyRepository, offerRepository, routeProvider,
+                new ShoppingOptimizationProperties(), markets());
+
+        ShoppingListItemResponse onion = item(1L, "Luk", 101L);
+        ShoppingListItemResponse catFood = item(2L, "Hrana za mačke", 102L);
+        ShoppingListItemResponse chips = item(3L, "Tortilja čips", 103L);
+        ShoppingListItemResponse salami = item(4L, "Parmezan salama", 104L);
+        when(listRepository.findById(10L)).thenReturn(Optional.of(new ShoppingListResponse(
+                10L, "Test korpa", OffsetDateTime.now(), OffsetDateTime.now(),
+                List.of(onion, catFood, chips, salami))));
+
+        // Seen on the copy 1.11.: two shops miss two items each, one onions
+        // and cat food, which every shop has, the other two rare ones.
+        NearbyStore rare = store(1L, "A");
+        NearbyStore usual = store(2L, "B");
+        NearbyStore other = store(3L, "C");
+        when(nearbyRepository.findPricingEligibleNearby(SERBIA, 44.0, 19.0, 15_000, 20))
+                .thenReturn(List.of(rare, usual, other));
+        when(offerRepository.findOffers(eq(10L), anyList(), eq(DATE), eq(true)))
+                .thenAnswer(call -> offersFor(call.getArgument(1), List.of(
+                        offer(rare, chips, 100, 1003L),
+                        offer(rare, salami, 100, 1004L),
+                        offer(usual, onion, 110, 2001L),
+                        offer(usual, catFood, 110, 2002L),
+                        offer(other, onion, 130, 3001L),
+                        offer(other, catFood, 130, 3002L)
+                )));
+        when(routeProvider.calculate(anyList())).thenReturn(routeMatrix(List.of(1L, 2L, 3L)));
+
+        ShoppingRecommendationResponse response = service.recommend(10L, 44.0, 19.0, DATE);
+
+        assertThat(response.singleStore().stores())
+                .extracting(RecommendationStoreResponse::storeId)
+                .containsExactly(2L);
+    }
+
+    @Test
     void importantExactCandidateBlocksOptimizationUntilConfirmed() {
         ShoppingListRepository listRepository =
                 mock(ShoppingListRepository.class);
