@@ -48,7 +48,9 @@ data class ShoppingListUiState(
     val isOffline: Boolean = false,
     val errorMessage: UiText? = null,
     val notice: UiText? = null,
-    val skippedItems: SkippedItems? = null
+    val skippedItems: SkippedItems? = null,
+    /** Upravo nalepljene stavke čiju vrstu server nije prepoznao (po ID-u na serveru). */
+    val pastedUnknownIds: Set<Long> = emptySet()
 )
 
 @HiltViewModel
@@ -141,6 +143,8 @@ class ShoppingListViewModel @Inject constructor(
         input: DraftItemInput,
         onSaved: () -> Unit
     ) {
+        // Izmenjena stavka više nije „neprepoznata iz nalepljenog spiska".
+        item.remoteId?.let { id -> _uiState.update { it.copy(pastedUnknownIds = it.pastedUnknownIds - id) } }
         mutate(onSaved) { repository.updateItem(item, input) }
     }
 
@@ -152,19 +156,38 @@ class ShoppingListViewModel @Inject constructor(
         mutate { repository.deleteAllItems() }
     }
 
-    fun pasteItems(text: String, onSaved: () -> Unit) {
+    /**
+     * [replace]: spisak se prvo isprazni („Zameni spisak"). Posle slanja
+     * poruka kaže koliko je prepoznato, a neprepoznate stavke idu na vrh.
+     */
+    fun pasteItems(text: String, replace: Boolean = false, onSaved: () -> Unit) {
         viewModelScope.launch {
             try {
-                val count = repository.pasteItems(text)
+                if (replace) repository.deleteAllItems()
+                val localIds = repository.pasteItems(text)
                 onSaved()
+                _uiState.update { it.copy(errorMessage = null, pastedUnknownIds = emptySet()) }
+                synchronizeSilently()
+                val added = uiPlural(R.plurals.count_items, localIds.size)
+                val reading = repository.pastedReading(localIds)
                 _uiState.update {
                     it.copy(
-                        notice = uiText(R.string.list_notice_added, uiPlural(R.plurals.count_items, count)),
-                        errorMessage = null
+                        notice = when {
+                            reading == null -> uiText(R.string.list_notice_added, added)
+                            reading.unknownRemoteIds.isEmpty() -> uiText(R.string.list_paste_notice_all, added)
+                            else -> uiPlural(
+                                R.plurals.list_paste_notice_unknown,
+                                reading.unknownRemoteIds.size,
+                                added,
+                                reading.recognized,
+                                reading.unknownRemoteIds.size
+                            )
+                        },
+                        pastedUnknownIds = reading?.unknownRemoteIds.orEmpty()
                     )
                 }
-                synchronizeSilently()
             } catch (error: Exception) {
+                if (error is CancellationException) throw error
                 _uiState.update {
                     it.copy(errorMessage = error.toUserMessage(R.string.list_error_paste_failed))
                 }

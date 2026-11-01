@@ -453,7 +453,7 @@ function itemAttention(item) {
   return '';
 }
 
-let listState = { list: null, adding: null, editing: null, rejected: null };
+let listState = { list: null, adding: null, editing: null, rejected: null, pasteAsk: null, pastedUnknown: new Set() };
 
 // Iste granice kao na serveru: količina 0,01–999, naziv koji se kuca do 80 znakova.
 const MIN_QUANTITY = 0.01;
@@ -728,6 +728,9 @@ function renderList() {
     saved.set('purchase', null);
     purchase = null;
   }
+  const pasteText = listState.pasteAsk ?? listState.rejected?.text ?? '';
+  // Upravo nalepljeno, a neprepoznato, stoji na vrhu dok se ne proveri.
+  const shown = [...items.filter(pastedUnknown), ...items.filter(item => !pastedUnknown(item))];
   const form = listState.adding === 'one'
     ? `<form class="card" data-form="add-one">
          <label class="label" for="one">Šta kupuješ</label>
@@ -737,9 +740,10 @@ function renderList() {
     : listState.adding === 'paste'
       ? `<form class="card" data-form="add-many">
            <label class="label" for="many">Nalepi spisak iz poruke ili beleške</label>
-           <textarea id="many" name="text" placeholder="mleko&#10;hleb&#10;ćevapi 3kg&#10;2x pivo" ${rejectedMark('many')}required>${esc(listState.rejected?.text || '')}</textarea>${rejectedNote()}
-           <div class="btn-row"><button type="button" class="btn" data-act="cancel-add">Odustani</button><button class="btn primary">Dodaj sve</button></div>
-         </form>`
+           <textarea id="many" name="text" placeholder="mleko&#10;hleb&#10;ćevapi 3kg&#10;2x pivo" aria-describedby="paste-preview" ${rejectedMark('many')}required>${esc(pasteText)}</textarea>${rejectedNote()}
+           <div id="paste-preview">${pastePreviewHtml(pasteText)}</div>
+           <div class="btn-row"><button type="button" class="btn" data-act="cancel-add">Odustani</button><button class="btn primary" ${paste(pasteText).some(line => !line.skipped) ? '' : 'disabled'}>Dodaj sve</button></div>
+         </form>` + pasteAskCard()
       : '';
   screen({
     title: 'Moj spisak',
@@ -753,11 +757,11 @@ function renderList() {
          <button class="btn tonal" data-act="add-many">${icon.paste}Nalepi spisak</button>
        </div>` + form + (listState.adding ? '' : salesShortcut()) +
       (items.length
-        ? `<div class="section">Stavke na spisku ${pill(items.length)}</div>` + duplicateNotice(items) + items.map(item => item.id === listState.editing ? itemEditor(item) : `
+        ? `<div class="section">Stavke na spisku ${pill(items.length)}</div>` + duplicateNotice(items) + shown.map(item => item.id === listState.editing ? itemEditor(item) : `
           <div class="card">
             <div class="row">
               <div class="grow" data-act="edit" data-id="${item.id}" role="button" tabindex="0" style="cursor:pointer" aria-label="Izmeni ${esc(item.name)}">
-                ${itemAttention(item)}
+                ${itemAttention(item) || (pastedUnknown(item) ? pill('Nije prepoznato', 'warn') : '')}
                 <div class="name">${esc(item.name)}</div>
                 ${item.note ? `<div class="muted small">${esc(item.note)}</div>` : ''}
                 ${itemRule(item) ? `<div class="muted small">${esc(itemRule(item))}</div>` : ''}
@@ -777,6 +781,126 @@ function renderList() {
   if (editing) editing.scrollIntoView({ block: 'nearest' });
 }
 
+// ---------- Nalepi spisak: pregled pre dodavanja ----------
+
+// Isto čitanje kao PastedListParser u Android aplikaciji (i ShoppingListTextParser
+// na serveru): „Kupi:“ je naslov, „(3)“ i „2x“ su količina, „za malog“ je beleška,
+// a red bez ijednog slova server ne prima. Samo za pregled; dodaje server.
+const paste = (() => {
+  const number = String.raw`\d+(?:[.,]\d+)?`;
+  const leading = new RegExp(String.raw`^(${number})\s*[x×]\s+(.+)$`, 'iu');
+  const trailing = new RegExp(String.raw`^(.+?)\s+[x×]\s*(${number})$`, 'iu');
+  const bullet = /^[\s*•·▪◦-]+/u;
+  const emoji = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{2300}-\u{23FF}\u{FE0E}\u{FE0F}\u{200D}\u{20E3}\u{E0020}-\u{E007F}]+/gu;
+  const heading = /^[^0-9:]{1,40}:$/u;
+  const headingBefore = /^(?:kupi(?:ti)?|spisak|lista|treba|potrebno|nabavka|market|prodavnica|купи(?:ти)?|списак|листа|треба|потребно|набавка)\s*:\s*(?=\S)/iu;
+  const approximately = /(?<![\p{L}0-9])(?:oko|otprilike|cca\.?|около|отприлике|~)\s*(?=[0-9])/giu;
+  const inBrackets = new RegExp(String.raw`\s*\(\s*(${number})\s*(?:kom(?:ad(?:a|i)?)?\.?|ком(?:ад(?:а|и)?)?\.?|pcs)?\s*\)`, 'iu');
+  const noteWords = '(?:malog|malu|male|mamu|tatu|baku|deku|dedu|decu|dete|sina|[cć]erku|[žz]enu|mu[žz]a'
+    + '|goste|gosta|kom[šs]ij[ue]|prijatelje|kuma|kumu|brata|sestru|nju|njega|sebe'
+    + '|utakmicu|ro[đd]j?endan|slavu|[žz]urku|proslavu|vikend|put|posao|[šs]kolu'
+    + '|vrti[ćc]|doru[čc]ak|ru[čc]ak|ve[čc]eru|u[žz]inu|sutra|danas|praznik'
+    + '|novu godinu|bo[žz]i[ćc]|uskrs)';
+  const note = new RegExp(String.raw`\s+(za\s+${noteWords}(?![\p{L}])[^0-9()]*?)(?=\s+[0-9]|\s*$)`, 'iu');
+  const noteInBrackets = /\s*\((\s*za\s+[^()]+?)\s*\)/iu;
+  const separator = /\s*[,;]\s+|\s*;\s*/u;
+  const word = /\p{L}{2,}/u;
+  const letter = /\p{L}/u;
+
+  const withoutEmoji = text => {
+    const stripped = text.replace(emoji, ' ');
+    return stripped === text ? text : stripped.replace(/\s{2,}/gu, ' ').trim();
+  };
+  const isHeading = line => {
+    const clean = withoutEmoji(line).replace(bullet, '').trim();
+    return heading.test(clean) && word.test(clean);
+  };
+  const cut = (text, match) => (text.slice(0, match.index) + text.slice(match.index + match[0].length)).trim();
+  function withNote(line) {
+    let rest = line;
+    let found = null;
+    const bracketed = noteInBrackets.exec(rest);
+    if (bracketed) { found = bracketed[1].trim(); rest = cut(rest, bracketed); }
+    const plain = note.exec(rest);
+    if (plain && word.test(rest.slice(0, plain.index))) { found = found ?? plain[1].trim(); rest = cut(rest, plain); }
+    return [rest, found];
+  }
+  function itemsOnLine(line) {
+    const parts = line.split(separator);
+    if (parts.length < 2 || parts.some(part => part.trim() && !word.test(part))) return [line];
+    return parts.map(part => part.trim()).filter(Boolean);
+  }
+  const toQuantity = text => { const value = Number(text.replace(',', '.')); return Number.isFinite(value) ? value : 1; };
+  function readLine(raw) {
+    const written = withoutEmoji(raw).replace(bullet, '').trim();
+    const [rest, found] = withNote(written.replace(approximately, ''));
+    const count = inBrackets.exec(rest);
+    const clean = count ? `${cut(rest, count)} x${count[1]}` : rest;
+    const first = leading.exec(clean);
+    const last = first ? null : trailing.exec(clean);
+    const name = (first ? first[2] : last ? last[1] : clean).trim();
+    const quantity = first ? toQuantity(first[1]) : last ? toQuantity(last[2]) : 1;
+    if (!name) return null;
+    if (!letter.test(name)) return { text: raw, skipped: 'letters' };
+    return { text: raw, name, quantity, note: found };
+  }
+
+  /** Svaki red kako će biti dodat: { name, quantity, note } ili { text, skipped }. */
+  return text => String(text || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean).flatMap(line => {
+    if (isHeading(line)) return [{ text: line, skipped: 'heading' }];
+    const match = headingBefore.exec(line);
+    const rest = match ? line.slice(match[0].length) : line;
+    const head = match ? [{ text: match[0].trim(), skipped: 'heading' }] : [];
+    return head.concat(itemsOnLine(rest).map(readLine).filter(Boolean));
+  });
+})();
+
+/** Ispod polja: koliko će biti dodato i kako je pročitan svaki red. */
+function pastePreviewHtml(text) {
+  const lines = paste(text);
+  const count = lines.filter(line => !line.skipped).length;
+  return `<p class="label">${count ? `Biće dodato: ${counted(count, 'stavka', 'stavke', 'stavki')}` : 'Nijedna stavka još nije upisana.'}</p>`
+    + (lines.length ? `<ul class="paste-preview">${lines.map(line => line.skipped
+      ? `<li class="skipped"><div class="grow"><s>${esc(line.text)}</s>
+           <div class="muted small">${line.skipped === 'heading' ? 'naslov, ne dodaje se' : 'nema slova, ne dodaje se'}</div></div></li>`
+      : `<li><div class="grow"><div>${esc(line.name)}</div>${line.note ? `<div class="muted small">Beleška: ${esc(line.note)}</div>` : ''}</div>
+           ${line.quantity !== 1 ? `<b class="amount">× ${esc(decimal(line.quantity))}</b>` : ''}</li>`).join('')}</ul>` : '');
+}
+
+function updatePastePreview(field) {
+  const box = view.querySelector('#paste-preview');
+  if (box) box.innerHTML = pastePreviewHtml(field.value);
+  const submit = field.form?.querySelector('button:not([type=button])');
+  if (submit) submit.disabled = !paste(field.value).some(line => !line.skipped);
+}
+
+/** Na spisku već ima stavki: prvo pitanje „Dodaj na spisak“ ili „Zameni spisak“. */
+async function submitPaste(text) {
+  if (listState.list.items.length && paste(text).some(line => !line.skipped)) {
+    listState.pasteAsk = text;
+    renderList();
+    view.querySelector('[data-act=paste-add]')?.focus();
+    return;
+  }
+  await addText(text);
+}
+
+function pasteAskCard() {
+  if (listState.adding !== 'paste' || listState.pasteAsk == null) return '';
+  const count = listState.list.items.length;
+  return `<div class="card" role="group" aria-labelledby="paste-ask-title">
+      <div class="name" id="paste-ask-title">Na spisku već ima ${counted(count, 'stavka', 'stavke', 'stavki')}</div>
+      <p class="muted">Nalepljene stavke možeš da dodaš uz postojeće ili da njima zameniš ceo spisak.</p>
+      <div class="btn-row">
+        <button class="btn" data-act="paste-ask-cancel">Odustani</button>
+        <button class="btn danger" data-act="paste-replace">Zameni spisak</button>
+        <button class="btn primary" data-act="paste-add">Dodaj na spisak</button>
+      </div></div>`;
+}
+
+/** Upravo nalepljena stavka čiju vrstu server nije prepoznao. */
+const pastedUnknown = item => listState.pastedUnknown.has(item.id) && item.matchingStatus !== 'CONFIRMED';
+
 const rejectedMark = id => listState.rejected ? `aria-invalid="true" aria-describedby="${id}-error" ` : '';
 
 /** Redovi koje server nije dodao ostaju u polju, a razlog svakog piše ispod njega. */
@@ -792,12 +916,23 @@ async function addText(text) {
   const listId = listState.list.id;
   const result = await api('POST', `shopping-lists/${listId}/items/paste`, { text });
   const rejected = result.rejectedLines || [];
+  // Iz polja „Nalepi spisak“ (i posle „Dodaj na spisak“ / „Zameni spisak“).
+  const pasted = listState.adding === 'paste';
+  if (pasted) {
+    listState.pastedUnknown = new Set((result.items || [])
+      .filter(item => item.matchingStatus !== 'CONFIRMED').map(item => item.id));
+  }
   listState.rejected = rejected.length ? { text: rejected.map(line => line.text).join('\n'), lines: rejected } : null;
   if (!rejected.length) listState.adding = null;
   listState.list = await api('GET', `shopping-lists/${listId}`);
   renderList();
-  const added = result.createdCount === 1 ? 'Dodato.'
-    : result.createdCount ? `Dodato: ${counted(result.createdCount, 'stavka', 'stavke', 'stavki')}.` : 'Nema stavki za dodavanje.';
+  const unknown = listState.pastedUnknown.size;
+  const read = !pasted || !result.createdCount ? ''
+    : !unknown ? ' Sve je prepoznato.'
+      : ` Prepoznato ${result.createdCount - unknown}, a ${unknown} ${plural(unknown, 'nije: stoji', 'nisu: stoje', 'nisu: stoje')}`
+        + ' na vrhu i traži se po nazivu kad klikneš Izračunaj.';
+  const added = (result.createdCount === 1 ? 'Dodato.'
+    : result.createdCount ? `Dodato: ${counted(result.createdCount, 'stavka', 'stavke', 'stavki')}.` : 'Nema stavki za dodavanje.') + read;
   toast(rejected.length ? `${added} Nije dodato: ${rejected.length}, razlog je ispod polja.` : added);
 }
 
@@ -1765,6 +1900,8 @@ document.addEventListener('input', event => {
     search.items = [];
     search.error = null;
     renderSearch();
+  } else if (field.id === 'many') {
+    updatePastePreview(field);
   } else if (field.id === 'pick-q' && picking) {
     picking.query = field.value;
     if (searchable(field.value)) return pickTyping.later(() => runPick(field.value));
@@ -2265,8 +2402,16 @@ function route() {
 const actions = {
   retry: () => route(),
   'add-one': () => { listState.adding = 'one'; listState.editing = null; listState.rejected = null; renderList(); },
-  'add-many': () => { listState.adding = 'paste'; listState.editing = null; listState.rejected = null; renderList(); },
-  'cancel-add': () => { listState.adding = null; listState.rejected = null; renderList(); },
+  'add-many': () => { listState.adding = 'paste'; listState.editing = null; listState.rejected = null; listState.pasteAsk = null; renderList(); },
+  'cancel-add': () => { listState.adding = null; listState.rejected = null; listState.pasteAsk = null; renderList(); },
+  'paste-ask-cancel': () => { listState.pasteAsk = null; renderList(); },
+  'paste-add': () => { const text = listState.pasteAsk; listState.pasteAsk = null; return addText(text); },
+  'paste-replace': async () => {
+    const text = listState.pasteAsk;
+    listState.pasteAsk = null;
+    await clearList();
+    return addText(text);
+  },
   edit: el => { listState.editing = Number(el.dataset.id); listState.adding = null; renderList(); },
   'cancel-edit': () => { listState.editing = null; renderList(); },
   delete: el => deleteItem(Number(el.dataset.id)),
@@ -2374,8 +2519,12 @@ const forms = {
     tripAmount(data, 'stop', tripCosts.maxCostPerStop),
     tripAmount(data, 'km', tripCosts.maxCostPerKm))),
   'add-one': data => addText(data.get('text')),
-  'add-many': data => addText(data.get('text')),
-  'edit-item': (data, form) => saveItem(Number(form.dataset.id), data),
+  'add-many': data => submitPaste(String(data.get('text') || '')),
+  'edit-item': (data, form) => {
+    // Izmenjena stavka više nije „neprepoznata iz nalepljenog spiska“.
+    listState.pastedUnknown.delete(Number(form.dataset.id));
+    return saveItem(Number(form.dataset.id), data);
+  },
   place: async data => {
     places.query = String(data.get('q') || '').trim();
     document.activeElement.blur();

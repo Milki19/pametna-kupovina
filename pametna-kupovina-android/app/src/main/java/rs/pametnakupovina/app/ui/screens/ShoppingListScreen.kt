@@ -273,7 +273,10 @@ fun ShoppingListScreen(
                         )
                     }
                 }
-                itemsIndexed(state.items, key = { _, item -> item.localId }) { index, item ->
+                // Upravo nalepljeno, a neprepoznato: na vrhu, dok se ne izabere proizvod.
+                val unknown = { item: DraftItemEntity -> pastedUnknown(item, state.pastedUnknownIds) }
+                val ordered = state.items.filter(unknown) + state.items.filterNot(unknown)
+                itemsIndexed(ordered, key = { _, item -> item.localId }) { index, item ->
                     val isNew = remember { settled && item.localId !in seen }
                     val visibility = remember { MutableTransitionState(!isNew) }
                     visibility.targetState = removingId != item.localId
@@ -295,6 +298,7 @@ fun ShoppingListScreen(
                     ) {
                         DraftItemRow(
                             item = item,
+                            notRecognized = unknown(item),
                             onEdit = { openEditor(item) },
                             onQuantity = { viewModel.changeQuantity(item, it) },
                             onDelete = { removingId = item.localId },
@@ -422,9 +426,10 @@ fun ShoppingListScreen(
 
     if (showPasteDialog) {
         PasteItemsDialog(
+            existingCount = state.items.size,
             onDismiss = { showPasteDialog = false },
-            onSave = { text ->
-                viewModel.pasteItems(text) { showPasteDialog = false }
+            onSave = { text, replace ->
+                viewModel.pasteItems(text, replace) { showPasteDialog = false }
             }
         )
     }
@@ -492,6 +497,7 @@ private fun EmptyList(modifier: Modifier = Modifier) {
 @Composable
 private fun DraftItemRow(
     item: DraftItemEntity,
+    notRecognized: Boolean,
     onEdit: () -> Unit,
     onQuantity: (Double) -> Unit,
     onDelete: () -> Unit,
@@ -503,6 +509,7 @@ private fun DraftItemRow(
         stringResource(R.string.list_status_not_sent) to StatusTone.ERROR
     } else {
         draftAttention(item.matchingStatus)?.let { (text, tone) -> stringResource(text) to tone }
+            ?: if (notRecognized) stringResource(R.string.list_status_not_recognized) to StatusTone.WARNING else null
     }
     val openPrices: (() -> Unit)? = item.canonicalProductId?.let { id -> { onOpenProduct(id) } }
         ?: item.productFamilyId
@@ -715,6 +722,11 @@ internal fun sameKindWords(first: String, second: String): Boolean {
         }
     }
 }
+
+/** Stavka iz upravo nalepljenog spiska čiju vrstu server nije prepoznao, i još nije izabrana. */
+internal fun pastedUnknown(item: DraftItemEntity, unknownRemoteIds: Set<Long>): Boolean =
+    item.remoteId != null && item.remoteId in unknownRemoteIds &&
+        item.matchingStatus != "CONFIRMED" && item.syncError == null
 
 private fun draftAttention(status: String): Pair<Int, StatusTone>? = when (status) {
     "NEEDS_CONFIRMATION" -> R.string.list_status_needs_confirmation to StatusTone.WARNING

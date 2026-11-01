@@ -65,6 +65,13 @@ import rs.pametnakupovina.app.data.similarItem
 import rs.pametnakupovina.app.data.similarKind
 import androidx.compose.ui.platform.testTag
 import rs.pametnakupovina.app.data.PastedListParser
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.unit.dp
+import rs.pametnakupovina.app.data.PastePreviewLine
+import rs.pametnakupovina.app.data.SkipReason
+import rs.pametnakupovina.app.ui.decimal
 
 /** The unit a person writes an amount in, mapped onto the one the server stores. */
 internal enum class AmountUnit(
@@ -622,14 +629,22 @@ private fun QuantityStepper(
     }
 }
 
+/**
+ * Polje za nalepljen spisak, a ispod njega svaki red onako kako će biti
+ * dodat: naziv, količina i beleška, a naslov i red bez slova precrtani. Kad
+ * na spisku već ima stavki, pre dodavanja se pita: dodaj ili zameni.
+ */
 @Composable
 internal fun PasteItemsDialog(
+    existingCount: Int,
     onDismiss: () -> Unit,
-    onSave: (String) -> Unit
+    onSave: (text: String, replace: Boolean) -> Unit
 ) {
     var text by rememberSaveable { mutableStateOf("") }
-    // Isto brojanje kao pri dodavanju: „Mleko, hleb, jaja" su tri stavke.
-    val lineCount = PastedListParser.parse(text).size
+    var askReplace by rememberSaveable { mutableStateOf(false) }
+    // Isto čitanje kao pri dodavanju: „Mleko, hleb, jaja" su tri stavke.
+    val preview = remember(text) { PastedListParser.preview(text) }
+    val lineCount = preview.count { it is PastePreviewLine.Item }
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
 
@@ -637,7 +652,7 @@ internal fun PasteItemsDialog(
         title = stringResource(R.string.list_paste_list),
         confirmLabel = stringResource(R.string.list_paste_add_all),
         confirmEnabled = lineCount > 0,
-        onConfirm = { onSave(text) },
+        onConfirm = { if (existingCount > 0) askReplace = true else onSave(text, false) },
         onDismiss = onDismiss
     ) { padding ->
         Column(
@@ -673,9 +688,106 @@ internal fun PasteItemsDialog(
                         pluralStringResource(R.plurals.count_items, lineCount, lineCount)
                     )
                 },
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(bottom = AppSpacing.md)
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.padding(bottom = if (preview.isEmpty()) AppSpacing.md else 0.dp)
+            )
+            if (preview.isNotEmpty()) {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .testTag("paste-preview"),
+                    contentPadding = PaddingValues(bottom = AppSpacing.md),
+                    verticalArrangement = Arrangement.spacedBy(AppSpacing.sm)
+                ) {
+                    items(preview) { line -> PastePreviewRow(line) }
+                }
+            }
+        }
+    }
+
+    if (askReplace) {
+        AlertDialog(
+            onDismissRequest = { askReplace = false },
+            title = {
+                Text(
+                    stringResource(
+                        R.string.list_paste_replace_title,
+                        pluralStringResource(R.plurals.count_items, existingCount, existingCount)
+                    )
+                )
+            },
+            text = { Text(stringResource(R.string.list_paste_replace_text)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        askReplace = false
+                        onSave(text, false)
+                    },
+                    modifier = Modifier.testTag("paste-add")
+                ) { Text(stringResource(R.string.list_paste_replace_add)) }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        askReplace = false
+                        onSave(text, true)
+                    },
+                    modifier = Modifier.testTag("paste-replace")
+                ) {
+                    Text(
+                        stringResource(R.string.list_paste_replace_replace),
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        )
+    }
+}
+
+/** Jedan red pregleda: stavka sa količinom i beleškom, ili precrtan red koji se ne dodaje. */
+@Composable
+private fun PastePreviewRow(line: PastePreviewLine) {
+    when (line) {
+        is PastePreviewLine.Item -> Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(AppSpacing.md)
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(line.line.name, style = MaterialTheme.typography.bodyLarge)
+                line.note?.let { note ->
+                    Text(
+                        stringResource(R.string.list_paste_preview_note, note),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            if (line.line.quantity != 1.0) {
+                Text(
+                    stringResource(R.string.list_paste_preview_quantity, decimal(line.line.quantity)),
+                    style = MaterialTheme.typography.titleSmall
+                )
+            }
+        }
+
+        is PastePreviewLine.Skipped -> Column(modifier = Modifier.fillMaxWidth()) {
+            Text(
+                line.text,
+                style = MaterialTheme.typography.bodyLarge,
+                textDecoration = TextDecoration.LineThrough,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                stringResource(
+                    when (line.reason) {
+                        SkipReason.HEADING -> R.string.list_paste_skipped_heading
+                        SkipReason.NO_LETTERS -> R.string.list_paste_skipped_no_letters
+                    }
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }

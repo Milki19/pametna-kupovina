@@ -106,5 +106,43 @@ class PastedListParserTest {
 
         assertEquals(listOf("mleko", "hleb"), result.map { it.name })
     }
-}
 
+    @Test
+    fun `red bez slova se ne dodaje, kao na serveru`() {
+        val result = PastedListParser.parse("mleko\n%%%###\n!!!")
+
+        assertEquals(listOf("mleko"), result.map { it.name })
+    }
+
+    @Test
+    fun `pregled pokazuje svaki red kako ce biti dodat`() {
+        val preview = PastedListParser.preview(
+            "Kupi:\n- jogurt (3)\npiletina oko 1 kg\nčokolada za malog\n%%%\nSpisak: mleko, hleb"
+        )
+
+        assertEquals(
+            listOf(
+                PastePreviewLine.Skipped("Kupi:", SkipReason.HEADING),
+                PastePreviewLine.Item(ParsedDraftLine("jogurt", "- jogurt (3)", 3.0), null),
+                PastePreviewLine.Item(ParsedDraftLine("piletina 1 kg", "piletina oko 1 kg", 1.0), null),
+                PastePreviewLine.Item(ParsedDraftLine("čokolada", "čokolada za malog", 1.0), "za malog"),
+                PastePreviewLine.Skipped("%%%", SkipReason.NO_LETTERS),
+                PastePreviewLine.Skipped("Spisak:", SkipReason.HEADING),
+                PastePreviewLine.Item(ParsedDraftLine("mleko", "mleko", 1.0), null),
+                PastePreviewLine.Item(ParsedDraftLine("hleb", "hleb", 1.0), null)
+            ),
+            preview
+        )
+    }
+
+    @Test
+    fun `pregled i dodavanje broje iste stavke`() {
+        val text = "Kupi: mleko, hleb, jaja\n2x pivo\n🥛\n###"
+
+        assertEquals(
+            PastedListParser.parse(text),
+            PastedListParser.preview(text).filterIsInstance<PastePreviewLine.Item>().map { it.line }
+        )
+        assertEquals(4, PastedListParser.parse(text).size)
+    }
+}

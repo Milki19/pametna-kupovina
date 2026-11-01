@@ -6,6 +6,29 @@ data class ParsedDraftLine(
     val quantity: Double
 )
 
+/**
+ * Jedan red iz polja „Nalepi spisak" kako će biti pročitan, za pregled pre
+ * dodavanja: stavka sa količinom i beleškom, ili red koji se ne dodaje.
+ */
+sealed interface PastePreviewLine {
+    /** Red (ili deo reda) kako je napisan. */
+    val text: String
+
+    data class Item(val line: ParsedDraftLine, val note: String?) : PastePreviewLine {
+        override val text: String get() = line.rawInput
+    }
+
+    data class Skipped(override val text: String, val reason: SkipReason) : PastePreviewLine
+}
+
+enum class SkipReason {
+    /** „Kupi:", „Spisak za vikend:" — naslov poruke, ne stavka. */
+    HEADING,
+
+    /** „%%%###" — server ne prima red bez ijednog slova. */
+    NO_LETTERS
+}
+
 object PastedListParser {
     private val leadingQuantity = Regex(
         "^($DECIMAL_NUMBER)\\s*[x×]\\s+(.+)$",
@@ -89,40 +112,63 @@ object PastedListParser {
         return parts.map(String::trim).filter(String::isNotBlank)
     }
 
-    fun parse(text: String): List<ParsedDraftLine> = text
+    private val letter = Regex("\\p{L}")
+
+    fun parse(text: String): List<ParsedDraftLine> =
+        preview(text).filterIsInstance<PastePreviewLine.Item>().map { it.line }
+
+    /**
+     * Svaki red onako kako će biti dodat, istim pravilima kao [parse]: naslov
+     * („Kupi:") i red bez slova su preskočeni, a ostalo je stavka.
+     */
+    fun preview(text: String): List<PastePreviewLine> = text
         .lineSequence()
         .map(String::trim)
         .filter(String::isNotBlank)
-        .filterNot(::isHeading)
-        .flatMap { itemsOnLine(withoutHeading(it)) }
-        .map { rawLine ->
-            val written = withoutEmoji(rawLine).replace(bullet, "").trim()
-            val clean = countFromBrackets(withNote(approximately.replace(written, "")).first)
-            val leading = leadingQuantity.matchEntire(clean)
-            val trailing = trailingQuantity.matchEntire(clean)
-
-            when {
-                leading != null -> ParsedDraftLine(
-                    name = leading.groupValues[2].trim(),
-                    rawInput = rawLine,
-                    quantity = leading.groupValues[1].toQuantity()
-                )
-
-                trailing != null -> ParsedDraftLine(
-                    name = trailing.groupValues[1].trim(),
-                    rawInput = rawLine,
-                    quantity = trailing.groupValues[2].toQuantity()
-                )
-
-                else -> ParsedDraftLine(
-                    name = clean,
-                    rawInput = rawLine,
-                    quantity = 1.0
-                )
+        .flatMap { line ->
+            if (isHeading(line)) {
+                return@flatMap sequenceOf(PastePreviewLine.Skipped(line, SkipReason.HEADING))
             }
+            val rest = withoutHeading(line)
+            val heading = line.substring(0, line.length - rest.length).trim()
+                .takeIf(String::isNotEmpty)
+                ?.let { PastePreviewLine.Skipped(it, SkipReason.HEADING) }
+            listOfNotNull(heading).asSequence() + itemsOnLine(rest).asSequence().mapNotNull(::readLine)
         }
-        .filter { it.name.isNotBlank() }
         .toList()
+
+    private fun readLine(rawLine: String): PastePreviewLine? {
+        val written = withoutEmoji(rawLine).replace(bullet, "").trim()
+        val (withoutNote, note) = withNote(approximately.replace(written, ""))
+        val clean = countFromBrackets(withoutNote)
+        val leading = leadingQuantity.matchEntire(clean)
+        val trailing = trailingQuantity.matchEntire(clean)
+
+        val line = when {
+            leading != null -> ParsedDraftLine(
+                name = leading.groupValues[2].trim(),
+                rawInput = rawLine,
+                quantity = leading.groupValues[1].toQuantity()
+            )
+
+            trailing != null -> ParsedDraftLine(
+                name = trailing.groupValues[1].trim(),
+                rawInput = rawLine,
+                quantity = trailing.groupValues[2].toQuantity()
+            )
+
+            else -> ParsedDraftLine(
+                name = clean,
+                rawInput = rawLine,
+                quantity = 1.0
+            )
+        }
+        return when {
+            line.name.isBlank() -> null
+            !letter.containsMatchIn(line.name) -> PastePreviewLine.Skipped(rawLine, SkipReason.NO_LETTERS)
+            else -> PastePreviewLine.Item(line, note)
+        }
+    }
 
     // "0x hleb" stays 0, so the server refuses that row with its reason and
     // the row is marked, instead of quietly becoming one loaf.
