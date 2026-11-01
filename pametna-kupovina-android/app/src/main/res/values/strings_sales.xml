@@ -3,8 +3,11 @@
     <!-- Products on sale -->
     <string name="sale_title">Akcije</string>
     <string name="sale_shortcut_text">Šta je danas na popustu u radnjama blizu tebe</string>
-    <string name="sale_nearby_subtitle">Radnje do 10 km od tebe</string>
-    <string name="sale_scope_near">Blizu mene</string>
+    <string name="sale_nearby_subtitle">Radnje do %1$s od tebe</string>
+    <string name="sale_near_origin_subtitle">Blizu: %1$s · do %2$s</string>
+    <string name="sale_origin_unnamed">polazna tačka</string>
+    <string name="sale_sort_nearest">Najbliže</string>
+    <string name="sale_all_retailers">Svi</string>
     <string name="sale_scope_all">Svi lanci</string>
     <string name="sale_loading">Učitavam akcije…</string>
     <string name="sale_load_error">Akcije trenutno nisu dostupne.</string>

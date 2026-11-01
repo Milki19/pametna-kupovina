@@ -3,8 +3,11 @@
     <!-- Products on sale -->
     <string name="sale_title">On sale</string>
     <string name="sale_shortcut_text">What is discounted today in shops near you</string>
-    <string name="sale_nearby_subtitle">Shops within 10 km of you</string>
-    <string name="sale_scope_near">Near me</string>
+    <string name="sale_nearby_subtitle">Shops within %1$s of you</string>
+    <string name="sale_near_origin_subtitle">Near: %1$s · within %2$s</string>
+    <string name="sale_origin_unnamed">starting point</string>
+    <string name="sale_sort_nearest">Nearest</string>
+    <string name="sale_all_retailers">All</string>
     <string name="sale_scope_all">All chains</string>
     <string name="sale_loading">Loading sales…</string>
     <string name="sale_load_error">Sales are not available right now.</string>

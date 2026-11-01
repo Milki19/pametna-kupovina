@@ -302,14 +302,19 @@ class ShoppingRepository @Inject constructor(
         sort: rs.pametnakupovina.app.data.network.SaleSortDto,
         page: Int,
         limit: Int,
-        near: Coordinates?
+        near: Coordinates?,
+        retailer: String? = null,
+        radiusMeters: Int? = null
     ): rs.pametnakupovina.app.data.network.SalePageDto = api.getSales(
         category = category,
+        retailer = retailer,
         sort = sort,
         page = page,
         limit = limit,
         latitude = near?.latitude,
-        longitude = near?.longitude
+        longitude = near?.longitude,
+        // Krug ima smisla samo uz mesto.
+        radiusMeters = radiusMeters.takeIf { near != null }
     )
 
     suspend fun getProductDetails(

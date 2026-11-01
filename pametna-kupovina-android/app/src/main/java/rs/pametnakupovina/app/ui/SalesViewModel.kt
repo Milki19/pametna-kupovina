@@ -16,6 +16,9 @@ import rs.pametnakupovina.app.data.DraftItemInput
 import rs.pametnakupovina.app.data.ShoppingRepository
 import rs.pametnakupovina.app.data.network.SaleCategoryDto
 import rs.pametnakupovina.app.data.network.SaleItemDto
+import rs.pametnakupovina.app.data.network.SaleRetailerDto
+import rs.pametnakupovina.app.data.preferences.SaleRadius
+import rs.pametnakupovina.app.data.preferences.SaleRadiusStore
 import rs.pametnakupovina.app.data.network.SaleSortDto
 import rs.pametnakupovina.app.data.network.ShoppingItemRuleDto
 import rs.pametnakupovina.app.location.Coordinates
@@ -34,11 +37,18 @@ data class SalesUiState(
     val page: Int = 0,
     val totalElements: Long = 0,
     val hasNext: Boolean = false,
-    // Server je znao gde je kupac, pa su na spisku samo lanci u blizini.
+    // Server je znao gde je kupac, pa su na spisku samo lanci u krugu.
     val nearby: Boolean = false,
-    // Lokacija je poznata, pa kupac bira između radnji u blizini i svih lanaca.
+    // Mesto je poznato (telefon ili polazna tačka plana), pa kupac bira krug.
     val located: Boolean = false,
-    val allChains: Boolean = false,
+    val radius: SaleRadius = SaleRadius.DEFAULT,
+    // Bez lokacije telefona krug se meri od polazne tačke plana; ovo je njena adresa.
+    val fromOrigin: Boolean = false,
+    val originLabel: String? = null,
+    // Lanci sa akcijama u krugu, sa brojem proizvoda; stižu uz prvu stranu.
+    val retailers: List<SaleRetailerDto> = emptyList(),
+    val retailer: String? = null,
+    val retailerName: String? = null,
     val errorMessage: UiText? = null,
     val notice: UiText? = null,
     // Proizvodi koji su već na spisku, odakle god da su dodati.
@@ -49,14 +59,18 @@ data class SalesUiState(
 class SalesViewModel @Inject constructor(
     private val repository: ShoppingRepository,
     private val locationProvider: FusedLocationProvider,
-    private val syncScheduler: SyncScheduler
+    private val syncScheduler: SyncScheduler,
+    private val radiusStore: SaleRadiusStore
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SalesUiState())
     val uiState: StateFlow<SalesUiState> = _uiState.asStateFlow()
 
-    private var near: Coordinates? = null
-    private var nearAsked = false
+    // Lokacija telefona se traži jednom; polazna tačka plana je rezerva.
+    private var phoneNear: Coordinates? = null
+    private var phoneAsked = false
+    private var origin: Coordinates? = null
+    private var originLabel: String? = null
     private var loadJob: Job? = null
     private var unlocatedChains: Set<String>? = null
 
@@ -70,7 +84,17 @@ class SalesViewModel @Inject constructor(
         }
 
     init {
-        load()
+        viewModelScope.launch {
+            val radius = try {
+                radiusStore.radius()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                SaleRadius.DEFAULT
+            }
+            _uiState.update { it.copy(radius = radius) }
+            load()
+        }
         // „Na spisku" važi dok je proizvod na spisku, i kad se ekran ponovo otvori.
         viewModelScope.launch {
             repository.draftItems.collect { items ->
@@ -93,10 +117,48 @@ class SalesViewModel @Inject constructor(
         load()
     }
 
-    fun chooseAllChains(all: Boolean) {
-        if (all == _uiState.value.allChains) return
-        _uiState.update { it.copy(allChains = all) }
+    fun chooseRadius(radius: SaleRadius) {
+        if (radius == _uiState.value.radius) return
+        _uiState.update {
+            it.copy(
+                radius = radius,
+                // „Najbliže" bez kruga nema smisla, pa ni čip.
+                sort = if (radius == SaleRadius.ALL && it.sort == SaleSortDto.NEAREST) SaleSortDto.DISCOUNT else it.sort
+            )
+        }
+        viewModelScope.launch {
+            try {
+                radiusStore.choose(radius)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                // Izbor važi i kad ne može da se zapamti.
+            }
+        }
         load()
+    }
+
+    fun chooseRetailer(retailer: SaleRetailerDto?) {
+        if (retailer?.code == _uiState.value.retailer) return
+        _uiState.update { it.copy(retailer = retailer?.code, retailerName = retailer?.name) }
+        load()
+    }
+
+    /**
+     * Polazna tačka iz plana, kad telefon ne da lokaciju. Zaokružuje se na
+     * ~1 km, kao lokacija telefona: za krug je to dovoljno.
+     */
+    fun useOrigin(latitude: Double?, longitude: Double?, label: String?) {
+        val next = if (latitude != null && longitude != null) {
+            Coordinates(roughly(latitude), roughly(longitude))
+        } else {
+            null
+        }
+        if (next == origin && label == originLabel) return
+        origin = next
+        originLabel = label
+        // Dok se lokacija telefona još traži, fetch će sam uzeti polaznu tačku.
+        if (phoneAsked && phoneNear == null) load()
     }
 
     fun retry() = load()
@@ -160,16 +222,20 @@ class SalesViewModel @Inject constructor(
         val asked = _uiState.value
         loadJob = viewModelScope.launch {
             try {
-                if (!nearAsked) {
-                    nearAsked = true
-                    near = locationProvider.nearbyLocation()
+                if (!phoneAsked) {
+                    phoneNear = locationProvider.nearbyLocation()
+                    phoneAsked = true
                 }
+                val near = phoneNear ?: origin
+                val fromOrigin = phoneNear == null && origin != null
                 val response = repository.sales(
                     category = asked.category,
                     sort = asked.sort,
                     page = page,
                     limit = PAGE_SIZE,
-                    near = near.takeUnless { asked.allChains }
+                    near = near.takeUnless { asked.radius == SaleRadius.ALL },
+                    retailer = asked.retailer,
+                    radiusMeters = asked.radius.meters
                 )
                 _uiState.update { current ->
                     current.copy(
@@ -179,11 +245,14 @@ class SalesViewModel @Inject constructor(
                             else (current.items + response.items).distinctBy { it.productFamilyId },
                         // Kategorije stižu samo uz prvu stranu.
                         categories = if (page == 0) response.categories else current.categories,
+                        retailers = if (page == 0) response.retailers else current.retailers,
                         page = response.page,
                         totalElements = response.totalElements,
                         hasNext = response.hasNext,
                         nearby = response.nearbyChecked,
-                        located = near != null
+                        located = near != null,
+                        fromOrigin = fromOrigin,
+                        originLabel = originLabel.takeIf { fromOrigin }
                     )
                 }
             } catch (error: CancellationException) {
@@ -202,5 +271,7 @@ class SalesViewModel @Inject constructor(
 
     private companion object {
         const val PAGE_SIZE = 20
+
+        fun roughly(degrees: Double) = Math.round(degrees * 100) / 100.0
     }
 }

@@ -170,7 +170,10 @@ data class SalePageDto(
     val hasNext: Boolean,
     val items: List<SaleItemDto> = emptyList(),
     val categories: List<SaleCategoryDto> = emptyList(),
-    val nearbyChecked: Boolean = false
+    val nearbyChecked: Boolean = false,
+    // Stariji server ih ne šalje: tada nema reda sa lancima.
+    val retailers: List<SaleRetailerDto> = emptyList(),
+    val radiusMeters: Int? = null
 )
 
 /** Samo ono što spisku treba: koji proizvodi pripadaju porodici. */
@@ -214,10 +217,19 @@ data class SaleCategoryDto(
 )
 
 @Serializable
+data class SaleRetailerDto(
+    val code: String,
+    val name: String,
+    val productCount: Int,
+    val nearestStoreMeters: Double? = null
+)
+
+@Serializable
 enum class SaleSortDto {
     DISCOUNT,
     SAVING,
-    PRICE
+    PRICE,
+    NEAREST
 }
 
 @Serializable
