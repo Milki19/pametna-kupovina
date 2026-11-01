@@ -440,6 +440,8 @@ class PametnaKupovinaBackendApplicationTests {
     void cleanBusinessData() {
         jdbcClient.sql("""
                         TRUNCATE TABLE
+                            app.product_choice_change,
+                            app.web_timing,
                             app.loyalty_card,
                             app.receipt_item,
                             app.receipt,

@@ -33,6 +33,8 @@ public class ShoppingListService {
     private final ProductNameNormalizer productNameNormalizer;
     private final ShoppingIntentResolver shoppingIntentResolver;
     private final ShoppingLineInterpreter lineInterpreter;
+    /** Null in unit tests that build the service by hand. */
+    private final ProductChoiceLog productChoiceLog;
 
     public ShoppingListService(
             ShoppingListRepository repository,
@@ -41,11 +43,24 @@ public class ShoppingListService {
             ShoppingIntentResolver shoppingIntentResolver,
             ShoppingLineInterpreter lineInterpreter
     ) {
+        this(repository, textParser, productNameNormalizer, shoppingIntentResolver, lineInterpreter, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public ShoppingListService(
+            ShoppingListRepository repository,
+            ShoppingListTextParser textParser,
+            ProductNameNormalizer productNameNormalizer,
+            ShoppingIntentResolver shoppingIntentResolver,
+            ShoppingLineInterpreter lineInterpreter,
+            ProductChoiceLog productChoiceLog
+    ) {
         this.repository = repository;
         this.textParser = textParser;
         this.productNameNormalizer = productNameNormalizer;
         this.shoppingIntentResolver = shoppingIntentResolver;
         this.lineInterpreter = lineInterpreter;
+        this.productChoiceLog = productChoiceLog;
     }
 
     @Transactional
@@ -438,6 +453,15 @@ public class ShoppingListService {
                                 ? null
                                 : request.flexibleConstraints()
                 );
+
+        if (productChoiceLog != null) {
+            productChoiceLog.beforeEdit(
+                    listId,
+                    repository.findItemById(listId, itemId).orElse(null),
+                    matchingRule == ShoppingItemRule.EXACT_PRODUCT ? canonicalProductId : null,
+                    matchingRule == ShoppingItemRule.PRODUCT_FAMILY ? productFamilyId : null
+            );
+        }
 
         ShoppingListItemResponse updatedItem =
                 repository.updateItem(

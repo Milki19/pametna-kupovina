@@ -1,4 +1,17 @@
-# Polazne tačke za merenje. trziste je app.market.code.
-trziste	grad	latitude	longitude
-RS	Beograd	44.8176	20.4569
-RS	Novi Sad	45.2551	19.8452
+# Polazne tačke za merenje (centar grada). trziste je app.market.code.
+# osnovni=da: tu se meri i stari skup bez grada (RS-sr.tsv). Za spiskove (kolona grad) se meri samo grad spiska.
+trziste	grad	latitude	longitude	osnovni
+RS	Beograd	44.8176	20.4569	da
+RS	Novi Sad	45.2551	19.8452	da
+RS	Niš	43.3209	21.8958	ne
+RS	Kragujevac	44.0128	20.9114	ne
+RS	Subotica	46.1003	19.6658	ne
+RS	Zrenjanin	45.3815	20.3906	ne
+RS	Pančevo	44.8708	20.6403	ne
+RS	Čačak	43.8914	20.3497	ne
+RS	Kraljevo	43.7238	20.6873	ne
+RS	Šabac	44.7489	19.6908	ne
+RS	Valjevo	44.2711	19.8903	ne
+RS	Smederevo	44.6628	20.9300	ne
+RS	Leskovac	42.9981	21.9461	ne
+RS	Novi Pazar	43.1367	20.5122	ne

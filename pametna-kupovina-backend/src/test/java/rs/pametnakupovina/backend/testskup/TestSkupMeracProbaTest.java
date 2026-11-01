@@ -20,8 +20,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * The measurement itself only runs against a copy of the real database, so
  * CI walks it once over an empty catalogue: every line goes through step 1
- * and both plans without an error, the report lists all of them as not
- * found, and nothing of the run is left behind.
+ * and both plans without an error, the report lists none of them in the
+ * plan, and nothing of the run is left behind.
  */
 @SpringBootTest(properties = "price-import.minimum-snapshot-date=")
 @Testcontainers
@@ -52,11 +52,31 @@ class TestSkupMeracProbaTest {
         TestSkupMerac.Ishod ishod = merac.meri(skup, dir);
 
         String report = Files.readString(ishod.izvestaj());
-        assertThat(report).contains("| Beograd | 0/" + skup.stavke().size())
-                .contains("| Novi Sad | 0/" + skup.stavke().size());
+        int beograd = skup.u("Beograd").size();
+        assertThat(report).contains("| Beograd | " + beograd + " | ")
+                .contains("| " + "0/" + beograd + " (0%) |")
+                .contains("| Novi Sad | " + skup.u("Novi Sad").size() + " | ");
         skup.stavke().forEach(stavka -> assertThat(report).contains("| " + stavka.id() + " |"));
         assertThat(ishod.prepoznato()).containsEntry("Beograd", 0.0).containsEntry("Novi Sad", 0.0);
+        // Kinds come with the migrations, so step 1 reads lines even without a single product.
+        assertThat(ishod.korak1()).containsKeys("Beograd", "Novi Sad");
         assertThat(jdbcClient.sql("SELECT COUNT(*) FROM app.shopping_list WHERE active").query(Long.class).single())
                 .isZero();
+    }
+
+    /** The blind part's report is only totals: no line, id or product of it may be read there. */
+    @Test
+    void theBlindReportShowsNoLine(@TempDir Path dir) throws IOException {
+        TestSkup skup = TestSkup.load("RS", "sr", "test-skup/primer-spiskovi.tsv");
+
+        TestSkupMerac.Ishod ishod = merac.meri(skup, dir, true);
+
+        String report = Files.readString(ishod.izvestaj());
+        assertThat(report).contains("slepi deo").contains("| Niš | ");
+        skup.stavke().forEach(stavka -> assertThat(report).doesNotContain(stavka.id()).doesNotContain(stavka.tekst()));
+        try (var files = Files.list(dir)) {
+            assertThat(files).containsExactly(ishod.izvestaj());
+        }
+        assertThat(ishod.citanje()).isNotNull();
     }
 }

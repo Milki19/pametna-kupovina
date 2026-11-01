@@ -1,0 +1,15 @@
+# Primer oblika za prave spiskove (slepi skup). Jedan red = jedna linija spiska, tačno kako je napisana.
+# spisak: oznaka pravog spiska (linije istog spiska se mere zajedno, kao jedan spisak u aplikaciji). grad: grad iz lokacije.tsv.
+# izvor: odakle je spisak (VIBER, PORODICA, PAPIR, PRIJATELJ...). kolicina: šta linija traži ukupno ("500 g", "1,5 kg", "2 l", "3 kom", "6 x 1,5 l"); "-" kad linija nema količinu; prazno = ne proverava se.
+# prihvatljivo i nije: regex nad normalizovanim nazivom proizvoda (mala slova, bez kvačica, đ=dj, broj i jedinica razdvojeni). max_pakovanja: prazno = bez provere.
+id	spisak	grad	izvor	tekst	kolicina	prihvatljivo	nije	max_pakovanja	opis
+P01	primer-1	Beograd	VIBER	mleko 2l	2000 ml	\bmleko\b	cokolad|kakao|kokos|badem|\bsoj|ovsen|pirin|u prahu|kondenz|kiselo|jogurt|kafa|bebe|biljn	2	Kravlje mleko, ukupno 2 l (jedno od 2 l ili dva od 1 l).
+P02	primer-1	Beograd	VIBER	hleb	-	\bhleb\b|\bvekn	mrvic|prezl|\btost|tortilj|lepinj|dvopek		Beli hleb.
+P03	primer-1	Beograd	VIBER	6 jaja L	6 kom	\bjaj[ae]\b|\bjaja\b	prepelic|cokolad|kinder|testenin|organsk|\bbio\b	1	Šest kokošjih jaja veličine L. Nisu organska jaja.
+P04	primer-1	Beograd	VIBER	toalet papir 10 rolni	10 kom	toalet(ni)? papir|\bwc papir	vlazn|maramic|kuhinjsk|ubrus	2	Toalet papir, pakovanje od 10 rolni (ili dva od 5).
+P05	primer-1	Beograd	VIBER	parmezan	-	parmezan|parmigiano|grana padano	salam|kobasic|cips|kreker|sos\b|pesto		Sir parmezan (ili grana padano). Nije salama sa parmezanom.
+P06	primer-2	Niš	PORODICA	pola kile sira	500 g	\bsir\b|\bsira\b|trapist|gauda|edamer|\bfeta\b	sirup|sirce|smoki|cips|kokice|namaz|topljen	2	Beli sir ili trapist, oko 0,5 kg.
+P07	primer-2	Niš	PORODICA	energetsko piće 4	4 kom	energ|red bull|monster|hell|guarana	cokolad|cips|bombon|zvak	4	Četiri limenke energetskog pića.
+P08	primer-2	Niš	PORODICA	voda 6x1,5l	6 x 1,5 l	\bvod[ae]\b|rosa|aqua viva|knjaz|prolom|heba	gazir|kisel|mineral|ukus|vitamin|tonik|micelar|toalet|kolonj	2	Negazirana voda, paket 6 × 1,5 l.
+P09	primer-2	Niš	PORODICA	tortilje	-	tortilj	cips|nachos|nacos|grickal		Tortilje (pšenične ili kukuruzne) za savijanje. Nije tortilja čips.
+P10	primer-2	Niš	PORODICA	persil prasak 4,5kg	4500 g	persil	discs|kapsul|caps|gel|tecn|omeksiv	2	Persil prašak za veš, oko 4,5 kg. Nisu kapsule (Discs) ni tečni.
