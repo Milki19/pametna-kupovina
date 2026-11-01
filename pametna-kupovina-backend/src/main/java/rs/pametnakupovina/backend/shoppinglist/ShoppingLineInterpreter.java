@@ -62,17 +62,25 @@ public class ShoppingLineInterpreter {
         // The words as a dictionary has them, where the kind sits among them:
         // "mlevenog mesa" holds "meso" only once read as "mleveno meso".
         String kindPhrase = name;
+        // The same words as the shopper writes them, for the list to show.
+        String kindWords = name;
 
         if (intent == null || !intent.exactAlias()) {
             Optional<ShoppingIntentResolver.FormMatch> form =
                     intentResolver.resolveForms(name);
+            // The kind as the shopper writes it, not as the dictionary keeps
+            // it: "mlevenog mesa" was shown as "Kategorija mlevenog meso"
+            // and "mleka 2,8%" as "Kategorija mleko 2 8" (peti test,
+            // 1.11.2026). Read again, the words are the same.
             if (form.isPresent() && form.get().intent().exactAlias()) {
                 name = respelled(name, form.get().phrase());
                 kindPhrase = form.get().phrase();
+                kindWords = name;
                 intent = form.get().intent();
             } else if (intent == null && form.isPresent()) {
                 intent = form.get().intent();
                 kindPhrase = form.get().phrase();
+                kindWords = respelled(name, kindPhrase);
             }
         }
 
@@ -130,9 +138,15 @@ public class ShoppingLineInterpreter {
             // the plan looks for among its products. Only where some product
             // of the kind says it: "toaletna voda" is no water.
             String wanted = WantedWords.pattern(kindPhrase, intent.normalizedAlias(), normalizer);
-            if (wanted != null
-                    && intentResolver.kindHasProductsMatching(intent.shoppingIntentId(), wanted)) {
-                return choice(name, kindPhrase, intent, null, packages, target, unit);
+            // Nothing beyond the kind ("jaja kom"), or only a size the shops
+            // may not write ("6 jaja L"): still the kind, not any product
+            // whose name says the word. "6 jaja L" became six organic eggs
+            // for 400 RSD (peti test, 1.11.2026).
+            if (wanted == null
+                    || intentResolver.kindHasProductsMatching(intent.shoppingIntentId(), wanted)
+                    || WantedWords.pattern(WantedWords.withoutSizeLetters(kindPhrase),
+                            intent.normalizedAlias(), normalizer) == null) {
+                return choice(name, kindWords, intent, null, packages, target, unit);
             }
             return kindByName(line);
         }
