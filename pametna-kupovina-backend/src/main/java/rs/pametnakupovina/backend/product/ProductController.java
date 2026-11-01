@@ -156,7 +156,8 @@ public class ProductController {
             @RequestParam(name = "page", defaultValue = "0") int page,
             @RequestParam(name = "limit", defaultValue = "20") int limit,
             @RequestParam(name = "latitude", required = false) Double latitude,
-            @RequestParam(name = "longitude", required = false) Double longitude
+            @RequestParam(name = "longitude", required = false) Double longitude,
+            @RequestParam(name = "radiusMeters", required = false) Integer radiusMeters
     ) {
         try {
             if (latitude != null && longitude != null) {
@@ -164,10 +165,11 @@ public class ProductController {
                         PreciseLocationPurpose.NEARBY_SALES,
                         latitude,
                         longitude,
-                        near -> saleService.find(near, category, retailer, query, minDiscount, sort, page, limit)
+                        near -> saleService.find(near, radiusMeters, category, retailer, query,
+                                minDiscount, sort, page, limit)
                 );
             }
-            return saleService.find(null, category, retailer, query, minDiscount, sort, page, limit);
+            return saleService.find(null, radiusMeters, category, retailer, query, minDiscount, sort, page, limit);
         } catch (IllegalArgumentException exception) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,

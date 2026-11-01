@@ -313,6 +313,138 @@ class SaleTest {
         }
     }
 
+    /**
+     * A shopper in Valjevo with a chain 2 km away and another 8 km away. In a
+     * circle of 3 km only the close chain's sales are listed, in 10 km both,
+     * and "Najbliže" puts the close one first. The chips with chains count
+     * every chain that has the product on sale, not only the one where it
+     * comes off the most, and stay put when a chain is chosen.
+     */
+    @Test
+    void aShopperChoosesHowFarAndWhichChain() {
+        LocalDate today = LocalDate.now(ZoneId.of("Europe/Belgrade"));
+        var here = new rs.pametnakupovina.backend.privacy.PreciseLocation(44.27, 19.88);
+        try {
+            for (String[] chain : new String[][]{{"BLIZU", "180,00", "44.29"}, {"DALEKO", "140,00", "44.34"}}) {
+                long retailer = jdbcClient.sql("""
+                                INSERT INTO app.retailer (code, name, dataset_url)
+                                VALUES (?, ?, ?)
+                                RETURNING id
+                                """)
+                        .param(chain[0])
+                        .param(chain[0])
+                        .param("http://127.0.0.1:" + csvServer.getAddress().getPort() + "/sale.csv")
+                        .query(Long.class)
+                        .single();
+                catalogue = HEADER
+                        + row("KEKS KRUZNI 200G", "8601234500162", "200,00", chain[1],
+                                today, today.minusDays(2), today.plusDays(5))
+                        + (chain[0].equals("BLIZU")
+                                ? row("KEKS SAMOBLIZU 200G", "8601234500179", "100,00", "90,00",
+                                        today, today.minusDays(2), today.plusDays(5))
+                                : "");
+                assertThat(priceImportService.importPrices(chain[0]).status()).isEqualTo("SUCCEEDED");
+                insertStore(retailer, chain[0], Double.parseDouble(chain[2]), 19.88);
+            }
+            saleListRefresher.refresh();
+
+            // 3 km: only the close chain, with both of its products.
+            SalePage close = saleService.find(here, 3_000, null, null, "keks", 1, SaleSort.DISCOUNT, 0, 20);
+            assertThat(close.nearbyChecked()).isTrue();
+            assertThat(close.radiusMeters()).isEqualTo(3_000);
+            assertThat(close.items()).extracting(SaleItem::retailerCode).containsOnly("BLIZU");
+            assertThat(close.items()).hasSize(2);
+            assertThat(close.retailers()).extracting(SaleRetailer::code).containsExactly("BLIZU");
+            assertThat(close.retailers().getFirst().nearestStoreMeters()).isBetween(2_000.0, 2_500.0);
+
+            // 10 km: the far chain is in, and the shared biscuit comes off
+            // more there; both chains count it.
+            SalePage wide = saleService.find(here, 10_000, null, null, "keks", 1, SaleSort.DISCOUNT, 0, 20);
+            assertThat(wide.items()).hasSize(2);
+            assertThat(wide.items().getFirst().retailerCode()).isEqualTo("DALEKO");
+            assertThat(wide.retailers()).extracting(SaleRetailer::code, SaleRetailer::productCount)
+                    .containsExactly(
+                            org.assertj.core.groups.Tuple.tuple("BLIZU", 2),
+                            org.assertj.core.groups.Tuple.tuple("DALEKO", 1));
+
+            // "Najbliže": the close chain's biscuit first.
+            assertThat(saleService.find(here, 10_000, null, null, "keks", 1, SaleSort.NEAREST, 0, 20).items())
+                    .extracting(SaleItem::retailerCode)
+                    .containsExactly("BLIZU", "DALEKO");
+
+            // The far chain chosen: only its sale, and the chips still show both.
+            SalePage far = saleService.find(here, 10_000, null, "DALEKO", "keks", 1, SaleSort.DISCOUNT, 0, 20);
+            assertThat(far.items()).extracting(SaleItem::retailerCode).containsExactly("DALEKO");
+            assertThat(far.retailers()).extracting(SaleRetailer::code).containsExactly("BLIZU", "DALEKO");
+
+            // Without a circle the app before 2.0.8 still gets 10 km.
+            assertThat(saleService.find(here, null, null, "keks", 1, SaleSort.DISCOUNT, 0, 20).radiusMeters())
+                    .isEqualTo(10_000);
+            assertThat(saleService.find(null, null, null, "keks", 1, SaleSort.DISCOUNT, 0, 20).radiusMeters())
+                    .isNull();
+            org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                            saleService.find(here, 100, null, null, null, 1, SaleSort.DISCOUNT, 0, 20))
+                    .isInstanceOf(IllegalArgumentException.class);
+            org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                            saleService.find(here, 50_000, null, null, null, 1, SaleSort.DISCOUNT, 0, 20))
+                    .isInstanceOf(IllegalArgumentException.class);
+        } finally {
+            jdbcClient.sql("""
+                            UPDATE app.current_price_offer AS offer
+                            SET discounted_price = NULL
+                            FROM app.retailer_product AS product
+                            JOIN app.retailer AS retailer
+                              ON retailer.id = product.retailer_id
+                            WHERE product.id = offer.retailer_product_id
+                              AND retailer.code IN ('BLIZU', 'DALEKO')
+                            """)
+                    .update();
+            jdbcClient.sql("""
+                            UPDATE app.store
+                            SET active = FALSE
+                            WHERE retailer_id IN (
+                                SELECT id FROM app.retailer WHERE code IN ('BLIZU', 'DALEKO'))
+                            """)
+                    .update();
+            saleListRefresher.refresh();
+        }
+    }
+
+    private void insertStore(long retailerId, String code, double latitude, double longitude) {
+        long format = jdbcClient.sql("""
+                        INSERT INTO app.store_format (retailer_id, code, name)
+                        VALUES (?, 'SALE_TEST', 'Sale test')
+                        RETURNING id
+                        """)
+                .param(retailerId)
+                .query(Long.class)
+                .single();
+        jdbcClient.sql("""
+                        WITH coordinates AS (
+                            SELECT ST_SetSRID(ST_MakePoint(?, ?), 4326)::geography AS location
+                        )
+                        INSERT INTO app.store (
+                            retailer_id, store_format_id, external_code, name, address, city,
+                            location, active, geocoding_candidate, geocoding_status,
+                            geocoding_query, geocoding_source, geocoding_matched_address,
+                            geocoding_confidence, geocoded_at, geocoding_review_note,
+                            geocoding_reviewed_at, pricing_eligible, pricing_ineligibility_reason
+                        )
+                        SELECT ?, ?, ?, ?, 'Test 1', 'Valjevo',
+                               coordinates.location, TRUE, coordinates.location, 'MANUALLY_VERIFIED',
+                               'test 1, valjevo', 'SALE_TEST', 'Test 1, Valjevo',
+                               1.0000, NOW(), 'test', NOW(), TRUE, NULL
+                        FROM coordinates
+                        """)
+                .param(longitude)
+                .param(latitude)
+                .param(retailerId)
+                .param(format)
+                .param(code + "-1")
+                .param(code)
+                .update();
+    }
+
     private void setDefaultTimeZone(String timeZone) {
         jdbcClient.sql("UPDATE app.market SET time_zone = ? WHERE is_default")
                 .param(timeZone)

@@ -7,5 +7,10 @@ public enum SaleSort {
     /** The most money saved on one piece first. */
     SAVING,
     /** The lowest sale price first. */
-    PRICE
+    PRICE,
+    /**
+     * The closest shop first, then the largest percentage off. Without a
+     * location it is the same as DISCOUNT.
+     */
+    NEAREST
 }
