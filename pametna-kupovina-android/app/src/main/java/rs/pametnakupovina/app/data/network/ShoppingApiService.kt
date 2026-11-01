@@ -28,11 +28,13 @@ interface ShoppingApiService {
     @GET("api/v1/products/on-sale")
     suspend fun getSales(
         @Query("category") category: String? = null,
+        @Query("retailer") retailer: String? = null,
         @Query("sort") sort: SaleSortDto = SaleSortDto.DISCOUNT,
         @Query("page") page: Int = 0,
         @Query("limit") limit: Int = 20,
         @Query("latitude") latitude: Double? = null,
-        @Query("longitude") longitude: Double? = null
+        @Query("longitude") longitude: Double? = null,
+        @Query("radiusMeters") radiusMeters: Int? = null
     ): SalePageDto
 
     @GET("api/v1/stores/nearby")

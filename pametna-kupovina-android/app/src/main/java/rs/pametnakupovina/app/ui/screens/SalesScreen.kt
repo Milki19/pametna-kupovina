@@ -23,6 +23,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -37,7 +38,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import rs.pametnakupovina.app.R
 import rs.pametnakupovina.app.data.amountLabel
 import rs.pametnakupovina.app.data.network.SaleItemDto
+import rs.pametnakupovina.app.data.network.SaleRetailerDto
 import rs.pametnakupovina.app.data.network.SaleSortDto
+import rs.pametnakupovina.app.data.preferences.SaleRadius
 import rs.pametnakupovina.app.text.asString
 import rs.pametnakupovina.app.ui.SalesViewModel
 import rs.pametnakupovina.app.ui.components.AppIcon
@@ -60,20 +63,27 @@ import rs.pametnakupovina.app.ui.shortDate
 private val SortLabels = listOf(
     SaleSortDto.DISCOUNT to R.string.sale_sort_discount,
     SaleSortDto.SAVING to R.string.sale_sort_saving,
-    SaleSortDto.PRICE to R.string.sale_sort_price
+    SaleSortDto.PRICE to R.string.sale_sort_price,
+    SaleSortDto.NEAREST to R.string.sale_sort_nearest
 )
 
 /**
- * Šta je danas na akciji, najveći popust prvi. Sa lokacijom samo lanci koji
- * imaju radnju u blizini; proizvod ide na spisak, a plan bira radnju.
+ * Šta je danas na akciji, najveći popust prvi. Sa lokacijom (ili polaznom
+ * tačkom plana) samo lanci sa radnjom u izabranom krugu, pa izbor lanca;
+ * proizvod ide na spisak, a plan bira radnju.
  */
 @Composable
 fun SalesScreen(
     onBack: () -> Unit,
     onOpenProduct: (Long) -> Unit,
+    origin: Pair<Double, Double>? = null,
+    originLabel: String? = null,
     viewModel: SalesViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    LaunchedEffect(origin, originLabel) {
+        viewModel.useOrigin(origin?.first, origin?.second, originLabel)
+    }
 
     Scaffold(
         containerColor = Color.Transparent,
@@ -81,7 +91,18 @@ fun SalesScreen(
             AppTopBar(
                 title = stringResource(R.string.sale_title),
                 onBack = onBack,
-                subtitle = if (state.nearby) stringResource(R.string.sale_nearby_subtitle) else null
+                subtitle = when {
+                    !state.nearby -> null
+                    state.fromOrigin -> stringResource(
+                        R.string.sale_near_origin_subtitle,
+                        state.originLabel ?: stringResource(R.string.sale_origin_unnamed),
+                        distance(state.radius.kilometres.toDouble())
+                    )
+                    else -> stringResource(
+                        R.string.sale_nearby_subtitle,
+                        distance(state.radius.kilometres.toDouble())
+                    )
+                }
             )
         }
     ) { padding ->
@@ -119,33 +140,67 @@ fun SalesScreen(
 
                 if (state.located) {
                     item(key = "scope") {
-                        // Krupna slova: drugi čip prelazi u novi red umesto da se seče.
+                        // Krupna slova: čipovi prelaze u novi red umesto da se seku.
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm)) {
-                            FilterChip(
-                                selected = !state.allChains,
-                                onClick = { viewModel.chooseAllChains(false) },
-                                label = { Text(stringResource(R.string.sale_scope_near)) },
-                                modifier = Modifier.testTag("sale-scope-near")
-                            )
-                            FilterChip(
-                                selected = state.allChains,
-                                onClick = { viewModel.chooseAllChains(true) },
-                                label = { Text(stringResource(R.string.sale_scope_all)) },
-                                modifier = Modifier.testTag("sale-scope-all")
-                            )
+                            SaleRadius.entries.forEach { radius ->
+                                FilterChip(
+                                    selected = state.radius == radius,
+                                    onClick = { viewModel.chooseRadius(radius) },
+                                    label = {
+                                        Text(
+                                            if (radius == SaleRadius.ALL) {
+                                                stringResource(R.string.sale_scope_all)
+                                            } else {
+                                                distance(radius.kilometres.toDouble())
+                                            }
+                                        )
+                                    },
+                                    modifier = Modifier.testTag("sale-radius-${radius.name.lowercase()}")
+                                )
+                            }
                         }
                     }
                 }
 
                 item(key = "sort") {
+                    // „Najbliže" samo kad se zna odakle.
+                    val sorts = SortLabels.filter { (sort, _) ->
+                        sort != SaleSortDto.NEAREST || state.nearby
+                    }
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm)) {
-                        items(SortLabels, key = { it.first.name }) { (sort, label) ->
+                        items(sorts, key = { it.first.name }) { (sort, label) ->
                             FilterChip(
                                 selected = state.sort == sort,
                                 onClick = { viewModel.chooseSort(sort) },
                                 label = { Text(stringResource(label)) },
                                 modifier = Modifier.testTag("sale-sort-${sort.name.lowercase()}")
                             )
+                        }
+                    }
+                }
+
+                val retailers = shownRetailers(state.retailers, state.retailer, state.retailerName)
+                if (retailers.size > 1 || state.retailer != null) {
+                    item(key = "retailers") {
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm)) {
+                            item(key = "all") {
+                                FilterChip(
+                                    selected = state.retailer == null,
+                                    onClick = { viewModel.chooseRetailer(null) },
+                                    label = { Text(stringResource(R.string.sale_all_retailers)) },
+                                    modifier = Modifier.testTag("sale-retailer-all")
+                                )
+                            }
+                            items(retailers, key = { it.code }) { retailer ->
+                                FilterChip(
+                                    selected = state.retailer == retailer.code,
+                                    onClick = { viewModel.chooseRetailer(retailer) },
+                                    label = {
+                                        Text(stringResource(R.string.sale_category_chip, retailer.name, retailer.productCount))
+                                    },
+                                    modifier = Modifier.testTag("sale-retailer-${retailer.code}")
+                                )
+                            }
                         }
                     }
                 }
@@ -353,6 +408,21 @@ private fun SaleCard(
         }
     }
 }
+
+/**
+ * Izabrani lanac ostaje u redu i kad u novom krugu nema akcija (sa 0), da
+ * kupac vidi zašto je spisak prazan i može da ga skine.
+ */
+private fun shownRetailers(
+    retailers: List<SaleRetailerDto>,
+    chosen: String?,
+    chosenName: String?
+): List<SaleRetailerDto> =
+    if (chosen == null || retailers.any { it.code == chosen }) {
+        retailers
+    } else {
+        listOf(SaleRetailerDto(chosen, chosenName ?: chosen, 0)) + retailers
+    }
 
 private fun saleDetails(item: SaleItemDto): String =
     listOfNotNull(

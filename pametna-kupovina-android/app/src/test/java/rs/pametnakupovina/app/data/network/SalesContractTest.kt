@@ -69,6 +69,38 @@ class SalesContractTest {
     }
 
     @Test
+    fun `dekodira lance u krugu, a stariji server bez njih i dalje radi`() {
+        val page = json.decodeFromString<SalePageDto>(
+            """
+            {"page":0,"limit":20,"totalElements":0,"totalPages":0,"hasNext":false,
+             "items":[],"categories":[],"nearbyChecked":true,
+             "retailers":[{"code":"MAXI","name":"Maxi","productCount":34,"nearestStoreMeters":420.0}],
+             "radiusMeters":3000}
+            """.trimIndent()
+        )
+        assertEquals("MAXI", page.retailers.single().code)
+        assertEquals(34, page.retailers.single().productCount)
+        assertEquals(3000, page.radiusMeters)
+
+        val older = json.decodeFromString<SalePageDto>(
+            """{"page":0,"limit":20,"totalElements":0,"totalPages":0,"hasNext":false}"""
+        )
+        assertEquals(emptyList<SaleRetailerDto>(), older.retailers)
+        assertNull(older.radiusMeters)
+        assertEquals(SaleSortDto.NEAREST, json.decodeFromString<SaleSortDto>("\"NEAREST\""))
+    }
+
+    @Test
+    fun `akcije šalju lanac i krug`() {
+        val method = ShoppingApiService::class.java.declaredMethods.single { it.name == "getSales" }
+        val names = method.parameterAnnotations.flatMap { annotations ->
+            annotations.filterIsInstance<retrofit2.http.Query>().map { it.value }
+        }
+        assertEquals(true, "retailer" in names)
+        assertEquals(true, "radiusMeters" in names)
+    }
+
+    @Test
     fun `akcije imaju svoj endpoint`() {
         val method = ShoppingApiService::class.java.declaredMethods.single { it.name == "getSales" }
         assertEquals("api/v1/products/on-sale", method.getAnnotation(GET::class.java)!!.value)

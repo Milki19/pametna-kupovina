@@ -293,7 +293,10 @@ fun PametnaKupovinaApp(
                     onBack = navController::popBackStack,
                     onOpenProduct = { canonicalProductId ->
                         navController.navigate(Route.productDetails(canonicalProductId))
-                    }
+                    },
+                    // Bez lokacije telefona krug se meri od polazne tačke plana.
+                    origin = calculationLocation,
+                    originLabel = calculationOriginLabel
                 )
             }
 
