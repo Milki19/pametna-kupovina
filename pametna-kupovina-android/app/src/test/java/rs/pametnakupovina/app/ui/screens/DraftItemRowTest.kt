@@ -1,7 +1,9 @@
 package rs.pametnakupovina.app.ui.screens
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import rs.pametnakupovina.app.R
 import rs.pametnakupovina.app.data.local.DraftItemEntity
@@ -76,5 +78,17 @@ class DraftItemRowTest {
         assertEquals("1,5 kg", draftAmountLabel(flexible("vrat", target = 1500.0, unit = "g")))
         assertEquals("400 g", draftAmountLabel(flexible("sir", target = 400.0, unit = "g")))
         assertEquals("3", draftAmountLabel(flexible("hleb", quantity = 3.0)))
+    }
+
+    @Test
+    fun `neprepoznata nalepljena stavka je oznacena dok se ne izabere`() {
+        val pasted = flexible("xyz grickalica").copy(remoteId = 7)
+        val ids = setOf(7L)
+
+        assertTrue(pastedUnknown(pasted, ids))
+        assertFalse(pastedUnknown(pasted.copy(matchingStatus = "CONFIRMED"), ids))
+        assertFalse(pastedUnknown(pasted.copy(syncError = "Naziv mora imati bar jedno slovo."), ids))
+        assertFalse(pastedUnknown(pasted, emptySet()))
+        assertFalse(pastedUnknown(pasted.copy(remoteId = null), ids))
     }
 }

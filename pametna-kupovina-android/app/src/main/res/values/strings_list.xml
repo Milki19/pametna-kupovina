@@ -81,6 +81,21 @@
     <string name="list_paste_placeholder">mleko\nhleb\nćevapi 3kg\n2x pivo</string>
     <string name="list_paste_none">Nijedna stavka još nije upisana.</string>
     <string name="list_paste_will_add">Biće dodato: %1$s</string>
+    <string name="list_paste_preview_note">Beleška: %1$s</string>
+    <string name="list_paste_preview_quantity">× %1$s</string>
+    <string name="list_paste_skipped_heading">naslov, ne dodaje se</string>
+    <string name="list_paste_skipped_no_letters">nema slova, ne dodaje se</string>
+    <string name="list_paste_replace_title">Na spisku već ima %1$s</string>
+    <string name="list_paste_replace_text">Nalepljene stavke možeš da dodaš uz postojeće ili da njima zameniš ceo spisak.</string>
+    <string name="list_paste_replace_add">Dodaj na spisak</string>
+    <string name="list_paste_replace_replace">Zameni spisak</string>
+    <string name="list_paste_notice_all">Dodato: %1$s. Sve je prepoznato.</string>
+    <plurals name="list_paste_notice_unknown">
+        <item quantity="one">Dodato: %1$s. Prepoznato %2$d, a %3$d nije: stoji na vrhu, dodirni je da izabereš proizvod.</item>
+        <item quantity="few">Dodato: %1$s. Prepoznato %2$d, a %3$d nisu: stoje na vrhu, dodirni ih da izabereš proizvod.</item>
+        <item quantity="other">Dodato: %1$s. Prepoznato %2$d, a %3$d nisu: stoje na vrhu, dodirni ih da izabereš proizvod.</item>
+    </plurals>
+    <string name="list_status_not_recognized">Nije prepoznato</string>
 
     <!-- Messages from the list, recommendation and matching view models -->
     <string name="list_notice_added">Dodato: %1$s.</string>

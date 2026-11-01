@@ -286,6 +286,11 @@ input[type=text], input[type=search], input[inputmode], select, textarea {
   font-size: 16px; transition: border-color 0.2s, box-shadow 0.25s;
 }
 textarea { min-height: 140px; resize: vertical; }
+/* Nalepi spisak: ispod polja svaki red kako će biti dodat. */
+.paste-preview { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.paste-preview li { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 12px; background: var(--card-solid); border: 1px solid var(--line); overflow-wrap: anywhere; }
+.paste-preview li.skipped { background: transparent; color: var(--muted); }
+.paste-preview .amount { white-space: nowrap; }
 /* Safari na iPhone-u inače polje za pretragu crta po svom (zaobljeno, sa lupom). */
 input[type=search] { -webkit-appearance: none; appearance: none; }
 input[type=search]::-webkit-search-decoration { -webkit-appearance: none; }

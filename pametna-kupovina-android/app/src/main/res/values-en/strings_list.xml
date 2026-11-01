@@ -79,6 +79,20 @@
     <string name="list_paste_placeholder">milk\nbread\nćevapi 3kg\n2x beer</string>
     <string name="list_paste_none">No items entered yet.</string>
     <string name="list_paste_will_add">Will be added: %1$s</string>
+    <string name="list_paste_preview_note">Note: %1$s</string>
+    <string name="list_paste_preview_quantity">× %1$s</string>
+    <string name="list_paste_skipped_heading">heading, not added</string>
+    <string name="list_paste_skipped_no_letters">no letters, not added</string>
+    <string name="list_paste_replace_title">The list already has %1$s</string>
+    <string name="list_paste_replace_text">You can add the pasted items to the ones there, or replace the whole list with them.</string>
+    <string name="list_paste_replace_add">Add to list</string>
+    <string name="list_paste_replace_replace">Replace list</string>
+    <string name="list_paste_notice_all">Added: %1$s. Everything was recognized.</string>
+    <plurals name="list_paste_notice_unknown">
+        <item quantity="one">Added: %1$s. Recognized %2$d, %3$d was not: it is at the top, tap it to choose a product.</item>
+        <item quantity="other">Added: %1$s. Recognized %2$d, %3$d were not: they are at the top, tap them to choose a product.</item>
+    </plurals>
+    <string name="list_status_not_recognized">Not recognized</string>
 
     <!-- Messages from the list, recommendation and matching view models -->
     <string name="list_notice_added">Added: %1$s.</string>

@@ -179,6 +179,9 @@ data class DraftItemInput(
 }
 
 @Singleton
+/** [recognized] stavki ima poznatu vrstu; ostale se traže po nazivu. */
+data class PasteReading(val recognized: Int, val unknownRemoteIds: Set<Long>)
+
 class ShoppingRepository @Inject constructor(
     private val api: ShoppingApiService,
     private val dao: DraftItemDao,
@@ -392,14 +395,32 @@ class ShoppingRepository @Inject constructor(
      * when it is sent, so "Pivo Zaječarsko 0.5" means the same here as
      * anywhere. Until then the row shows the phone's rough reading.
      */
-    suspend fun pasteItems(text: String): Int {
+    suspend fun pasteItems(text: String): List<Long> {
         val parsed = PastedListParser.parse(text)
         requireUser(parsed.isNotEmpty()) { uiText(R.string.list_error_paste_empty) }
 
-        parsed.forEach { line ->
+        return parsed.map { line ->
             dao.insert(line.toFlexibleDraftInput().toEntity(syncState = SyncState.PENDING_PASTE))
         }
-        return parsed.size
+    }
+
+    /**
+     * Kako je server pročitao upravo nalepljene redove: koliko je prepoznato
+     * (vrsta proizvoda je poznata) i koje stavke se traže samo po nazivu.
+     * Null dok neki red još nije poslat (nema mreže).
+     */
+    suspend fun pastedReading(localIds: List<Long>): PasteReading? {
+        val wanted = localIds.toSet()
+        val rows = dao.getAllItems().filter { it.localId in wanted }
+        if (rows.any { it.syncState == SyncState.PENDING_PASTE.name && it.syncError == null }) return null
+        // Red koji server nije primio ima svoju oznaku („Nije poslato") i ne broji se ovde.
+        val pasted = rows.filter { it.syncState == SyncState.SYNCED.name }
+        if (pasted.isEmpty()) return null
+        val unknown = pasted.filter { it.matchingStatus != "CONFIRMED" }
+        return PasteReading(
+            recognized = pasted.size - unknown.size,
+            unknownRemoteIds = unknown.mapNotNull(DraftItemEntity::remoteId).toSet()
+        )
     }
 
     /**
