@@ -125,6 +125,13 @@ public class ShoppingLineInterpreter {
             return choice(name, name, intent, null, packages, target, unit);
         }
 
+        // "parmezan salama" names salami, not parmesan: what the kind's own
+        // rules leave out is looked for by name.
+        if (intentResolver.wordsLeaveTheKind(intent.shoppingIntentId(),
+                wordsBeside(kindPhrase, intent.normalizedAlias()))) {
+            return kindByName(line);
+        }
+
         // A brand only where products of the kind are sold under it: "krem
         // sir" is cream cheese and "vanilin šećer" vanilla sugar, not the
         // brands "Krem" and "Vanilin" (provera uživo 23.10.).
@@ -314,6 +321,18 @@ public class ShoppingLineInterpreter {
                 carriesAmount ? target : null,
                 carriesAmount ? unit : null
         );
+    }
+
+    /** The normalized words of the phrase other than the kind's own. */
+    private String wordsBeside(String phrase, String normalizedAlias) {
+        List<String> tokens = new ArrayList<>(List.of(normalizer.normalize(phrase).split(" ")));
+        List<String> aliasTokens = List.of(normalizedAlias.split(" "));
+        int start = Collections.indexOfSubList(tokens, aliasTokens);
+        if (start >= 0) {
+            tokens.subList(start, start + aliasTokens.size()).clear();
+        }
+        tokens.removeIf(String::isBlank);
+        return String.join(" ", tokens);
     }
 
     /**

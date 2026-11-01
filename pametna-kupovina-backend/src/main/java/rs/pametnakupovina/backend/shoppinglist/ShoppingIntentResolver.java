@@ -181,6 +181,38 @@ public class ShoppingIntentResolver {
     }
 
     /**
+     * Whether the words beside the kind make it something else, by the
+     * kind's own rules: "parmezan salama" is salami, which the rules for
+     * cheese leave out (proba na kopiji 1.11.2026).
+     */
+    public boolean wordsLeaveTheKind(long shoppingIntentId, String normalizedWords) {
+        if (normalizedWords == null || normalizedWords.isBlank()) {
+            return false;
+        }
+        return memo.remember(
+                List.of("wordsLeaveTheKind", String.valueOf(shoppingIntentId), normalizedWords),
+                () -> jdbcClient.sql("""
+                                SELECT EXISTS (
+                                    SELECT 1
+                                    FROM app.shopping_intent_product_type AS allowed
+                                    JOIN app.product_type_rule AS rule
+                                      ON rule.product_type_id = allowed.product_type_id
+                                     AND rule.active = TRUE
+                                     AND rule.retailer_id IS NULL
+                                    WHERE allowed.shopping_intent_id = ?
+                                      AND allowed.enabled_by_default = TRUE
+                                      AND rule.exclude_pattern IS NOT NULL
+                                      AND ? ~ rule.exclude_pattern
+                                )
+                                """)
+                        .param(1, shoppingIntentId)
+                        .param(2, normalizedWords)
+                        .query(Boolean.class)
+                        .single()
+        );
+    }
+
+    /**
      * Whether products with a price say all these words: what a list asks
      * for that no dictionary knows ("tortilje", "vlažne maramice") is found
      * by the products' own names.
