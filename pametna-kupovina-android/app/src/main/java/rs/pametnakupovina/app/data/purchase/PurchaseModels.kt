@@ -1,5 +1,6 @@
 package rs.pametnakupovina.app.data.purchase
 
+import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.Serializable
 import rs.pametnakupovina.app.R
 import rs.pametnakupovina.app.data.network.OptimizationScenarioDto
@@ -28,7 +29,9 @@ data class PurchaseItemProgress(
     // Decimal text prevents binary floating-point errors in user-entered money.
     val actualLineTotal: String? = null,
     /** Kupac je javio serveru da ovoga nema u prodavnici. */
-    val reportedMissing: Boolean = false
+    val reportedMissing: Boolean = false,
+    /** Iz kupovine je obrisano i sa glavnog spiska („ne treba više"). */
+    val removedFromList: Boolean = false
 )
 
 /**
@@ -45,6 +48,48 @@ class MissingProductReporter(
 /** Prazni spisak posle kupovine; kao [MissingProductReporter], bez celog ShoppingRepository-ja. */
 class ShoppingListClearer(private val clear: suspend () -> Unit) {
     suspend fun clearList() = clear()
+}
+
+/** Stavka glavnog spiska kako je kupovina vidi: id sa servera (null dok se ne sinhronizuje) i naziv. */
+data class ListEntry(val itemId: Long?, val name: String)
+
+/**
+ * Glavni spisak iz kupovine: šta je još na njemu i brisanje pojedinih
+ * stavki. Brisanje ide istim putem kao na spisku, pa radi i bez mreže.
+ */
+class ShoppingListItems(
+    private val entries: () -> Flow<List<ListEntry>>,
+    private val remove: suspend (Set<Long>) -> Unit
+) {
+    fun observe(): Flow<List<ListEntry>> = entries()
+    suspend fun remove(itemIds: Set<Long>) { if (itemIds.isNotEmpty()) remove.invoke(itemIds) }
+}
+
+/** Kupljeno koje je još na spisku, i šta na spisku ostaje kad se ono skloni. */
+data class BoughtOnList(val removable: Set<Long>, val remaining: List<String>)
+
+/**
+ * Kupljeno je samo ono što je štiklirano kao kupljeno (ceo planirani broj);
+ * delimično kupljeno, preskočeno i „nema u prodavnici" ostaju na spisku za
+ * sledeći put. Stavka dodata na spisak posle plana takođe ostaje.
+ */
+fun PurchaseSession.boughtOnList(list: List<ListEntry>): BoughtOnList {
+    val bought = snapshot.scenario.items
+        .filter { progress[it.itemId]?.status == PurchaseStatus.PURCHASED }
+        .map { it.itemId }
+        .toSet()
+    val removable = list.mapNotNull { it.itemId }.filter { it in bought }.toSet()
+    return BoughtOnList(removable, list.filter { it.itemId == null || it.itemId !in removable }.map { it.name })
+}
+
+/** Gde stavka stoji u kupovini: gore ono što još treba, dole sklopljeno kupljeno i preskočeno. */
+enum class PurchaseGroup { ACTIVE, BOUGHT, SKIPPED }
+
+fun PurchaseItemProgress.group(): PurchaseGroup = when (status) {
+    PurchaseStatus.PURCHASED -> PurchaseGroup.BOUGHT
+    PurchaseStatus.SKIPPED -> PurchaseGroup.SKIPPED
+    // „Nema u prodavnici" ostaje gore: odatle se javlja serveru i vraća na spisak.
+    PurchaseStatus.TO_BUY, PurchaseStatus.NOT_FOUND -> PurchaseGroup.ACTIVE
 }
 
 data class PurchaseSession(

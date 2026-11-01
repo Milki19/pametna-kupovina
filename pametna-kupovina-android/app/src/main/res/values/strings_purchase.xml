@@ -33,7 +33,7 @@
     <string name="purchase_no_store_header">Bez prodavnice</string>
     <string name="purchase_reopen">Ponovo otvori kupovinu</string>
     <string name="purchase_finish">Završi kupovinu</string>
-    <string name="purchase_footer_note">Originalni spisak ostaje nepromenjen. Mape traže mrežu ili unapred preuzetu mapu.</string>
+    <string name="purchase_footer_note">Glavni spisak se menja samo kad izabereš „Obriši sa spiska“ ili „Skloni kupljeno“. Prevuci stavku desno za kupljeno, levo za preskoči. Mape traže mrežu ili unapred preuzetu mapu.</string>
     <string name="purchase_finish_confirm_title">Završi kupovinu?</string>
     <string name="purchase_finish_confirm_text">Kupljeno %1$d od %2$d. Nekupljene stavke neće biti označene kao kupljene. Plan i napomene ostaju u istoriji.\n\nU troškove ulazi skenirani račun, ne sama kupovina.</string>
     <string name="purchase_finish_and_scan">Završi i skeniraj račun</string>
@@ -59,7 +59,7 @@
     <string name="purchase_not_in_store">Nema u prodavnici</string>
     <string name="purchase_skip">Preskoči</string>
     <string name="purchase_details">Detalji</string>
-    <string name="purchase_back_to_list">Vrati na spisak</string>
+    <string name="purchase_back_to_list">Vrati u kupovinu</string>
     <string name="purchase_note_value">Napomena: %1$s</string>
     <string name="purchase_paid_value">Plaćeno %1$s</string>
     <string name="purchase_status_not_found_partial">Nema u prodavnici, kupljeno %1$s od %2$s</string>
@@ -97,4 +97,29 @@
     <string name="purchase_report_missing_failed">Javljanje nije uspelo. Treba mreža, probaj ponovo.</string>
     <string name="purchase_start_new_list">Započni nov spisak</string>
     <string name="purchase_start_new_list_text">Sve stavke se brišu sa spiska, a ova kupovina ostaje u istoriji.</string>
+
+    <!-- Sklanjanje kupljenog i preskočenog -->
+    <string name="purchase_mark_bought">Kupljeno</string>
+    <string name="purchase_undo">Poništi</string>
+    <string name="purchase_moved_bought">Kupljeno: %1$s</string>
+    <string name="purchase_moved_skipped">Preskočeno: %1$s. Ostaje na spisku za sledeći put.</string>
+    <string name="purchase_group_bought">Kupljeno (%1$d)</string>
+    <string name="purchase_group_skipped">Preskočeno (%1$d)</string>
+    <string name="purchase_remove_from_list">Obriši sa spiska</string>
+    <string name="purchase_remove_from_list_title">Obrisati „%1$s“ sa spiska?</string>
+    <string name="purchase_remove_from_list_text">Stavka nestaje i sa glavnog spiska, ne samo iz ove kupovine. Preskoči je ako treba sledeći put.</string>
+    <string name="purchase_status_removed_from_list">Obrisano sa spiska</string>
+    <string name="purchase_receipt_saved_title">Račun je zaveden</string>
+    <string name="purchase_remove_bought_question">Skloniti sa spiska kupljeno (%1$d)?</string>
+    <string name="purchase_remove_bought">Skloni kupljeno</string>
+    <string name="purchase_remove_bought_count">Skloni kupljeno sa spiska (%1$d)</string>
+    <string name="purchase_keep_all">Zadrži sve</string>
+    <string name="purchase_list_left">Na spisku ostaje %1$d: %2$s</string>
+    <string name="purchase_list_left_empty">Spisak posle toga ostaje prazan.</string>
+    <string name="purchase_clear_whole_list">Obriši ceo spisak</string>
+    <plurals name="purchase_removed_bought">
+        <item quantity="one">Sklonjena %d stavka sa spiska</item>
+        <item quantity="few">Sklonjene %d stavke sa spiska</item>
+        <item quantity="other">Sklonjeno %d stavki sa spiska</item>
+    </plurals>
 </resources>

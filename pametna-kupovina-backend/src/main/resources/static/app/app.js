@@ -658,15 +658,53 @@ function lostListNotice() {
     </div></div>`;
 }
 
-/** Posle završene kupovine: spisak može da ostane ili da se počne ispočetka. */
+/**
+ * Kupljeno iz završene kupovine što je još na ovom spisku. Stara kupovina
+ * (pre 2.0.32) pamti samo „završeno", pa nema šta da se ponudi.
+ */
+function boughtOnList(items) {
+  const done = saved.get('purchaseDone');
+  if (!done || done === true || done.listId !== listState.list.id) return [];
+  const bought = new Set(done.bought.map(String));
+  return items.filter(i => bought.has(String(i.id)));
+}
+
+/** Posle završene kupovine: sa spiska se sklanja samo kupljeno; ceo spisak se briše sporednim dugmetom. */
 function purchaseDoneNotice(items) {
   if (!saved.get('purchaseDone')) return '';
   if (!items.length) { saved.set('purchaseDone', null); return ''; }
-  return `<div class="card">${notice('Kupovina je završena. Stavke su i dalje na spisku.', 'pos')}
+  const bought = boughtOnList(items);
+  if (!bought.length) {
+    return `<div class="card">${notice('Kupovina je završena. Stavke su i dalje na spisku.', 'pos')}
+      <div class="btn-row">
+        <button class="btn" data-act="keep-list">Zadrži spisak</button>
+        <button class="btn" data-act="start-new-list">Obriši ceo spisak</button>
+      </div></div>`;
+  }
+  const left = items.filter(i => !bought.includes(i));
+  const names = left.slice(0, 3).map(i => i.name).join(', ') + (left.length > 3 ? ', …' : '');
+  return `<div class="card">${notice(`Kupovina je završena. Skloniti sa spiska kupljeno (${bought.length})?`, 'pos')}
+    <p class="muted small">${left.length ? esc(`Na spisku ostaje ${left.length}: ${names}`) : 'Spisak posle toga ostaje prazan.'}</p>
     <div class="btn-row">
-      <button class="btn" data-act="keep-list">Zadrži spisak</button>
-      <button class="btn primary" data-act="start-new-list">Započni nov spisak</button>
-    </div></div>`;
+      <button class="btn" data-act="keep-list">Zadrži sve</button>
+      <button class="btn primary" data-act="remove-bought">Skloni kupljeno</button>
+    </div>
+    <button class="btn danger" data-act="start-new-list">Obriši ceo spisak</button></div>`;
+}
+
+/** Briše samo kupljene stavke, jednu po jednu, istim zahtevom kao brisanje na spisku. */
+async function removeBought() {
+  await flushDelete();
+  const listId = listState.list.id;
+  const bought = boughtOnList(listState.list.items);
+  for (const item of bought) {
+    // Već obrisano (drugi telefon u domaćinstvu) nije greška.
+    await api('DELETE', `shopping-lists/${listId}/items/${item.id}`).catch(error => { if (error.status !== 404) throw error; });
+  }
+  saved.set('purchaseDone', null);
+  listState.list = await api('GET', `shopping-lists/${listId}`);
+  renderList();
+  toast(`Sklonjeno sa spiska: ${counted(bought.length, 'stavka', 'stavke', 'stavki')}`);
 }
 
 /** Sve stavke odjednom; spisak ostaje isti, pa ga ukućani i aplikacija i dalje vide. */
@@ -1501,11 +1539,17 @@ async function wrongProduct(itemId) {
 /** Kupuje se samo ono što ima prodavnicu u planu; stavke bez nje se ne broje. */
 const purchaseItems = purchase => purchase.scenario.items.filter(i => i.storeId != null);
 const purchaseBought = purchase => purchaseItems(purchase).filter(i => purchase.checked[i.itemId]).length;
+/** Gde stavka stoji: gore ono što još treba, dole sklopljeno kupljeno i preskočeno. */
+const purchaseGroup = (purchase, item) =>
+  purchase.checked[item.itemId] ? 'bought' : purchase.skipped?.[item.itemId] ? 'skipped' : 'active';
+/** Koji sklopljeni odeljci su otvoreni; samo dok je stranica otvorena. */
+const purchaseOpen = {};
+let purchaseRedraw = null;
 
 function startPurchase() {
   const s = distinctScenarios(recommendation).find(x => x.type === selectedType) || recommendation.recommendedBalance;
   if (saved.get('purchase') && !confirm('Započni novu kupovinu? Napredak prethodne kupovine se briše.')) return;
-  saved.set('purchase', { startedAt: new Date().toISOString(), listId: saved.get('listId'), scenario: s, checked: {},
+  saved.set('purchase', { startedAt: new Date().toISOString(), listId: saved.get('listId'), scenario: s, checked: {}, skipped: {},
     walking: recommendation.assumptions?.travelMode === 'WALKING' });
   location.hash = '#/kupovina';
 }
@@ -1519,10 +1563,12 @@ function showPurchase() {
   const stores = [...s.stores].sort((a, b) => a.stopOrder - b.stopOrder);
   const row = item => {
     const done = Boolean(purchase.checked[item.itemId]);
+    const skipped = purchaseGroup(purchase, item) === 'skipped';
     // Bez prodavnice nema šta da se štiklira: stavka samo kaže zašto je nema.
     if (item.storeId == null) return `<div class="list-row"><span class="name" style="display:block">${esc(item.requestedName)}</span>
       <span class="small ${onTheWay(s, item) ? 'muted' : ''}" style="display:block;${onTheWay(s, item) ? '' : 'color:var(--error)'}">${esc(item.explanation)}</span></div>`;
-    return `<label class="check">
+    // Ceo red je kućica; „Preskoči" je pored, ne u meniju.
+    return `<div class="purchase-row"><label class="check">
       <input type="checkbox" data-check="${item.itemId}" ${done ? 'checked' : ''} aria-label="Kupljeno: ${esc(item.requestedName)}">
       <span class="grow"><span class="name ${done ? 'strike' : ''}" style="display:block">${esc(item.requestedName)}</span>
         ${item.productName && item.productName.toLowerCase() !== item.requestedName.toLowerCase() ? `<span class="muted small" style="display:block">${esc(item.productName)}</span>` : ''}
@@ -1530,7 +1576,21 @@ function showPurchase() {
         ${item.substituteNote ? `<span class="small" style="display:block;color:var(--on-amber)">${esc(item.substituteNote)}</span>` : ''}
         ${item.storeId == null ? `<span class="small ${onTheWay(s, item) ? 'muted' : ''}" style="display:block;${onTheWay(s, item) ? '' : 'color:var(--error)'}">${esc(item.explanation)}</span>` : ''}</span>
       ${item.lineTotal != null ? `<span class="price ${done ? 'strike' : ''}">${money(item.lineTotal)}</span>` : ''}
-    </label>`;
+    </label>${done ? '' : skipped
+      ? `<button type="button" class="check-action" data-act="unskip-item" data-item="${item.itemId}" aria-label="Vrati u kupovinu: ${esc(item.requestedName)}">Vrati</button>`
+      : `<button type="button" class="check-action" data-act="skip-item" data-item="${item.itemId}" aria-label="Preskoči: ${esc(item.requestedName)}">Preskoči</button>`}</div>`;
+  };
+  // Kupljeno i preskočeno idu na dno, u sklopljene odeljke.
+  const grouped = (key, items) => {
+    const by = g => items.filter(i => purchaseGroup(purchase, i) === g);
+    const folded = (g, label) => {
+      const rows = by(g);
+      if (!rows.length) return '';
+      const id = `${key}-${g}`;
+      return `<details class="purchase-group" data-group="${id}" ${purchaseOpen[id] ? 'open' : ''}>
+        <summary>${label} (${rows.length})</summary>${rows.map(row).join('')}</details>`;
+    };
+    return by('active').map(row).join('') + folded('bought', 'Kupljeno') + folded('skipped', 'Preskočeno');
   };
   const unresolved = s.items.filter(i => i.storeId == null);
   screen({
@@ -1560,12 +1620,12 @@ function showPurchase() {
             <b data-store-count>${done}/${items.length}</b>
             <a class="icon-action" style="color:var(--primary)" href="${esc(mapsUrl(null, [store], purchase.walking))}" target="_blank" rel="noopener" aria-label="Put do prodavnice ${esc(store.retailerName)}">${icon.route}</a>
           </div>
-          ${items.map(row).join('')}
+          ${grouped(store.storeId, items)}
         </div>`;
       }).join('') +
-      (unresolved.length ? `<div class="section">${unresolved.every(i => onTheWay(s, i)) ? 'Kupi usput' : 'Bez prodavnice'} ${pill(unresolved.length)}</div><div class="card flush">${unresolved.map(row).join('')}</div>` : '') +
+      (unresolved.length ? `<div class="section">${unresolved.every(i => onTheWay(s, i)) ? 'Kupi usput' : 'Bez prodavnice'} ${pill(unresolved.length)}</div><div class="card flush">${grouped('none', unresolved)}</div>` : '') +
       `<button class="btn" data-act="finish-purchase">Završi kupovinu</button>
-       <p class="muted small">Napredak kupovine čuva ovaj pregledač; originalni spisak ostaje nepromenjen.</p>`
+       <p class="muted small">Napredak kupovine čuva ovaj pregledač. Preskočeno ostaje na spisku za sledeći put; kupljeno možeš da skloniš sa spiska kad završiš.</p>`
   });
 }
 
@@ -2215,11 +2275,18 @@ const actions = {
   'pick-keep': () => pickProduct(picking.better.chosen, true),
   'lost-list-ok': () => { saved.set('listLost', null); renderList(); },
   'finish-purchase': () => {
-    if (!confirm('Završi kupovinu? Napredak se briše, a spisak ostaje.')) return;
+    if (!confirm('Završi kupovinu? Posle toga biraš da li se kupljeno sklanja sa spiska.')) return;
+    const purchase = saved.get('purchase');
     saved.set('purchase', null);
-    saved.set('purchaseDone', true);
+    saved.set('purchaseDone', {
+      listId: purchase.listId,
+      bought: purchase.scenario.items.filter(i => purchase.checked[i.itemId]).map(i => i.itemId)
+    });
     location.hash = '#/spisak';
   },
+  'skip-item': el => movePurchaseItem(el.dataset.item, 'skipped'),
+  'unskip-item': el => movePurchaseItem(el.dataset.item, 'active'),
+  'remove-bought': removeBought,
   'clear-list': () => {
     const count = listState.list.items.length;
     if (!confirm(`Obrisati ceo spisak (${counted(count, 'stavka', 'stavke', 'stavki')})? Ovo ne može da se vrati.`)) return;
@@ -2336,10 +2403,55 @@ document.addEventListener('change', event => {
   const box = event.target.closest('[data-check]');
   if (!box) return;
   const purchase = saved.get('purchase');
+  const before = purchaseState(purchase, box.dataset.check);
   purchase.checked[box.dataset.check] = box.checked;
+  if (box.checked && purchase.skipped) delete purchase.skipped[box.dataset.check];
   saved.set('purchase', purchase);
   markPurchase(box, purchase);
+  // Kvačica i precrtavanje se odigraju, pa red pređe u svoj odeljak.
+  redrawPurchase(box.checked ? `Kupljeno: ${purchaseName(purchase, box.dataset.check)}` : null, before, box.dataset.check);
 });
+
+document.addEventListener('toggle', event => {
+  const group = event.target.closest?.('[data-group]');
+  if (group) purchaseOpen[group.dataset.group] = group.open;
+}, true);
+
+const purchaseName = (purchase, itemId) =>
+  purchase.scenario.items.find(i => String(i.itemId) === String(itemId))?.requestedName || '';
+const purchaseState = (purchase, itemId) =>
+  ({ checked: Boolean(purchase.checked[itemId]), skipped: Boolean(purchase.skipped?.[itemId]) });
+
+/** Preskočeno nestaje iz kupovine, a na spisku ostaje za sledeći put. */
+function movePurchaseItem(itemId, to) {
+  const purchase = saved.get('purchase');
+  if (!purchase) return;
+  const before = purchaseState(purchase, itemId);
+  purchase.skipped = purchase.skipped || {};
+  if (to === 'skipped') { purchase.skipped[itemId] = true; delete purchase.checked[itemId]; }
+  else delete purchase.skipped[itemId];
+  saved.set('purchase', purchase);
+  showPurchase();
+  if (to === 'skipped') {
+    toast(`Preskočeno: ${purchaseName(purchase, itemId)}. Ostaje na spisku za sledeći put.`, 'Poništi', () => restorePurchaseItem(itemId, before));
+  }
+}
+
+function restorePurchaseItem(itemId, state) {
+  const purchase = saved.get('purchase');
+  if (!purchase) return;
+  purchase.skipped = purchase.skipped || {};
+  if (state.checked) purchase.checked[itemId] = true; else delete purchase.checked[itemId];
+  if (state.skipped) purchase.skipped[itemId] = true; else delete purchase.skipped[itemId];
+  saved.set('purchase', purchase);
+  if (location.hash === '#/kupovina') showPurchase();
+}
+
+function redrawPurchase(message, before, itemId) {
+  clearTimeout(purchaseRedraw);
+  purchaseRedraw = setTimeout(() => { if (location.hash === '#/kupovina') showPurchase(); }, 450);
+  if (message) toast(message, 'Poništi', () => restorePurchaseItem(itemId, before));
+}
 
 /** Štikliranje menja samo ono što se promenilo, da kvačica i precrtavanje odigraju animaciju. */
 function markPurchase(box, purchase) {

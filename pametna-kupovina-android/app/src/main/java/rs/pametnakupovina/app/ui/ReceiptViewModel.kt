@@ -41,7 +41,9 @@ data class ReceiptUiState(
     val habits: List<HabitDto> = emptyList(),
     val selectedMonth: LocalDate = LocalDate.now(CurrentMarket.settings.zone).withDayOfMonth(1),
     val scanning: Boolean = false,
-    val message: UiText? = null
+    val message: UiText? = null,
+    /** Raste sa svakim zavedenim računom, da kupovina zna kad da ponudi „Skloni kupljeno". */
+    val savedCount: Int = 0
 )
 
 @HiltViewModel
@@ -106,6 +108,7 @@ class ReceiptViewModel @Inject constructor(
                     scanner.verificationUrl(activityContext)
                 )
                 refresh()
+                _uiState.update { it.copy(savedCount = it.savedCount + 1) }
                 uiText(R.string.receipt_saved, receipt.shopName, money(receipt.totalAmount))
             } catch (cancelled: ScanCancelled) {
                 null
@@ -144,6 +147,7 @@ class ReceiptViewModel @Inject constructor(
             val message: UiText = try {
                 val receipt = repository.scanReceiptFile(files.read(uri))
                 refresh()
+                _uiState.update { it.copy(savedCount = it.savedCount + 1) }
                 uiText(R.string.receipt_saved, receipt.shopName, money(receipt.totalAmount))
             } catch (_: ReceiptFileTooLarge) {
                 uiText(R.string.receipt_file_too_large)
