@@ -12,6 +12,10 @@
         X-Content-Type-Options "nosniff"
         X-Frame-Options "DENY"
         Referrer-Policy "no-referrer"
+        # Samo svoje skripte i Google-ova prijava. Inline stil ostaje (stil u
+        # atributima koje app.js iscrtava), inline skripte i eval ne prolaze.
+        Content-Security-Policy "default-src 'self'; script-src 'self' https://accounts.google.com/gsi/client; style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style; img-src 'self' data: blob:; connect-src 'self' https://accounts.google.com/gsi/; frame-src https://accounts.google.com/gsi/; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+        Permissions-Policy "camera=(self), geolocation=(self), microphone=(), payment=(), usb=()"
         -Server
     }
 
