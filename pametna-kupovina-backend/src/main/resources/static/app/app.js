@@ -1870,11 +1870,19 @@ async function showProduct(id) {
 
 // ---------- Akcije ----------
 
-let sales = { sort: 'DISCOUNT', category: null, allChains: false, place: null, page: null, items: [], categories: [], error: null };
-const saleSorts = { DISCOUNT: 'Najveći popust', SAVING: 'Najveća ušteda', PRICE: 'Najniža cena' };
+// Krug u metrima (0 = „Svi lanci"); pamti se izbor, podrazumevano 3 km.
+const saleRadii = [1000, 3000, 10000, 0];
+const savedSaleRadius = () => { const r = saved.get('saleRadius', 3000); return saleRadii.includes(r) ? r : 3000; };
+let sales = { sort: 'DISCOUNT', category: null, retailer: null, retailerName: null, radius: savedSaleRadius(),
+  place: null, page: null, items: [], categories: [], retailers: [], error: null };
+const saleSorts = { DISCOUNT: 'Najveći popust', SAVING: 'Najveća ušteda', PRICE: 'Najniža cena', NEAREST: 'Najbliže' };
+const radiusLabel = meters => meters ? distance(meters / 1000) : 'Svi lanci';
 
-/** Sa sačuvanom polaznom tačkom samo radnje u blizini, osim kad kupac izabere „Svi lanci". */
-const salesPlace = () => sales.allChains ? '' : searchLocation();
+/** Sa sačuvanom polaznom tačkom samo radnje u izabranom krugu, osim kad kupac izabere „Svi lanci". */
+const salesPlace = () => {
+  const place = sales.radius ? searchLocation() : '';
+  return place ? place + '&radiusMeters=' + sales.radius : '';
+};
 
 /** Lista se pamti dok se ide na detalje i nazad; nova kad se promeni mesto. */
 function showSales() {
@@ -1905,10 +1913,11 @@ async function loadSales(more = false) {
   renderSales(true);
   try {
     const page = await api('GET', `products/on-sale?sort=${sales.sort}&page=${next}&limit=20${
-      sales.category ? '&category=' + encodeURIComponent(sales.category) : ''}${sales.place}`);
+      sales.category ? '&category=' + encodeURIComponent(sales.category) : ''}${
+      sales.retailer ? '&retailer=' + encodeURIComponent(sales.retailer) : ''}${sales.place}`);
     sales.page = page;
     sales.items = more ? sales.items.concat(page.items) : page.items;
-    if (!more) sales.categories = page.categories;
+    if (!more) { sales.categories = page.categories; sales.retailers = page.retailers || []; }
   } catch (error) {
     sales.error = error.message;
   }
@@ -1939,19 +1948,31 @@ function renderSales(loading = false) {
   const page = sales.page;
   const chip = (act, value, label, pressed) =>
     `<button class="chip" data-act="${act}" data-value="${esc(value)}" aria-pressed="${pressed}">${esc(label)}</button>`;
+  const origin = saved.get('origin');
+  const radius = page?.radiusMeters ? distance(page.radiusMeters / 1000) : null;
+  // Izabrani lanac ostaje u redu i kad u novom krugu nema akcija, da može da se skine.
+  const retailers = sales.retailer && !sales.retailers.some(r => r.code === sales.retailer)
+    ? [{ code: sales.retailer, name: sales.retailerName || sales.retailer, productCount: 0 }, ...sales.retailers]
+    : sales.retailers;
   screen({
     title: 'Akcije',
-    subtitle: page ? (page.nearbyChecked ? 'Radnje do 10 km od tebe' : 'Svi lanci') : null,
+    subtitle: page ? (page.nearbyChecked
+      ? (origin?.label ? `Blizu: ${origin.label} · do ${radius}` : `Radnje do ${radius} od tebe`)
+      : 'Svi lanci') : null,
     back: salesFrom,
     html:
       (!saved.get('origin') ? `<button class="card soft row" style="text-align:left;cursor:pointer" data-act="sales-locate">
         <span class="letter" style="border-radius:50%;background:var(--mint);color:var(--on-mint)">${icon.pin}</span>
         <span class="grow"><span class="name" style="display:block">Samo radnje blizu mene</span>
         <span class="muted small">${browserName} će pitati za dozvolu</span></span>${icon.chevron}</button>`
-        : `<div class="chips" role="group" aria-label="Radnje">${chip('sale-scope', 'near', 'Blizu mene', !sales.allChains)}${
-          chip('sale-scope', 'all', 'Svi lanci', sales.allChains)}</div>`) +
-      `<div class="chips" role="group" aria-label="Redosled">${Object.entries(saleSorts).map(([key, label]) =>
-        chip('sale-sort', key, label, key === sales.sort)).join('')}</div>` +
+        : `<div class="chips" role="group" aria-label="Koliko daleko">${saleRadii.map(r =>
+          chip('sale-radius', String(r), radiusLabel(r), r === sales.radius)).join('')}</div>`) +
+      `<div class="chips" role="group" aria-label="Redosled">${Object.entries(saleSorts)
+        // „Najbliže" samo kad se zna odakle.
+        .filter(([key]) => key !== 'NEAREST' || page?.nearbyChecked)
+        .map(([key, label]) => chip('sale-sort', key, label, key === sales.sort)).join('')}</div>` +
+      (retailers.length > 1 || sales.retailer ? `<div class="chips" role="group" aria-label="Lanac">${chip('sale-retailer', '', 'Svi', !sales.retailer)}${
+        retailers.map(r => chip('sale-retailer', r.code, `${r.name} (${r.productCount})`, r.code === sales.retailer)).join('')}</div>` : '') +
       (sales.categories.length ? `<div class="chips" role="group" aria-label="Kategorija">${chip('sale-category', '', 'Sve', !sales.category)}${
         sales.categories.map(c => chip('sale-category', c.code, `${c.name} (${c.productCount})`, c.code === sales.category)).join('')}</div>` : '') +
       (sales.error ? notice('Akcije trenutno nisu dostupne. ' + sales.error, 'err') : '') +
@@ -1973,7 +1994,11 @@ function renderSales(loading = false) {
 function salesLocate() {
   if (!navigator.geolocation) return toast('Ovaj pregledač ne daje lokaciju.');
   navigator.geolocation.getCurrentPosition(
-    position => { saved.set('origin', { lat: position.coords.latitude, lng: position.coords.longitude }); sales.allChains = false; loadSales(); },
+    position => {
+      saved.set('origin', { lat: position.coords.latitude, lng: position.coords.longitude });
+      if (!sales.radius) sales.radius = 3000;
+      loadSales();
+    },
     error => toast(error.code === 1 ? `${browserName} nema dozvolu za lokaciju.` : 'Lokacija trenutno nije dostupna.', null, null, true),
     { enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 }
   );
@@ -2317,7 +2342,17 @@ const actions = {
   },
   ...accountActions,
   'sale-sort': el => { sales.sort = el.dataset.value; return loadSales(); },
-  'sale-scope': el => { sales.allChains = el.dataset.value === 'all'; return loadSales(); },
+  'sale-radius': el => {
+    sales.radius = Number(el.dataset.value);
+    saved.set('saleRadius', sales.radius);
+    if (!sales.radius && sales.sort === 'NEAREST') sales.sort = 'DISCOUNT';
+    return loadSales();
+  },
+  'sale-retailer': el => {
+    sales.retailer = el.dataset.value || null;
+    sales.retailerName = sales.retailers.find(r => r.code === sales.retailer)?.name || null;
+    return loadSales();
+  },
   'sale-category': el => { sales.category = el.dataset.value || null; return loadSales(); },
   'sales-more': () => loadSales(true),
   'sales-locate': salesLocate,

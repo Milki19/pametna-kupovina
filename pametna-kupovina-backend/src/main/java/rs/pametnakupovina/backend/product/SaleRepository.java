@@ -15,8 +15,14 @@ import java.util.List;
 @Repository
 public class SaleRepository {
 
-    /** Only shops this close count as "nearby" for the list of sales. */
+    /**
+     * Only shops this close count as "nearby" when the shopper does not say
+     * how far: what every app before 2.0.8 gets.
+     */
     static final int NEARBY_METERS = 10_000;
+    /** The circle a shopper can choose, from a walk to a drive across town. */
+    static final int MIN_RADIUS_METERS = 300;
+    static final int MAX_RADIUS_METERS = 15_000;
 
     private static final RowMapper<SaleRow> ROW_MAPPER = (resultSet, rowNumber) ->
             new SaleRow(
@@ -43,8 +49,8 @@ public class SaleRepository {
             );
 
     /*
-     * The sales a shopper can reach: with a location, only shops within
-     * NEARBY_METERS, and a price set for one shop counts only for that shop.
+     * The sales a shopper can reach: with a location, only shops within the
+     * chosen circle (NEARBY_METERS when none is chosen), and a price set for one shop counts only for that shop.
      * Then the best one per product.
      */
     private static final String BEST_SALES = """
@@ -153,6 +159,7 @@ public class SaleRepository {
             case DISCOUNT -> "listed.discount_percent DESC, listed.regular_price - listed.sale_price DESC";
             case SAVING -> "listed.regular_price - listed.sale_price DESC, listed.discount_percent DESC";
             case PRICE -> "listed.sale_price ASC, listed.discount_percent DESC";
+            case NEAREST -> "listed.meters ASC NULLS LAST, listed.discount_percent DESC";
         };
         return withFilter(jdbcClient.sql(BEST_SALES + """
                         SELECT listed.product_family_id,
@@ -216,6 +223,42 @@ public class SaleRepository {
                 .list();
     }
 
+    /**
+     * Chains with something on sale under the same place, category and words,
+     * with how many products each has on sale there. A product counts for
+     * every chain that has it on sale, not only the one where it comes off the
+     * most: that is what the list shows once the chain is chosen.
+     */
+    public List<SaleRetailer> findRetailers(SaleFilter filter) {
+        return withFilter(jdbcClient.sql(BEST_SALES + """
+                        SELECT retailer.code,
+                               retailer.name,
+                               COUNT(*)::INTEGER AS product_count,
+                               MIN(chain_best.meters) AS meters
+                        FROM chain_best
+                        JOIN app.product_family AS family
+                          ON family.id = chain_best.product_family_id
+                        LEFT JOIN app.product_category AS category
+                          ON category.id = family.product_category_id
+                        JOIN app.retailer AS retailer
+                          ON retailer.id = chain_best.retailer_id
+                        WHERE family.review_status <> 'REJECTED'
+                          AND (CAST(:query AS TEXT) IS NULL
+                               OR family.normalized_name LIKE '%' || CAST(:query AS TEXT) || '%')
+                          AND (CAST(:category AS TEXT) IS NULL
+                               OR category.code = CAST(:category AS TEXT))
+                        GROUP BY retailer.code, retailer.name
+                        ORDER BY product_count DESC, retailer.name
+                        """), filter)
+                .query((resultSet, rowNumber) -> new SaleRetailer(
+                        resultSet.getString("code"),
+                        resultSet.getString("name"),
+                        resultSet.getInt("product_count"),
+                        resultSet.getObject("meters", Double.class)
+                ))
+                .list();
+    }
+
     private static JdbcClient.StatementSpec withFilter(
             JdbcClient.StatementSpec statement,
             SaleFilter filter
@@ -224,7 +267,7 @@ public class SaleRepository {
                 .param("located", filter.located())
                 .param("latitude", filter.located() ? filter.latitude() : null)
                 .param("longitude", filter.located() ? filter.longitude() : null)
-                .param("radius", NEARBY_METERS)
+                .param("radius", filter.radiusMeters())
                 .param("minDiscount", filter.minDiscount())
                 .param("retailer", filter.retailerCode())
                 .param("category", filter.categoryCode())
@@ -234,6 +277,7 @@ public class SaleRepository {
     /**
      * @param normalizedQuery words the product's name must contain, already
      *                        normalized the way names are; null for any
+     * @param radiusMeters    how far a shop may be from the location
      */
     record SaleFilter(
             Double latitude,
@@ -241,8 +285,19 @@ public class SaleRepository {
             String categoryCode,
             String retailerCode,
             String normalizedQuery,
-            int minDiscount
+            int minDiscount,
+            int radiusMeters
     ) {
+        SaleFilter withoutCategory() {
+            return new SaleFilter(latitude, longitude, null, retailerCode, normalizedQuery,
+                    minDiscount, radiusMeters);
+        }
+
+        SaleFilter withoutRetailer() {
+            return new SaleFilter(latitude, longitude, categoryCode, null, normalizedQuery,
+                    minDiscount, radiusMeters);
+        }
+
         boolean located() {
             return latitude != null && longitude != null;
         }
