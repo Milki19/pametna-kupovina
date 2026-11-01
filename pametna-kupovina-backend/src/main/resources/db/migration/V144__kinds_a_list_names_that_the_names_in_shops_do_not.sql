@@ -47,7 +47,9 @@ FROM (
                 || '|sapun[a-z]*|puder[a-z]*|pasta|zub[a-z]*|cetk[a-z]*|cetkic[a-z]*|flasic[a-z]*|cucl[a-z]*'
                 || '|cinij[a-z]*|tanjir[a-z]*|kasicic[a-z]*|kasik[a-z]*|posud[a-z]*|igrack[a-z]*'
                 || '|deterdzent[a-z]*|omeksivac[a-z]*|ves|vesa|sprej[a-z]*|balzam[a-z]*|zastit[a-z]*'
-                || '|sunc[a-z]*|termometar[a-z]*|kesa|kese|torb[a-z]*|prasic[a-z]*|mack[a-z]*|pas|psa|pse|dog|cat)\M',
+                || '|sunc[a-z]*|termometar[a-z]*|kesa|kese|torb[a-z]*|prasic[a-z]*|mack[a-z]*|pas|psa|pse|dog|cat'
+                -- Slatkiši za decu: „BOMBONE FAST FOOD 30G BEBETO“.
+                || '|bombon[a-z]*|bebeto|lizalic[a-z]*|zvak[a-z]*|gumen[a-z]*|bonbon[a-z]*)\M',
             -- Ispred voća, jogurta i sokova: „HIPP kašica jabuka“ je hrana za bebe.
             5
         ),
