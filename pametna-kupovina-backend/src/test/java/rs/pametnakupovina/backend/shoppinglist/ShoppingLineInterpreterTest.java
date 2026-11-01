@@ -118,6 +118,18 @@ class ShoppingLineInterpreterTest {
     }
 
     @Test
+    void wordsTheKindsRulesLeaveOutAreLookedForByName() {
+        // "parmezan salama" became Zanetti parmesan (proba na kopiji 1.11.2026).
+        kind("parmezan salama", "parmezan", false, null);
+        when(resolver.wordsLeaveTheKind(7L, "salama")).thenReturn(true);
+
+        var salami = interpreter.interpret("parmezan salama");
+
+        assertThat(salami.normalizedCategory()).isNotEqualTo("parmezan");
+        assertThat(salami.name()).isEqualTo("parmezan salama");
+    }
+
+    @Test
     void anUnknownLineIsAProductSearchWithEverythingThatWasWritten() {
         when(resolver.resolve(anyString())).thenReturn(Optional.empty());
 

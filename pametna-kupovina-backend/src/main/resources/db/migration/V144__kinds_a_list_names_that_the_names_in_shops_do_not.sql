@@ -94,7 +94,11 @@ FROM (
                 || '|kecap[a-z]*|ketchup|paprik[a-z]*|chili|cili|salsa|sos[a-z]*|dip|sour|pavlak[a-z]*|bbq'
                 || '|so|morska|piletin[a-z]*|pilec[a-z]*|sunk[a-z]*|sir|sirom|povrc[a-z]*|meso|mesom'
                 || '|gotov[a-z]*|obrok[a-z]*|sendvic[a-z]*|burrito|fajita|kebab|giros|tun[ae]|losos[a-z]*'
-                || '|salat[a-z]*|tiganj[a-z]*|kalup[a-z]*)\M',
+                || '|salat[a-z]*|tiganj[a-z]*|kalup[a-z]*'
+                -- Grickalice koje lanci zovu tortiljom, i ulošci „Single Wrap“.
+                || '|cheese|pizza|kechup|kecup|hot|spicy|flavour|sourcream|cream|luk|tzatziki|rostilj'
+                || '|cvarc[a-z]*|famoso|doritos|smoki|chio|miguel|hrusty|patos|always|liners?|ulos[a-z]*'
+                || '|discreet|dnevn[a-z]*)\M',
             -- Ispred hleba i grickalica.
             5
         ),
@@ -107,7 +111,11 @@ FROM (
             '\m(plocic[a-z]*|bar|cokolad[a-z]*|bombon[a-z]*|zvak[a-z]*|gel|tablet[a-z]*|sumec[a-z]*'
                 || '|kapsul[a-z]*|keks[a-z]*|musli|zitn[a-z]*|kroasan[a-z]*|sampon[a-z]*|dezodorans[a-z]*'
                 || '|sprej[a-z]*|baterij[a-z]*|sijalic[a-z]*|kafa|caj|protein[a-z]*|izotonik[a-z]*'
-                || '|sladoled[a-z]*|pivo|rakij[a-z]*|vodk[a-z]*|liker[a-z]*|koktel[a-z]*|case|casa)\M',
+                || '|sladoled[a-z]*|pivo|rakij[a-z]*|vodk[a-z]*|liker[a-z]*|koktel[a-z]*|case|casa'
+                -- Kozmetika „Energy“: „Dove Men Energising 150ml“, „Nivea SG Energy“.
+                || '|deo|dezodor[a-z]*|antiperspir[a-z]*|roll|tus[a-z]*|kupk[a-z]*|losion[a-z]*|krem[a-z]*'
+                || '|parfem[a-z]*|balzam[a-z]*|brijanj[a-z]*|sg|as|edt|edp|men|nivea|dove|loreal|axe'
+                || '|rexona|garnier|cardin|zensen|energiser|energizer)\M',
             -- Ispred gaziranih sokova: „Guarana“ je energetsko piće.
             5
         ),
