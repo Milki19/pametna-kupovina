@@ -422,6 +422,7 @@ internal fun RecommendationContent(
                         scenario = scenario,
                         selected = scenario.type == selected.type,
                         onSelect = { selectedTypeName = scenario.type.name },
+                        walking = result.assumptions.walking,
                         modifier = Modifier.enter(entrance, index + 1)
                     )
                 }
@@ -431,10 +432,19 @@ internal fun RecommendationContent(
                 item(key = "on-the-way-${selected.type}") {
                     val names = onTheWay.itemNames.joinToString(", ").replaceFirstChar { it.uppercase() }
                     NoticeBanner(
-                        text = stringResource(
-                            if (onTheWay.itemNames.size == 1) R.string.rec_on_the_way_one else R.string.rec_on_the_way_many,
-                            names, wholeAmount(onTheWay.extraCost), currency(), duration(onTheWay.extraSeconds)
-                        ),
+                        text = if (result.assumptions.walking) {
+                            // Peške se hod ne pretvara u dinare.
+                            stringResource(
+                                if (onTheWay.itemNames.size == 1) R.string.rec_on_the_way_walking_one
+                                else R.string.rec_on_the_way_walking_many,
+                                names, duration(onTheWay.extraSeconds)
+                            )
+                        } else {
+                            stringResource(
+                                if (onTheWay.itemNames.size == 1) R.string.rec_on_the_way_one else R.string.rec_on_the_way_many,
+                                names, wholeAmount(onTheWay.extraCost), currency(), duration(onTheWay.extraSeconds)
+                            )
+                        },
                         modifier = Modifier.testTag("on-the-way")
                     )
                 }
@@ -694,7 +704,8 @@ private fun ScenarioCard(
     scenario: OptimizationScenarioDto,
     selected: Boolean,
     onSelect: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    walking: Boolean = false
 ) {
     val scheme = MaterialTheme.colorScheme
     GlassCard(
@@ -778,7 +789,7 @@ private fun ScenarioCard(
                 ) {
                     HorizontalDivider(color = scheme.outlineVariant)
                     if (scenario.available) {
-                        ScenarioDetails(scenario)
+                        ScenarioDetails(scenario, walking)
                     } else {
                         Text(scenario.explanation, style = MaterialTheme.typography.bodyMedium)
                     }
@@ -789,7 +800,7 @@ private fun ScenarioCard(
 }
 
 @Composable
-private fun ScenarioDetails(scenario: OptimizationScenarioDto) {
+private fun ScenarioDetails(scenario: OptimizationScenarioDto, walking: Boolean = false) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -847,14 +858,19 @@ private fun ScenarioDetails(scenario: OptimizationScenarioDto) {
         itemVerticalAlignment = Alignment.CenterVertically
     ) {
         // Put i vreme is everything above the basket, so the two parts
-        // always add up to the total shown above them.
+        // always add up to the total shown above them. On foot the plan
+        // costs the basket alone (utisak 31.10.).
         scenario.totalCost?.let {
             Text(
-                stringResource(
-                    R.string.rec_basket_plus_travel,
-                    money(scenario.basketCost),
-                    money(it - scenario.basketCost)
-                ),
+                if (walking) {
+                    stringResource(R.string.rec_basket_only_walking)
+                } else {
+                    stringResource(
+                        R.string.rec_basket_plus_travel,
+                        money(scenario.basketCost),
+                        money(it - scenario.basketCost)
+                    )
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = muted
             )
@@ -1274,20 +1290,28 @@ private fun CalculationDetails(
                             ?: stringResource(R.string.rec_calc_no_prices),
                         scenario.disclaimer.ifBlank { result.disclaimer },
                         scenario.takeIf { it.available }?.let {
+                            if (assumptions.walking) {
+                                stringResource(R.string.rec_calc_basket_only, money(it.basketCost))
+                            } else {
+                                stringResource(
+                                    R.string.rec_calc_costs,
+                                    money(it.basketCost),
+                                    money(it.travelCost),
+                                    money(it.timeCost),
+                                    money(it.stopCost)
+                                )
+                            }
+                        },
+                        if (assumptions.walking) {
+                            stringResource(R.string.rec_calc_walking)
+                        } else {
                             stringResource(
-                                R.string.rec_calc_costs,
-                                money(it.basketCost),
-                                money(it.travelCost),
-                                money(it.timeCost),
-                                money(it.stopCost)
+                                R.string.rec_calc_rates,
+                                money(assumptions.costPerKm),
+                                money(assumptions.valuePerHour),
+                                money(assumptions.costPerStop)
                             )
                         },
-                        stringResource(
-                            R.string.rec_calc_rates,
-                            money(assumptions.costPerKm),
-                            money(assumptions.valuePerHour),
-                            money(assumptions.costPerStop)
-                        ),
                         if (scenario.approximateRoute) {
                             stringResource(R.string.rec_calc_approximate)
                         } else {

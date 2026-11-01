@@ -48,6 +48,7 @@
     <string name="rec_no_price">nema cene</string>
     <string name="rec_savings">Ušteda %1$s %2$s</string>
     <string name="rec_basket_plus_travel">korpa %1$s + put i vreme %2$s</string>
+    <string name="rec_basket_only_walking">samo korpa: peške ne računamo put ni vreme u dinarima</string>
     <!-- %1$s broj prodavnica, %2$s razdaljina, %3$s vreme -->
     <string name="rec_scenario_route">%1$s · %2$s · %3$s</string>
     <plurals name="rec_store_count">
@@ -94,8 +95,10 @@
     <string name="rec_calc_data_as_of">Cene su iz cenovnika od %1$s; cenovnik ne govori da li je artikal na polici.</string>
     <string name="rec_calc_no_prices">Za ovaj scenario nema važećih cena.</string>
     <string name="rec_calc_costs">Korpa %1$s, put %2$s, vreme %3$s, stajanja %4$s.</string>
+    <string name="rec_calc_basket_only">Korpa %1$s.</string>
     <string name="rec_calc_change_trip">Promeni cenu vremena i prevoza</string>
     <string name="rec_calc_rates">Put računamo %1$s po kilometru, vreme %2$s po satu i %3$s po stajanju.</string>
+    <string name="rec_calc_walking">Peške ne računamo put ni vreme u dinarima. Kad je razlika u korpi mala, biramo bližu radnju i manje radnji.</string>
     <string name="rec_item_price_from">Cena od %1$s</string>
     <string name="rec_calc_approximate">Udaljenosti su procena: vazdušna linija uvećana za ulice, bez saobraćaja.</string>
     <plurals name="rec_calc_candidates">
@@ -135,6 +138,8 @@
     <string name="rec_balance_more_names">%1$s i još %2$d</string>
     <string name="rec_on_the_way_one">%1$s kupi usput. Zbog te stavke plan bi imao još jednu prodavnicu: +%2$s %3$s i oko %4$s više.</string>
     <string name="rec_on_the_way_many">%1$s kupi usput. Zbog tih stavki plan bi imao još jednu prodavnicu: +%2$s %3$s i oko %4$s više.</string>
+    <string name="rec_on_the_way_walking_one">%1$s kupi usput. Zbog te stavke plan bi imao još jednu prodavnicu: oko %2$s hoda više.</string>
+    <string name="rec_on_the_way_walking_many">%1$s kupi usput. Zbog tih stavki plan bi imao još jednu prodavnicu: oko %2$s hoda više.</string>
     <string name="rec_long_walk">Ovo je oko %1$s hoda.</string>
     <string name="rec_near_only">Samo radnje do %1$d km</string>
     <string name="rec_near_only_on">Samo radnje do %1$d km.</string>

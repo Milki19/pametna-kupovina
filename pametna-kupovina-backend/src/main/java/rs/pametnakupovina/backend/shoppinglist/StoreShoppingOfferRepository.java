@@ -407,16 +407,15 @@ public class StoreShoppingOfferRepository {
                                   -- from a shop with only cartons of ten are two
                                   -- cartons, not no price. Up to twice what was
                                   -- asked; the cheaper total still wins.
-                                  AND (
-                                      need.packages * pack.size <= item.target_quantity * item.quantity
-                                          * CASE WHEN requested_intent.default_base_unit = 'piece'
-                                                 THEN 2 ELSE 1.25 END
-                                      -- One pack of up to twice the amount: "šećer 500 g"
-                                      -- in a shop with only a kilogram of white sugar.
-                                      -- It comes after every pack that fits (V125).
-                                      OR (need.packages = 1
-                                          AND pack.size <= item.target_quantity * item.quantity * 2)
-                                  )
+                                  -- Anything more than a quarter over the amount
+                                  -- ("šećer 500 g" in a shop with only a kilogram,
+                                  -- 2 × 3 kg of powder for 4,5 kg) comes after every
+                                  -- pack that fits (oversize_rank), and the plan
+                                  -- says so: the nearest pack, not "Nema cene"
+                                  -- (test 1.11.).
+                                  -- Nine boxes of discs for 4,5 kg of powder are
+                                  -- weighed against what other shops ask (PlanRules).
+                                  AND need.packages * pack.size <= item.target_quantity * item.quantity * 2
                               ))
                               -- Found by one of the intent's types, so it is of a kind
                               -- the item allows: asked again, that was 30,000 lookups.
@@ -871,16 +870,15 @@ public class StoreShoppingOfferRepository {
                                   -- from a shop with only cartons of ten are two
                                   -- cartons, not no price. Up to twice what was
                                   -- asked; the cheaper total still wins.
-                                  AND (
-                                      need.packages * pack.size <= item.target_quantity * item.quantity
-                                          * CASE WHEN requested_intent.default_base_unit = 'piece'
-                                                 THEN 2 ELSE 1.25 END
-                                      -- One pack of up to twice the amount: "šećer 500 g"
-                                      -- in a shop with only a kilogram of white sugar.
-                                      -- It comes after every pack that fits (V125).
-                                      OR (need.packages = 1
-                                          AND pack.size <= item.target_quantity * item.quantity * 2)
-                                  )
+                                  -- Anything more than a quarter over the amount
+                                  -- ("šećer 500 g" in a shop with only a kilogram,
+                                  -- 2 × 3 kg of powder for 4,5 kg) comes after every
+                                  -- pack that fits (oversize_rank), and the plan
+                                  -- says so: the nearest pack, not "Nema cene"
+                                  -- (test 1.11.).
+                                  -- Nine boxes of discs for 4,5 kg of powder are
+                                  -- weighed against what other shops ask (PlanRules).
+                                  AND need.packages * pack.size <= item.target_quantity * item.quantity * 2
                               ))
                               AND (
                                   (
