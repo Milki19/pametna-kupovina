@@ -41,7 +41,6 @@ interface SessionStorage {
         refreshToken: String,
         deviceId: Long
     )
-    suspend fun startOver()
 }
 
 @Singleton
@@ -100,24 +99,6 @@ class ClientIdentityStore @Inject constructor(
             preferences[ACCESS_EXPIRES_AT] = accessExpiresAtMillis
             preferences[REFRESH_TOKEN] = KeystoreBox.seal(refreshToken)
             preferences[DEVICE_ID] = deviceId
-        }
-    }
-
-    /**
-     * Server više ne priznaje ni sesiju ni stari broj ovog telefona (uklonjen
-     * je sa naloga ili dugo nije korišćen). Telefon počinje kao nov: novi
-     * broj, bez sesije i bez spiska koji je pripadao starom nalogu.
-     */
-    override suspend fun startOver() {
-        tokenMutex.withLock {
-            context.clientIdentityDataStore.edit { preferences ->
-                preferences.remove(CLIENT_TOKEN)
-                preferences.remove(ACCESS_TOKEN)
-                preferences.remove(ACCESS_EXPIRES_AT)
-                preferences.remove(REFRESH_TOKEN)
-                preferences.remove(DEVICE_ID)
-                preferences.remove(ACTIVE_LIST_ID)
-            }
         }
     }
 

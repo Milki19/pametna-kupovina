@@ -148,6 +148,12 @@ interface ShoppingApiService {
         @Path("listId") listId: Long
     ): ShoppingListDto
 
+    /** Isti spisak po nasumičnom ID-ju (link domaćinstva iz novije web verzije). */
+    @GET("api/v1/shopping-lists/{listRef}")
+    suspend fun getShoppingListByRef(
+        @Path("listRef") listRef: String
+    ): ShoppingListDto
+
     @POST("api/v1/shopping-lists/{listId}/items")
     suspend fun addShoppingListItem(
         @Path("listId") listId: Long,

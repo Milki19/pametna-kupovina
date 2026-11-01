@@ -270,8 +270,10 @@ class ShoppingRepository @Inject constructor(
      * ništa što je kupac upisao ne nestaje sa ekrana.
      */
     suspend fun joinHousehold(scanned: String) {
-        val (code, listId) = parseHouseholdCode(scanned) ?: throw NotAHouseholdCode()
+        val (code, listRef) = parseHouseholdCode(scanned) ?: throw NotAHouseholdCode()
         api.joinHousehold(JoinRequestDto(code)).rememberingMarket()
+        // Nasumičan ID tek posle ulaska vodi do spiska, jer je on tada i naš.
+        val listId = listRef.toLongOrNull() ?: api.getShoppingListByRef(listRef).id
         syncMutex.withLock {
             clientIdentityStore.setActiveListId(listId)
             dao.resetRemoteState()
@@ -686,8 +688,11 @@ private const val NEARBY_STORE_LIMIT = 100
 private const val HOUSEHOLD_PREFIX = "pametnakupovina:domacinstvo:"
 
 // Link do web verzije: iPhone ga otvori kamerom, a aplikacija ga čita kao kod.
-private val HOUSEHOLD_LINK =
-    Regex("^https?://[^/\\s]+/app/(?:index\\.html)?#/domacinstvo/([A-Za-z0-9_-]+)/(\\d+)$")
+// Spisak je broj (kako ga i dalje pravi i Android 2.0.6) ili nasumičan ID.
+private val HOUSEHOLD_LINK = Regex(
+    "^https?://[^/\\s]+/app/(?:index\\.html)?#/domacinstvo/([A-Za-z0-9_-]+)/" +
+        "([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|\\d+)$"
+)
 
 internal fun householdCode(
     code: String,
@@ -695,16 +700,21 @@ internal fun householdCode(
     baseUrl: String = BuildConfig.BACKEND_BASE_URL
 ) = "${baseUrl.trimEnd('/')}/app/#/domacinstvo/$code/$listId"
 
-/** Kod i spisak iz skeniranog QR-a (link ili kod iz aplikacije 1.x), ili null za bilo koji drugi kod. */
-internal fun parseHouseholdCode(scanned: String): Pair<String, Long>? {
+/**
+ * Kod i spisak iz skeniranog QR-a (link ili kod iz aplikacije 1.x), ili null
+ * za bilo koji drugi kod. Spisak ostaje kako je u linku: broj ili nasumičan ID.
+ */
+internal fun parseHouseholdCode(scanned: String): Pair<String, String>? {
     val text = scanned.trim()
     HOUSEHOLD_LINK.matchEntire(text)?.let { link ->
-        return link.groupValues[1] to (link.groupValues[2].toLongOrNull() ?: return null)
+        val listRef = link.groupValues[2]
+        if (listRef.all(Char::isDigit) && listRef.toLongOrNull() == null) return null
+        return link.groupValues[1] to listRef
     }
     val rest = text.takeIf { it.startsWith(HOUSEHOLD_PREFIX) }
         ?.removePrefix(HOUSEHOLD_PREFIX) ?: return null
     val listId = rest.substringAfter(':', "").toLongOrNull() ?: return null
-    return rest.substringBefore(':').takeIf(String::isNotBlank)?.let { it to listId }
+    return rest.substringBefore(':').takeIf(String::isNotBlank)?.let { it to listId.toString() }
 }
 
 class ItemSyncValidationException(

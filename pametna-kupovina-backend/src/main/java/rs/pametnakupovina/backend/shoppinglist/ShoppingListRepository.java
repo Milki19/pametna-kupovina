@@ -10,6 +10,7 @@ import java.sql.Types;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 @Repository
 public class ShoppingListRepository {
@@ -18,6 +19,7 @@ public class ShoppingListRepository {
             SUMMARY_ROW_MAPPER = (resultSet, rowNumber) ->
             new ShoppingListSummary(
                     resultSet.getLong("id"),
+                    resultSet.getObject("public_id", UUID.class),
                     resultSet.getString("name"),
                     resultSet.getObject(
                             "created_at",
@@ -163,6 +165,7 @@ public class ShoppingListRepository {
                         )
                         VALUES (?, ?)
                         RETURNING id,
+                                  public_id,
                                   name,
                                   created_at,
                                   updated_at,
@@ -179,6 +182,7 @@ public class ShoppingListRepository {
     ) {
         return jdbcClient.sql("""
                         SELECT sl.id,
+                               sl.public_id,
                                sl.name,
                                sl.created_at,
                                sl.updated_at,
@@ -189,6 +193,7 @@ public class ShoppingListRepository {
                         WHERE sl.account_id = ?
                           AND sl.active = TRUE
                         GROUP BY sl.id,
+                                 sl.public_id,
                                  sl.name,
                                  sl.created_at,
                                  sl.updated_at
@@ -204,6 +209,7 @@ public class ShoppingListRepository {
         Optional<ShoppingListHeader> header =
                 jdbcClient.sql("""
                                 SELECT id,
+                                       public_id,
                                        name,
                                        created_at,
                                        updated_at
@@ -215,6 +221,7 @@ public class ShoppingListRepository {
                         .query((resultSet, rowNumber) ->
                                 new ShoppingListHeader(
                                         resultSet.getLong("id"),
+                                        resultSet.getObject("public_id", UUID.class),
                                         resultSet.getString("name"),
                                         resultSet.getObject(
                                                 "created_at",
@@ -237,6 +244,7 @@ public class ShoppingListRepository {
         Optional<ShoppingListHeader> header =
                 jdbcClient.sql("""
                                 SELECT id,
+                                       public_id,
                                        name,
                                        created_at,
                                        updated_at
@@ -250,6 +258,7 @@ public class ShoppingListRepository {
                         .query((resultSet, rowNumber) ->
                                 new ShoppingListHeader(
                                         resultSet.getLong("id"),
+                                        resultSet.getObject("public_id", UUID.class),
                                         resultSet.getString("name"),
                                         resultSet.getObject(
                                                 "created_at",
@@ -308,12 +317,32 @@ public class ShoppingListRepository {
         return Optional.of(
                 new ShoppingListResponse(
                         value.id(),
+                        value.publicId(),
                         value.name(),
                         value.createdAt(),
                         value.updatedAt(),
                         items
                 )
         );
+    }
+
+    /**
+     * The number of the caller's own list behind a random id. Someone else's
+     * list is not found, the same as one that does not exist, so its number
+     * never comes back in a refusal.
+     */
+    public Optional<Long> idForPublicId(UUID publicId, long accountId) {
+        return jdbcClient.sql("""
+                        SELECT id
+                        FROM app.shopping_list
+                        WHERE public_id = ?
+                          AND account_id = ?
+                          AND active = TRUE
+                        """)
+                .param(1, publicId)
+                .param(2, accountId)
+                .query(Long.class)
+                .optional();
     }
 
     public boolean existsByIdAndAccount(
@@ -964,6 +993,7 @@ public class ShoppingListRepository {
 
     private record ShoppingListHeader(
             Long id,
+            UUID publicId,
             String name,
             OffsetDateTime createdAt,
             OffsetDateTime updatedAt

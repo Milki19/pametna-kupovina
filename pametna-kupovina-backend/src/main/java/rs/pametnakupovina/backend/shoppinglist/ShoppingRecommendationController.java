@@ -2,7 +2,6 @@ package rs.pametnakupovina.backend.shoppinglist;
 
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -33,7 +32,7 @@ public class ShoppingRecommendationController {
 
     @GetMapping("/{listId}/recommendations")
     public ShoppingRecommendationResponse recommend(
-            @PathVariable("listId") Long listId,
+            @ListRef Long listId,
             DeviceCaller caller,
             @RequestParam("latitude") double latitude,
             @RequestParam("longitude") double longitude,
@@ -74,7 +73,7 @@ public class ShoppingRecommendationController {
     /** The chains without shop addresses; no location needed. */
     @GetMapping("/{listId}/recommendations/unlocated-price-options")
     public List<UnlocatedPriceOption> unlocatedPriceOptions(
-            @PathVariable("listId") Long listId,
+            @ListRef Long listId,
             DeviceCaller caller,
             @RequestParam(
                     name = "date",

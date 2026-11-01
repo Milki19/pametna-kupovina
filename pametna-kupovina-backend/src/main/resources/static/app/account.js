@@ -121,14 +121,19 @@ const householdLink = (code, listId) => `${location.origin}/app/#/domacinstvo/${
 /** Kod i spisak iz linka ili iz starog Android QR koda; null za bilo šta drugo. */
 function parseHousehold(text) {
   const value = String(text || '').trim();
-  const match = value.match(/#\/domacinstvo\/([A-Za-z0-9_-]+)\/(\d+)/)
+  const match = value.match(new RegExp(`#/domacinstvo/([A-Za-z0-9_-]+)/(${LIST_REF})`))
     || (value.startsWith(HOUSEHOLD_PREFIX) && value.slice(HOUSEHOLD_PREFIX.length).match(/^([A-Za-z0-9_-]+):(\d+)$/));
-  return match ? { code: match[1], listId: Number(match[2]) } : null;
+  return match ? { code: match[1], listId: match[2] } : null;
 }
+
+// Spisak u linku: nasumičan ID ili broj (Android 2.0.6 i link koji se i sada
+// pravi). ID ide prvi, jer i on može da počne ciframa.
+const LIST_REF = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|\\d+';
+const isListRef = value => new RegExp(`^(${LIST_REF})$`).test(String(value || '')) && String(value) !== '0';
 
 function showHousehold(_, parts = []) {
   const [code, listId] = parts;
-  if (code && Number(listId) > 0) return showJoin(code, Number(listId));
+  if (code && isListRef(listId)) return showJoin(code, listId);
   const link = household.link;
   screen({
     title: 'Domaćinstvo',
@@ -157,6 +162,8 @@ async function createInvite() {
   const list = await loadList();
   listState.list = list;
   const invite = await api('POST', 'accounts/invite');
+  // Broj, ne nasumičan ID: Android 2.0.6 čita samo broj, a link otvara i on.
+  // Kad stari APK ode, ovde ide listRef(list).
   household.link = householdLink(invite.code, list.id);
   household.validMinutes = invite.validMinutes || 15;
   showHousehold();
@@ -189,7 +196,7 @@ function showJoin(code, listId) {
         <p>Ovaj telefon ulazi u zajednički nalog. Ono što je na tvom spisku dodaje se zajedničkom, a računi i kartice postaju zajednički.</p>
         ${standaloneApp() ? '' : `<p class="muted small">Ako Pametnu kupovinu otvaraš sa početnog ekrana, kopiraj ovaj link i nalepi ga tamo u Više → Domaćinstvo. ${browserName} i aplikacija sa početnog ekrana ne dele podatke.</p>`}
         <div class="btn-row"><a class="btn" href="#/spisak">Odustani</a>
-          <button class="btn primary" data-act="household-join" data-code="${esc(code)}" data-list="${listId}">Pridruži se</button></div>
+          <button class="btn primary" data-act="household-join" data-code="${esc(code)}" data-list="${esc(listId)}">Pridruži se</button></div>
       </div>`
   });
 }
@@ -219,7 +226,7 @@ async function joinHousehold(code, listId) {
       });
     }
     await api('DELETE', `shopping-lists/${own.id}`).catch(() => {});
-    saved.set('listId', shared.id);
+    saved.set('listId', listRef(shared));
   }
   household = { link: null, validMinutes: 15, error: null };
   account.state = null;
@@ -392,7 +399,7 @@ const accountActions = {
   'remove-device': removeDevice,
   'household-invite': () => createInvite().catch(error => { household.error = error.message; showHousehold(); }),
   'household-share': shareInvite,
-  'household-join': el => joinHousehold(el.dataset.code, Number(el.dataset.list)),
+  'household-join': el => joinHousehold(el.dataset.code, el.dataset.list),
   'spending-month': el => { spending.month = shiftMonth(spending.month, Number(el.dataset.by)); return showSpending(); },
   'spending-view': el => { spending.view = el.dataset.value; renderSpending(); }
 };

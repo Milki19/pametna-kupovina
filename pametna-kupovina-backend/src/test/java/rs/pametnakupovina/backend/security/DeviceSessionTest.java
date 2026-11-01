@@ -324,6 +324,87 @@ class DeviceSessionTest {
         assertThat(json(list).path("items").size()).isZero();
     }
 
+    /**
+     * The web app and Android throw their number away when opening a session
+     * is refused. The server never refuses it: a phone that was removed or
+     * signed out opens a new account with the same number. So a refusal on
+     * that path can only come from the network, and the number must stay.
+     */
+    @Test
+    void aNumberIsNeverRefusedSoAPhoneHasNoReasonToThrowItAway() throws Exception {
+        String removedNumber = newDeviceToken();
+        JsonNode keeper = open(newDeviceToken());
+        JsonNode removed = open(removedNumber);
+        String code = json(mvc.perform(authorized(post("/api/v1/accounts/invite"), access(keeper)))
+                .andReturn()).path("code").asText();
+        mvc.perform(authorized(post("/api/v1/accounts/join"), access(removed))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"code\":\"" + code + "\"}"));
+        assertThat(status(delete("/api/v1/accounts/devices/" + removed.path("deviceId").asLong()),
+                access(keeper))).isEqualTo(204);
+
+        String signedOutNumber = newDeviceToken();
+        JsonNode signedOut = open(signedOutNumber);
+        assertThat(status(delete("/api/v1/sessions/current"), access(signedOut))).isEqualTo(204);
+
+        String copiedNumber = newDeviceToken();
+        JsonNode copied = open(copiedNumber);
+        String copiedRefresh = copied.path("refreshToken").asText();
+        JsonNode stolen = refresh(copiedRefresh, 200);
+        assertThat(status(get("/api/v1/accounts/me"), access(stolen))).isEqualTo(200);
+        refresh(copiedRefresh, 401);
+
+        for (String number : new String[] {removedNumber, signedOutNumber, copiedNumber}) {
+            JsonNode again = open(number);
+            assertThat(status(get("/api/v1/accounts/me"), access(again))).isEqualTo(200);
+            assertThat(open(number).path("deviceId").asLong()).isEqualTo(again.path("deviceId").asLong());
+        }
+        assertThat(open(copiedNumber).path("deviceId").asLong()).isEqualTo(copied.path("deviceId").asLong());
+    }
+
+    @Test
+    void aListIsReachedByItsRandomIdAndStillByItsNumber() throws Exception {
+        JsonNode mine = open(newDeviceToken());
+        JsonNode stranger = open(newDeviceToken());
+        MvcResult created = mvc.perform(authorized(post("/api/v1/shopping-lists"), access(mine))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Nasumičan ID\"}"))
+                .andReturn();
+        long number = json(created).path("id").asLong();
+        String publicId = json(created).path("publicId").asText();
+        assertThat(UUID.fromString(publicId).toString()).isEqualTo(publicId);
+
+        MvcResult added = mvc.perform(authorized(post("/api/v1/shopping-lists/" + publicId + "/items/paste"), access(mine))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"text\":\"mleko\\nhleb\"}"))
+                .andReturn();
+        assertThat(added.getResponse().getStatus()).isEqualTo(201);
+
+        JsonNode byRandomId = json(mvc.perform(authorized(get("/api/v1/shopping-lists/" + publicId), access(mine)))
+                .andReturn());
+        assertThat(byRandomId.path("id").asLong()).isEqualTo(number);
+        assertThat(byRandomId.path("publicId").asText()).isEqualTo(publicId);
+        assertThat(byRandomId.path("items").size()).isEqualTo(2);
+        // Android 2.0.6 keeps calling it by its number.
+        JsonNode byNumber = json(mvc.perform(authorized(get("/api/v1/shopping-lists/" + number), access(mine)))
+                .andReturn());
+        assertThat(byNumber.path("items").size()).isEqualTo(2);
+        JsonNode all = json(mvc.perform(authorized(get("/api/v1/shopping-lists"), access(mine))).andReturn());
+        assertThat(all.get(0).path("publicId").asText()).isEqualTo(publicId);
+
+        MvcResult refused = mvc.perform(authorized(get("/api/v1/shopping-lists/" + publicId), access(stranger)))
+                .andReturn();
+        assertThat(refused.getResponse().getStatus()).isEqualTo(404);
+        assertThat(refused.getResponse().getContentAsString()).doesNotContain(String.valueOf(number));
+        assertThat(status(delete("/api/v1/shopping-lists/" + publicId + "/items"), access(stranger))).isEqualTo(404);
+        assertThat(status(get("/api/v1/shopping-lists/" + UUID.randomUUID()), access(mine))).isEqualTo(404);
+        assertThat(status(get("/api/v1/shopping-lists/nije-spisak"), access(mine))).isEqualTo(400);
+
+        assertThat(status(delete("/api/v1/shopping-lists/" + publicId + "/items"), access(mine))).isEqualTo(204);
+        assertThat(json(mvc.perform(authorized(get("/api/v1/shopping-lists/" + number), access(mine))).andReturn())
+                .path("items").size()).isZero();
+    }
+
     @Test
     void theAdminApiAnswersOnlyTheKey() throws Exception {
         JsonNode phone = open(newDeviceToken());
