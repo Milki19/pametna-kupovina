@@ -141,6 +141,66 @@ class ShoppingRecommendationServiceTest {
                 .contains("nisu garantovane");
     }
 
+    /**
+     * Peti test, 1.11.2026: five people asking for the same plan at once
+     * were answered after 1, 2, 3, 4 and 5 s. The plan is worked out once
+     * and everyone gets it; asked again afterwards, it is worked out anew.
+     */
+    @Test
+    void theSamePlanAskedFiveTimesAtOnceIsWorkedOutOnce() throws Exception {
+        ShoppingListRepository listRepository = mock(ShoppingListRepository.class);
+        NearbyStoreRepository nearbyRepository = mock(NearbyStoreRepository.class);
+        StoreShoppingOfferRepository offerRepository = mock(StoreShoppingOfferRepository.class);
+        RouteMatrixProvider routeProvider = mock(RouteMatrixProvider.class);
+        ShoppingRecommendationService service = new ShoppingRecommendationService(
+                listRepository, nearbyRepository, offerRepository, routeProvider,
+                new ShoppingOptimizationProperties(), markets());
+
+        ShoppingListItemResponse milk = item(1L, "Mleko", 101L);
+        ShoppingListResponse shoppingList = new ShoppingListResponse(
+                10L, "Test korpa", OffsetDateTime.now(), OffsetDateTime.now(), List.of(milk));
+        NearbyStore shop = store(1L, "A");
+        when(listRepository.findById(10L)).thenReturn(Optional.of(shoppingList));
+
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.atomic.AtomicInteger plansWorkedOut = new java.util.concurrent.atomic.AtomicInteger();
+        when(nearbyRepository.findPricingEligibleNearby(SERBIA, 44.0, 19.0, 15_000, 20))
+                .thenAnswer(call -> {
+                    plansWorkedOut.incrementAndGet();
+                    release.await();
+                    return List.of(shop);
+                });
+        when(offerRepository.findOffers(eq(10L), anyList(), eq(DATE), eq(true)))
+                .thenAnswer(call -> offersFor(call.getArgument(1), List.of(offer(shop, milk, 100, 1001L))));
+        when(routeProvider.calculate(anyList())).thenReturn(routeMatrix());
+
+        List<Thread> people = new ArrayList<>();
+        List<ShoppingRecommendationResponse> answers =
+                java.util.Collections.synchronizedList(new ArrayList<>());
+        for (int person = 0; person < 5; person++) {
+            Thread asking = new Thread(() -> answers.add(service.recommend(10L, 44.0, 19.0, DATE)));
+            people.add(asking);
+            asking.start();
+        }
+        // One is working the plan out (held at the shops), four wait for it.
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(10);
+        while (!people.stream().allMatch(asking -> asking.getState() == Thread.State.WAITING)) {
+            assertThat(System.nanoTime()).isLessThan(deadline);
+            Thread.sleep(5);
+        }
+        release.countDown();
+        for (Thread asking : people) {
+            asking.join(10_000);
+        }
+
+        assertThat(answers).hasSize(5);
+        assertThat(answers).allMatch(answer -> answer == answers.getFirst());
+        assertThat(plansWorkedOut).hasValue(1);
+
+        service.recommend(10L, 44.0, 19.0, DATE);
+        assertThat(plansWorkedOut).hasValue(2);
+    }
+
     @Test
     void chainsWithoutAddressesCanBeAskedForApartFromThePlan() {
         ShoppingListRepository listRepository =

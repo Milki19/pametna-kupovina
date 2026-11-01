@@ -150,6 +150,49 @@ class ApiSecurityTest {
         assertThat(page.getResponse().getHeader("X-Content-Type-Options")).isEqualTo("nosniff");
     }
 
+    /**
+     * Search and sales are the same for everyone, so the phone keeps them
+     * five minutes and then asks with the ETag; a list stays never kept.
+     */
+    @Test
+    void searchAndSalesAreKeptForAWhileAndComeBackAs304() throws Exception {
+        MockMvc withFilters = MockMvcBuilders.webAppContextSetup(context)
+                .addFilter(new ServerTimingFilter(), "/api/*")
+                .addFilter(new org.springframework.web.filter.ShallowEtagHeaderFilter(),
+                        ApiTimingAndEtagConfiguration.KEPT_PATHS)
+                .apply(springSecurity())
+                .build();
+
+        MvcResult search = withFilters.perform(call("GET", "/api/v1/products/search")
+                .param("query", "mleko")).andReturn();
+        MvcResult sales = withFilters.perform(call("GET", "/api/v1/products/on-sale")).andReturn();
+        MvcResult retailers = withFilters.perform(call("GET", "/api/v1/retailers")).andReturn();
+
+        assertThat(search.getResponse().getStatus()).isEqualTo(200);
+        assertThat(search.getResponse().getHeader("Cache-Control")).isEqualTo("private, max-age=300");
+        assertThat(sales.getResponse().getHeader("Cache-Control")).isEqualTo("private, max-age=300");
+        assertThat(retailers.getResponse().getHeader("Cache-Control")).contains("no-store");
+        assertThat(retailers.getResponse().getHeader("ETag")).isNull();
+        assertThat(search.getResponse().getHeader("Server-Timing")).startsWith("app;dur=");
+
+        String etag = search.getResponse().getHeader("ETag");
+        assertThat(etag).isNotBlank();
+        MvcResult again = withFilters.perform(call("GET", "/api/v1/products/search")
+                .param("query", "mleko")
+                .header("If-None-Match", etag)).andReturn();
+        assertThat(again.getResponse().getStatus()).isEqualTo(304);
+        assertThat(again.getResponse().getContentAsByteArray()).isEmpty();
+    }
+
+    @Test
+    void aRefusedSearchIsNotKept() throws Exception {
+        MvcResult refused = mvc.perform(call("GET", "/api/v1/products/search")
+                .param("query", "m")).andReturn();
+
+        assertThat(refused.getResponse().getStatus()).isEqualTo(400);
+        assertThat(refused.getResponse().getHeader("Cache-Control")).doesNotContain("max-age=300");
+    }
+
     @Test
     void versionedWebFilesAreKeptAndThePageIsAlwaysChecked() throws Exception {
         MvcResult script = mvc.perform(call("GET", "/app/app.js").param("v", "2.0.4")).andReturn();

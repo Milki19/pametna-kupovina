@@ -92,6 +92,46 @@ class CatalogMemoTest {
     }
 
     @Test
+    void twentyAskingAtOnceReadOnce() throws Exception {
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        List<Thread> searches = new java.util.ArrayList<>();
+        for (int search = 0; search < 20; search++) {
+            Thread thread = new Thread(() -> memo.rememberLarge(List.of("searchCandidates", "mleko"), () -> {
+                try {
+                    release.await();
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                }
+                return read();
+            }));
+            searches.add(thread);
+            thread.start();
+        }
+        rs.pametnakupovina.backend.SingleFlightTestAccess.waitUntilAllWait(searches);
+        release.countDown();
+        for (Thread thread : searches) {
+            thread.join(10_000);
+        }
+
+        assertThat(reads).hasValue(1);
+    }
+
+    @Test
+    void searchesAreKeptTooButOnlyTheLastFew() {
+        memo.rememberLarge(List.of("searchCandidates", "mleko"), this::read);
+        memo.rememberLarge(List.of("searchCandidates", "mleko"), this::read);
+        assertThat(reads).hasValue(1);
+
+        for (int word = 0; word < CatalogMemo.MAX_LARGE_ENTRIES; word++) {
+            memo.rememberLarge(List.of("searchCandidates", "rec" + word), () -> "x");
+        }
+        assertThat(memo.size()).isLessThanOrEqualTo(CatalogMemo.MAX_LARGE_ENTRIES);
+
+        memo.catalogChanged();
+        assertThat(memo.size()).isZero();
+    }
+
+    @Test
     void switchedOffItAlwaysReads() {
         CatalogMemo off = new CatalogMemo(false);
         off.remember(List.of("kind", "jogurt"), this::read);

@@ -1,5 +1,7 @@
 package rs.pametnakupovina.backend.product;
 
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -121,18 +123,20 @@ public class ProductController {
             @RequestParam(name = "onSale", defaultValue = "false") boolean onSale,
             // Oko kilometar tačno, samo za redosled; ne čuva se.
             @RequestParam(name = "latitude", required = false) Double latitude,
-            @RequestParam(name = "longitude", required = false) Double longitude
+            @RequestParam(name = "longitude", required = false) Double longitude,
+            HttpServletResponse response
     ) {
         try {
             if (latitude != null && longitude != null) {
-                return locationPolicy.useForRequest(
+                return keptForAWhile(response, locationPolicy.useForRequest(
                         PreciseLocationPurpose.SEARCH_RANKING,
                         latitude,
                         longitude,
                         near -> canonicalSearchService.search(query, page, limit, includeWithoutPrice, near, onSale)
-                );
+                ));
             }
-            return canonicalSearchService.search(query, page, limit, includeWithoutPrice, null, onSale);
+            return keptForAWhile(response,
+                    canonicalSearchService.search(query, page, limit, includeWithoutPrice, null, onSale));
         } catch (IllegalArgumentException exception) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
@@ -157,19 +161,21 @@ public class ProductController {
             @RequestParam(name = "limit", defaultValue = "20") int limit,
             @RequestParam(name = "latitude", required = false) Double latitude,
             @RequestParam(name = "longitude", required = false) Double longitude,
-            @RequestParam(name = "radiusMeters", required = false) Integer radiusMeters
+            @RequestParam(name = "radiusMeters", required = false) Integer radiusMeters,
+            HttpServletResponse response
     ) {
         try {
             if (latitude != null && longitude != null) {
-                return locationPolicy.useForRequest(
+                return keptForAWhile(response, locationPolicy.useForRequest(
                         PreciseLocationPurpose.NEARBY_SALES,
                         latitude,
                         longitude,
                         near -> saleService.find(near, radiusMeters, category, retailer, query,
                                 minDiscount, sort, page, limit)
-                );
+                ));
             }
-            return saleService.find(null, radiusMeters, category, retailer, query, minDiscount, sort, page, limit);
+            return keptForAWhile(response,
+                    saleService.find(null, radiusMeters, category, retailer, query, minDiscount, sort, page, limit));
         } catch (IllegalArgumentException exception) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
@@ -177,6 +183,20 @@ public class ProductController {
                     exception
             );
         }
+    }
+
+    /**
+     * Search results and sales are the same for everyone and change with
+     * the daily import, so the phone keeps them five minutes: going back to
+     * a search or to Akcije asks nothing. Kept by that phone only
+     * (private), since the address can carry the rounded location; after
+     * five minutes the ETag lets an unchanged answer come back as 304.
+     */
+    static final String KEPT_FOR_A_WHILE = "private, max-age=300";
+
+    private static <T> T keptForAWhile(HttpServletResponse response, T answer) {
+        response.setHeader(HttpHeaders.CACHE_CONTROL, KEPT_FOR_A_WHILE);
+        return answer;
     }
 
     @GetMapping("/match-candidates")

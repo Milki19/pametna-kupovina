@@ -14,6 +14,8 @@ import rs.pametnakupovina.backend.store.NearbyStoreRepository;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import rs.pametnakupovina.backend.SingleFlight;
+
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -54,6 +56,10 @@ public class ShoppingRecommendationService {
     private final RouteMatrixProvider routeMatrixProvider;
     private final ShoppingOptimizationProperties properties;
     private final MarketRepository marketRepository;
+    // The same plan asked for by several people at once (or by one, twice) is
+    // worked out once: five at once were answered after 1, 2, 3, 4 and 5 s on
+    // the server's two cores (peti test, 1.11.2026).
+    private final SingleFlight<List<Object>> plansInFlight = new SingleFlight<>();
 
     public ShoppingRecommendationService(
             ShoppingListRepository shoppingListRepository,
@@ -178,6 +184,30 @@ public class ShoppingRecommendationService {
             );
         }
 
+        // Everything the plan depends on: the list as it is now (items,
+        // quantities, chosen products), the market with the account's costs,
+        // the day, the place and how the shopper travels. The place is held
+        // only while the plan is being worked out.
+        List<Object> sameRequest = java.util.Arrays.asList(
+                listId, shoppingList, market, asOfDate, latitude, longitude,
+                travelMode, includeUnlocated, radiusMeters);
+        return plansInFlight.run(sameRequest, () -> plan(
+                listId, latitude, longitude, walking, includeUnlocated,
+                radiusMeters, candidateRadius, shoppingList, market, asOfDate));
+    }
+
+    private ShoppingRecommendationResponse plan(
+            Long listId,
+            double latitude,
+            double longitude,
+            boolean walking,
+            boolean includeUnlocated,
+            Integer radiusMeters,
+            int candidateRadius,
+            ShoppingListResponse shoppingList,
+            Market market,
+            LocalDate asOfDate
+    ) {
         List<NearbyStore> nearbyStores =
                 nearbyStoreRepository.findPricingEligibleNearby(
                         market.id(),
@@ -252,7 +282,9 @@ public class ShoppingRecommendationService {
                 .filter(java.util.Objects::nonNull).distinct().toList();
         // On foot only shops within walking reach: eggs from a shop 15 km
         // away are no plan for someone walking (utisak 31.10.).
-        int fartherRadius = walking ? usualRadius : FARTHER_RADIUS_METERS;
+        int fartherRadius = walking
+                ? properties.getWalkingCandidateRadiusMeters()
+                : FARTHER_RADIUS_METERS;
         if (radiusMeters == null
                 && (!missingFamilies.isEmpty() || !missingProducts.isEmpty())) {
             List<NearbyStore> fartherStores = nearbyStoreRepository
