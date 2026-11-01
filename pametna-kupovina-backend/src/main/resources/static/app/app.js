@@ -173,6 +173,7 @@ async function api(method, path, body, retried = false, signal = undefined) {
   if (method !== 'GET' && path.startsWith('shopping-lists')) listVersion++;
   let response;
   let token;
+  const started = performance.now();
   try {
     token = await accessToken();
     response = await fetch('/api/v1/' + path, {
@@ -208,6 +209,7 @@ async function api(method, path, body, retried = false, signal = undefined) {
     throw error;
   }
   const text = await response.text();
+  if (typeof pkTiming !== 'undefined') pkTiming.request(method, path, performance.now() - started);
   return text ? JSON.parse(text) : null;
 }
 

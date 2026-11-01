@@ -80,4 +80,60 @@ class TestSkupFormatTest {
         assertThat(stavka("C33").oceni("MASLAC 82% 250G", BigDecimal.ONE)).isEqualTo(Ocena.ISPRAVNO);
         assertThat(stavka("S14").oceni("Ulje maslinovo extra vergine WM 1l", BigDecimal.ONE)).isEqualTo(Ocena.POGRESNO);
     }
+
+    @Test
+    void realListsKeepTheirListCityAndAmount() {
+        TestSkup primer = TestSkup.load("RS", "sr", "test-skup/primer-spiskovi.tsv");
+
+        assertThat(primer.lokacije()).extracting(TestSkup.Lokacija::grad).containsExactly("Beograd", "Niš");
+        assertThat(primer.u("Beograd")).extracting(Stavka::id).containsExactly("P01", "P02", "P03", "P04", "P05");
+        assertThat(primer.u("Niš")).allSatisfy(s -> assertThat(s.spisak()).isEqualTo("primer-2"));
+        Stavka voda = primer.stavke().stream().filter(s -> s.id().equals("P08")).findFirst().orElseThrow();
+        assertThat(voda.kolicina()).isEqualTo(new TestSkup.Kolicina(new BigDecimal("9000.0"), "ml"));
+        assertThat(primer.stavke()).allSatisfy(s -> assertThat(s.kolicina()).as(s.id()).isNotNull());
+    }
+
+    @Test
+    void anAmountIsWrittenTheWayAPersonSaysIt() {
+        assertThat(TestSkup.Kolicina.parse("1,5 kg")).isEqualTo(new TestSkup.Kolicina(new BigDecimal("1500.0"), "g"));
+        assertThat(TestSkup.Kolicina.parse("500g").isti(TestSkup.Kolicina.parse("0,5 kg"))).isTrue();
+        assertThat(TestSkup.Kolicina.parse("2 l").isti(TestSkup.Kolicina.parse("2000 ml"))).isTrue();
+        assertThat(TestSkup.Kolicina.parse("-")).isEqualTo(TestSkup.Kolicina.parse("1 kom"));
+        assertThat(TestSkup.Kolicina.parse("3")).isEqualTo(TestSkup.Kolicina.parse("3 kom"));
+        assertThat(TestSkup.Kolicina.parse("6 x 1,5 l").isti(TestSkup.Kolicina.parse("9 l"))).isTrue();
+        assertThat(TestSkup.Kolicina.parse("2 l").isti(TestSkup.Kolicina.parse("2 kom"))).isFalse();
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> TestSkup.Kolicina.parse("dve kile"))
+                .hasMessageContaining("1,5 kg");
+    }
+
+    @Test
+    void theBlindPartIsReadFromADiskOutsideTheRepository(@org.junit.jupiter.api.io.TempDir java.nio.file.Path dir)
+            throws java.io.IOException {
+        java.nio.file.Path file = dir.resolve("slepi.tsv");
+        java.nio.file.Files.writeString(file, String.join("\t", TestSkup.KOLONE_SPISKOVA) + "\n"
+                + "B01\ts1\tKragujevac\tVIBER\tkafa 200g\t200 g\tkafa\tinstant\t2\tMlevena kafa.\n");
+
+        TestSkup slepi = TestSkup.load("RS", "sr", file.toString());
+
+        assertThat(slepi.stavke()).singleElement().satisfies(s -> {
+            assertThat(s.grad()).isEqualTo("Kragujevac");
+            assertThat(s.kolicina()).isEqualTo(TestSkup.Kolicina.parse("200 g"));
+        });
+        assertThat(slepi.lokacije()).extracting(TestSkup.Lokacija::grad).containsExactly("Kragujevac");
+    }
+
+    @Test
+    void aMistakeInTheFileSaysWhereItIs(@org.junit.jupiter.api.io.TempDir java.nio.file.Path dir)
+            throws java.io.IOException {
+        java.nio.file.Path city = dir.resolve("grad.tsv");
+        java.nio.file.Files.writeString(city, String.join("\t", TestSkup.KOLONE_SPISKOVA) + "\n"
+                + "B01\ts1\tAtlantida\tVIBER\tkafa\t-\tkafa\t\t\tKafa.\n");
+        java.nio.file.Path header = dir.resolve("zaglavlje.tsv");
+        java.nio.file.Files.writeString(header, "id\ttekst\n");
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> TestSkup.load("RS", "sr", city.toString()))
+                .hasMessageContaining("B01").hasMessageContaining("Atlantida");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> TestSkup.load("RS", "sr", header.toString()))
+                .hasMessageContaining("zaglavlje");
+    }
 }

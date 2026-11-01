@@ -70,7 +70,9 @@ public final class AccessRules {
             new Rule(HttpMethod.GET, "/api/v1/stores/nearby", Access.PUBLIC),
             new Rule(HttpMethod.GET, "/api/v1/retailers", Access.PUBLIC),
             new Rule(HttpMethod.GET, "/api/v1/retailer-locations/**", Access.PUBLIC),
-            new Rule(HttpMethod.POST, "/api/v1/crash-reports", Access.PUBLIC)
+            new Rule(HttpMethod.POST, "/api/v1/crash-reports", Access.PUBLIC),
+            // Merenje u pregledaču: samo trajanje, bez naloga (V152).
+            new Rule(HttpMethod.POST, "/api/v1/web-timings", Access.PUBLIC)
     );
 
     private AccessRules() {

@@ -23,9 +23,12 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <p>Environment: {@code TEST_SKUP_DB_URL}, {@code TEST_SKUP_DB_USERNAME},
  * {@code TEST_SKUP_DB_PASSWORD}; optionally {@code TEST_SKUP_TRZISTE} (RS),
- * {@code TEST_SKUP_JEZIK} (sr), {@code TEST_SKUP_IZLAZ} (target/test-skup)
- * and {@code TEST_SKUP_MIN_PREPOZNATO} / {@code TEST_SKUP_MIN_ISPRAVNO}
- * (percent; the test fails below them).
+ * {@code TEST_SKUP_JEZIK} (sr), {@code TEST_SKUP_IZLAZ} (target/test-skup),
+ * {@code TEST_SKUP_FAJL} (only this file, e.g. the blind part kept outside
+ * git), {@code TEST_SKUP_SLEPO} (1: the report keeps only the totals) and
+ * {@code TEST_SKUP_MIN_PREPOZNATO} / {@code TEST_SKUP_MIN_ISPRAVNO} /
+ * {@code TEST_SKUP_MIN_KORAK1} / {@code TEST_SKUP_MIN_CITANJE} (percent; the
+ * test fails below them).
  */
 @SpringBootTest(properties = {
         "price-refresh.daily.enabled=false",
@@ -62,12 +65,20 @@ class TestSkupMerenjeTest {
 
     @Test
     void merenje() throws IOException {
-        TestSkup skup = TestSkup.load(env("TEST_SKUP_TRZISTE", "RS"), env("TEST_SKUP_JEZIK", "sr"));
-        TestSkupMerac.Ishod ishod = merac.meri(skup, Path.of(env("TEST_SKUP_IZLAZ", "target/test-skup")));
+        String market = env("TEST_SKUP_TRZISTE", "RS");
+        String language = env("TEST_SKUP_JEZIK", "sr");
+        String file = env("TEST_SKUP_FAJL", "");
+        TestSkup skup = file.isEmpty() ? TestSkup.load(market, language) : TestSkup.load(market, language, file);
+        boolean slepo = env("TEST_SKUP_SLEPO", "0").equals("1");
+        TestSkupMerac.Ishod ishod = merac.meri(skup, Path.of(env("TEST_SKUP_IZLAZ", "target/test-skup")), slepo);
         System.out.println("Izveštaj test skupa: " + ishod.izvestaj().toAbsolutePath());
 
         minimum("TEST_SKUP_MIN_PREPOZNATO", ishod.prepoznato());
         minimum("TEST_SKUP_MIN_ISPRAVNO", ishod.ispravno());
+        minimum("TEST_SKUP_MIN_KORAK1", ishod.korak1());
+        if (ishod.citanje() != null) {
+            minimum("TEST_SKUP_MIN_CITANJE", Map.of("sve", ishod.citanje()));
+        }
     }
 
     private static void minimum(String variable, Map<String, Double> perCity) {
