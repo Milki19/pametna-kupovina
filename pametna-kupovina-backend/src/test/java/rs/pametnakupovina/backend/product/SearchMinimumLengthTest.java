@@ -43,7 +43,8 @@ class SearchMinimumLengthTest {
                     new EanValidator(),
                     intentResolver,
                     new SearchSpellingCorrector(
-                            mock(SearchWordVocabularyRepository.class))
+                            mock(SearchWordVocabularyRepository.class)),
+                    new CatalogMemo(false)
             );
 
     @Test

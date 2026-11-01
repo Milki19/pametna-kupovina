@@ -52,6 +52,7 @@ public class CanonicalProductSearchService {
     private final EanValidator eanValidator;
     private final ShoppingIntentResolver shoppingIntentResolver;
     private final SearchSpellingCorrector searchSpellingCorrector;
+    private final CatalogMemo memo;
 
     public CanonicalProductSearchService(
             CanonicalProductSearchRepository searchRepository,
@@ -60,7 +61,8 @@ public class CanonicalProductSearchService {
             ProductMatchScorer productMatchScorer,
             EanValidator eanValidator,
             ShoppingIntentResolver shoppingIntentResolver,
-            SearchSpellingCorrector searchSpellingCorrector
+            SearchSpellingCorrector searchSpellingCorrector,
+            CatalogMemo memo
     ) {
         this.searchRepository = searchRepository;
         this.productNameNormalizer = productNameNormalizer;
@@ -69,6 +71,7 @@ public class CanonicalProductSearchService {
         this.eanValidator = eanValidator;
         this.shoppingIntentResolver = shoppingIntentResolver;
         this.searchSpellingCorrector = searchSpellingCorrector;
+        this.memo = memo;
     }
 
     public CanonicalProductSearchPage search(
@@ -430,7 +433,12 @@ public class CanonicalProductSearchService {
             String validEan,
             boolean includeWithoutPrice
     ) {
-        return searchRepository.findCandidates(normalizedQuery, validEan)
+        // Twenty people searching at once queued on two cores (median 2.4 s,
+        // peti test 1.11.2026); the same words now cost the query once.
+        List<CanonicalProductSearchRow> candidates = memo.rememberLarge(
+                List.of("searchCandidates", normalizedQuery, validEan == null ? "" : validEan),
+                () -> searchRepository.findCandidates(normalizedQuery, validEan));
+        return candidates
                 .stream()
                 .filter(row -> includeWithoutPrice
                         || row.hasUsablePrice()
@@ -512,8 +520,10 @@ public class CanonicalProductSearchService {
         java.util.Set<Long> found = rows.stream()
                 .map(CanonicalProductSearchRow::productFamilyId)
                 .collect(Collectors.toSet());
-        List<CanonicalProductSearchRow> more = searchRepository
-                .findKindFamilies(normalizedQuery, kind.normalizedAlias())
+        List<CanonicalProductSearchRow> kindFamilies = memo.rememberLarge(
+                List.of("searchKindFamilies", normalizedQuery, kind.normalizedAlias()),
+                () -> searchRepository.findKindFamilies(normalizedQuery, kind.normalizedAlias()));
+        List<CanonicalProductSearchRow> more = kindFamilies
                 .stream()
                 .filter(row -> !found.contains(row.productFamilyId()))
                 .filter(row -> includeWithoutPrice || row.hasUsablePrice())

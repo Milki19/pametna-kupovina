@@ -494,7 +494,8 @@ public class CanonicalProductSearchRepository {
                         .collect(Collectors.joining(",")))
                 .query((row, number) -> Map.entry(
                         row.getLong("product_family_id"),
-                        row.getDouble("meters")
+                        // A whole metre: "1234.5678 m" told nothing more.
+                        (double) Math.round(row.getDouble("meters"))
                 ))
                 .list()
                 .stream()

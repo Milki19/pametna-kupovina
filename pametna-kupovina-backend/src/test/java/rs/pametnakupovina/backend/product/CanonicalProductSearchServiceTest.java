@@ -50,7 +50,8 @@ class CanonicalProductSearchServiceTest {
                     new ProductMatchScorer(normalizer),
                     new EanValidator(),
                     intentResolver,
-                    new SearchSpellingCorrector(vocabularyRepository)
+                    new SearchSpellingCorrector(vocabularyRepository),
+                    new CatalogMemo(false)
             );
 
     @BeforeEach

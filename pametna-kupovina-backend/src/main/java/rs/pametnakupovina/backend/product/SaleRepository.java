@@ -43,10 +43,15 @@ public class SaleRepository {
                             resultSet.getInt("discount_percent"),
                             resultSet.getObject("discount_end", LocalDate.class),
                             resultSet.getInt("other_chain_count"),
-                            resultSet.getObject("meters", Double.class)
+                            wholeMetres(resultSet.getObject("meters", Double.class))
                     ),
                     resultSet.getLong("total_count")
             );
+
+    /** A whole metre: "1234.5678 m" told nothing more. */
+    private static Double wholeMetres(Double meters) {
+        return meters == null ? null : (double) Math.round(meters);
+    }
 
     /*
      * The sales a shopper can reach: with a location, only shops within the
