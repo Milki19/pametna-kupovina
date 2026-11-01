@@ -387,7 +387,8 @@ public class ShoppingRecommendationService {
         // računaju kao i u planu Najbolje ukupno. Po samoj korpi bi pobedila
         // radnja 13 km dalje koja je jeftinija za par dinara, pa bi taj plan
         // bio i skuplji i dalji od plana sa radnjom iza ćoška.
-        EvaluatedPlan bestSingle = chooseByTotalCost(evaluatedSingles);
+        EvaluatedPlan bestSingle = chooseByTotalCost(
+                missingOnlyWhatFewShopsHave(evaluatedSingles, nearbyStores, offersByStore));
         EvaluatedPlan lowestPrice = chooseByBasket(evaluatedAll);
         EvaluatedPlan recommended = chooseByTotalCost(evaluatedAll);
 
@@ -1022,6 +1023,47 @@ public class ShoppingRecommendationService {
         }
 
         return best;
+    }
+
+    /**
+     * Of the shops that cover the most items, those whose missing items are
+     * the ones few shops nearby sell. One shop without onions and cat food
+     * is a worse single stop than one without "parmezan salama" and tortilla
+     * chips, though both miss two (proba na kopiji 1.11.2026): an item every
+     * shop has is one the shopper expects to find there.
+     */
+    private static List<EvaluatedPlan> missingOnlyWhatFewShopsHave(
+            List<EvaluatedPlan> singles,
+            List<NearbyStore> stores,
+            Map<Long, Map<Long, StoreItemOffer>> offersByStore
+    ) {
+        int mostCovered = singles.stream()
+                .mapToInt(plan -> plan.plan().coveredItems())
+                .max()
+                .orElse(0);
+        if (mostCovered == 0) {
+            return singles;
+        }
+        Map<Long, Integer> shopsSelling = new java.util.HashMap<>();
+        for (NearbyStore store : stores) {
+            offersByStore.getOrDefault(store.storeId(), Map.of()).values().stream()
+                    .filter(StoreItemOffer::available)
+                    .map(StoreItemOffer::itemId)
+                    .distinct()
+                    .forEach(item -> shopsSelling.merge(item, 1, Integer::sum));
+        }
+        java.util.function.ToIntFunction<EvaluatedPlan> missedCommonness = plan ->
+                shopsSelling.entrySet().stream()
+                        .filter(item -> !plan.plan().assignments().containsKey(item.getKey()))
+                        .mapToInt(Map.Entry::getValue)
+                        .sum();
+        List<EvaluatedPlan> best = singles.stream()
+                .filter(plan -> plan.plan().coveredItems() == mostCovered)
+                .toList();
+        int least = best.stream().mapToInt(missedCommonness).min().orElse(0);
+        return best.stream()
+                .filter(plan -> missedCommonness.applyAsInt(plan) == least)
+                .toList();
     }
 
     private static long wantedItems(EvaluatedPlan evaluated) {
