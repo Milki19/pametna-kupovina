@@ -47,6 +47,7 @@
     <string name="rec_no_price">no price</string>
     <string name="rec_savings">You save %1$s %2$s</string>
     <string name="rec_basket_plus_travel">basket %1$s + travel and time %2$s</string>
+    <string name="rec_basket_only_walking">basket only: on foot we do not count travel or time in money</string>
     <!-- %1$s broj prodavnica, %2$s razdaljina, %3$s vreme -->
     <string name="rec_scenario_route">%1$s · %2$s · %3$s</string>
     <plurals name="rec_store_count">
@@ -91,8 +92,10 @@
     <string name="rec_calc_data_as_of">Prices come from the price list of %1$s; a price list doesn\'t say whether the item is on the shelf.</string>
     <string name="rec_calc_no_prices">There are no valid prices for this scenario.</string>
     <string name="rec_calc_costs">Basket %1$s, travel %2$s, time %3$s, stops %4$s.</string>
+    <string name="rec_calc_basket_only">Basket %1$s.</string>
     <string name="rec_calc_change_trip">Change the value of time and travel</string>
     <string name="rec_calc_rates">We count travel at %1$s per kilometer, time at %2$s per hour and %3$s per stop.</string>
+    <string name="rec_calc_walking">On foot we do not count travel or time in money. When the baskets differ little, we pick the closer shop and fewer shops.</string>
     <string name="rec_item_price_from">Price from %1$s</string>
     <string name="rec_calc_approximate">Distances are estimates: the straight line plus an allowance for streets, without traffic.</string>
     <plurals name="rec_calc_candidates">
@@ -128,6 +131,8 @@
     <string name="rec_balance_more_names">%1$s and %2$d more</string>
     <string name="rec_on_the_way_one">Buy %1$s on the way. For that item the plan would need another shop: +%2$s %3$s and about %4$s more.</string>
     <string name="rec_on_the_way_many">Buy %1$s on the way. For those items the plan would need another shop: +%2$s %3$s and about %4$s more.</string>
+    <string name="rec_on_the_way_walking_one">Buy %1$s on the way. For that item the plan would need another shop: about %2$s more walking.</string>
+    <string name="rec_on_the_way_walking_many">Buy %1$s on the way. For those items the plan would need another shop: about %2$s more walking.</string>
     <string name="rec_long_walk">This is about %1$s on foot.</string>
     <string name="rec_near_only">Only shops within %1$d km</string>
     <string name="rec_near_only_on">Only shops within %1$d km.</string>

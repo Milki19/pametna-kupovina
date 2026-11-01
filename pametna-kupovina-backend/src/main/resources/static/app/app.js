@@ -1267,12 +1267,15 @@ function scenarioWarnings(s, result) {
 const onTheWay = (s, item) => Boolean(s.onTheWay && s.onTheWay.itemIds.includes(item.itemId));
 
 /** Sitna stavka zbog koje ne vredi ići u još jednu prodavnicu (izveštaj 20.10.). */
-function onTheWayNotice(s) {
+function onTheWayNotice(s, walking = false) {
   const o = s.onTheWay;
   if (!o || !o.itemNames.length) return '';
   const names = o.itemNames.join(', ');
+  // Peške se hod ne pretvara u dinare (utisak 31.10.).
+  const cost = walking ? `oko ${duration(o.extraSeconds)} hoda više`
+    : `+${whole(o.extraCost)} ${market.currency} i oko ${duration(o.extraSeconds)} više`;
   return notice(`${names.charAt(0).toUpperCase() + names.slice(1)} kupi usput. Zbog ${o.itemNames.length === 1 ? 'te stavke' : 'tih stavki'}
-    bi plan imao još jednu prodavnicu: +${whole(o.extraCost)} ${market.currency} i oko ${duration(o.extraSeconds)} više.`);
+    bi plan imao još jednu prodavnicu: ${cost}.`);
 }
 
 // Peške duže od pola sata: ponuda da plan ostane u blizini (izveštaj 20.10.).
@@ -1370,6 +1373,7 @@ function renderRecommendation() {
   const stores = [...s.stores].sort((a, b) => a.stopOrder - b.stopOrder);
   const unresolved = s.items.filter(i => i.resultStatus !== 'AVAILABLE' && !onTheWay(s, i));
   const a = result.assumptions;
+  const onFoot = a?.travelMode === 'WALKING';
   screen({
     title: 'Preporuke',
     back: '#/lokacija',
@@ -1394,7 +1398,8 @@ function renderRecommendation() {
         <div class="title">${scenarioTitle[s.type]}</div>
         ${s.available ? `
           <div class="big">${s.totalCost != null ? money(s.totalCost) : 'nema cene'}</div>
-          ${s.totalCost != null ? `<p class="muted small">korpa ${money(s.basketCost)} + put i vreme ${money(s.totalCost - s.basketCost)}</p>` : ''}
+          ${s.totalCost != null ? `<p class="muted small">${onFoot ? 'samo korpa: peške ne računamo put ni vreme u dinarima'
+            : `korpa ${money(s.basketCost)} + put i vreme ${money(s.totalCost - s.basketCost)}`}</p>` : ''}
           <div class="stats">
             <div><span class="small muted">Prodavnice</span><b>${s.stopCount}</b></div>
             <div><span class="small muted">Razdaljina</span><b>${distance(s.routeDistanceKm)}</b></div>
@@ -1402,7 +1407,7 @@ function renderRecommendation() {
           </div>
           <div class="row"><span class="grow">Pokrivenost korpe</span><b style="color:var(--primary)">${s.coveredItems} od ${s.items.length} ${plural(s.items.length, 'stavke', 'stavke', 'stavki')}</b></div>`
           : `<p>${esc(s.explanation)}</p>`}
-      </div>` + onTheWayNotice(s) + nearOnlyOffer(s, result) + balanceExplanation(s, result) +
+      </div>` + onTheWayNotice(s, onFoot) + nearOnlyOffer(s, result) + balanceExplanation(s, result) +
       scenarioWarnings(s, result).map(w => notice(w, 'warn')).join('') +
       (s.available && stores.length ? `
         <a class="btn" href="${esc(mapsUrl(origin, stores, result.assumptions?.travelMode === 'WALKING'))}" target="_blank" rel="noopener">${icon.route}${stores.length === 1 ? 'Pregled puta do prodavnice' : `Pregled rute kroz ${stores.length} ${plural(stores.length, 'prodavnicu', 'prodavnice', 'prodavnica')}`}</a>
@@ -1440,8 +1445,10 @@ function renderRecommendation() {
         ${[
           s.dataAsOf ? `Cene su iz cenovnika od ${date(s.dataAsOf)}; cenovnik ne govori da li je artikal na polici.` : 'Za ovaj scenario nema važećih cena.',
           s.disclaimer || result.disclaimer,
-          s.available ? `Korpa ${money(s.basketCost)}, put ${money(s.travelCost)}, vreme ${money(s.timeCost)}, stajanja ${money(s.stopCost)}.` : null,
-          `Put računamo ${money(a.costPerKm)} po kilometru, vreme ${money(a.valuePerHour)} po satu i ${money(a.costPerStop)} po stajanju.`,
+          s.available && onFoot ? `Korpa ${money(s.basketCost)}.` : null,
+          s.available && !onFoot ? `Korpa ${money(s.basketCost)}, put ${money(s.travelCost)}, vreme ${money(s.timeCost)}, stajanja ${money(s.stopCost)}.` : null,
+          onFoot ? 'Peške ne računamo put ni vreme u dinarima. Kad je razlika u korpi mala, biramo bližu radnju i manje radnji.'
+            : `Put računamo ${money(a.costPerKm)} po kilometru, vreme ${money(a.valuePerHour)} po satu i ${money(a.costPerStop)} po stajanju.`,
           s.approximateRoute ? 'Udaljenosti su procena: vazdušna linija uvećana za ulice, bez saobraćaja.' : null,
           `Razmotreno ${counted(result.candidateStoreCount, 'prodavnica', 'prodavnice', 'prodavnica')} u krugu od ${decimal(a.candidateRadiusMeters / 1000, 1)} km.`
         ].filter(Boolean).map(line => `<p class="small">${esc(line)}</p>`).join('')}
