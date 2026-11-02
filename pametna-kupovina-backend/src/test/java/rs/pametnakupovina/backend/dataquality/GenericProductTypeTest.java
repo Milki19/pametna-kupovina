@@ -91,6 +91,13 @@ class GenericProductTypeTest {
     private static final String MEAT_BUREK = "BUREK MESO 600G";
     private static final String ONLY_FROZEN_HAKE = "OSLIĆ HEK 800G LAMARGO";
     private static final String ONLY_FROZEN_BEEF = "ZAM. JUNEĆI BIFTEK VAKUUM 1KG";
+    private static final String CAT_TREAT = "DREAMIES SIR 60G";
+    private static final String CAT_POUCH = "KITEKAT EX LOSOS KESA 85G";
+    private static final String DOG_KIBBLE = "FRISKIES GR ZA PSE JUNIOR 500G";
+    private static final String BABY_PUREE = "JUVITANA KAS.128GR BRESKVA";
+    private static final String SCOURING_POWDER = "HIPP GRAND 600G PANONIJA";
+    private static final String ENERGY_SOFTENER = "OMEKŠIVAČ AURA ENERGY 1.4L";
+    private static final String FELIX_WINE = "VINO BELO FELIX SOLIS 0.75L";
 
     private static final LocalDate PRICE_DAY = LocalDate.of(2026, 9, 13);
 
@@ -130,9 +137,9 @@ class GenericProductTypeTest {
                 + row("21", "Lična higijena i kozmetika", PADS, "8600000001097", "299,99")
                 + row("9", "Sveža i prerađena riba", CANNED_TUNA, "8600000001035", "189,99")
                 + row("9", "Sveža i prerađena riba", SEA_BREAM, "8600000001103", "699,99")
-                + row("9", "Sveža i prerađena riba", CAT_FOOD, "8600000001042", "79,99")
+                + row("25", "Hrana za kućne ljubimce", CAT_FOOD, "8600000001042", "79,99")
                 + row("8", "Sveže i prerađeno meso", SALAMI, "8600000001059", "149,99")
-                + row("8", "Sveže i prerađeno meso", DOG_PATE, "8600000001066", "199,99")
+                + row("25", "Hrana za kućne ljubimce", DOG_PATE, "8600000001066", "199,99")
                 + row("8", "Sveže i prerađeno meso", BEEF, "8600000001110", "899,99")
                 + row("8", "Sveže i prerađeno meso", TROTTERS, "8600000001127", "199,99")
                 + row("3", "Sveže voće i povrće", APPLE, "8600000001073", "119,99")
@@ -141,7 +148,14 @@ class GenericProductTypeTest {
                 + row("7", "Smrznuti proizvodi", FROZEN_HAKE, "8600000001141", "449,99")
                 + row("7", "Smrznuti proizvodi", FISH_STICKS, "8600000001158", "299,99")
                 + row("7", "Smrznuti proizvodi", FROZEN_CHICKEN, "8600000001165", "599,99")
-                + row("7", "Smrznuti proizvodi", MEAT_BUREK, "8600000001172", "349,99");
+                + row("7", "Smrznuti proizvodi", MEAT_BUREK, "8600000001172", "349,99")
+                + row("25", "Hrana za kućne ljubimce", CAT_TREAT, "8600000001202", "149,99")
+                + row("25", "Hrana za kućne ljubimce", CAT_POUCH, "8600000001219", "69,99")
+                + row("25", "Hrana za kućne ljubimce", DOG_KIBBLE, "8600000001226", "299,99")
+                + row("22", "Hrana za bebe", BABY_PUREE, "8600000001233", "99,99")
+                + row("19", "Kućna hemija", SCOURING_POWDER, "8600000001240", "159,99")
+                + row("19", "Kućna hemija", ENERGY_SOFTENER, "8600000001257", "349,99")
+                + row("24", "Alkoholna pića", FELIX_WINE, "8600000001264", "599,99");
         // A shop that sells meat and fish only frozen.
         String frozenOnly = HEADER
                 + row("7", "Smrznuti proizvodi", ONLY_FROZEN_HAKE, "8600000001189", "699,99")
@@ -265,6 +279,16 @@ class GenericProductTypeTest {
         assertThat(typeOf(FROZEN_CHICKEN)).isEqualTo("FROZEN_MEAT");
         assertThat(typeOf(FISH_STICKS)).isNull();
         assertThat(typeOf(MEAT_BUREK)).isNull();
+        // Since V153 a kind stays in the department the price list names:
+        // a cheese treat for cats is cat food, a Vim called "Hipp" is no baby
+        // food, and a department of one kind is enough for that kind.
+        assertThat(typeOf(CAT_TREAT)).isEqualTo("CAT_FOOD");
+        assertThat(typeOf(CAT_POUCH)).isEqualTo("CAT_FOOD");
+        assertThat(typeOf(DOG_KIBBLE)).isEqualTo("DOG_FOOD");
+        assertThat(typeOf(BABY_PUREE)).isEqualTo("BABY_FOOD");
+        assertThat(typeOf(SCOURING_POWDER)).isNull();
+        assertThat(typeOf(ENERGY_SOFTENER)).isNull();
+        assertThat(typeOf(FELIX_WINE)).isNotEqualTo("CAT_FOOD");
 
         long shop = shopOf(retailerId, "GENERIC");
         long list = shoppingListService.create(new CreateShoppingListRequest("Opšte reči"), callers.account("generic")).id();
