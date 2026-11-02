@@ -93,7 +93,7 @@ with the same meaning across chains.
 | --- | --- |
 | Backend | Java 21, Spring Boot, Spring Security, JDBC, Flyway (140 migrations), PostgreSQL 16 + PostGIS, Apache POI, PDFBox, Commons CSV, ONNX Runtime |
 | Android | Kotlin, Jetpack Compose, Material 3, Hilt, Room, Retrofit, kotlinx.serialization, WorkManager, DataStore, ML Kit code scanner, Credential Manager (Google sign-in) |
-| Web | Vanilla JavaScript PWA served by the backend |
+| Web | Vanilla JavaScript PWA served by the backend, ES modules bundled with esbuild at build time |
 | Testing | JUnit 5, Testcontainers (real PostgreSQL), MockRestServiceServer, Android unit tests |
 | Infra | Docker Compose, Caddy, GitHub Actions, Oracle Cloud (Always Free ARM), automated backups and health checks |
 
@@ -101,6 +101,7 @@ with the same meaning across chains.
 
 ```
 pametna-kupovina-backend/   Spring Boot service, Flyway migrations, web app in static/app
+                            (its JavaScript lives as ES modules in src/main/web/app)
 pametna-kupovina-android/   Android app
 infra/                      Local database, production Compose, deploy/backup scripts
 design/                     App icon
@@ -124,6 +125,11 @@ cd ../pametna-kupovina-android
 cp local.properties.example local.properties   # set the server address
 ./gradlew testDebugUnitTest assembleDebug
 ```
+
+The web app's JavaScript is built by Maven (`frontend-maven-plugin` downloads
+Node into `target/` and runs esbuild), so `./mvnw test` and `./mvnw package`
+always ship a fresh `static/app/app.js`. While working on the web app, run
+`npm run watch` in `pametna-kupovina-backend` next to `./mvnw spring-boot:run`.
 
 To run the backend with the daily price import, see
 [infra/README.md](infra/README.md). Configuration comes from environment

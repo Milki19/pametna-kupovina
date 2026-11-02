@@ -1,9 +1,12 @@
-'use strict';
-
 // ---------- Račun sa slike ili PDF-a ----------
 // Digitalni račun iz aplikacije trgovine (Maxi, Lidl Plus...) stoji na istom
 // telefonu, pa ga kamera ne može uhvatiti. Screenshot ili PDF ide serveru,
 // koji pročita QR kod i zavede račun kao da je skeniran.
+
+import { api } from '../core/api.js';
+import { date, esc, market, money, notice } from '../core/format.js';
+import { currentRoute } from '../core/router.js';
+import { screen } from '../core/screen.js';
 
 /** Caddy i server primaju do 1 MB; ostaje mesta za omot zahteva. */
 const RECEIPT_MOST_BYTES = 950000;
@@ -132,3 +135,5 @@ document.addEventListener('change', event => {
   event.target.value = '';
   if (file) uploadReceipt(file);
 });
+
+export { showReceipt };

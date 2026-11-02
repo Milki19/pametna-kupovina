@@ -1,10 +1,11 @@
 # syntax=docker/dockerfile:1.7
-FROM eclipse-temurin:21-jdk-alpine AS build
+# Ubuntu, ne Alpine: Node za esbuild (web /app) je napravljen za glibc.
+FROM eclipse-temurin:21-jdk AS build
 
 WORKDIR /workspace
 
 COPY .mvn .mvn
-COPY mvnw pom.xml ./
+COPY mvnw pom.xml package.json package-lock.json ./
 COPY src src
 RUN --mount=type=cache,target=/root/.m2 \
     ./mvnw -q -DskipTests package
