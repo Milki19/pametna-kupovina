@@ -87,24 +87,67 @@ final class PlanRules {
         return usual;
     }
 
-    /** No more than three times what the item usually costs. */
-    static boolean usualPrice(StoreItemOffer offer, Map<Long, BigDecimal> usualUnitPrices) {
-        BigDecimal usual = usualUnitPrices.get(offer.itemId());
-        BigDecimal unitPrice = unitPrice(offer);
-        return usual == null
-                || unitPrice == null
-                || unitPrice.compareTo(usual.multiply(MAX_TIMES_MEDIAN)) <= 0;
+    /**
+     * What a line for the item usually costs: the median of what the shops
+     * of this plan ask for it. It judges an offer whose amount is not known
+     * (test 2.11.: "RIBA LIST GRČKA" at 6.599,99 RSD, a kilogram or a box,
+     * was "riba" in the one-stop plan where fish elsewhere cost 340 RSD).
+     */
+    static Map<Long, BigDecimal> usualLinePrices(Collection<StoreItemOffer> offers) {
+        Map<Long, List<BigDecimal>> byItem = new HashMap<>();
+        for (StoreItemOffer offer : offers) {
+            if (offer.available() && offer.lineTotal() != null && offer.lineTotal().signum() > 0) {
+                byItem.computeIfAbsent(offer.itemId(), id -> new java.util.ArrayList<>()).add(offer.lineTotal());
+            }
+        }
+        Map<Long, BigDecimal> usual = new HashMap<>();
+        byItem.forEach((itemId, prices) -> {
+            if (prices.size() >= MIN_OFFERS_FOR_MEDIAN) {
+                usual.put(itemId, median(prices));
+            }
+        });
+        return usual;
     }
 
-    static boolean passes(StoreItemOffer offer, Map<Long, BigDecimal> usualUnitPrices) {
+    /**
+     * No more than three times what the item usually costs: a gram, a
+     * millilitre or a piece where the amount is known, the whole line
+     * where it is not.
+     */
+    static boolean usualPrice(
+            StoreItemOffer offer,
+            Map<Long, BigDecimal> usualUnitPrices,
+            Map<Long, BigDecimal> usualLinePrices
+    ) {
+        BigDecimal unitPrice = unitPrice(offer);
+        if (unitPrice == null) {
+            BigDecimal usualLine = usualLinePrices.get(offer.itemId());
+            return usualLine == null
+                    || offer.lineTotal() == null
+                    || offer.lineTotal().compareTo(usualLine.multiply(MAX_TIMES_MEDIAN)) <= 0;
+        }
+        BigDecimal usual = usualUnitPrices.get(offer.itemId());
+        return usual == null || unitPrice.compareTo(usual.multiply(MAX_TIMES_MEDIAN)) <= 0;
+    }
+
+    static boolean passes(
+            StoreItemOffer offer,
+            Map<Long, BigDecimal> usualUnitPrices,
+            Map<Long, BigDecimal> usualLinePrices
+    ) {
         return !offer.available()
-                || (reasonablePackCount(offer, usualUnitPrices) && usualPrice(offer, usualUnitPrices));
+                || (reasonablePackCount(offer, usualUnitPrices)
+                        && usualPrice(offer, usualUnitPrices, usualLinePrices));
     }
 
     /** The offers a plan may count on; the rest are as if the shop had none. */
-    static List<StoreItemOffer> keep(List<StoreItemOffer> offers, Map<Long, BigDecimal> usualUnitPrices) {
+    static List<StoreItemOffer> keep(
+            List<StoreItemOffer> offers,
+            Map<Long, BigDecimal> usualUnitPrices,
+            Map<Long, BigDecimal> usualLinePrices
+    ) {
         return offers.stream()
-                .filter(offer -> passes(offer, usualUnitPrices))
+                .filter(offer -> passes(offer, usualUnitPrices, usualLinePrices))
                 .toList();
     }
 

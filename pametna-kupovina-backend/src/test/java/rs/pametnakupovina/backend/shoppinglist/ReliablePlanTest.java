@@ -268,6 +268,35 @@ class ReliablePlanTest {
         assertThat(PlanRules.reasonablePackCount(sachets, java.util.Map.of())).isFalse();
     }
 
+    /**
+     * A fish whose amount is unknown at twenty times what fish costs nearby
+     * is no fish for the one-stop plan (test 2.11.: "RIBA LIST GRČKA" at
+     * 6.599,99 RSD made Super Vero 9.886 RSD against 3.479 RSD for two shops).
+     */
+    @Test
+    void anOfferOfUnknownAmountFarAboveTheUsualLineIsNoChoice() {
+        ShoppingListItemResponse fish = item(1L, "riba");
+        ShoppingListItemResponse milk = item(2L, "mleko");
+        NearbyStore dear = store(1L, "A");
+        NearbyStore sprats = store(2L, "B");
+        NearbyStore hake = store(3L, "C");
+        NearbyStore dairy = store(4L, "D");
+
+        ShoppingRecommendationResponse response = plan(List.of(fish, milk), List.of(dear, sprats, hake, dairy), List.of(
+                offer(dear, fish, "6599.99", 101L),
+                offer(dear, milk, "100.00", 102L),
+                offer(sprats, fish, "339.99", 201L),
+                offer(hake, fish, "400.00", 301L),
+                offer(dairy, milk, "90.00", 402L)
+        ), TravelMode.DRIVING);
+
+        assertThat(java.util.stream.Stream.of(response.singleStore(), response.recommendedBalance(), response.lowestPrice())
+                .flatMap(scenario -> scenario.items().stream())
+                .filter(line -> line.lineTotal() != null))
+                .noneMatch(line -> line.lineTotal().compareTo(new BigDecimal("6599.99")) == 0);
+        assertThat(response.singleStore().basketCost()).isLessThan(new BigDecimal("1000"));
+    }
+
     /** Five 200 g cups for less than the kilogram tub: many packs, but cheaper. */
     @Test
     void manyCupsThatCostLessThanTheTubAreKept() {

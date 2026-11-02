@@ -243,7 +243,9 @@ public class ShoppingRecommendationService {
         // What the item usually costs here, from every shop asked; an offer
         // far above it, or nine boxes for one pack, never enters a plan.
         Map<Long, BigDecimal> usualUnitPrices = PlanRules.usualUnitPrices(pricedOfferRows);
-        List<StoreItemOffer> allOfferRows = PlanRules.keep(pricedOfferRows, usualUnitPrices);
+        Map<Long, BigDecimal> usualLinePrices = PlanRules.usualLinePrices(pricedOfferRows);
+        List<StoreItemOffer> allOfferRows =
+                PlanRules.keep(pricedOfferRows, usualUnitPrices, usualLinePrices);
 
         Set<Long> nearbyStoreIds = Set.copyOf(storeIds);
         List<StoreItemOffer> offerRows = allOfferRows.stream()
@@ -309,8 +311,11 @@ public class ShoppingRecommendationService {
                 Map<Long, BigDecimal> fartherUsual = new java.util.HashMap<>(
                         PlanRules.usualUnitPrices(fartherPriced));
                 fartherUsual.putAll(usualUnitPrices);
+                Map<Long, BigDecimal> fartherUsualLines = new java.util.HashMap<>(
+                        PlanRules.usualLinePrices(fartherPriced));
+                fartherUsualLines.putAll(usualLinePrices);
                 List<StoreItemOffer> fartherOffers = preferFreshOffers(
-                        PlanRules.keep(fartherPriced, fartherUsual),
+                        PlanRules.keep(fartherPriced, fartherUsual, fartherUsualLines),
                         asOfDate,
                         properties.getMaxPriceAgeDays()
                 );
