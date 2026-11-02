@@ -1,7 +1,18 @@
-'use strict';
-// Nalog, domaćinstvo, telefoni na nalogu i potrošnja u web verziji. Učitava
-// se pre app.js, koji dodaje ove ekrane i radnje u svoje; zato se ovde ništa
-// iz app.js ne poziva dok se ekran ne otvori.
+// Nalog, domaćinstvo, telefoni na nalogu i potrošnja u web verziji. Ruter
+// dodaje ove ekrane, radnje i obrasce u svoje.
+
+import { api, listRef, loadList } from '../core/api.js';
+import { counted, date, decimal, esc, market, money, notice, spinner, useMarket, whole } from '../core/format.js';
+import { icon } from '../core/html.js';
+import { routes, run } from '../core/router.js';
+import { failed, screen, toast } from '../core/screen.js';
+import { browserName } from '../core/session.js';
+import { saved } from '../core/storage.js';
+import { qrSvg } from '../lib/barcode.js';
+import { listState } from './list.js';
+import { showMore } from './more.js';
+import { addProduct } from './prices.js';
+import { onListKeys } from './sales.js';
 
 // ---------- Nalog na ekranu Više ----------
 
@@ -205,7 +216,7 @@ function showJoin(code, listId) {
 async function joinHousehold(code, listId) {
   const own = await loadList();
   const state = await api('POST', 'accounts/join', { code });
-  if (state?.market) { market = state.market; separators = separatorsOf(market.locale); saved.set('market', market); }
+  if (state?.market) useMarket(state.market);
   let shared;
   try {
     shared = await api('GET', `shopping-lists/${listId}`);
@@ -411,3 +422,22 @@ const accountForms = {
     location.hash = `#/domacinstvo/${encodeURIComponent(parsed.code)}/${parsed.listId}`;
   }
 };
+
+async function deleteAccount() {
+  const shared = account.state?.household;
+  if (!confirm(shared
+    ? 'Ovaj pregledač izlazi iz domaćinstva i briše sve sa sebe. Zajednički spisak, računi i kartice ostaju ukućanima.'
+    : 'Obrisati spisak, račune, kartice i sve podatke ovog uređaja sa servera? Ovo se ne može vratiti.')) return;
+  await api('DELETE', 'accounts/me');
+  clearBrowser();
+  account = { state: null, devices: [], error: null };
+  // Bez odlaska na spisak: on bi odmah napravio nov nalog.
+  screen({
+    title: 'Podaci obrisani',
+    html: notice(shared ? 'Ovaj pregledač je izašao iz domaćinstva i obrisao svoje podatke.'
+      : 'Spisak, računi, kartice i broj ovog uređaja su obrisani sa servera i iz pregledača.', 'pos') +
+      `<a class="btn" href="#/spisak">Počni ispočetka</a>`
+  });
+}
+
+export { account, accountActions, accountCard, accountForms, accountRoutes, deleteAccount, loadAccount };

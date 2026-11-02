@@ -1,0 +1,12 @@
+{
+  "name": "pametna-kupovina-web",
+  "private": true,
+  "description": "Web verzija (/app): ES moduli iz src/main/web/app, spojeni esbuild-om u target/classes/static/app/app.js.",
+  "scripts": {
+    "build": "node src/main/web/build.mjs",
+    "watch": "node src/main/web/build.mjs --watch"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

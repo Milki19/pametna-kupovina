@@ -1,8 +1,8 @@
-'use strict';
 // Merenje u pregledaču: koliko kupac čeka na otvaranje, korak 1, preporuku i
 // pretragu. Ide samo našem serveru, bez naloga i bez sadržaja spiska: ime
 // merenja, trajanje u milisekundama i verzija. Šalje se kad se kartica skloni
 // ili kad se skupi 20 merenja.
+
 const pkTiming = (() => {
   const app = document.querySelector('script[src^="app.js"]');
   const version = (app && new URL(app.src, location.href).searchParams.get('v')) || '?';
@@ -46,3 +46,5 @@ const pkTiming = (() => {
     }
   };
 })();
+
+export { pkTiming };

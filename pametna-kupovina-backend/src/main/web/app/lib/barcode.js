@@ -1,4 +1,3 @@
-'use strict';
 // Crtični kod za karticu na kasi, kao SVG. Isto kao u Android aplikaciji:
 // EAN-13 kad broj to jeste, inače CODE-128, koji prima bilo koji broj i koji
 // svaki trgovački čitač razume. QR se crta; ostali 2D oblici ne.
@@ -53,7 +52,6 @@ function ean13Modules(value) {
 function widthsToModules(widths) {
   return widths.map((w, i) => (i % 2 ? '0' : '1').repeat(w)).join('');
 }
-
 
 // ---------- QR kod (bajt režim, nivo ispravke M, verzije 1–10) ----------
 // Za poziv u domaćinstvo i za kartice sa QR kodom. Prati ISO/IEC 18004.
@@ -282,4 +280,4 @@ function barcodeSvg(value, format) {
   return `<svg viewBox="0 0 ${modules.length + quiet * 2} 1" preserveAspectRatio="none" role="img" aria-label="Crtični kod: ${value.replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`)}"><path d="${path}"/></svg>`;
 }
 
-if (typeof module !== 'undefined') module.exports = { qrMatrix, qrSvg, code128Widths, ean13Modules, ean13Valid, barcodeSvg, widthsToModules };
+export { barcodeSvg, ean13Valid, qrSvg };
