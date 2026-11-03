@@ -3,6 +3,7 @@ package rs.pametnakupovina.backend.shoppinglist;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
+import rs.pametnakupovina.backend.product.CatalogMemo;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -57,9 +58,26 @@ public class StoreShoppingOfferRepository {
             );
 
     private final JdbcClient jdbcClient;
+    private final CatalogMemo memo;
 
-    public StoreShoppingOfferRepository(JdbcClient jdbcClient) {
+    public StoreShoppingOfferRepository(JdbcClient jdbcClient, CatalogMemo memo) {
         this.jdbcClient = jdbcClient;
+        this.memo = memo;
+    }
+
+    /**
+     * Everything the offer query reads from the list: each item as it is
+     * stored, in order. A changed item, quantity or match is a new list.
+     */
+    private String itemsFingerprint(Long listId) {
+        return jdbcClient.sql("""
+                        SELECT md5(COALESCE(string_agg(item::TEXT, '|' ORDER BY item.id), ''))
+                        FROM app.shopping_list_item AS item
+                        WHERE item.shopping_list_id = :listId
+                        """)
+                .param("listId", listId)
+                .query(String.class)
+                .single();
     }
 
     /**
@@ -107,6 +125,26 @@ public class StoreShoppingOfferRepository {
             return List.of();
         }
 
+        // The same list in the same shops on the same day is priced once:
+        // opening the plan again, on foot and then by car, or from a step
+        // away, asks nothing (k6, 3.11.2026). The shops stand for the place;
+        // no coordinates are kept.
+        Long[] bought = boughtFamilyIds(listId);
+        List<Object> key = java.util.Arrays.asList(
+                "planOffers", listId, itemsFingerprint(listId),
+                storeIds.stream().sorted().toList(), asOfDate, includeUnlocated,
+                List.of(bought));
+        return memo.rememberOffers(key, () -> List.copyOf(
+                queryOffers(listId, storeIds, asOfDate, includeUnlocated, bought)));
+    }
+
+    private List<StoreItemOffer> queryOffers(
+            Long listId,
+            List<Long> storeIds,
+            LocalDate asOfDate,
+            boolean includeUnlocated,
+            Long[] boughtFamilyIds
+    ) {
         return jdbcClient.sql("""
                         -- Which products can answer each item in each chain, worked
                         -- out once per chain instead of once per store: twenty
@@ -1578,7 +1616,7 @@ public class StoreShoppingOfferRepository {
                 .param("listId", listId)
                 .param("storeIds", storeIds)
                 .param("includeUnlocated", includeUnlocated)
-                .param("boughtFamilyIds", boughtFamilyIds(listId))
+                .param("boughtFamilyIds", boughtFamilyIds)
                 .query(ROW_MAPPER)
                 .list();
     }

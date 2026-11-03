@@ -18,7 +18,7 @@ class ProductReportServiceTest {
 
     private final ProductReportRepository repository = mock(ProductReportRepository.class);
     private final ProductReportService service =
-            new ProductReportService(repository);
+            new ProductReportService(repository, new CatalogMemo(false));
 
     @Test
     void aReportWithAReasonIsKeptForReview() {
