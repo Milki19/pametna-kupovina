@@ -167,6 +167,57 @@ final class PlanRules {
                         quantity.targetAmount().multiply(new BigDecimal("0.25"))) > 0;
     }
 
+    /** A pack at least this many times the usual amount is called bigger. */
+    static final BigDecimal BIGGER_PACK_TIMES = BigDecimal.valueOf(2);
+
+    /**
+     * How much of the item a line usually brings, per unit (g, ml, piece):
+     * the median of what the shops of this plan offer for it. Items with too
+     * few offers in one unit have none.
+     */
+    static Map<String, BigDecimal> usualAmounts(Collection<StoreItemOffer> offers) {
+        Map<String, List<BigDecimal>> byItem = new HashMap<>();
+        for (StoreItemOffer offer : offers) {
+            PurchaseQuantity quantity = offer.purchaseQuantity();
+            if (offer.available() && quantity != null && quantity.baseUnit() != null
+                    && quantity.suppliedAmount() != null && quantity.suppliedAmount().signum() > 0) {
+                byItem.computeIfAbsent(amountKey(offer.itemId(), quantity.baseUnit()),
+                        key -> new java.util.ArrayList<>()).add(quantity.suppliedAmount());
+            }
+        }
+        Map<String, BigDecimal> usual = new HashMap<>();
+        byItem.forEach((key, amounts) -> {
+            if (amounts.size() >= MIN_OFFERS_FOR_MEDIAN) {
+                usual.put(key, median(amounts));
+            }
+        });
+        return usual;
+    }
+
+    /**
+     * The usual amount, where the line names none and this pack is at least
+     * twice it (test 2.11.: "hrana za mačke" was 12×85 g at 419,99 RSD in
+     * the one-stop plan, a single 85 g pouch at 64,99 RSD elsewhere, and the
+     * line said only that the price was chosen by scope). Null otherwise.
+     */
+    static BigDecimal usualAmountOfBiggerPack(StoreItemOffer offer, Map<String, BigDecimal> usualAmounts) {
+        PurchaseQuantity quantity = offer.purchaseQuantity();
+        if (!offer.available() || quantity == null || quantity.baseUnit() == null
+                || quantity.suppliedAmount() == null
+                || (quantity.targetAmount() != null && quantity.targetAmount().signum() > 0)) {
+            return null;
+        }
+        BigDecimal usual = usualAmounts.get(amountKey(offer.itemId(), quantity.baseUnit()));
+        return usual != null && usual.signum() > 0
+                && quantity.suppliedAmount().compareTo(usual.multiply(BIGGER_PACK_TIMES)) >= 0
+                ? usual
+                : null;
+    }
+
+    private static String amountKey(Long itemId, String baseUnit) {
+        return itemId + ":" + baseUnit;
+    }
+
     private static BigDecimal unitPrice(StoreItemOffer offer) {
         if (!offer.available() || offer.purchaseQuantity() == null) {
             return null;

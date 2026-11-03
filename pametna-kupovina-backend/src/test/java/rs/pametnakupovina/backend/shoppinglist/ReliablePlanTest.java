@@ -297,6 +297,55 @@ class ReliablePlanTest {
         assertThat(response.singleStore().basketCost()).isLessThan(new BigDecimal("1000"));
     }
 
+    /**
+     * Twelve pouches where the line names no amount and a pouch is usual
+     * elsewhere: the line says it is a bigger pack, not "scope prioritet"
+     * (test 2.11.: 12×85 g cat food at 419,99 RSD against 64,99 RSD).
+     */
+    @Test
+    void aMuchBiggerPackSaysSo() {
+        ShoppingListItemResponse cat = item(1L, "hrana za macke");
+        ShoppingListItemResponse milk = item(2L, "mleko");
+        NearbyStore multipack = store(1L, "A");
+        NearbyStore pouchB = store(2L, "B");
+        NearbyStore pouchC = store(3L, "C");
+        NearbyStore pouchD = store(4L, "D");
+
+        ShoppingRecommendationResponse response = plan(List.of(cat, milk),
+                List.of(multipack, pouchB, pouchC, pouchD), List.of(
+                        amount(offer(multipack, cat, "419.99", 101L), "1020", "g"),
+                        offer(multipack, milk, "89.99", 102L),
+                        amount(offer(pouchB, cat, "64.99", 201L), "85", "g"),
+                        amount(offer(pouchC, cat, "45.00", 301L), "85", "g"),
+                        amount(offer(pouchD, cat, "59.99", 401L), "100", "g")
+                ), TravelMode.DRIVING);
+
+        RecommendationItemResponse catLine = response.singleStore().items().stream()
+                .filter(line -> line.itemId().equals(1L)).findFirst().orElseThrow();
+        assertThat(catLine.storeId()).isEqualTo(1L);
+        assertThat(catLine.substituteNote())
+                .isEqualTo("Veće pakovanje: 1,02 kg, a obično oko 92,5 g, pa je i cena veća.");
+        assertThat(catLine.explanation()).isEqualTo(catLine.substituteNote());
+        RecommendationItemResponse milkLine = response.singleStore().items().stream()
+                .filter(line -> line.itemId().equals(2L)).findFirst().orElseThrow();
+        assertThat(milkLine.substituteNote()).isNull();
+        assertThat(milkLine.explanation()).isEqualTo("Cena lanca, ista u njegovim prodavnicama.");
+        assertThat(java.util.stream.Stream.of(response.singleStore(), response.recommendedBalance(), response.lowestPrice())
+                .flatMap(scenario -> scenario.items().stream()))
+                .noneMatch(line -> line.explanation() != null && line.explanation().contains("scope"));
+    }
+
+    @Test
+    void amountsAreWrittenTheWayAShopperReadsThem() {
+        assertThat(ShoppingRecommendationService.amountText(new BigDecimal("85"), "g")).isEqualTo("85 g");
+        assertThat(ShoppingRecommendationService.amountText(new BigDecimal("1020"), "g")).isEqualTo("1,02 kg");
+        assertThat(ShoppingRecommendationService.amountText(new BigDecimal("1500.000"), "ml")).isEqualTo("1,5 l");
+        assertThat(ShoppingRecommendationService.amountText(new BigDecimal("1000"), "g")).isEqualTo("1 kg");
+        assertThat(ShoppingRecommendationService.amountText(new BigDecimal("12"), "piece")).isEqualTo("12 kom");
+        assertThat(ShoppingRecommendationService.priceSourceText("STORE")).isEqualTo("Cena iz ove prodavnice.");
+        assertThat(ShoppingRecommendationService.priceSourceText(null)).isEqualTo("Cena iz cenovnika.");
+    }
+
     /** Five 200 g cups for less than the kilogram tub: many packs, but cheaper. */
     @Test
     void manyCupsThatCostLessThanTheTubAreKept() {
@@ -407,6 +456,19 @@ class ReliablePlanTest {
                 o.productBarcode(), o.priceDate(), o.regularPrice(), o.discountedPrice(), o.effectivePrice(),
                 o.effectivePrice().multiply(count).setScale(2), o.priceScope(),
                 new PurchaseQuantity(count, packSize, unit, wanted, supplied, supplied.subtract(wanted), null),
+                true, false);
+    }
+
+    /** One pack of {@code size}, for a line that names no amount. */
+    private static StoreItemOffer amount(StoreItemOffer o, String size, String unit) {
+        BigDecimal packSize = new BigDecimal(size);
+        return new StoreItemOffer(o.storeId(), o.retailerCode(), o.retailerName(), o.storeFormatCode(),
+                o.storeFormatName(), o.storeName(), o.address(), o.city(), o.latitude(), o.longitude(),
+                o.itemId(), o.requestedName(), o.requestedQuantity(), o.matchingRule(), o.matchingStatus(),
+                o.retailerProductId(), o.canonicalProductId(), o.productName(), o.productBrand(),
+                o.productBarcode(), o.priceDate(), o.regularPrice(), o.discountedPrice(), o.effectivePrice(),
+                o.lineTotal(), o.priceScope(),
+                new PurchaseQuantity(BigDecimal.ONE, packSize, unit, null, packSize, null, null),
                 true, false);
     }
 
