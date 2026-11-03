@@ -29,6 +29,12 @@ import java.util.function.Supplier;
  *
  * <p>A word's first check costs the queries; the same word for anyone after
  * that costs nothing (brzina na 2 jezgra, 31.10.2026).
+ *
+ * <p>A plan's offers are the exception: they carry prices, and working them
+ * out was 70% of the database's time under load (k6, 3.11.2026). The same
+ * list in the same shops is priced once and kept {@link #OFFER_MAX_AGE}: an
+ * import still clears them at once, a "not in this shop" report too, and
+ * anything else (a shop's format, a kind's settings) shows within minutes.
  */
 @Component
 public class CatalogMemo {
@@ -45,6 +51,14 @@ public class CatalogMemo {
 
     private final Map<List<?>, Optional<Object>> entries = new ConcurrentHashMap<>();
     private final Map<List<?>, Optional<Object>> largeEntries = new ConcurrentHashMap<>();
+
+    static final Duration OFFER_MAX_AGE = Duration.ofMinutes(10);
+    /** A plan's offers: a few hundred rows for each list and group of shops. */
+    static final int MAX_OFFER_ENTRIES = 1_000;
+    private final Map<List<?>, KeptOffers> offerEntries = new ConcurrentHashMap<>();
+
+    private record KeptOffers(Instant keptAt, Object offers) {
+    }
     private final SingleFlight<List<?>> inFlight = new SingleFlight<>();
     // Raised on every change, so a lookup that began before it is not kept.
     private final AtomicLong generation = new AtomicLong();
@@ -111,6 +125,54 @@ public class CatalogMemo {
         });
     }
 
+    /**
+     * A plan's offers for this list in these shops, or the lookup's answer,
+     * kept {@link #OFFER_MAX_AGE}. The key must say everything the offers
+     * depend on but the prices: the list's items, the shops, the day.
+     */
+    @SuppressWarnings("unchecked")
+    public <T> T rememberOffers(List<?> key, Supplier<T> lookup) {
+        if (!enabled) {
+            return lookup.get();
+        }
+        Instant now = clock.instant();
+        KeptOffers found = offerEntries.get(key);
+        if (found != null && !found.keptAt().plus(OFFER_MAX_AGE).isBefore(now)) {
+            return (T) found.offers();
+        }
+        long before = generation.get();
+        return inFlight.run(List.of(before, "offers", key), () -> {
+            T answer = lookup.get();
+            if (answer != null && generation.get() == before) {
+                if (offerEntries.size() >= MAX_OFFER_ENTRIES) {
+                    offerEntries.clear();
+                }
+                offerEntries.put(key, new KeptOffers(clock.instant(), answer));
+            }
+            return answer;
+        });
+    }
+
+    /** Something only a plan's offers read changed; once it commits. */
+    public void offersChanged() {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            generation.incrementAndGet();
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCompletion(int status) {
+                    forgetOffers();
+                }
+            });
+        } else {
+            forgetOffers();
+        }
+    }
+
+    private void forgetOffers() {
+        generation.incrementAndGet();
+        offerEntries.clear();
+    }
+
     /** The catalogue changed; inside a transaction, once it commits. */
     public void catalogChanged() {
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
@@ -132,10 +194,11 @@ public class CatalogMemo {
         generation.incrementAndGet();
         entries.clear();
         largeEntries.clear();
+        offerEntries.clear();
         startedAt = clock.instant();
     }
 
     int size() {
-        return entries.size() + largeEntries.size();
+        return entries.size() + largeEntries.size() + offerEntries.size();
     }
 }

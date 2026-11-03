@@ -132,6 +132,35 @@ class CatalogMemoTest {
     }
 
     @Test
+    void aPlansOffersAreKeptTenMinutesAndClearedByAnImportOrAReport() {
+        memo.rememberOffers(List.of("planOffers", 1L), this::read);
+        memo.rememberOffers(List.of("planOffers", 1L), this::read);
+        assertThat(reads).hasValue(1);
+
+        clock.move(CatalogMemo.OFFER_MAX_AGE.plusSeconds(1));
+        memo.rememberOffers(List.of("planOffers", 1L), this::read);
+        assertThat(reads).hasValue(2);
+
+        memo.offersChanged();
+        memo.rememberOffers(List.of("planOffers", 1L), this::read);
+        assertThat(reads).hasValue(3);
+
+        memo.catalogChanged();
+        memo.rememberOffers(List.of("planOffers", 1L), this::read);
+        assertThat(reads).hasValue(4);
+    }
+
+    @Test
+    void aReportOnlyClearsThePlansOffers() {
+        memo.remember(List.of("kind", "jogurt"), this::read);
+        memo.rememberOffers(List.of("planOffers", 1L), this::read);
+        memo.offersChanged();
+        memo.remember(List.of("kind", "jogurt"), this::read);
+
+        assertThat(reads).hasValue(2);
+    }
+
+    @Test
     void switchedOffItAlwaysReads() {
         CatalogMemo off = new CatalogMemo(false);
         off.remember(List.of("kind", "jogurt"), this::read);

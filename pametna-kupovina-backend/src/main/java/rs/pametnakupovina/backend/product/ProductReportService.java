@@ -11,11 +11,14 @@ public class ProductReportService {
     private static final int MAX_NOTE_LENGTH = 500;
 
     private final ProductReportRepository repository;
+    private final CatalogMemo memo;
 
     public ProductReportService(
-            ProductReportRepository repository
+            ProductReportRepository repository,
+            CatalogMemo memo
     ) {
         this.repository = repository;
+        this.memo = memo;
     }
 
     /** @param clientTokenHash the reporting phone, or null when it is not known */
@@ -65,6 +68,10 @@ public class ProductReportService {
                 note,
                 clientTokenHash
         );
+        if (storeId != null) {
+            // Two such reports take the product out of that shop's plans.
+            memo.offersChanged();
+        }
 
         return new ProductReportResponse(id, "NEW");
     }
