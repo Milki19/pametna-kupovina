@@ -740,8 +740,11 @@ private fun draftAttention(status: String): Pair<Int, StatusTone>? = when (statu
  */
 internal data class DuplicateGroup(val items: List<DraftItemEntity>, val merged: DraftItemEntity?)
 
+// Dok server ne pročita nalepljen red, ne zna se da li je to ista stavka, pa se ćuti.
 internal fun duplicateGroups(items: List<DraftItemEntity>): List<DuplicateGroup> =
-    items.groupBy { sameName(it.name) }.values.filter { it.size > 1 }.map { DuplicateGroup(it, mergedItem(it)) }
+    items.groupBy { sameName(it.name) }.values
+        .filter { group -> group.size > 1 && group.none { it.syncState == SyncState.PENDING_PASTE.name } }
+        .map { DuplicateGroup(it, mergedItem(it)) }
 
 /**
  * Prva stavka ostaje (mesto, pravilo, proizvod) i dobija zbir količina.

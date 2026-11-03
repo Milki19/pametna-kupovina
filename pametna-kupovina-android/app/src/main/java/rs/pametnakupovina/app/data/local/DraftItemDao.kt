@@ -36,9 +36,6 @@ interface DraftItemDao {
     @Query("DELETE FROM draft_items WHERE localId = :localId")
     suspend fun deleteByLocalId(localId: Long)
 
-    @Query("DELETE FROM draft_items")
-    suspend fun deleteAll()
-
     // A new list on the server: everything is sent again, except a pasted
     // line still waiting to be read and a row already deleted here.
     @Query(
@@ -47,12 +44,6 @@ interface DraftItemDao {
             "THEN syncState ELSE 'PENDING_CREATE' END"
     )
     suspend fun resetRemoteState()
-
-    @Transaction
-    suspend fun replaceWithRemote(items: List<DraftItemEntity>) {
-        deleteAll()
-        insertAll(items)
-    }
 
     @Query("DELETE FROM draft_items WHERE syncState = 'SYNCED'")
     suspend fun deleteSynced()

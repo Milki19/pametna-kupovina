@@ -2,6 +2,7 @@ package rs.pametnakupovina.app.ui.screens
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import rs.pametnakupovina.app.data.local.DraftItemEntity
 import rs.pametnakupovina.app.data.network.CanonicalProductSearchItemDto
@@ -181,6 +182,12 @@ class ShoppingListScreenTest {
         assertNull(mergedItem(listOf(existingItem, existingItem.copy(localId = 2, canonicalProductId = 16))))
         assertNull(mergedItem(listOf(flexible(1, "mleko"), flexible(2, "mleko").copy(syncState = "PENDING_PASTE"))))
         assertNull(mergedItem(listOf(flexible(1, "pivo", 600.0), flexible(2, "pivo", 500.0))))
+    }
+
+    @Test
+    fun `nalepljen red koji server jos nije procitao nije duplikat`() {
+        assertTrue(duplicateGroups(listOf(flexible(1, "jogurt"), flexible(2, "jogurt").copy(syncState = "PENDING_PASTE"))).isEmpty())
+        assertEquals(1, duplicateGroups(listOf(flexible(1, "jogurt"), flexible(2, "jogurt"))).size)
     }
 
     @Test
