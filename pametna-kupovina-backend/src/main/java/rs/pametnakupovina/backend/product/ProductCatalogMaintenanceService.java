@@ -560,6 +560,13 @@ public class ProductCatalogMaintenanceService {
                 .query((resultSet, rowNumber) -> true)
                 .single();
 
+        // Pet food whose name names no animal, like "FRISKIES TBONZ 150G",
+        // is the cat or dog food the same barcode is at other chains (V154).
+        jdbcClient.sql("SELECT COUNT(*) FROM app.assign_pet_kinds_by_barcode(?)")
+                .param(1, retailerId)
+                .query(Long.class)
+                .single();
+
         // A pack whose name does not say what it holds, like METRO's
         // "0.33L CORONA NB 6/1", is the type of the single bottle it was
         // read against (V73), unless the taxonomy still waits for a review.
