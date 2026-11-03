@@ -244,6 +244,8 @@ public class ShoppingRecommendationService {
         // far above it, or nine boxes for one pack, never enters a plan.
         Map<Long, BigDecimal> usualUnitPrices = PlanRules.usualUnitPrices(pricedOfferRows);
         Map<Long, BigDecimal> usualLinePrices = PlanRules.usualLinePrices(pricedOfferRows);
+        // How much a line usually brings, so a much bigger pack says so.
+        Map<String, BigDecimal> usualAmounts = PlanRules.usualAmounts(pricedOfferRows);
         List<StoreItemOffer> allOfferRows =
                 PlanRules.keep(pricedOfferRows, usualUnitPrices, usualLinePrices);
 
@@ -425,7 +427,8 @@ public class ShoppingRecommendationService {
                 routeMatrix,
                 null,
                 walking,
-                candidateRadius
+                candidateRadius,
+                usualAmounts
         );
 
         OptimizationScenarioResponse recommendedScenario = buildScenario(
@@ -437,7 +440,8 @@ public class ShoppingRecommendationService {
                 routeMatrix,
                 onTheWay,
                 walking,
-                candidateRadius
+                candidateRadius,
+                usualAmounts
         );
 
         OptimizationScenarioResponse lowestPriceScenario = buildScenario(
@@ -449,7 +453,8 @@ public class ShoppingRecommendationService {
                 routeMatrix,
                 null,
                 walking,
-                candidateRadius
+                candidateRadius,
+                usualAmounts
         );
 
         return new ShoppingRecommendationResponse(
@@ -1172,7 +1177,8 @@ public class ShoppingRecommendationService {
             RouteMatrix routeMatrix,
             OnTheWay onTheWay,
             boolean walking,
-            int candidateRadius
+            int candidateRadius,
+            Map<String, BigDecimal> usualAmounts
     ) {
         Map<Long, StoreItemOffer> assignments = evaluated == null
                 ? Map.of()
@@ -1188,7 +1194,7 @@ public class ShoppingRecommendationService {
             StoreItemOffer offer = assignments.get(item.id());
 
             if (offer != null && offer.available()) {
-                itemResponses.add(availableItem(item, offer));
+                itemResponses.add(availableItem(item, offer, usualAmounts));
                 continue;
             }
 
@@ -1437,8 +1443,10 @@ public class ShoppingRecommendationService {
 
     private RecommendationItemResponse availableItem(
             ShoppingListItemResponse item,
-            StoreItemOffer offer
+            StoreItemOffer offer,
+            Map<String, BigDecimal> usualAmounts
     ) {
+        String biggerPack = biggerPackNote(offer, usualAmounts);
         return new RecommendationItemResponse(
                 item.id(),
                 item.name(),
@@ -1458,8 +1466,7 @@ public class ShoppingRecommendationService {
                 offer.effectivePrice(),
                 offer.lineTotal(),
                 offer.priceScope(),
-                "Važeća cena je izabrana po scope prioritetu "
-                        + "objekat, format, pa lanac.",
+                biggerPack != null ? biggerPack : priceSourceText(offer.priceScope()),
                 offer.purchaseQuantity(),
                 offer.wantedMissing()
                         ? "Zamena: ovde nema „" + item.name()
@@ -1467,8 +1474,52 @@ public class ShoppingRecommendationService {
                         : PlanRules.overTheAmount(offer)
                         ? "Najbliže pakovanje: manjeg ovde nema, pa dobijaš više"
                                 + " nego što piše na spisku."
-                        : null
+                        : biggerPack
         );
+    }
+
+    /**
+     * "Veće pakovanje: 1,02 kg, a obično oko 85 g, pa je i cena veća." Said
+     * where the line names no amount and the pack is at least twice what the
+     * item usually comes in, so a dearer line is not taken for a dearer shop.
+     */
+    static String biggerPackNote(StoreItemOffer offer, Map<String, BigDecimal> usualAmounts) {
+        BigDecimal usual = PlanRules.usualAmountOfBiggerPack(offer, usualAmounts);
+        if (usual == null) {
+            return null;
+        }
+        String unit = offer.purchaseQuantity().baseUnit();
+        return "Veće pakovanje: " + amountText(offer.purchaseQuantity().suppliedAmount(), unit)
+                + ", a obično oko " + amountText(usual, unit) + ", pa je i cena veća.";
+    }
+
+    /** Where the price comes from, in words (it was "scope prioritet"). */
+    static String priceSourceText(String priceScope) {
+        if (priceScope == null) {
+            return "Cena iz cenovnika.";
+        }
+        return switch (priceScope) {
+            case "STORE" -> "Cena iz ove prodavnice.";
+            case "STORE_FORMAT" -> "Cena za ovu vrstu prodavnica lanca.";
+            case "RETAILER" -> "Cena lanca, ista u njegovim prodavnicama.";
+            default -> "Cena iz cenovnika.";
+        };
+    }
+
+    /** 85 g, 1,02 kg, 250 ml, 1,5 l, 12 kom. */
+    static String amountText(BigDecimal amount, String unit) {
+        String shownUnit = unit;
+        BigDecimal shown = amount;
+        if (("g".equals(unit) || "ml".equals(unit)) && amount.compareTo(BigDecimal.valueOf(1000)) >= 0) {
+            shown = amount.divide(BigDecimal.valueOf(1000), 2, RoundingMode.HALF_UP);
+            shownUnit = "g".equals(unit) ? "kg" : "l";
+        } else if ("piece".equals(unit)) {
+            shownUnit = "kom";
+        }
+        shown = shown.setScale(Math.min(2, Math.max(0, shown.stripTrailingZeros().scale())), RoundingMode.HALF_UP)
+                .stripTrailingZeros();
+        String text = shown.scale() <= 0 ? shown.setScale(0).toPlainString() : shown.toPlainString();
+        return text.replace('.', ',') + " " + shownUnit;
     }
 
     private RecommendationItemResponse unavailableItem(
