@@ -62,10 +62,16 @@ class ShoppingListViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(ShoppingListUiState())
     val uiState: StateFlow<ShoppingListUiState> = _uiState.asStateFlow()
 
+    /** Nalepljeni redovi koje server još nije pročitao (lokalni ID-jevi). */
+    private var pendingPaste: List<Long> = emptyList()
+
     init {
         viewModelScope.launch {
             repository.draftItems.collect { items ->
                 _uiState.update { it.copy(items = items) }
+                // Ko god da pošalje nalepljeno (ovaj ekran, ponovni pokušaj ili
+                // worker), poruka i oznaka „Nije prepoznato" stižu kad server odgovori.
+                showPastedReading()
             }
         }
         refresh()
@@ -165,26 +171,14 @@ class ShoppingListViewModel @Inject constructor(
             try {
                 if (replace) repository.deleteAllItems()
                 val localIds = repository.pasteItems(text)
+                pendingPaste = localIds
                 onSaved()
                 _uiState.update { it.copy(errorMessage = null, pastedUnknownIds = emptySet()) }
                 synchronizeSilently()
-                val added = uiPlural(R.plurals.count_items, localIds.size)
-                val reading = repository.pastedReading(localIds)
-                _uiState.update {
-                    it.copy(
-                        notice = when {
-                            reading == null -> uiText(R.string.list_notice_added, added)
-                            reading.unknownRemoteIds.isEmpty() -> uiText(R.string.list_paste_notice_all, added)
-                            else -> uiPlural(
-                                R.plurals.list_paste_notice_unknown,
-                                reading.unknownRemoteIds.size,
-                                added,
-                                reading.recognized,
-                                reading.unknownRemoteIds.size
-                            )
-                        },
-                        pastedUnknownIds = reading?.unknownRemoteIds.orEmpty()
-                    )
+                showPastedReading()
+                if (pendingPaste.isNotEmpty()) {
+                    val added = uiPlural(R.plurals.count_items, localIds.size)
+                    _uiState.update { it.copy(notice = uiText(R.string.list_notice_added, added)) }
                 }
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
@@ -192,6 +186,29 @@ class ShoppingListViewModel @Inject constructor(
                     it.copy(errorMessage = error.toUserMessage(R.string.list_error_paste_failed))
                 }
             }
+        }
+    }
+
+    private suspend fun showPastedReading() {
+        val localIds = pendingPaste.takeIf { it.isNotEmpty() } ?: return
+        val reading = repository.pastedReading(localIds) ?: return
+        pendingPaste = emptyList()
+        val added = uiPlural(R.plurals.count_items, localIds.size)
+        _uiState.update {
+            it.copy(
+                notice = if (reading.unknownRemoteIds.isEmpty()) {
+                    uiText(R.string.list_paste_notice_all, added)
+                } else {
+                    uiPlural(
+                        R.plurals.list_paste_notice_unknown,
+                        reading.unknownRemoteIds.size,
+                        added,
+                        reading.recognized,
+                        reading.unknownRemoteIds.size
+                    )
+                },
+                pastedUnknownIds = reading.unknownRemoteIds
+            )
         }
     }
 

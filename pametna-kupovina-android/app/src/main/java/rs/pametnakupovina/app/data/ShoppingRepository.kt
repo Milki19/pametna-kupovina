@@ -178,10 +178,12 @@ data class DraftItemInput(
     }
 }
 
-@Singleton
 /** [recognized] stavki ima poznatu vrstu; ostale se traže po nazivu. */
 data class PasteReading(val recognized: Int, val unknownRemoteIds: Set<Long>)
 
+// Jedan za celu aplikaciju: ekran i ShoppingSyncWorker dele syncMutex, inače
+// isti red šalju dva puta i server ga upiše dvaput.
+@Singleton
 class ShoppingRepository @Inject constructor(
     private val api: ShoppingApiService,
     private val dao: DraftItemDao,
@@ -534,7 +536,8 @@ class ShoppingRepository @Inject constructor(
         try {
             pushPending(listId)
             val remote = api.getShoppingList(listId)
-            dao.replaceWithRemote(remote.items.map { it.toEntity() })
+            // Izmena napravljena dok je stizao spisak ostaje i šalje se sledeći put.
+            dao.replaceSyncedWithRemote(remote.items.map { it.toEntity() })
             listId
         } catch (error: ItemSyncValidationException) {
             // Show what the server made of the rest; keep the refused rows.
