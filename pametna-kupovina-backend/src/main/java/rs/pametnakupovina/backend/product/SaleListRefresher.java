@@ -30,12 +30,14 @@ public class SaleListRefresher {
     static final Duration MAX_AGE = Duration.ofHours(1);
 
     private final JdbcClient jdbcClient;
+    private final CatalogMemo memo;
     // Stale from the start: the list may be from before the backend stopped.
     private final AtomicBoolean stale = new AtomicBoolean(true);
     private volatile Instant refreshedAt = Instant.EPOCH;
 
-    public SaleListRefresher(JdbcClient jdbcClient) {
+    public SaleListRefresher(JdbcClient jdbcClient, CatalogMemo memo) {
         this.jdbcClient = jdbcClient;
+        this.memo = memo;
     }
 
     /** A chain's prices changed; inside a transaction, once it commits. */
@@ -101,6 +103,8 @@ public class SaleListRefresher {
         try {
             jdbcClient.sql("REFRESH MATERIALIZED VIEW CONCURRENTLY app.current_sale_list").update();
             refreshedAt = reading;
+            // Pages read from the old list are not answered again; plans stay.
+            memo.salesChanged();
             log.info("Lista akcija osvežena za {} ms", (System.nanoTime() - started) / 1_000_000);
         } catch (DataAccessException failed) {
             stale.set(true);
