@@ -30,11 +30,13 @@ import java.util.function.Supplier;
  * <p>A word's first check costs the queries; the same word for anyone after
  * that costs nothing (brzina na 2 jezgra, 31.10.2026).
  *
- * <p>A plan's offers are the exception: they carry prices, and working them
- * out was 70% of the database's time under load (k6, 3.11.2026). The same
- * list in the same shops is priced once and kept {@link #OFFER_MAX_AGE}: an
- * import still clears them at once, a "not in this shop" report too, and
- * anything else (a shop's format, a kind's settings) shows within minutes.
+ * <p>A plan's offers and a page of sales are the exception: they carry
+ * prices, and working them out was 90% of the database's time under load
+ * (k6, 3.11.2026). The same list in the same shops, or the same sales page
+ * for the same place, is worked out once and kept {@link #OFFER_MAX_AGE}: an
+ * import or a new read of the sales clears them at once, a "not in this
+ * shop" report too, and anything else (a shop's format, a kind's settings)
+ * shows within minutes.
  */
 @Component
 public class CatalogMemo {
@@ -53,7 +55,7 @@ public class CatalogMemo {
     private final Map<List<?>, Optional<Object>> largeEntries = new ConcurrentHashMap<>();
 
     static final Duration OFFER_MAX_AGE = Duration.ofMinutes(10);
-    /** A plan's offers: a few hundred rows for each list and group of shops. */
+    /** A plan's offers (a few hundred rows for a list and group of shops) and sale pages. */
     static final int MAX_OFFER_ENTRIES = 1_000;
     private final Map<List<?>, KeptOffers> offerEntries = new ConcurrentHashMap<>();
 
@@ -126,9 +128,9 @@ public class CatalogMemo {
     }
 
     /**
-     * A plan's offers for this list in these shops, or the lookup's answer,
-     * kept {@link #OFFER_MAX_AGE}. The key must say everything the offers
-     * depend on but the prices: the list's items, the shops, the day.
+     * A plan's offers or a sales page, or the lookup's answer, kept
+     * {@link #OFFER_MAX_AGE}. The key must say everything the answer depends
+     * on but the prices: the list's items, the shops, the day, the filter.
      */
     @SuppressWarnings("unchecked")
     public <T> T rememberOffers(List<?> key, Supplier<T> lookup) {
@@ -153,7 +155,7 @@ public class CatalogMemo {
         });
     }
 
-    /** Something only a plan's offers read changed; once it commits. */
+    /** Something only plans and sales read changed; once it commits. */
     public void offersChanged() {
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             generation.incrementAndGet();
@@ -167,6 +169,15 @@ public class CatalogMemo {
             forgetOffers();
         }
     }
+
+    /** The sales list was read again: only its pages go, the plans stay. */
+    public void salesChanged() {
+        generation.incrementAndGet();
+        offerEntries.keySet().removeIf(key -> !key.isEmpty() && SALE_PAGE.equals(key.getFirst()));
+    }
+
+    /** The first part of a sales page's key. */
+    public static final String SALE_PAGE = "salePage";
 
     private void forgetOffers() {
         generation.incrementAndGet();

@@ -15,13 +15,16 @@ public class SaleService {
 
     private final SaleRepository saleRepository;
     private final ProductNameNormalizer productNameNormalizer;
+    private final CatalogMemo memo;
 
     public SaleService(
             SaleRepository saleRepository,
-            ProductNameNormalizer productNameNormalizer
+            ProductNameNormalizer productNameNormalizer,
+            CatalogMemo memo
     ) {
         this.saleRepository = saleRepository;
         this.productNameNormalizer = productNameNormalizer;
+        this.memo = memo;
     }
 
     /** The list as every app before 2.0.8 asks for it: shops within 10 km. */
@@ -84,9 +87,30 @@ public class SaleService {
                 radius
         );
 
+        SaleSort order = sort == null ? SaleSort.DISCOUNT : sort;
+        // The same page for the same place is the same for everyone until the
+        // list is read again (k6, 3.11.2026: 130 ms of the database each).
+        // Only a place the app already rounded to about a kilometre is kept
+        // as part of the key; an exact one is answered and forgotten.
+        if (near != null && !(roughly(near.latitude()) && roughly(near.longitude()))) {
+            return read(filter, order, page, limit, near != null, radius);
+        }
+        return memo.rememberOffers(
+                java.util.Arrays.asList(CatalogMemo.SALE_PAGE, filter, order, page, limit),
+                () -> read(filter, order, page, limit, near != null, radius));
+    }
+
+    private SalePage read(
+            SaleRepository.SaleFilter filter,
+            SaleSort order,
+            int page,
+            int limit,
+            boolean located,
+            int radius
+    ) {
         List<SaleRepository.SaleRow> rows = saleRepository.findSales(
                 filter,
-                sort == null ? SaleSort.DISCOUNT : sort,
+                order,
                 limit,
                 (long) page * limit
         );
@@ -111,10 +135,16 @@ public class SaleService {
                 (long) page + 1 < totalPages,
                 rows.stream().map(SaleRepository.SaleRow::item).toList(),
                 categories,
-                near != null,
+                located,
                 retailers,
-                near == null ? null : radius
+                located ? radius : null
         );
+    }
+
+    /** Two decimals at most, as the apps send it (about a kilometre). */
+    static boolean roughly(double degrees) {
+        double hundredths = degrees * 100;
+        return Math.abs(hundredths - Math.rint(hundredths)) < 1e-6;
     }
 
     private static String blankToNull(String value) {
