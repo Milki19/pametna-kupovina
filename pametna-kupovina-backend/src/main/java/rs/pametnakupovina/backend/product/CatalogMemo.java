@@ -55,8 +55,11 @@ public class CatalogMemo {
     private final Map<List<?>, Optional<Object>> largeEntries = new ConcurrentHashMap<>();
 
     static final Duration OFFER_MAX_AGE = Duration.ofMinutes(10);
-    /** A plan's offers (a few hundred rows for a list and group of shops) and sale pages. */
-    static final int MAX_OFFER_ENTRIES = 1_000;
+    /**
+     * A plan's offers (a few hundred rows for a list and group of shops), one
+     * item's offers in a group of shops (a row per shop), and sale pages.
+     */
+    static final int MAX_OFFER_ENTRIES = 4_000;
     private final Map<List<?>, KeptOffers> offerEntries = new ConcurrentHashMap<>();
 
     private record KeptOffers(Instant keptAt, Object offers) {
@@ -153,6 +156,42 @@ public class CatalogMemo {
             }
             return answer;
         });
+    }
+
+    /**
+     * What {@link #rememberOffers} keeps, read without working it out: a plan
+     * asks for many items at once and works out only the ones not kept.
+     * Null when nothing fresh is kept.
+     */
+    @SuppressWarnings("unchecked")
+    public <T> T keptOffers(List<?> key) {
+        if (!enabled) {
+            return null;
+        }
+        KeptOffers found = offerEntries.get(key);
+        if (found != null && !found.keptAt().plus(OFFER_MAX_AGE).isBefore(clock.instant())) {
+            return (T) found.offers();
+        }
+        return null;
+    }
+
+    /** Read before the lookup, for {@link #keepOffers}. */
+    public long offersGeneration() {
+        return generation.get();
+    }
+
+    /**
+     * Keeps an answer worked out outside {@link #rememberOffers}, unless
+     * something it read changed since {@code generationBefore}.
+     */
+    public void keepOffers(List<?> key, Object offers, long generationBefore) {
+        if (!enabled || offers == null || generation.get() != generationBefore) {
+            return;
+        }
+        if (offerEntries.size() >= MAX_OFFER_ENTRIES) {
+            offerEntries.clear();
+        }
+        offerEntries.put(key, new KeptOffers(clock.instant(), offers));
     }
 
     /** Something only plans and sales read changed; once it commits. */
