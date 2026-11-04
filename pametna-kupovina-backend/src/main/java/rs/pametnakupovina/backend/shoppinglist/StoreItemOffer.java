@@ -139,4 +139,15 @@ public record StoreItemOffer(
                 && effectivePrice != null
                 && lineTotal != null;
     }
+    /**
+     * The same answer for another line that asks the same: only which line
+     * and what it is called differ (see the offers kept per item).
+     */
+    StoreItemOffer forItem(Long otherItemId, String otherRequestedName) {
+        return new StoreItemOffer(storeId, retailerCode, retailerName, storeFormatCode, storeFormatName,
+                storeName, address, city, latitude, longitude, otherItemId, otherRequestedName,
+                requestedQuantity, matchingRule, matchingStatus, retailerProductId, canonicalProductId,
+                productName, productBrand, productBarcode, priceDate, regularPrice, discountedPrice,
+                effectivePrice, lineTotal, priceScope, purchaseQuantity, usualChoice, wantedMissing);
+    }
 }

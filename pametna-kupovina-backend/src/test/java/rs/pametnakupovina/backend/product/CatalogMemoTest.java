@@ -161,6 +161,29 @@ class CatalogMemoTest {
     }
 
     @Test
+    void anItemsOffersKeptByHandLastTenMinutes() {
+        List<String> key = List.of("itemOffers", "mleko 1 l");
+        assertThat((Object) memo.keptOffers(key)).isNull();
+
+        memo.keepOffers(key, "offers", memo.offersGeneration());
+        assertThat((Object) memo.keptOffers(key)).isEqualTo("offers");
+
+        clock.move(Duration.ofMinutes(11));
+        assertThat((Object) memo.keptOffers(key)).isNull();
+    }
+
+    @Test
+    void anItemsOffersReadDuringAReportAreNotKept() {
+        List<String> key = List.of("itemOffers", "mleko 1 l");
+        long before = memo.offersGeneration();
+        memo.offersChanged();
+
+        memo.keepOffers(key, "offers", before);
+
+        assertThat((Object) memo.keptOffers(key)).isNull();
+    }
+
+    @Test
     void switchedOffItAlwaysReads() {
         CatalogMemo off = new CatalogMemo(false);
         off.remember(List.of("kind", "jogurt"), this::read);

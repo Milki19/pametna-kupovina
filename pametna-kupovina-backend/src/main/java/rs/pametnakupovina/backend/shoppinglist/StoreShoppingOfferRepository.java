@@ -6,7 +6,12 @@ import org.springframework.stereotype.Repository;
 import rs.pametnakupovina.backend.product.CatalogMemo;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Repository
 public class StoreShoppingOfferRepository {
@@ -66,18 +71,33 @@ public class StoreShoppingOfferRepository {
     }
 
     /**
-     * Everything the offer query reads from the list: each item as it is
-     * stored, in order. A changed item, quantity or match is a new list.
+     * A line of the list as the offer query sees it. {@code spec} is the
+     * row without what only names or orders it, so two lines that ask the
+     * same, in this list or anyone's, are priced once.
      */
-    private String itemsFingerprint(Long listId) {
+    record PlanItem(Long id, String name, String spec) {
+    }
+
+    private List<PlanItem> planItems(Long listId) {
         return jdbcClient.sql("""
-                        SELECT md5(COALESCE(string_agg(item::TEXT, '|' ORDER BY item.id), ''))
+                        SELECT item.id,
+                               item.name,
+                               md5((to_jsonb(item) - ARRAY[
+                                   'id', 'shopping_list_id', 'name', 'raw_input',
+                                   'created_at', 'updated_at',
+                                   'matching_decision_id', 'matching_score',
+                                   'matching_algorithm_version', 'flexible_category'
+                               ])::TEXT) AS spec
                         FROM app.shopping_list_item AS item
                         WHERE item.shopping_list_id = :listId
+                        ORDER BY item.created_at, item.id
                         """)
                 .param("listId", listId)
-                .query(String.class)
-                .single();
+                .query((resultSet, rowNumber) -> new PlanItem(
+                        resultSet.getLong("id"),
+                        resultSet.getString("name"),
+                        resultSet.getString("spec")))
+                .list();
     }
 
     /**
@@ -130,16 +150,81 @@ public class StoreShoppingOfferRepository {
         // away, asks nothing (k6, 3.11.2026). The shops stand for the place;
         // no coordinates are kept.
         Long[] bought = boughtFamilyIds(listId);
+        List<PlanItem> items = planItems(listId);
+        if (items.isEmpty()) {
+            return List.of();
+        }
+        List<Long> shops = storeIds.stream().sorted().toList();
         List<Object> key = java.util.Arrays.asList(
-                "planOffers", listId, itemsFingerprint(listId),
-                storeIds.stream().sorted().toList(), asOfDate, includeUnlocated,
-                List.of(bought));
+                "planOffers", listId, items, shops, asOfDate, includeUnlocated, List.of(bought));
         return memo.rememberOffers(key, () -> List.copyOf(
-                queryOffers(listId, storeIds, asOfDate, includeUnlocated, bought)));
+                offersByItem(items, shops, asOfDate, includeUnlocated, bought)));
+    }
+
+    /**
+     * Each item's offers in these shops are kept on their own, so a list
+     * opened for the first time asks only for the lines nobody nearby asked
+     * for in the last minutes, and "mleko 1 l" is priced once for everyone.
+     * Nothing in the query ties one line to another.
+     */
+    private List<StoreItemOffer> offersByItem(
+            List<PlanItem> items,
+            List<Long> shops,
+            LocalDate asOfDate,
+            boolean includeUnlocated,
+            Long[] bought
+    ) {
+        long generation = memo.offersGeneration();
+        Map<String, List<StoreItemOffer>> bySpec = new HashMap<>();
+        Map<String, Long> askedFor = new LinkedHashMap<>();
+        for (PlanItem item : items) {
+            if (bySpec.containsKey(item.spec()) || askedFor.containsKey(item.spec())) {
+                continue;
+            }
+            List<StoreItemOffer> kept = memo.keptOffers(
+                    itemKey(item.spec(), shops, asOfDate, includeUnlocated, bought));
+            if (kept != null) {
+                bySpec.put(item.spec(), kept);
+            } else {
+                askedFor.put(item.spec(), item.id());
+            }
+        }
+        if (!askedFor.isEmpty()) {
+            Map<Long, List<StoreItemOffer>> byItem = new HashMap<>();
+            for (StoreItemOffer offer : queryOffers(
+                    List.copyOf(askedFor.values()), shops, asOfDate, includeUnlocated, bought)) {
+                byItem.computeIfAbsent(offer.itemId(), ignored -> new ArrayList<>()).add(offer);
+            }
+            askedFor.forEach((spec, itemId) -> {
+                List<StoreItemOffer> offers = List.copyOf(byItem.getOrDefault(itemId, List.of()));
+                bySpec.put(spec, offers);
+                memo.keepOffers(itemKey(spec, shops, asOfDate, includeUnlocated, bought), offers, generation);
+            });
+        }
+
+        // As the query sorted them: by shop, then the list's own order.
+        List<StoreItemOffer> offers = new ArrayList<>();
+        Map<Long, Integer> position = new HashMap<>();
+        for (int index = 0; index < items.size(); index++) {
+            PlanItem item = items.get(index);
+            position.put(item.id(), index);
+            for (StoreItemOffer offer : bySpec.get(item.spec())) {
+                offers.add(offer.itemId().equals(item.id()) ? offer : offer.forItem(item.id(), item.name()));
+            }
+        }
+        offers.sort(Comparator.comparing(StoreItemOffer::storeId)
+                .thenComparing(offer -> position.get(offer.itemId())));
+        return offers;
+    }
+
+    private static List<Object> itemKey(
+            String spec, List<Long> shops, LocalDate asOfDate, boolean includeUnlocated, Long[] bought) {
+        return java.util.Arrays.asList(
+                "itemOffers", spec, shops, asOfDate, includeUnlocated, List.of(bought));
     }
 
     private List<StoreItemOffer> queryOffers(
-            Long listId,
+            List<Long> itemIds,
             List<Long> storeIds,
             LocalDate asOfDate,
             boolean includeUnlocated,
@@ -436,7 +521,7 @@ public class StoreShoppingOfferRepository {
                                     ELSE CEIL(item.target_quantity * item.quantity / NULLIF(pack.size, 0))
                                 END AS packages
                             ) need
-                            WHERE item.shopping_list_id = :listId
+                            WHERE item.id IN (:itemIds)
                               AND item.matching_rule = 'FLEXIBLE_CATEGORY'
                               AND requested_intent.shopping_intent_id IS NOT NULL
                               AND (item.target_quantity IS NULL OR (
@@ -706,7 +791,7 @@ public class StoreShoppingOfferRepository {
                             CROSS JOIN (
                                 SELECT own_item.*
                                 FROM app.shopping_list_item AS own_item
-                                WHERE own_item.shopping_list_id = :listId
+                                WHERE own_item.id IN (:itemIds)
                                   AND NOT (
                                       own_item.matching_rule = 'FLEXIBLE_CATEGORY'
                                       AND EXISTS (
@@ -872,7 +957,7 @@ public class StoreShoppingOfferRepository {
                                     ELSE CEIL(item.target_quantity * item.quantity / NULLIF(pack.size, 0))
                                 END AS packages
                             ) need
-                            WHERE item.shopping_list_id = :listId
+                            WHERE item.id IN (:itemIds)
                               AND NOT (
                                   item.matching_rule = 'FLEXIBLE_CATEGORY'
                                   AND requested_intent.shopping_intent_id IS NOT NULL
@@ -884,7 +969,7 @@ public class StoreShoppingOfferRepository {
                               AND EXISTS (
                                   SELECT 1
                                   FROM app.shopping_list_item AS any_item
-                                  WHERE any_item.shopping_list_id = :listId
+                                  WHERE any_item.id IN (:itemIds)
                                     AND NOT (
                                         any_item.matching_rule = 'FLEXIBLE_CATEGORY'
                                         AND EXISTS (
@@ -1564,7 +1649,7 @@ public class StoreShoppingOfferRepository {
                           ON product.id = offer.retailer_product_id
                         LEFT JOIN app.canonical_product AS canonical
                           ON canonical.id = product.canonical_product_id
-                        WHERE item.shopping_list_id = :listId
+                        WHERE item.id IN (:itemIds)
                         )
                         SELECT store.id AS store_id,
                                retailer.code AS retailer_code,
@@ -1613,7 +1698,7 @@ public class StoreShoppingOfferRepository {
                                  priced.item_id ASC
                         """)
                 .param("asOfDate", asOfDate)
-                .param("listId", listId)
+                .param("itemIds", itemIds)
                 .param("storeIds", storeIds)
                 .param("includeUnlocated", includeUnlocated)
                 .param("boughtFamilyIds", boughtFamilyIds)
