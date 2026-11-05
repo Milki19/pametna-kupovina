@@ -149,13 +149,9 @@ public class CanonicalProductSearchService {
                                 )
                         ));
 
-        // Da kupac pre izbora vidi da li se proizvod prodaje u blizini.
-        Map<Long, Double> nearestMeters = near == null
-                ? Map.of()
-                : searchRepository.nearestStoreMeters(
-                        pageRows.stream().map(row -> row.source().productFamilyId()).toList(),
-                        near.latitude(),
-                        near.longitude());
+        // Da kupac pre izbora vidi da li se proizvod prodaje u blizini: već
+        // izračunato za redosled, pa se baza ne pita dvaput.
+        Map<Long, Double> nearestMeters = ranked.nearestMeters();
 
         List<CanonicalProductSearchItem> items = pageRows.stream()
                 .map(row -> toItem(
@@ -186,6 +182,17 @@ public class CanonicalProductSearchService {
                 items,
                 near != null
         );
+    }
+
+    /**
+     * Looks the words up so the next search for them is answered from
+     * memory ({@link SearchWarmup}). Nothing is returned or shown.
+     */
+    void warm(String query) {
+        if (query == null || query.isBlank()) {
+            return;
+        }
+        rank(query, true, null);
     }
 
     // The shopping list's product check picks from these same ranked
@@ -279,9 +286,10 @@ public class CanonicalProductSearchService {
         if (kind.isPresent()) {
             rows = withKindFamilies(rows, normalizedQuery, kind.get(), includeWithoutPrice);
         }
+        Map<Long, Double> nearestMeters = nearestMeters(rows, near);
         Map<Long, Integer> nearness = near == null && kind.isPresent()
                 ? spread(rows)
-                : nearness(rows, near);
+                : bands(nearestMeters);
         Map<Long, Integer> anotherAisle = anotherAisle(rows, normalizedQuery);
         String rankedQuery = normalizedQuery;
         List<Pattern> queryWords = wordStems(withoutAmount(normalizedQuery));
@@ -330,7 +338,7 @@ public class CanonicalProductSearchService {
                 )
                 .toList();
 
-        return new RankedQuery(correctedQuery, scoredRows);
+        return new RankedQuery(correctedQuery, scoredRows, nearestMeters);
     }
 
     /** Words that say how much, not what: "1 5 l", "x 2", "pola kg", "oko". */
@@ -408,19 +416,33 @@ public class CanonicalProductSearchService {
     }
 
     /**
+     * Each product's nearest shop. How far each chain is from here is the
+     * same for every search from this place, so it is asked once in ten
+     * minutes: twenty searches from one place measured the shops of the
+     * whole city twenty times (proba 5.11.2026: 2,15 s cold, 0,53 s warm).
+     */
+    private Map<Long, Double> nearestMeters(List<CanonicalProductSearchRow> rows, PreciseLocation near) {
+        if (near == null || rows.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, Double> chains = memo.rememberOffers(
+                List.of("nearestChains", near.latitude(), near.longitude()),
+                () -> searchRepository.nearestChainMeters(near.latitude(), near.longitude()));
+        if (chains.isEmpty()) {
+            return Map.of();
+        }
+        return CanonicalProductSearchRepository.nearestStoreMeters(
+                searchRepository.chainsSelling(
+                        rows.stream().map(CanonicalProductSearchRow::productFamilyId).distinct().toList()),
+                chains);
+    }
+
+    /**
      * Pojas udaljenosti, ne metri: 300 m i 900 m su isto „blizu", pa unutar
      * pojasa i dalje odlučuje koliko naziv odgovara upitu.
      */
-    private Map<Long, Integer> nearness(List<CanonicalProductSearchRow> rows, PreciseLocation near) {
-        if (near == null) {
-            return Map.of();
-        }
-
-        return searchRepository.nearestStoreMeters(
-                        rows.stream().map(CanonicalProductSearchRow::productFamilyId).toList(),
-                        near.latitude(),
-                        near.longitude()
-                ).entrySet().stream()
+    private static Map<Long, Integer> bands(Map<Long, Double> nearestMeters) {
+        return nearestMeters.entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, entry -> band(entry.getValue())));
     }
 
@@ -436,7 +458,7 @@ public class CanonicalProductSearchService {
         // Twenty people searching at once queued on two cores (median 2.4 s,
         // peti test 1.11.2026); the same words now cost the query once.
         List<CanonicalProductSearchRow> candidates = memo.rememberLarge(
-                List.of("searchCandidates", normalizedQuery, validEan == null ? "" : validEan),
+                List.of(CatalogMemo.SEARCH_CANDIDATES, normalizedQuery, validEan == null ? "" : validEan),
                 () -> searchRepository.findCandidates(normalizedQuery, validEan));
         return candidates
                 .stream()
@@ -627,7 +649,8 @@ public class CanonicalProductSearchService {
 
     private record RankedQuery(
             String correctedQuery,
-            List<ScoredRow> rows
+            List<ScoredRow> rows,
+            Map<Long, Double> nearestMeters
     ) {
     }
 
