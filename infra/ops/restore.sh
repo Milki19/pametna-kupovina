@@ -6,6 +6,13 @@ set -euo pipefail
 
 dump="${1:?Navedi .dump fajl}"
 test -s "$dump" || { echo "Fajl ne postoji ili je prazan: $dump" >&2; exit 1; }
+case "$dump" in
+    *.age)
+        echo "Ovo je šifrovan dump. Otključaj ga na Mac-u (ključ nije na serveru):" >&2
+        echo "  age --decrypt -i ~/.config/pametna-kupovina/backup-key.txt -o ${dump%.age} $dump" >&2
+        echo "pa pošalji $(basename "${dump%.age}") na server i pokreni ops/restore.sh nad njim." >&2
+        exit 1 ;;
+esac
 # env.sh changes into the server folder, so remember where the dump is first.
 dump="$(cd "$(dirname "$dump")" && pwd -P)/$(basename "$dump")"
 . "$(dirname "$0")/env.sh"

@@ -146,6 +146,14 @@ Backup van servera (preporučeno): Storage → Buckets → Create Bucket (npr.
 `pametna-kupovina-backup`) → Pre-Authenticated Requests → Create: target
 Bucket, access „Permit object writes", datum isteka (npr. godinu dana).
 Dobijeni URL (završava se sa `/o/`) upisati u `BACKUP_UPLOAD_URL`.
+Van servera ide samo šifrovan dump (`.dump.age`). Jednom, na Mac-u:
+`brew install age`, pa `mkdir -p ~/.config/pametna-kupovina && age-keygen -o
+~/.config/pametna-kupovina/backup-key.txt`. Sadržaj tog fajla sačuvati i u
+menadžeru lozinki: bez njega se backup ne može vratiti. Ispisani javni ključ
+(`age1...`) upisati u `BACKUP_AGE_RECIPIENT`, a na serveru `sudo apt install
+age`. Vraćanje: preuzeti `.dump.age` iz bucket-a, na Mac-u `age --decrypt -i
+~/.config/pametna-kupovina/backup-key.txt -o x.dump x.dump.age`, pa
+`ops/restore.sh` nad `x.dump` na serveru.
 
 Obaveštenje na telefon (preporučeno): instalirati aplikaciju ntfy, pretplatiti
 se na temu sa dugim tajnim imenom i upisati `ALERT_URL=https://ntfy.sh/<ime>`.
