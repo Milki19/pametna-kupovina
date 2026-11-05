@@ -103,7 +103,7 @@ services:
 
   # One verified dump into ./backups; ops/backup.sh runs it daily.
   database-backup:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     profiles:
       - operations
     depends_on:
