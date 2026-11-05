@@ -76,6 +76,13 @@ class ApiSecurityTest {
     }
 
     @Test
+    void onlyHealthIsVisibleOfTheActuator() throws Exception {
+        assertThat(status(call("GET", "/actuator/health"))).isEqualTo(200);
+        assertThat(status(call("GET", "/actuator"))).isEqualTo(404);
+        assertThat(status(call("GET", "/actuator/env"))).isEqualTo(404);
+    }
+
+    @Test
     void theAdminApiAsksForTheExactKey() throws Exception {
         assertThat(status(call("GET", "/api/v1/imports/sources"))).isEqualTo(401);
         assertThat(status(call("GET", "/api/v1/imports/sources")
