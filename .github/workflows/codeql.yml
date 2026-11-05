@@ -1,0 +1,86 @@
+name: CodeQL
+
+# GitHub's own static analysis for security bugs (injection, unsafe
+# deserialization, path traversal, weak crypto, ...). Findings show up under
+# Security > Code scanning; nothing is sent anywhere else.
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  schedule:
+    # Monday morning, so new CodeQL rules also run over code that did not change.
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: backend
+            language: java-kotlin
+            build-mode: manual
+          - name: android
+            language: java-kotlin
+            build-mode: manual
+          # app.js, account.js, admin.js and the service worker.
+          - name: web
+            language: javascript-typescript
+            build-mode: none
+          - name: workflows
+            language: actions
+            build-mode: none
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Java 21
+        if: matrix.build-mode == 'manual'
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: ${{ matrix.name == 'backend' && 'maven' || '' }}
+
+      - name: Set up Gradle
+        if: matrix.name == 'android'
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          queries: security-extended
+
+      - name: Build backend
+        if: matrix.name == 'backend'
+        working-directory: pametna-kupovina-backend
+        run: ./mvnw --batch-mode -DskipTests compile
+
+      - name: Build Android
+        if: matrix.name == 'android'
+        working-directory: pametna-kupovina-android
+        # CodeQL must see the compiler run, so no build cache is reused.
+        run: ./gradlew --no-daemon --no-build-cache --rerun-tasks :app:compileDebugKotlin :app:compileDebugJavaWithJavac
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:${{ matrix.language }}/${{ matrix.name }}
