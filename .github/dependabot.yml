@@ -25,17 +25,26 @@ updates:
         update-types: [minor, patch]
 
   # The backend's base image (eclipse-temurin) and the images in compose.
+  # A new major PostgreSQL can't open the old data volume (it needs
+  # pg_upgrade or a dump and restore), and a new Java is a planned move too,
+  # so only patch and minor image updates come as PRs.
   - package-ecosystem: docker
     directory: /infra
     schedule:
       interval: weekly
       day: monday
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
 
   - package-ecosystem: docker-compose
     directory: /infra
     schedule:
       interval: weekly
       day: monday
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
 
   - package-ecosystem: github-actions
     directory: /
