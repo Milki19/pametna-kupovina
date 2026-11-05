@@ -25,7 +25,7 @@ codeScanner = "16.1.0"
 zxing = "3.5.3"
 playServicesLocation = "21.4.0"
 # 1.7.x prati Compose 1.10 i Kotlin 2.2; 2.x traži Compose 1.12 i Kotlin 2.4.
-haze = "1.7.2"
+haze = "2.1.0"
 
 [libraries]
 androidx-credentials = { group = "androidx.credentials", name = "credentials", version.ref = "credentials" }
