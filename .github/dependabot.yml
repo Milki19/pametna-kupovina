@@ -1,0 +1,47 @@
+# Weekly pull requests for outdated dependencies, and right away for ones
+# with a known vulnerability (Dependabot security updates, turned on in the
+# repository's Settings > Advanced Security). Minor and patch bumps of each
+# ecosystem come grouped into one PR, so a week means a few PRs, not dozens.
+version: 2
+updates:
+  - package-ecosystem: maven
+    directory: /pametna-kupovina-backend
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      backend-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: gradle
+    directory: /pametna-kupovina-android
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      android-minor-and-patch:
+        update-types: [minor, patch]
+
+  # The backend's base image (eclipse-temurin) and the images in compose.
+  - package-ecosystem: docker
+    directory: /infra
+    schedule:
+      interval: weekly
+      day: monday
+
+  - package-ecosystem: docker-compose
+    directory: /infra
+    schedule:
+      interval: weekly
+      day: monday
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      actions:
+        patterns: ["*"]
