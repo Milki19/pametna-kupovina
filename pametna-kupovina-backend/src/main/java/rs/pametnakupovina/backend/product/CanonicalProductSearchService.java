@@ -16,6 +16,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.Semaphore;
+import java.util.function.Supplier;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -53,6 +55,11 @@ public class CanonicalProductSearchService {
     private final ShoppingIntentResolver shoppingIntentResolver;
     private final SearchSpellingCorrector searchSpellingCorrector;
     private final CatalogMemo memo;
+    // Twenty new searches at once shared two cores and all finished near the
+    // end (median 1,06 s, the slowest 1,28 s; proba 5.11.2026). Taken in turn,
+    // as many at once as there are cores, half are done in half the time.
+    private final Semaphore databaseTurns =
+            new Semaphore(Math.max(1, Runtime.getRuntime().availableProcessors()), true);
 
     public CanonicalProductSearchService(
             CanonicalProductSearchRepository searchRepository,
@@ -459,13 +466,22 @@ public class CanonicalProductSearchService {
         // peti test 1.11.2026); the same words now cost the query once.
         List<CanonicalProductSearchRow> candidates = memo.rememberLarge(
                 List.of(CatalogMemo.SEARCH_CANDIDATES, normalizedQuery, validEan == null ? "" : validEan),
-                () -> searchRepository.findCandidates(normalizedQuery, validEan));
+                () -> inTurn(() -> searchRepository.findCandidates(normalizedQuery, validEan)));
         return candidates
                 .stream()
                 .filter(row -> includeWithoutPrice
                         || row.hasUsablePrice()
                         || row.exactEanMatch())
                 .toList();
+    }
+
+    <T> T inTurn(Supplier<T> lookup) {
+        databaseTurns.acquireUninterruptibly();
+        try {
+            return lookup.get();
+        } finally {
+            databaseTurns.release();
+        }
     }
 
     /**
@@ -544,7 +560,7 @@ public class CanonicalProductSearchService {
                 .collect(Collectors.toSet());
         List<CanonicalProductSearchRow> kindFamilies = memo.rememberLarge(
                 List.of("searchKindFamilies", normalizedQuery, kind.normalizedAlias()),
-                () -> searchRepository.findKindFamilies(normalizedQuery, kind.normalizedAlias()));
+                () -> inTurn(() -> searchRepository.findKindFamilies(normalizedQuery, kind.normalizedAlias())));
         List<CanonicalProductSearchRow> more = kindFamilies
                 .stream()
                 .filter(row -> !found.contains(row.productFamilyId()))
