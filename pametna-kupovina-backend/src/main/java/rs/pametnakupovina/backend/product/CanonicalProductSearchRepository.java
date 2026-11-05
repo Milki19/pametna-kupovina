@@ -452,54 +452,93 @@ public class CanonicalProductSearchRepository {
      * ponytail: blizina lanca, ne tačne prodavnice — plan posle proverava
      * baš tu prodavnicu; dovoljno za redosled pretrage.
      */
-    public Map<Long, Double> nearestStoreMeters(
-            List<Long> familyIds,
+    /**
+     * How far each chain's nearest shop is, within 20 km: the same for every
+     * search from this place, so a search asks it once (see the service).
+     */
+    public Map<Long, Double> nearestChainMeters(
             double latitude,
             double longitude
     ) {
+        return jdbcClient.sql("""
+                        WITH here AS (
+                            SELECT ST_SetSRID(ST_MakePoint(:longitude, :latitude), 4326)::geography
+                                       AS location
+                        )
+                        SELECT store.retailer_id,
+                               MIN(ST_Distance(store.location, here.location)) AS meters
+                        FROM app.store AS store
+                        CROSS JOIN here
+                        WHERE store.active = TRUE
+                          AND store.pricing_eligible = TRUE
+                          AND store.location IS NOT NULL
+                          AND store.geocoding_status IN ('AUTO_VERIFIED', 'MANUALLY_VERIFIED')
+                          AND ST_DWithin(store.location, here.location, 20000)
+                        GROUP BY store.retailer_id
+                        """)
+                .param("latitude", latitude)
+                .param("longitude", longitude)
+                .query((row, number) -> Map.entry(
+                        row.getLong("retailer_id"),
+                        row.getDouble("meters")
+                ))
+                .list()
+                .stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    /** The chains that sell each of these products now. */
+    public Map<Long, List<Long>> chainsSelling(List<Long> familyIds) {
         if (familyIds.isEmpty()) {
             return Map.of();
         }
 
         return jdbcClient.sql("""
-                        WITH here AS (
-                            SELECT ST_SetSRID(ST_MakePoint(:longitude, :latitude), 4326)::geography
-                                       AS location
-                        ),
-                        nearest_chain AS (
-                            SELECT store.retailer_id,
-                                   MIN(ST_Distance(store.location, here.location)) AS meters
-                            FROM app.store AS store
-                            CROSS JOIN here
-                            WHERE store.active = TRUE
-                              AND store.pricing_eligible = TRUE
-                              AND store.location IS NOT NULL
-                              AND store.geocoding_status IN ('AUTO_VERIFIED', 'MANUALLY_VERIFIED')
-                              AND ST_DWithin(store.location, here.location, 20000)
-                            GROUP BY store.retailer_id
-                        )
                         SELECT presence.product_family_id,
-                               MIN(nearest_chain.meters) AS meters
+                               presence.retailer_id
                         FROM app.product_retailer_presence AS presence
-                        JOIN nearest_chain
-                          ON nearest_chain.retailer_id = presence.retailer_id
                         WHERE presence.product_family_id
                                   = ANY(STRING_TO_ARRAY(:ids, ',')::BIGINT[])
                           AND presence.current_offer_count > 0
-                        GROUP BY presence.product_family_id
                         """)
-                .param("latitude", latitude)
-                .param("longitude", longitude)
                 .param("ids", familyIds.stream().map(String::valueOf)
                         .collect(Collectors.joining(",")))
                 .query((row, number) -> Map.entry(
                         row.getLong("product_family_id"),
-                        // A whole metre: "1234.5678 m" told nothing more.
-                        (double) Math.round(row.getDouble("meters"))
+                        row.getLong("retailer_id")
                 ))
                 .list()
                 .stream()
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+                .collect(Collectors.groupingBy(
+                        Map.Entry::getKey,
+                        Collectors.mapping(Map.Entry::getValue, Collectors.toList())
+                ));
+    }
+
+    /**
+     * Each product's nearest shop within 20 km, in whole metres: the nearest
+     * shop of a chain that sells it.
+     */
+    public Map<Long, Double> nearestStoreMeters(
+            List<Long> familyIds,
+            double latitude,
+            double longitude
+    ) {
+        return nearestStoreMeters(chainsSelling(familyIds), nearestChainMeters(latitude, longitude));
+    }
+
+    static Map<Long, Double> nearestStoreMeters(
+            Map<Long, List<Long>> chainsSelling,
+            Map<Long, Double> nearestChainMeters
+    ) {
+        Map<Long, Double> nearest = new java.util.HashMap<>();
+        chainsSelling.forEach((familyId, chains) -> chains.stream()
+                .map(nearestChainMeters::get)
+                .filter(java.util.Objects::nonNull)
+                .min(Double::compare)
+                // A whole metre: "1234.5678 m" told nothing more.
+                .ifPresent(meters -> nearest.put(familyId, (double) Math.round(meters))));
+        return nearest;
     }
 
     /** Which of these products some chain sells on sale today (V117 list). */

@@ -65,6 +65,10 @@ public class CatalogMemo {
     private record KeptOffers(Instant keptAt, Object offers) {
     }
     private final SingleFlight<List<?>> inFlight = new SingleFlight<>();
+    /** The first part of a search's key, as {@link CanonicalProductSearchService} keeps it. */
+    static final String SEARCH_CANDIDATES = "searchCandidates";
+    private final List<java.util.function.Consumer<List<String>>> forgetListeners =
+            new java.util.concurrent.CopyOnWriteArrayList<>();
     // Raised on every change, so a lookup that began before it is not kept.
     private final AtomicLong generation = new AtomicLong();
     private volatile Instant startedAt;
@@ -242,10 +246,31 @@ public class CatalogMemo {
 
     private void forget() {
         generation.incrementAndGet();
+        List<String> searched = largeEntries.keySet().stream()
+                .filter(key -> key.size() == 3 && SEARCH_CANDIDATES.equals(key.get(0))
+                        && "".equals(key.get(2)))
+                .map(key -> String.valueOf(key.get(1)))
+                .toList();
         entries.clear();
         largeEntries.clear();
         offerEntries.clear();
         startedAt = clock.instant();
+        if (enabled && !searched.isEmpty()) {
+            forgetListeners.forEach(listener -> listener.accept(searched));
+        }
+    }
+
+    /**
+     * Told the words searched for until now, each time everything is
+     * forgotten (an import, a review, the hour): so they can be looked up
+     * again before someone asks.
+     */
+    public void onForget(java.util.function.Consumer<List<String>> listener) {
+        forgetListeners.add(listener);
+    }
+
+    public boolean enabled() {
+        return enabled;
     }
 
     int size() {

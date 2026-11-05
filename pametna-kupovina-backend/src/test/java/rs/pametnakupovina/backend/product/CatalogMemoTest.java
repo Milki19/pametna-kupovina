@@ -192,6 +192,21 @@ class CatalogMemoTest {
         assertThat(reads).hasValue(2);
     }
 
+    @Test
+    void whatWasSearchedIsToldWhenItIsForgotten() {
+        List<List<String>> told = new java.util.ArrayList<>();
+        memo.onForget(told::add);
+        memo.rememberLarge(List.of(CatalogMemo.SEARCH_CANDIDATES, "mleko", ""), () -> List.of());
+        memo.rememberLarge(List.of(CatalogMemo.SEARCH_CANDIDATES, "8600000000000", "8600000000000"), () -> List.of());
+        memo.rememberLarge(List.of("kindFamilies", "mleko", "mleko"), () -> List.of());
+
+        memo.catalogChanged();
+
+        assertThat(told).containsExactly(List.of("mleko"));
+        memo.catalogChanged();
+        assertThat(told).hasSize(1);
+    }
+
     private static final class MovableClock extends Clock {
         private Instant now = Instant.parse("2026-10-31T10:00:00Z");
 
