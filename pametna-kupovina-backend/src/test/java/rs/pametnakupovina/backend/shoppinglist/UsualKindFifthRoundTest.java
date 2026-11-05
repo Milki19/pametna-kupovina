@@ -91,6 +91,8 @@ class UsualKindFifthRoundTest {
     private static final String COFFEE = "GRAND KAFA 200G";
     private static final String MILK = "MLEKO 3,2% MM 1L";
     private static final String LIGHT_MILK = "MLEKO 1,5% MM 1L";
+    /** As many milks come in 1,5 l as say 1,5 %: "mleko 1,5" is still the fat. */
+    private static final String BIG_MILK = "MLEKO 2,8% MM 1,5L";
     private static final String TORTILLAS = "TORTILJA PSENICNA 6/1 370G";
     private static final String WIPES = "MARAMICE VLAZNE BABY 72KOM";
     private static final String OLIVE_OIL = "MASLINOVO ULJE EKSTRA DEVICANSKO 1L";
@@ -121,6 +123,7 @@ class UsualKindFifthRoundTest {
             + row(COFFEE, "289,99")
             + row(MILK, "159,99")
             + row(LIGHT_MILK, "129,99")
+            + row(BIG_MILK, "199,99")
             + row(TORTILLAS, "199,99")
             + row(WIPES, "149,99")
             + row(OLIVE_OIL, "1299,99")
