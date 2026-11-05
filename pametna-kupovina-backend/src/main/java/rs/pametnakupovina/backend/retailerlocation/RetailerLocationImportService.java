@@ -9,6 +9,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import rs.pametnakupovina.backend.priceimport.DisplayNames;
 import rs.pametnakupovina.backend.priceimport.RetailerDataSourceRepository;
+import rs.pametnakupovina.backend.storepricing.StorePriceFormatMappingRepository;
 import rs.pametnakupovina.backend.retailer.Retailer;
 import rs.pametnakupovina.backend.retailer.RetailerRepository;
 
@@ -60,16 +61,20 @@ public class RetailerLocationImportService {
 
     private final JdbcClient jdbcClient;
     private final RetailerRepository retailerRepository;
+    private final StorePriceFormatMappingRepository
+            priceFormatMappingRepository;
     private final RetailerDataSourceRepository dataSourceRepository;
 
     public RetailerLocationImportService(
             JdbcClient jdbcClient,
             RetailerRepository retailerRepository,
-            RetailerDataSourceRepository dataSourceRepository
+            RetailerDataSourceRepository dataSourceRepository,
+            StorePriceFormatMappingRepository priceFormatMappingRepository
     ) {
         this.jdbcClient = jdbcClient;
         this.retailerRepository = retailerRepository;
         this.dataSourceRepository = dataSourceRepository;
+        this.priceFormatMappingRepository = priceFormatMappingRepository;
     }
 
     public RetailerLocationImportResult importLocations(
@@ -173,6 +178,29 @@ public class RetailerLocationImportService {
                 rowsSaved,
                 rowsRead - rowsSaved,
                 status
+        );
+    }
+
+    /**
+     * Records that an official source could not even be read (the chain
+     * changed its page, refused the request, sent a broken answer), so the
+     * source shows FAILED with the reason instead of an old SUCCEEDED.
+     */
+    public void recordVerifiedSourceFailure(
+            String retailerCode,
+            RetailerLocationSource source,
+            String errorMessage
+    ) {
+        Retailer retailer = retailerRepository.findByCode(retailerCode)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Prodavnica nije pronađena: " + retailerCode
+                ));
+        dataSourceRepository.markFailed(
+                ensureLocationDataSourceId(
+                        retailer.id(),
+                        requiredSource(source)
+                ),
+                errorMessage
         );
     }
 
@@ -299,6 +327,13 @@ public class RetailerLocationImportService {
             if (rowsSaved == locations.size()) {
                 deactivateMissingLocations(dataSourceId, syncStartedAt);
             }
+
+            // Saving a shop resets its price eligibility to what the locator
+            // knows, and a locator knows nothing of the chain's price lists
+            // (Maxi, IDEA/Roda read theirs through a list link). Until the
+            // next price import put it back, those shops had no prices and
+            // fell out of every plan, so the links are applied right away.
+            priceFormatMappingRepository.refreshEligibility(retailer.id());
 
             String status = rowsSaved == locations.size()
                     ? "SUCCEEDED"
