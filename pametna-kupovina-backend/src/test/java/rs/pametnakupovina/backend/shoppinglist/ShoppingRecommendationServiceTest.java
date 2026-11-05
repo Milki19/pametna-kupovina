@@ -935,6 +935,48 @@ class ShoppingRecommendationServiceTest {
         assertThat(response.recommendedBalance().basketCost()).isEqualByComparingTo("450.00");
     }
 
+    /**
+     * Proba 5.11.2026: Najjeftinija korpa was 4.069,87 RSD and Jedna stanica
+     * 3.829,87 RSD for the same seven items. The two-shop plan had one more
+     * product of the usual kind, and that alone kept the dearer one.
+     */
+    @Test
+    void theCheapestBasketIsNeverDearerThanOneShopWithTheSameItems() {
+        ShoppingListRepository listRepository = mock(ShoppingListRepository.class);
+        NearbyStoreRepository nearbyRepository = mock(NearbyStoreRepository.class);
+        StoreShoppingOfferRepository offerRepository = mock(StoreShoppingOfferRepository.class);
+        RouteMatrixProvider routeProvider = mock(RouteMatrixProvider.class);
+        ShoppingRecommendationService service = new ShoppingRecommendationService(
+                listRepository, nearbyRepository, offerRepository, routeProvider,
+                new ShoppingOptimizationProperties(), markets());
+
+        ShoppingListItemResponse powder = item(1L, "Persil 4,5 kg", 101L);
+        ShoppingListItemResponse eggs = item(2L, "6 jaja L", 102L);
+        when(listRepository.findById(10L)).thenReturn(Optional.of(new ShoppingListResponse(
+                10L, "Test korpa", OffsetDateTime.now(), OffsetDateTime.now(), List.of(powder, eggs))));
+
+        NearbyStore idea = store(1L, "A");
+        NearbyStore maxi = store(2L, "B");
+        when(nearbyRepository.findPricingEligibleNearby(SERBIA, 44.0, 19.0, 15_000, 20))
+                .thenReturn(List.of(idea, maxi));
+        when(offerRepository.findOffers(eq(10L), anyList(), eq(DATE), eq(true)))
+                .thenAnswer(call -> offersFor(call.getArgument(1), List.of(
+                        odd(offer(idea, powder, 1499, 1001L)),
+                        offer(idea, eggs, 200, 1002L),
+                        offer(maxi, powder, 2040, 2001L),
+                        odd(offer(maxi, eggs, 150, 2002L))
+                )));
+        when(routeProvider.calculate(anyList())).thenReturn(routeMatrix());
+
+        ShoppingRecommendationResponse response = service.recommend(10L, 44.0, 19.0, DATE);
+
+        assertThat(response.singleStore().basketCost()).isEqualByComparingTo("1699.00");
+        assertThat(response.lowestPrice().basketCost())
+                .isLessThanOrEqualTo(response.singleStore().basketCost())
+                .isEqualByComparingTo("1699.00");
+        assertThat(response.lowestPrice().priceSources()).containsExactly("A");
+    }
+
     private static StoreItemOffer substitute(StoreItemOffer o) {
         return new StoreItemOffer(o.storeId(), o.retailerCode(), o.retailerName(), o.storeFormatCode(),
                 o.storeFormatName(), o.storeName(), o.address(), o.city(), o.latitude(), o.longitude(),
