@@ -6,6 +6,7 @@ import rs.pametnakupovina.backend.matching.ProductNameNormalizer;
 import rs.pametnakupovina.backend.matching.SerbianWordForms;
 import rs.pametnakupovina.backend.product.CatalogMemo;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
@@ -176,6 +177,53 @@ public class ShoppingIntentResolver {
                         """)
                 .param(1, shoppingIntentId)
                 .param(2, pattern)
+                .query(Boolean.class)
+                .single();
+    }
+
+    /**
+     * Whether a decimal after the kind is a percentage its products say
+     * rather than a size they are sold in: "mleko 2,8" is 2,8 % milk, not
+     * 2,8 l (provera uživo 5.11.2026), while "pivo 0,5" stays half a litre.
+     * The names decide, kind by kind and market by market: more products
+     * of the kind say "2,8%" than are sold in 2,8 l or 2,8 kg.
+     */
+    public boolean kindSaysPercent(long shoppingIntentId, BigDecimal number) {
+        if (number == null || number.signum() <= 0 || number.compareTo(BigDecimal.valueOf(100)) >= 0) {
+            return false;
+        }
+        String plain = number.stripTrailingZeros().toPlainString();
+        return memo.remember(
+                List.of("kindSaysPercent", String.valueOf(shoppingIntentId), plain),
+                () -> readKindSaysPercent(shoppingIntentId, number.stripTrailingZeros(), plain)
+        );
+    }
+
+    private boolean readKindSaysPercent(long shoppingIntentId, BigDecimal number, String plain) {
+        // Digits only, so the expression is safe: "2.8" says "2,8 %" or "2.8%".
+        String percent = "(^|[^0-9.,])" + plain.replace(".", "[.,]") + " ?%";
+        return jdbcClient.sql("""
+                        WITH typed AS (
+                            SELECT product.name, product.quantity_value
+                            FROM app.shopping_intent_product_type AS allowed
+                            JOIN app.retailer_product_type AS assignment
+                              ON assignment.product_type_id = allowed.product_type_id
+                            JOIN app.retailer_product AS product
+                              ON product.id = assignment.retailer_product_id
+                            WHERE allowed.shopping_intent_id = ?
+                              AND allowed.enabled_by_default = TRUE
+                              AND EXISTS (
+                                  SELECT 1
+                                  FROM app.current_price_offer AS offer
+                                  WHERE offer.retailer_product_id = product.id
+                              )
+                        )
+                        SELECT (SELECT COUNT(*) FROM typed WHERE typed.name ~ ?)
+                             > (SELECT COUNT(*) FROM typed WHERE typed.quantity_value = ?)
+                        """)
+                .param(1, shoppingIntentId)
+                .param(2, percent)
+                .param(3, number.multiply(BigDecimal.valueOf(1000)))
                 .query(Boolean.class)
                 .single();
     }

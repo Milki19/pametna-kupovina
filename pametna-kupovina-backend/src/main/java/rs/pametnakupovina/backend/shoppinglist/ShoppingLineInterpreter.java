@@ -98,6 +98,11 @@ public class ShoppingLineInterpreter {
         if (line.bareNumber() != null) {
             if (isCount(line.bareNumber())) {
                 packages = packages.multiply(line.bareNumber());
+            } else if (intentResolver.kindSaysPercent(intent.shoppingIntentId(), line.bareNumber())) {
+                // "mleko 2,8" is 2,8 % milk, read as "mleko 2,8%" is: it was
+                // 2,8 l of any milk (provera uživo 5.11.2026).
+                return interpret(new ParsedShoppingListLine(
+                        line.nameWithAmount() + "%", line.rawInput(), line.quantity()));
             } else if ("ml".equals(intent.defaultBaseUnit())) {
                 target = line.bareNumber().multiply(ONE_THOUSAND).stripTrailingZeros();
                 unit = "ml";

@@ -378,6 +378,44 @@ class UsualKindFifthRoundTest {
         assertThat(offers.values()).noneMatch(StoreItemOffer::wantedMissing);
     }
 
+    /**
+     * "mleko 2,8" was 2,8 l of any milk in the live check of 5.11.2026: a
+     * decimal the milks say with "%" is the fat, while "kisela voda 1,5"
+     * stays a litre and a half, which no water says as a percentage.
+     */
+    @Test
+    void aDecimalTheMilksSayAsAPercentIsTheFat() {
+        long shop = bigShop();
+        long listId = pasted("mleko 3,2\nmleko 1,5\nkisela voda 1,5");
+        matchingService.match(listId, callers.caller(TOKEN), true);
+
+        Map<String, StoreItemOffer> offers = offerRepository
+                .findPriceListOffers(listId, List.of(shop), PRICE_DATE)
+                .stream()
+                .collect(Collectors.toMap(StoreItemOffer::requestedName, offer -> offer, (a, b) -> a));
+        String seen = offers.keySet().toString();
+
+        assertThat(productFor(offers, "mleko 3")).as(seen).isEqualTo(MILK);
+        assertThat(offerFor(offers, "mleko 3").purchaseQuantity().packages()).isEqualByComparingTo("1");
+        assertThat(productFor(offers, "mleko 1")).as(seen).isEqualTo(LIGHT_MILK);
+        assertThat(offerFor(offers, "mleko 1").purchaseQuantity().packages()).isEqualByComparingTo("1");
+        assertThat(productFor(offers, "kisel")).as(seen).isEqualTo(WATER);
+        assertThat(offers.values()).as(seen).noneMatch(StoreItemOffer::wantedMissing);
+
+        List<String> targets = jdbcClient.sql("""
+                        SELECT name || ' ' || COALESCE(target_quantity::text || ' ' || required_base_unit, '-')
+                        FROM app.shopping_list_item
+                        WHERE shopping_list_id = ?
+                        ORDER BY id
+                        """)
+                .param(listId)
+                .query(String.class)
+                .list();
+        assertThat(targets.get(0)).doesNotContain("3200");
+        assertThat(targets.get(1)).doesNotContain("1500");
+        assertThat(targets.get(2)).contains("1500");
+    }
+
     /** A shop without feta still offers a cheese, and says it is another one. */
     @Test
     void aShopWithoutWhatIsAskedOffersASubstituteAndSaysSo() {
