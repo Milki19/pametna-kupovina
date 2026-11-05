@@ -185,8 +185,11 @@ public class ShoppingIntentResolver {
      * Whether a decimal after the kind is a percentage its products say
      * rather than a size they are sold in: "mleko 2,8" is 2,8 % milk, not
      * 2,8 l (provera uživo 5.11.2026), while "pivo 0,5" stays half a litre.
-     * The names decide, kind by kind and market by market: more products
-     * of the kind say "2,8%" than are sold in 2,8 l or 2,8 kg.
+     * The names decide, kind by kind and market by market: products of the
+     * kind say "2,8%" at least half as often as they are sold in 2,8 l or
+     * 2,8 kg. "Mleko 1,5" is 1,5 % milk although 148 milks come in 1,5 l
+     * and 104 say 1,5 % (provera uživo 5.11.2026): a litre and a half is
+     * written with its "l", a fat without its "%".
      */
     public boolean kindSaysPercent(long shoppingIntentId, BigDecimal number) {
         if (number == null || number.signum() <= 0 || number.compareTo(BigDecimal.valueOf(100)) >= 0) {
@@ -218,8 +221,9 @@ public class ShoppingIntentResolver {
                                   WHERE offer.retailer_product_id = product.id
                               )
                         )
-                        SELECT (SELECT COUNT(*) FROM typed WHERE typed.name ~ ?)
-                             > (SELECT COUNT(*) FROM typed WHERE typed.quantity_value = ?)
+                        SELECT percent.n > 0 AND percent.n * 2 >= sized.n
+                        FROM (SELECT COUNT(*) AS n FROM typed WHERE typed.name ~ ?) AS percent,
+                             (SELECT COUNT(*) AS n FROM typed WHERE typed.quantity_value = ?) AS sized
                         """)
                 .param(1, shoppingIntentId)
                 .param(2, percent)
