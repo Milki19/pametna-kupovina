@@ -46,6 +46,7 @@
     <string name="purchase_planned_value">planirano %1$s</string>
     <string name="purchase_about_time">oko %1$s</string>
     <string name="purchase_remaining">Još %1$d za odluku. Cene u sačuvanom planu se ne osvežavaju.</string>
+    <string name="purchase_prices_frozen">Cene u sačuvanom planu se ne osvežavaju.</string>
     <plurals name="purchase_paid_for_items">
         <item quantity="one">Upisano plaćeno: %2$s za %1$d stavku</item>
         <item quantity="few">Upisano plaćeno: %2$s za %1$d stavke</item>
