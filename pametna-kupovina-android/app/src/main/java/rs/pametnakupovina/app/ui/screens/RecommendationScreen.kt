@@ -1506,7 +1506,8 @@ internal fun itemQuantityLine(item: RecommendationItemDto): String? {
     return listOfNotNull(
         itemPriceBreakdown(item)?.takeIf { BigDecimal.valueOf(packages).compareTo(BigDecimal.ONE) != 0 },
         quantity?.unitPrice?.let { price ->
-            quantity.baseUnit?.let { "${money(price)}/${perUnit(it)}" }
+            // No-break space and word joiner keep "99,99 RSD/kg" on one line.
+            quantity.baseUnit?.let { "${money(price).replace(' ', '\u00A0')}/\u2060${perUnit(it)}" }
         },
         quantity?.let { surplus(it) }
     ).joinToString(" · ").ifEmpty { null }

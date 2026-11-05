@@ -874,7 +874,10 @@ private fun PurchaseProgressHeader(session: PurchaseSession, onOpenCards: () -> 
                 textAlign = TextAlign.Center
             )
             Text(
-                stringResource(R.string.purchase_remaining, total - session.resolvedCount),
+                (total - session.resolvedCount).let { left ->
+                    if (left > 0) stringResource(R.string.purchase_remaining, left)
+                    else stringResource(R.string.purchase_prices_frozen)
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = muted,
                 textAlign = TextAlign.Center
