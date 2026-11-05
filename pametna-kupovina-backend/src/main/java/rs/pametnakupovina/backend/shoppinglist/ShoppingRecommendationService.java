@@ -416,6 +416,10 @@ public class ShoppingRecommendationService {
 
         // Najjeftinija korpa is never dearer than another plan that covers
         // as much (test 1.11.: 3.831 against 3.621 RSD in Najbolje ukupno).
+        // As much is as many items, as asked: the usual kind and size only
+        // orders the plans that cost the same, or Najjeftinija stays dearer
+        // than Jedna stanica (proba 5.11.: 4.069,87 against 3.829,87 RSD,
+        // where one shop's Persil did not count as the usual one).
         lowestPrice = cheapestOfSameCoverage(lowestPrice, recommended, bestSingle);
 
         OptimizationScenarioResponse singleScenario = buildScenario(
@@ -1095,6 +1099,12 @@ public class ShoppingRecommendationService {
                 && usualItems(one) == usualItems(other);
     }
 
+    /** Plans a shopper compares by price: as many items, as asked. */
+    private static boolean sameItemsAsAsked(EvaluatedPlan one, EvaluatedPlan other) {
+        return one.plan().coveredItems() == other.plan().coveredItems()
+                && wantedItems(one) == wantedItems(other);
+    }
+
     private static EvaluatedPlan cheapestOfSameCoverage(
             EvaluatedPlan lowestPrice,
             EvaluatedPlan... others
@@ -1105,7 +1115,7 @@ public class ShoppingRecommendationService {
         EvaluatedPlan cheapest = lowestPrice;
         for (EvaluatedPlan other : others) {
             if (other != null
-                    && sameCoverage(other, lowestPrice)
+                    && sameItemsAsAsked(other, lowestPrice)
                     && other.plan().basketCost().compareTo(cheapest.plan().basketCost()) < 0) {
                 cheapest = other;
             }

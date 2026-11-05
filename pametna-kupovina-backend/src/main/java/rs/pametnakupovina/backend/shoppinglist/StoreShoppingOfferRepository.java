@@ -1554,7 +1554,15 @@ public class StoreShoppingOfferRepository {
                                    -- The usual kind in the usual size: a plan over
                                    -- several shops takes it before a cheaper
                                    -- 35 g sachet elsewhere, as one shop does.
-                                   (candidate_row.wanted_rank + candidate_row.uncommon_rank + candidate_row.loose_rank
+                                   -- The word as the second or third in the name
+                                   -- (wanted_rank 2) is still the thing: "DET
+                                   -- PERSIL POW 4,5KG" is Persil as much as
+                                   -- "PERSIL PRAŠAK 1,5KG". It only orders within
+                                   -- a shop; across shops the price decides
+                                   -- (proba 5.11.2026: 3 × 1,5 kg for 2.040 RSD
+                                   -- beside 4,5 kg for 1.499 RSD).
+                                   (CASE WHEN candidate_row.wanted_rank = 2 THEN 0 ELSE candidate_row.wanted_rank END
+                                       + candidate_row.uncommon_rank + candidate_row.loose_rank
                                        + candidate_row.oversize_rank + candidate_row.size_rank = 0)
                                        AS usual_choice,
                                    candidate_row.retailer_product_id,
