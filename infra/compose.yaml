@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: ghcr.io/baosystems/postgis:16-3.5
+    image: ghcr.io/baosystems/postgis:18-3.6
     container_name: pametna-kupovina-postgres
 
     environment:
