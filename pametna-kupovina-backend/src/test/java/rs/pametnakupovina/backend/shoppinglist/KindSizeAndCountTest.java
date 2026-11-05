@@ -3,10 +3,13 @@ package rs.pametnakupovina.backend.shoppinglist;
 import org.junit.jupiter.api.Test;
 import rs.pametnakupovina.backend.matching.ProductNameNormalizer;
 
+import java.math.BigDecimal;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -127,5 +130,36 @@ class KindSizeAndCountTest {
         assertThat(milk.matchingRule()).isEqualTo(ShoppingItemRule.FLEXIBLE_CATEGORY);
         assertThat(milk.category()).isEqualTo("mleko 2,8%");
         assertThat(normalizer.normalize(milk.category())).isEqualTo("mleko 2 8");
+    }
+    @Test
+    void aFatTheMilksSayIsNoSize() {
+        // "mleko 2,8" was read as 2,8 l of any milk (provera uživo 5.11.2026).
+        kind("mleko", "mleko", true, "ml");
+        when(resolver.resolve("mleko 2,8%")).thenReturn(Optional.empty());
+        when(resolver.resolveForms("mleko 2,8%")).thenReturn(Optional.of(new ShoppingIntentResolver.FormMatch(
+                new ShoppingIntentResolver.ResolvedShoppingIntent(7L, "MILK", "Mleko", "mleko", false, "ml"),
+                "mleko 2 8")));
+        when(resolver.kindSaysPercent(eq(7L), argThat(n -> n.compareTo(new BigDecimal("2.8")) == 0)))
+                .thenReturn(true);
+        when(resolver.kindHasProductsMatching(anyLong(), anyString())).thenReturn(true);
+
+        var milk = interpreter.interpret("2x mleko 2,8");
+
+        assertThat(milk.matchingRule()).isEqualTo(ShoppingItemRule.FLEXIBLE_CATEGORY);
+        assertThat(milk.category()).isEqualTo("mleko 2,8%");
+        assertThat(milk.quantity()).isEqualByComparingTo("2");
+        assertThat(milk.targetQuantity()).isNull();
+    }
+
+    @Test
+    void aSizeTheKindIsSoldInStaysASize() {
+        // "kisela voda 1,5" and "pivo 0,5": no percentage, so litres.
+        kind("kisela voda", "kisela voda", true, "ml");
+
+        var water = interpreter.interpret("kisela voda 1,5");
+
+        assertThat(water.matchingRule()).isEqualTo(ShoppingItemRule.FLEXIBLE_CATEGORY);
+        assertThat(water.targetQuantity()).isEqualByComparingTo("1500");
+        assertThat(water.baseUnit()).isEqualTo("ml");
     }
 }
