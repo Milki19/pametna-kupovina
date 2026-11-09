@@ -8,7 +8,7 @@ import { saved } from './storage.js';
 import { ean13Valid } from '../lib/barcode.js';
 import { accountActions, accountForms, accountRoutes, deleteAccount } from '../screens/account.js';
 import { cards, renderCards, showCards } from '../screens/cards.js';
-import { clearList, deleteItem, flushDelete, listState, mergeDuplicates, removeBought, renderList, saveItem, showList } from '../screens/list.js';
+import { clearList, deleteItem, flushDelete, listState, mergeAllDuplicates, mergeDuplicates, removeBought, renderList, saveItem, showList } from '../screens/list.js';
 import { cancelPick, chainWithoutAddresses, matching, openPick, picking, pickProduct, resolve, runPick, showMatching, useAsFlexible, wrongProduct } from '../screens/matching.js';
 import { saveTripCosts, showMore, showTripCosts, tripAmount, tripCosts } from '../screens/more.js';
 import { locate, places, showLocation, useOrigin } from '../screens/origin.js';
@@ -97,6 +97,7 @@ const actions = {
   'cancel-edit': () => { listState.editing = null; renderList(); },
   delete: el => deleteItem(Number(el.dataset.id)),
   merge: el => mergeDuplicates(Number(el.dataset.id)),
+  'merge-all': mergeAllDuplicates,
   calculate: () => { location.hash = '#/provera'; },
   choose: el => {
     const item = matching.items.find(i => i.itemId === Number(el.dataset.item));

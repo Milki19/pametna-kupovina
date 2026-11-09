@@ -177,6 +177,15 @@
     <string name="list_duplicate_merge_hint">“%1$s” is on the list more than once. Merge them into one item or delete the extra one.</string>
     <string name="list_duplicate_merge">Merge</string>
     <string name="list_notice_merged">Merged: %1$s.</string>
+    <string name="list_duplicate_merge_all">Merge all (%1$d)</string>
+    <plurals name="list_duplicate_merge_all_hint">
+        <item quantity="one">%d item is on the list more than once. Merge all at once or one by one below.</item>
+        <item quantity="other">%d items are on the list more than once. Merge all at once or one by one below.</item>
+    </plurals>
+    <plurals name="list_notice_merged_all">
+        <item quantity="one">Merged %d item.</item>
+        <item quantity="other">Merged %d items.</item>
+    </plurals>
     <string name="list_clear_all">Clear the whole list</string>
     <string name="list_clear_all_title">Clear the whole list?</string>
     <string name="list_clear_all_text">%1$s will be removed from the list. This cannot be undone.</string>
