@@ -50,11 +50,16 @@ public class ShoppingRecommendationController {
             boolean unlocated,
             // "Samo radnje do 1 km", when a plan on foot came out too long.
             @RequestParam(name = "radiusMeters", required = false)
-            Integer radiusMeters
+            Integer radiusMeters,
+            // Preporuke u dva koraka: every plan's totals and coverage, and
+            // the items of this one; another plan's items when it is opened.
+            // Without it, every plan with its items (APK 2.0.x).
+            @RequestParam(name = "plan", required = false)
+            RecommendationScenarioType plan
     ) {
         shoppingListService.requireOwnedList(listId, caller.accountId());
 
-        return preciseLocationPolicy.useForRequest(
+        ShoppingRecommendationResponse answer = preciseLocationPolicy.useForRequest(
                 PreciseLocationPurpose.SHOPPING_LIST_OPTIMIZATION,
                 latitude,
                 longitude,
@@ -68,6 +73,7 @@ public class ShoppingRecommendationController {
                         radiusMeters
                 )
         );
+        return plan == null ? answer : answer.detailsOf(plan);
     }
 
     /** The chains without shop addresses; no location needed. */

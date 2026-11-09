@@ -103,6 +103,7 @@ class PreciseLocationControllerBoundaryTest {
                     recommendationDate,
                     rs.pametnakupovina.backend.shoppinglist.TravelMode.DRIVING,
                     true,
+                    null,
                     null
             );
 
