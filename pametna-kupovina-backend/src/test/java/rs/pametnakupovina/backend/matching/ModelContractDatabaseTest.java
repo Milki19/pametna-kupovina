@@ -51,13 +51,12 @@ class ModelContractDatabaseTest {
 
     @Test
     void theTablesStartEmpty() {
-        for (String table : List.of("unit_word", "piece_mass", "variant_word", "product_type_required_attribute")) {
+        // piece_mass and sale_mode are filled by V156.
+        for (String table : List.of("unit_word", "variant_word", "product_type_required_attribute")) {
             assertThat(jdbcClient.sql("SELECT COUNT(*) FROM app." + table).query(Long.class).single())
                     .as(table).isZero();
         }
         assertThat(jdbcClient.sql("SELECT COUNT(*) FROM app.product_type WHERE base_type_id IS NOT NULL")
-                .query(Long.class).single()).isZero();
-        assertThat(jdbcClient.sql("SELECT COUNT(*) FROM app.retailer_product WHERE sale_mode IS NOT NULL")
                 .query(Long.class).single()).isZero();
     }
 
@@ -111,6 +110,8 @@ class ModelContractDatabaseTest {
     @Test
     void aPieceWeighsByTheMostPreciseKey() {
         Market market = marketRepository.defaultMarket();
+        // Only this test's rows: V156 fills the table.
+        jdbcClient.sql("DELETE FROM app.piece_mass").update();
         long type = newType("S0_LEMON", null);
         jdbcClient.sql("INSERT INTO app.piece_mass (product_type_id, grams, source) VALUES (:type, 110, 'test')")
                 .param("type", type)

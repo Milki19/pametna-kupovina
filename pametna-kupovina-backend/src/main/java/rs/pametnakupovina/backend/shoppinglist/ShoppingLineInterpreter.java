@@ -1,6 +1,9 @@
 package rs.pametnakupovina.backend.shoppinglist;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import rs.pametnakupovina.backend.market.MarketRepository;
+import rs.pametnakupovina.backend.matching.PieceMassCatalog;
 import rs.pametnakupovina.backend.matching.ProductNameNormalizer;
 
 import java.math.BigDecimal;
@@ -8,6 +11,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Function;
+import java.util.regex.Pattern;
 
 /**
  * Reads one written line the way a shopper means it. A kind of product, alone
@@ -27,18 +32,46 @@ public class ShoppingLineInterpreter {
     /** "jaja 10" means ten eggs, not ten cartons; "2x jaja" stays two cartons. */
     private static final BigDecimal MIN_COUNT_OF_PIECES = BigDecimal.valueOf(4);
 
+    /** "limun 1 kom": a count of one written out, not just "limun". */
+    private static final Pattern PIECE_WORD = Pattern.compile(
+            "(?iu)(?<![\\p{L}])(kom(ad[a-z]*)?|ком(ад[а-я]*)?|pcs)(?![\\p{L}])");
+
     private final ShoppingListTextParser parser;
     private final ShoppingIntentResolver intentResolver;
     private final ProductNameNormalizer normalizer;
+    /** What one piece of the list word weighs, where pieces are counted (V156). */
+    private final Function<String, Optional<BigDecimal>> gramsPerPiece;
 
     public ShoppingLineInterpreter(
             ShoppingListTextParser parser,
             ShoppingIntentResolver intentResolver,
             ProductNameNormalizer normalizer
     ) {
+        this(parser, intentResolver, normalizer, word -> Optional.empty());
+    }
+
+    @Autowired
+    public ShoppingLineInterpreter(
+            ShoppingListTextParser parser,
+            ShoppingIntentResolver intentResolver,
+            ProductNameNormalizer normalizer,
+            PieceMassCatalog pieceMasses,
+            MarketRepository markets
+    ) {
+        this(parser, intentResolver, normalizer,
+                word -> pieceMasses.gramsPerPiece(markets.defaultMarket(), null, null, word));
+    }
+
+    ShoppingLineInterpreter(
+            ShoppingListTextParser parser,
+            ShoppingIntentResolver intentResolver,
+            ProductNameNormalizer normalizer,
+            Function<String, Optional<BigDecimal>> gramsPerPiece
+    ) {
         this.parser = parser;
         this.intentResolver = intentResolver;
         this.normalizer = normalizer;
+        this.gramsPerPiece = gramsPerPiece;
     }
 
     public InterpretedLine interpret(String rawLine) {
@@ -122,6 +155,20 @@ public class ShoppingLineInterpreter {
             packages = BigDecimal.ONE;
         }
 
+        // "limun 3", "3 limuna", "avokado 2 kom": fruit and vegetables
+        // counted are pieces, never kilograms weighed out. "limun 3" was
+        // 3 kg for 389,97 RSD and "avokado 2" 1,5 kg (šesti test, 6.11.2026).
+        // Only a word whose piece has a mass: the plan weighs the pieces
+        // for a shop that sells by the kilogram (V156).
+        if (target == null
+                && countWritten(line, packages)
+                && packages.stripTrailingZeros().scale() <= 0
+                && gramsPerPiece.apply(intent.normalizedAlias()).isPresent()) {
+            target = packages;
+            unit = "piece";
+            packages = BigDecimal.ONE;
+        }
+
         if (intent.exactAlias()) {
             String named = WantedWords.pattern(name, null, normalizer);
             if (named != null && intentResolver.kindIsBarelyTyped(intent.shoppingIntentId(), named)) {
@@ -172,6 +219,12 @@ public class ShoppingLineInterpreter {
                 target,
                 unit
         );
+    }
+
+    private static boolean countWritten(ParsedShoppingListLine line, BigDecimal packages) {
+        return line.bareNumber() != null
+                || packages.compareTo(BigDecimal.ONE) != 0
+                || (line.rawInput() != null && PIECE_WORD.matcher(line.rawInput()).find());
     }
 
     private static boolean isCount(BigDecimal number) {
