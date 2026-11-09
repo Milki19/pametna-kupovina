@@ -91,16 +91,26 @@ function pastePreviewHtml(text) {
            ${line.quantity !== 1 ? `<b class="amount">× ${esc(decimal(line.quantity))}</b>` : ''}</li>`).join('')}</ul>` : '');
 }
 
+/** Jedna stavka: „Dodaj“; više njih: „Dodaj sve (3)“. */
+const addLabel = count => count > 1 ? `Dodaj sve (${count})` : 'Dodaj';
+const itemCount = text => paste(text).filter(line => !line.skipped).length;
+
+/** Pregled se vidi tek kad ima šta da pokaže: više stavki, naslov, red bez slova ili beleška. */
 function updatePastePreview(field) {
+  const lines = paste(field.value);
+  const count = lines.filter(line => !line.skipped).length;
   const box = view.querySelector('#paste-preview');
-  if (box) box.innerHTML = pastePreviewHtml(field.value);
+  if (box) box.innerHTML = count > 1 || lines.some(line => line.skipped || line.note) ? pastePreviewHtml(field.value) : '';
   const submit = field.form?.querySelector('button:not([type=button])');
-  if (submit) submit.disabled = !paste(field.value).some(line => !line.skipped);
+  if (submit) {
+    submit.disabled = !count;
+    submit.textContent = addLabel(count);
+  }
 }
 
-/** Na spisku već ima stavki: prvo pitanje „Dodaj na spisak“ ili „Zameni spisak“. */
+/** Više stavki na spisak koji nije prazan: prvo pitanje „Dodaj na spisak“ ili „Zameni spisak“. */
 async function submitPaste(text) {
-  if (listState.list.items.length && paste(text).some(line => !line.skipped)) {
+  if (listState.list.items.length && itemCount(text) > 1) {
     listState.pasteAsk = text;
     renderList();
     view.querySelector('[data-act=paste-add]')?.focus();
@@ -131,8 +141,7 @@ const rejectedMark = id => listState.rejected ? `aria-invalid="true" aria-descri
 function rejectedNote() {
   const lines = listState.rejected?.lines;
   if (!lines?.length) return '';
-  const field = listState.adding === 'paste' ? 'many' : 'one';
-  return `<p class="field-error" id="${field}-error" role="alert">${
+  return `<p class="field-error" id="many-error" role="alert">${
     lines.map(line => esc(`„${line.text}“: ${line.message}`)).join('<br>')}</p>`;
 }
 
@@ -140,8 +149,8 @@ async function addText(text) {
   const listId = listRef(listState.list);
   const result = await api('POST', `shopping-lists/${listId}/items/paste`, { text });
   const rejected = result.rejectedLines || [];
-  // Iz polja „Nalepi spisak“ (i posle „Dodaj na spisak“ / „Zameni spisak“).
-  const pasted = listState.adding === 'paste';
+  // Nalepljen spisak (više stavki, i posle „Dodaj na spisak“ / „Zameni spisak“), ne jedna stavka.
+  const pasted = itemCount(text) > 1;
   if (pasted) {
     listState.pastedUnknown = new Set((result.items || [])
       .filter(item => item.matchingStatus !== 'CONFIRMED').map(item => item.id));
@@ -160,4 +169,4 @@ async function addText(text) {
   toast(rejected.length ? `${added} Nije dodato: ${rejected.length}, razlog je ispod polja.` : added);
 }
 
-export { addText, paste, pasteAskCard, pastedUnknown, pastePreviewHtml, rejectedMark, rejectedNote, submitPaste, updatePastePreview };
+export { addLabel, addText, paste, pasteAskCard, pastedUnknown, pastePreviewHtml, rejectedMark, rejectedNote, submitPaste, updatePastePreview };

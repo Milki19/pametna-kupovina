@@ -257,6 +257,15 @@ a.card:active, button.card:active { transform: scale(0.98); }
 .add-row:active { transform: scale(0.98); }
 .add-row svg { width: 22px; height: 22px; }
 .add-bar .btn { flex: 0 1 auto; min-height: 52px; border-radius: 18px; }
+.add-row { width: 100%; }
+/* Sam, van .add-bar: ne raste po visini u koloni ekrana. */
+main > .add-row { flex: none; }
+/* Jedna stavka staje u dva reda; pregled se vidi kad je nalepljeno više. */
+textarea.add-text { min-height: 88px; }
+/* Red stavke: dodir na naziv ili količinu otvara izmenu, a ceo red je bar 44 px. */
+.card.item { padding: 6px 4px 6px 16px; }
+.item-tap { flex: 1; min-width: 0; min-height: 44px; display: flex; align-items: center; gap: 12px; cursor: pointer; border-radius: 14px; }
+.item-tap:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
 /* Pilule */
 .pill {
@@ -449,6 +458,8 @@ details.list-row > .row { padding: 2px 0; gap: 8px; }
   .top h1 { font-size: 22px; }
   .row { flex-wrap: wrap; gap: 8px; }
   .row > .grow { flex: 1 1 6em; }
+  .item-tap { flex-wrap: wrap; gap: 4px 8px; }
+  .item-tap > .grow { flex: 1 1 6em; }
   .row > input { flex: 1 1 6em !important; min-width: 0; }
   .btn-row { flex-wrap: wrap; }
   .btn-row > .btn { flex: 1 1 auto; }

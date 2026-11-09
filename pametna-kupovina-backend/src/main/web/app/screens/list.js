@@ -7,7 +7,7 @@ import { failed, fieldError, screen, toast, view } from '../core/screen.js';
 import { reportProblem } from '../core/session.js';
 import { saved } from '../core/storage.js';
 import { account } from './account.js';
-import { paste, pasteAskCard, pastedUnknown, pastePreviewHtml, rejectedMark, rejectedNote } from './paste.js';
+import { addLabel, paste, pasteAskCard, pastedUnknown, pastePreviewHtml, rejectedMark, rejectedNote } from './paste.js';
 import { purchaseBought, purchaseItems } from './purchase.js';
 
 function itemAmount(item) {
@@ -337,20 +337,17 @@ function renderList() {
   const pasteText = listState.pasteAsk ?? listState.rejected?.text ?? '';
   // Upravo nalepljeno, a neprepoznato, stoji na vrhu dok se ne proveri.
   const shown = [...items.filter(pastedUnknown), ...items.filter(item => !pastedUnknown(item))];
-  const form = listState.adding === 'one'
-    ? `<form class="card" data-form="add-one">
-         <label class="label" for="one">Šta kupuješ</label>
-         <input id="one" name="text" type="text" autocomplete="off" enterkeyhint="done" placeholder="npr. mleko 2l ili jaja 10 kom" value="${esc(listState.rejected?.text || '')}" ${rejectedMark('one')}required>${rejectedNote()}
-         <div class="btn-row"><button type="button" class="btn" data-act="cancel-add">Odustani</button><button class="btn primary">Dodaj</button></div>
-       </form>`
-    : listState.adding === 'paste'
-      ? `<form class="card" data-form="add-many">
-           <label class="label" for="many">Nalepi spisak iz poruke ili beleške</label>
-           <textarea id="many" name="text" placeholder="mleko&#10;hleb&#10;ćevapi 3kg&#10;2x pivo" aria-describedby="paste-preview" ${rejectedMark('many')}required>${esc(pasteText)}</textarea>${rejectedNote()}
-           <div id="paste-preview">${pastePreviewHtml(pasteText)}</div>
-           <div class="btn-row"><button type="button" class="btn" data-act="cancel-add">Odustani</button><button class="btn primary" ${paste(pasteText).some(line => !line.skipped) ? '' : 'disabled'}>Dodaj sve</button></div>
-         </form>` + pasteAskCard()
-      : '';
+  // Jedno polje za jednu stavku i za ceo nalepljen spisak (šesti test, 8.11.2026).
+  const lineCount = paste(pasteText).filter(line => !line.skipped).length;
+  const form = listState.adding
+    ? `<form class="card" data-form="add-many">
+         <label class="label" for="many">Šta kupuješ</label>
+         <textarea id="many" name="text" class="add-text" placeholder="mleko 2l&#10;hleb&#10;ćevapi 3kg&#10;2x pivo" aria-describedby="add-hint paste-preview" ${rejectedMark('many')}required>${esc(pasteText)}</textarea>${rejectedNote()}
+         <p class="muted small" id="add-hint">Jedna stavka, ili ceo spisak iz poruke ili beleške: svaka stavka u svom redu.</p>
+         <div id="paste-preview">${lineCount > 1 || paste(pasteText).some(line => line.skipped || line.note) ? pastePreviewHtml(pasteText) : ''}</div>
+         <div class="btn-row"><button type="button" class="btn" data-act="cancel-add">Odustani</button><button class="btn primary" ${lineCount ? '' : 'disabled'}>${addLabel(lineCount)}</button></div>
+       </form>` + pasteAskCard()
+    : '';
   screen({
     title: 'Moj spisak',
     subtitle: items.length ? counted(items.length, 'stavka', 'stavke', 'stavki') : null,
@@ -358,27 +355,28 @@ function renderList() {
       (purchase ? `<a class="card row" href="#/kupovina" style="text-decoration:none;color:inherit">
           <div class="grow"><div class="name">Kupovina u toku</div>
           <div class="muted small">Kupljeno ${purchaseBought(purchase)} od ${purchaseItems(purchase).length}</div></div>${icon.chevron}</a>` : '') +
-      `<div class="add-bar">
-         <button class="add-row" data-act="add-one">${icon.add}Dodaj stavku</button>
-         <button class="btn tonal" data-act="add-many">${icon.paste}Nalepi spisak</button>
-       </div>` + form + (listState.adding ? '' : salesShortcut()) +
+      (listState.adding ? '' : `<button class="add-row" data-act="add-many">${icon.add}Dodaj ili nalepi spisak</button>`) + form +
+      // Akcije su prečica dok je spisak prazan; posle su na kartici Cene, da stavke budu na prvom ekranu.
+      (listState.adding || items.length ? '' : salesShortcut()) +
       (items.length
         ? `<div class="section">Stavke na spisku ${pill(items.length)}</div>` + duplicateNotice(items) + shown.map(item => item.id === listState.editing ? itemEditor(item) : `
-          <div class="card">
+          <div class="card item">
             <div class="row">
-              <div class="grow" data-act="edit" data-id="${item.id}" role="button" tabindex="0" style="cursor:pointer" aria-label="Izmeni ${esc(item.name)}">
-                ${itemAttention(item) || (pastedUnknown(item) ? pill('Nije prepoznato', 'warn') : '')}
-                <div class="name">${esc(item.name)}</div>
-                ${item.note ? `<div class="muted small">${esc(item.note)}</div>` : ''}
-                ${itemRule(item) ? `<div class="muted small">${esc(itemRule(item))}</div>` : ''}
+              <div class="item-tap" data-act="edit" data-id="${item.id}" role="button" tabindex="0" aria-label="Izmeni ${esc(item.name)}">
+                <div class="grow">
+                  ${itemAttention(item) || (pastedUnknown(item) ? pill('Nije prepoznato', 'warn') : '')}
+                  <div class="name">${esc(item.name)}</div>
+                  ${item.note ? `<div class="muted small">${esc(item.note)}</div>` : ''}
+                  ${itemRule(item) ? `<div class="muted small">${esc(itemRule(item))}</div>` : ''}
+                </div>
+                <span class="amount">${esc(itemAmount(item))}</span>
               </div>
-              <span class="amount">${esc(itemAmount(item))}</span>
               <button class="icon-action" data-act="delete" data-id="${item.id}" aria-label="Obriši ${esc(item.name)}">${icon.trash}</button>
             </div>
           </div>`).join('') +
           `<button class="btn danger" data-act="clear-list">${icon.trash}Obriši ceo spisak</button>`
         : `<div class="card soft center"><div class="title">Spisak je prazan</div>
-           <p class="muted">Nalepi spisak iz poruke ili beleške, ili dodaj stavku po stavku.</p></div>`),
+           <p class="muted">Dodaj stavku po stavku, ili nalepi ceo spisak iz poruke ili beleške.</p></div>`),
     action: `<button class="btn primary main" data-act="calculate" ${items.length ? '' : 'disabled'}>Izračunaj</button>`
   });
   const field = view.querySelector('[data-form] input:not([type=hidden]), [data-form] textarea');
