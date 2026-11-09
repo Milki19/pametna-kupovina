@@ -22,6 +22,7 @@ import rs.pametnakupovina.app.data.local.MIGRATION_1_2
 import rs.pametnakupovina.app.data.local.MIGRATION_2_3
 import rs.pametnakupovina.app.data.local.MIGRATION_3_4
 import rs.pametnakupovina.app.data.local.MIGRATION_4_5
+import rs.pametnakupovina.app.data.local.MIGRATION_5_6
 import rs.pametnakupovina.app.data.local.PametnaKupovinaDatabase
 import rs.pametnakupovina.app.data.ShoppingRepository
 import rs.pametnakupovina.app.data.purchase.MissingProductReporter
@@ -139,7 +140,7 @@ object DatabaseModule {
         PametnaKupovinaDatabase::class.java,
         "pametna-kupovina.db"
     )
-        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
         .build()
 
     @Provides

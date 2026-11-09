@@ -22,6 +22,12 @@ data class DraftItemEntity(
     val maxPackageQuantity: Double? = null,
     val requiredBaseUnit: String? = null,
     val targetQuantity: Double? = null,
+    /**
+     * What one counted piece weighs, from the server ("limun 3": 100 g), so
+     * the list says "≈0,3 kg". Null for anything not counted in pieces, and
+     * until the server has read a row written here.
+     */
+    val pieceGrams: Double? = null,
     val syncState: String = SyncState.PENDING_CREATE.name,
     /** Why the server refused this row, in its own words; null once accepted. */
     val syncError: String? = null,

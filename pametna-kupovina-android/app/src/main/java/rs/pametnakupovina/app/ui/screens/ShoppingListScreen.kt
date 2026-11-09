@@ -533,6 +533,13 @@ private fun DraftItemRow(
     val texts: @Composable (Modifier) -> Unit = { textModifier ->
         Column(modifier = textModifier, verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(item.name, style = MaterialTheme.typography.titleMedium)
+            draftPiecesWeight(item)?.let { weight ->
+                Text(
+                    weight,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
             PastedListParser.noteOf(item.rawInput)?.let { note ->
                 Text(
                     note,
@@ -680,6 +687,17 @@ private fun StepButton(
     ) {
         AppIcon(icon, contentDescription = description, tint = tint, modifier = Modifier.size(20.dp))
     }
+}
+
+/**
+ * „≈0,3 kg" uz komade voća i povrća („limun 3" su 3 komada, ne 3 kg), kao
+ * napomena „3 kom ≈ 0,3 kg" u planu (šesti test, V156). Inače null.
+ */
+internal fun draftPiecesWeight(item: DraftItemEntity): String? {
+    val pieces = item.targetQuantity?.takeIf { item.requiredBaseUnit == "piece" } ?: return null
+    val grams = item.pieceGrams?.takeIf { it > 0 } ?: return null
+    val kilograms = maxOf(0.01, Math.round(pieces * item.quantity * grams / 10) / 100.0)
+    return "≈${decimal(kilograms)} kg"
 }
 
 /** Ukupna količina kad je upisana („2 kg"), inače samo broj pakovanja. */

@@ -75,7 +75,9 @@ data class ShoppingListItemDto(
     val matchingAlgorithmVersion: String? = null,
     val flexibleConstraints: FlexibleItemConstraintsDto? = null,
     val createdAt: String,
-    val updatedAt: String
+    val updatedAt: String,
+    /** What one counted piece weighs ("limun 3": 100 g); null unless pieces are counted. */
+    val pieceGrams: Double? = null
 )
 
 @Serializable

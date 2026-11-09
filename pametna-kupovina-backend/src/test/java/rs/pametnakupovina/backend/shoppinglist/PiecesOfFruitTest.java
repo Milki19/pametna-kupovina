@@ -166,6 +166,13 @@ class PiecesOfFruitTest {
         assertThat(items.get(0).quantity()).isEqualByComparingTo("1");
         // A line with no count is still a kilogram weighed out (V137).
         assertThat(items.get(3).flexibleConstraints().targetQuantity()).isNull();
+        // The list says "3 kom (≈0,3 kg)": what one piece weighs comes with
+        // the item, from the same app.piece_grams the plan weighs with (S15).
+        assertThat(items.get(0).pieceGrams()).isEqualByComparingTo("100");
+        assertThat(items.get(1).pieceGrams()).isEqualByComparingTo("200");
+        assertThat(items.get(2).pieceGrams()).isEqualByComparingTo("100");
+        assertThat(items.get(3).pieceGrams()).isNull();
+        assertThat(items.get(4).pieceGrams()).isEqualByComparingTo("180");
 
         List<StoreItemOffer> offers = offerRepository.findPriceListOffers(
                 list.id(),
