@@ -2,6 +2,7 @@ package rs.pametnakupovina.backend.shoppinglist;
 
 import rs.pametnakupovina.backend.matching.ProductNameNormalizer;
 import rs.pametnakupovina.backend.matching.SerbianWordForms;
+import rs.pametnakupovina.backend.matching.WholeWords;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -21,12 +22,16 @@ import java.util.stream.Collectors;
  * words are the whole kind: the products whose names say them.
  *
  * <p>The result is a PostgreSQL regular expression over a product's
- * normalized name: every word as the start of a word, in any order.
+ * normalized name: every word whole, in any of its forms, in any order.
  */
 public final class WantedWords {
 
-    /** The item keeps the expression in 1000 characters (V146). */
-    private static final int MAX_LENGTH = 1000;
+    /**
+     * The item keeps the expression in 2000 characters (V159): each word
+     * carries its endings now, so a line of six words outgrew the 1000 of
+     * V146.
+     */
+    private static final int MAX_LENGTH = 2000;
 
     /** The codes a chain writes into its names: Lidl's "MK20", "SK6", "RFA". */
     private static final String NOT_A_CODE = "(?<!mk )(?<!sk )(?<!rfa )";
@@ -295,7 +300,9 @@ public final class WantedWords {
                 // A short word is the whole word: "AA" batteries are no "AAA".
                 terms.add("\\m" + word + "\\M");
             } else {
-                terms.add("\\m" + stem);
+                // The word in its forms, never the start of another word:
+                // "kinoa" is no "Kinder Cards" (šesti test, 6.11.2026).
+                terms.add(WholeWords.formsPattern(word));
             }
         }
         return terms.stream().distinct().toList();
