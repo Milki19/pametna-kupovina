@@ -37,6 +37,14 @@ import java.util.function.Supplier;
  * import or a new read of the sales clears them at once, a "not in this
  * shop" report too, and anything else (a shop's format, a kind's settings)
  * shows within minutes.
+ *
+ * <p>Whole answers of a search and of a sales page are kept for everyone
+ * ({@link #rememberShared}), {@link #SHARED_MAX_AGE} at most: the same words
+ * or the same sales from the same neighbourhood (rounded to about a
+ * kilometre) cost the first person, not each one (šesti test, 6.11.2026:
+ * every phone paid its own first search). A place in a key is never kept
+ * longer than that: what is older is dropped every minute, not only when
+ * asked for again.
  */
 @Component
 public class CatalogMemo {
@@ -64,9 +72,18 @@ public class CatalogMemo {
 
     private record KeptOffers(Instant keptAt, Object offers) {
     }
+
+    /** As the privacy page says: a rounded place is kept five minutes at most. */
+    static final Duration SHARED_MAX_AGE = Duration.ofMinutes(
+            rs.pametnakupovina.backend.privacy.PreciseLocationPolicy.ROUGH_RETENTION_MINUTES);
+    /** A search page is 5 to 20 products; a few thousand of them are a few MB. */
+    static final int MAX_SHARED_ENTRIES = 3_000;
+    private final Map<List<?>, KeptOffers> sharedEntries = new ConcurrentHashMap<>();
     private final SingleFlight<List<?>> inFlight = new SingleFlight<>();
     /** The first part of a search's key, as {@link CanonicalProductSearchService} keeps it. */
     static final String SEARCH_CANDIDATES = "searchCandidates";
+    /** The first part of a whole search answer's key. */
+    static final String SEARCH_ANSWER = "searchAnswer";
     private final List<java.util.function.Consumer<List<String>>> forgetListeners =
             new java.util.concurrent.CopyOnWriteArrayList<>();
     // Raised on every change, so a lookup that began before it is not kept.
@@ -163,6 +180,59 @@ public class CatalogMemo {
     }
 
     /**
+     * The whole answer to a search or a sales page, the same for everyone who
+     * asks the same thing from the same rounded place, or the lookup's answer,
+     * kept {@link #SHARED_MAX_AGE}. Several people asking at once wait for one
+     * lookup. The key must say everything the answer depends on, the place
+     * only {@linkplain rs.pametnakupovina.backend.privacy.PreciseLocation#roughly()
+     * rounded}. Any change of the catalogue, the prices or the sales drops them.
+     */
+    @SuppressWarnings("unchecked")
+    public <T> T rememberShared(List<?> key, Supplier<T> lookup) {
+        if (!enabled) {
+            return lookup.get();
+        }
+        KeptOffers found = sharedEntries.get(key);
+        if (found != null && fresh(found, clock.instant())) {
+            return (T) found.offers();
+        }
+        long before = generation.get();
+        return inFlight.run(List.of(before, "shared", key), () -> {
+            T answer = lookup.get();
+            if (answer != null && generation.get() == before) {
+                if (sharedEntries.size() >= MAX_SHARED_ENTRIES) {
+                    forgetExpiredShared();
+                    if (sharedEntries.size() >= MAX_SHARED_ENTRIES) {
+                        sharedEntries.clear();
+                    }
+                }
+                sharedEntries.put(key, new KeptOffers(clock.instant(), answer));
+            }
+            return answer;
+        });
+    }
+
+    private static boolean fresh(KeptOffers kept, Instant now) {
+        return kept.keptAt().plus(SHARED_MAX_AGE).isAfter(now);
+    }
+
+    /**
+     * Drops every shared answer older than {@link #SHARED_MAX_AGE}, so a
+     * rounded place in a key is gone within a minute of its five, even if
+     * nobody asks the same again.
+     */
+    @org.springframework.scheduling.annotation.Scheduled(fixedDelay = 60_000, initialDelay = 60_000)
+    public void forgetExpiredShared() {
+        Instant now = clock.instant();
+        sharedEntries.values().removeIf(kept -> !fresh(kept, now));
+    }
+
+    /** How many shared answers are kept now. */
+    int sharedSize() {
+        return sharedEntries.size();
+    }
+
+    /**
      * What {@link #rememberOffers} keeps, read without working it out: a plan
      * asks for many items at once and works out only the ones not kept.
      * Null when nothing fresh is kept.
@@ -213,10 +283,14 @@ public class CatalogMemo {
         }
     }
 
-    /** The sales list was read again: only its pages go, the plans stay. */
+    /**
+     * The sales list was read again: its pages and the searches go (a search
+     * can ask only for what is on sale), the plans stay.
+     */
     public void salesChanged() {
         generation.incrementAndGet();
         offerEntries.keySet().removeIf(key -> !key.isEmpty() && SALE_PAGE.equals(key.getFirst()));
+        sharedEntries.clear();
     }
 
     /** The first part of a sales page's key. */
@@ -225,6 +299,7 @@ public class CatalogMemo {
     private void forgetOffers() {
         generation.incrementAndGet();
         offerEntries.clear();
+        sharedEntries.clear();
     }
 
     /** The catalogue changed; inside a transaction, once it commits. */
@@ -254,6 +329,7 @@ public class CatalogMemo {
         entries.clear();
         largeEntries.clear();
         offerEntries.clear();
+        sharedEntries.clear();
         startedAt = clock.instant();
         if (enabled && !searched.isEmpty()) {
             forgetListeners.forEach(listener -> listener.accept(searched));
@@ -274,6 +350,6 @@ public class CatalogMemo {
     }
 
     int size() {
-        return entries.size() + largeEntries.size() + offerEntries.size();
+        return entries.size() + largeEntries.size() + offerEntries.size() + sharedEntries.size();
     }
 }

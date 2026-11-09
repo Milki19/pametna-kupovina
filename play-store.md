@@ -39,7 +39,7 @@ Super Vero, dm, Gomex i lanci širom Srbije. Osvežavaju se svakog dana.
 
 **Privatnost**
 Bez imena, e-maila i lozinke. Lokacija služi samo za jedno računanje i ne
-čuva se. Bez reklama i bez praćenja. Sve podatke brišeš jednim dugmetom.
+čuva se; uz pretragu i Akcije je zaokružena na 1 km i čuva se 5 minuta. Bez reklama i bez praćenja. Sve podatke brišeš jednim dugmetom.
 
 Cena u cenovniku nije potvrda da proizvoda ima na stanju; merodavna je cena u
 prodavnici.
@@ -55,7 +55,7 @@ Prikupljeno (ništa se ne deli sa trećim licima, ništa nije za reklame):
 
 | Vrsta (Play) | Šta je to kod nas | Obavezno? | Svrha |
 |---|---|---|---|
-| Lokacija — približna i precizna | koordinate za jedno računanje plana; uz pretragu zaokružene na ~1 km za redosled; uz praćenje cene kraj (~1 km) ostaje samo na telefonu; server ih ne čuva | opciono | Funkcionalnost aplikacije (obrada samo u trenutku) |
+| Lokacija — približna i precizna | koordinate za jedno računanje plana; uz pretragu i Akcije zaokružene na 1 km, u memoriji servera 5 minuta uz deljen odgovor; uz praćenje cene kraj (~1 km) ostaje samo na telefonu; server ih ne čuva | opciono | Funkcionalnost aplikacije (obrada samo u trenutku) |
 | Lični podaci — ID korisnika | Google-ov broj naloga, samo ako se korisnik prijavi | opciono | Upravljanje nalogom |
 | Finansijski podaci — istorija kupovine | skenirani fiskalni računi (prodavnica, iznos, stavke) | opciono | Funkcionalnost aplikacije |
 | Finansijski podaci — ostalo | broj kartice lojalnosti | opciono | Funkcionalnost aplikacije |

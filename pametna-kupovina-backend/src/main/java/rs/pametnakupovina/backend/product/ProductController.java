@@ -121,14 +121,15 @@ public class ProductController {
             ) int limit,
             @RequestParam(name = "includeWithoutPrice", defaultValue = "false") boolean includeWithoutPrice,
             @RequestParam(name = "onSale", defaultValue = "false") boolean onSale,
-            // Oko kilometar tačno, samo za redosled; ne čuva se.
+            // Zaokruženo na oko kilometar, samo za redosled; deo ključa
+            // deljenog odgovora najviše pet minuta.
             @RequestParam(name = "latitude", required = false) Double latitude,
             @RequestParam(name = "longitude", required = false) Double longitude,
             HttpServletResponse response
     ) {
         try {
             if (latitude != null && longitude != null) {
-                return keptForAWhile(response, locationPolicy.useForRequest(
+                return keptForAWhile(response, locationPolicy.useRoughlyForAWhile(
                         PreciseLocationPurpose.SEARCH_RANKING,
                         latitude,
                         longitude,
@@ -148,7 +149,8 @@ public class ProductController {
 
     /**
      * Products on sale today, the largest discount first. With a location,
-     * only chains with a shop nearby; the location is not kept.
+     * only chains with a shop nearby; the location is rounded to about a
+     * kilometre and kept only as part of the shared page's key, five minutes.
      */
     @GetMapping("/on-sale")
     public SalePage onSale(
@@ -166,7 +168,7 @@ public class ProductController {
     ) {
         try {
             if (latitude != null && longitude != null) {
-                return keptForAWhile(response, locationPolicy.useForRequest(
+                return keptForAWhile(response, locationPolicy.useRoughlyForAWhile(
                         PreciseLocationPurpose.NEARBY_SALES,
                         latitude,
                         longitude,
@@ -188,9 +190,11 @@ public class ProductController {
     /**
      * Search results and sales are the same for everyone and change with
      * the daily import, so the phone keeps them five minutes: going back to
-     * a search or to Akcije asks nothing. Kept by that phone only
-     * (private), since the address can carry the rounded location; after
-     * five minutes the ETag lets an unchanged answer come back as 304.
+     * a search or to Akcije asks nothing. The server keeps the same answer
+     * five minutes for everyone too ({@link CatalogMemo#rememberShared}).
+     * The phone's copy stays private, since the address can carry the
+     * rounded location; after five minutes the ETag lets an unchanged answer
+     * come back as 304.
      */
     static final String KEPT_FOR_A_WHILE = "private, max-age=300";
 

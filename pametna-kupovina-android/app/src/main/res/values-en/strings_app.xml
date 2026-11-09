@@ -113,7 +113,7 @@
     <string name="location_find_address">Find address</string>
     <string name="location_open_location_settings">Open location settings</string>
     <string name="location_open_app_permissions">Open app permissions</string>
-    <string name="location_privacy_note">Your location is used for this calculation and to order search results. The app doesn\'t track it in the background, and the server doesn\'t store it. The server looks up addresses through OpenStreetMap and doesn\'t save them.</string>
+    <string name="location_privacy_note">Your location is used for this calculation and to order search results. The app doesn\'t track it in the background. For a plan the server doesn\'t store it; for search and Sales it is rounded to 1 km and kept for 5 minutes. The server looks up addresses through OpenStreetMap and doesn\'t save them.</string>
     <string name="location_found_current">Location found. Check it and start the calculation.</string>
     <string name="location_found_address">Found: %1$s</string>
     <string name="location_not_found_type_address">Location not found. Enter an address.</string>

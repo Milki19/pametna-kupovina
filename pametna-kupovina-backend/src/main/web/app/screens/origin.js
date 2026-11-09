@@ -52,7 +52,7 @@ function showLocation(message = null, tone = 'err') {
         <span class="grow"><span class="label">Poslednja polazna tačka</span><span style="display:block">${esc(originLabel(last))}</span></span>
         <span class="btn">Koristi</span></button>` : ''}
       ${message ? notice(message, tone) : ''}
-      <p class="muted small">Lokacija služi samo za ovo računanje i za redosled pretrage. Ne prati se u pozadini, a server je ne čuva. Adresu server traži preko OpenStreetMap-a i ne upisuje je.</p>`
+      <p class="muted small">Lokacija služi samo za ovo računanje i za redosled pretrage. Ne prati se u pozadini. Za plan je server ne čuva; za pretragu i Akcije je zaokružena na 1 km, čuva se 5 minuta. Adresu server traži preko OpenStreetMap-a i ne upisuje je.</p>`
   });
 }
 
