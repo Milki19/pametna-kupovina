@@ -6,7 +6,7 @@ import androidx.room.migration.Migration
 
 @Database(
     entities = [DraftItemEntity::class, PurchaseSessionEntity::class],
-    version = 5,
+    version = 6,
     exportSchema = true
 )
 abstract class PametnaKupovinaDatabase : RoomDatabase() {
@@ -25,6 +25,11 @@ val MIGRATION_3_4 = Migration(3, 4) { database ->
 
 val MIGRATION_4_5 = Migration(4, 5) { database ->
     database.execSQL("ALTER TABLE draft_items ADD COLUMN syncError TEXT")
+}
+
+/** Mass of one counted piece, for "3 kom (≈0,3 kg)"; filled at the next sync. */
+val MIGRATION_5_6 = Migration(5, 6) { database ->
+    database.execSQL("ALTER TABLE draft_items ADD COLUMN pieceGrams REAL")
 }
 
 val MIGRATION_1_2 = Migration(1, 2) { database ->

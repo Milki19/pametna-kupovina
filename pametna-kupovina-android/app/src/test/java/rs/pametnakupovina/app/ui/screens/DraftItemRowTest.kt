@@ -17,7 +17,8 @@ class DraftItemRowTest {
         brand: String? = null,
         quantity: Double = 1.0,
         target: Double? = null,
-        unit: String? = null
+        unit: String? = null,
+        pieceGrams: Double? = null
     ) = DraftItemEntity(
         name = name,
         quantity = quantity,
@@ -25,8 +26,26 @@ class DraftItemRowTest {
         category = category,
         requiredBrand = brand,
         targetQuantity = target,
-        requiredBaseUnit = unit
+        requiredBaseUnit = unit,
+        pieceGrams = pieceGrams
     )
+
+    @Test
+    fun `komadi voca kazu i koliko otprilike teze`() {
+        val lemons = flexible("limun", target = 3.0, unit = "piece", pieceGrams = 100.0)
+        assertEquals("3 kom", draftAmountLabel(lemons))
+        assertEquals("≈0,3 kg", draftPiecesWeight(lemons))
+        // Dva puta po dva avokada: 4 × 200 g.
+        assertEquals("≈0,8 kg", draftPiecesWeight(flexible("avokado", quantity = 2.0, target = 2.0, unit = "piece", pieceGrams = 200.0)))
+        assertEquals("≈0,12 kg", draftPiecesWeight(flexible("kajsije", target = 3.0, unit = "piece", pieceGrams = 40.0)))
+    }
+
+    @Test
+    fun `bez mase komada ili za kilograme nema napomene`() {
+        assertNull(draftPiecesWeight(flexible("jaja", target = 10.0, unit = "piece")))
+        assertNull(draftPiecesWeight(flexible("limun", target = 2000.0, unit = "g", pieceGrams = 100.0)))
+        assertNull(draftPiecesWeight(flexible("limun", pieceGrams = 100.0)))
+    }
 
     @Test
     fun `kategorija ista kao naziv se ne ponavlja`() {

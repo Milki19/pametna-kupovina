@@ -12,6 +12,7 @@ import rs.pametnakupovina.app.data.local.MIGRATION_1_2
 import rs.pametnakupovina.app.data.local.MIGRATION_2_3
 import rs.pametnakupovina.app.data.local.MIGRATION_3_4
 import rs.pametnakupovina.app.data.local.MIGRATION_4_5
+import rs.pametnakupovina.app.data.local.MIGRATION_5_6
 
 @RunWith(AndroidJUnit4::class)
 @Suppress("DEPRECATION")
@@ -137,6 +138,24 @@ class RoomMigrationInstrumentedTest {
                 it.moveToFirst()
                 assertEquals("pivo", it.getString(0))
                 assertEquals(true, it.isNull(1))
+            }
+        }
+    }
+
+    @Test
+    fun migrationTo6KeepsItemsWithoutAPieceMass() {
+        val name = "migration-test-v6"
+        helper.createDatabase(name, 5).apply {
+            execSQL("""INSERT INTO draft_items(name, quantity, matchingRule, matchingStatus, requiredBaseUnit, targetQuantity, syncState, updatedAtEpochMillis)
+                VALUES('limun', 1, 'FLEXIBLE_CATEGORY', 'CONFIRMED', 'piece', 3, 'SYNCED', 1)""")
+            close()
+        }
+        helper.runMigrationsAndValidate(name, 6, true, MIGRATION_5_6).use { database ->
+            database.query("SELECT name, targetQuantity, pieceGrams FROM draft_items").use {
+                it.moveToFirst()
+                assertEquals("limun", it.getString(0))
+                assertEquals(3.0, it.getDouble(1), 0.0)
+                assertEquals(true, it.isNull(2))
             }
         }
     }

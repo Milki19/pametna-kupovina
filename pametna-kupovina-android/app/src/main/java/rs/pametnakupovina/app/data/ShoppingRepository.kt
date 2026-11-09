@@ -500,6 +500,10 @@ class ShoppingRepository @Inject constructor(
                     SyncState.PENDING_CREATE
                 } else {
                     SyncState.PENDING_UPDATE
+                },
+                // Ista reč i komadi: masa komada važi i dok server ne odgovori.
+                pieceGrams = item.pieceGrams.takeIf {
+                    value.category == item.category && value.requiredBaseUnit == "piece" && item.requiredBaseUnit == "piece"
                 }
             )
         )
@@ -836,7 +840,8 @@ private fun DraftItemInput.toEntity(
     localId: Long = 0,
     remoteId: Long? = null,
     matchingStatus: String = "PENDING",
-    syncState: SyncState = SyncState.PENDING_CREATE
+    syncState: SyncState = SyncState.PENDING_CREATE,
+    pieceGrams: Double? = null
 ): DraftItemEntity = DraftItemEntity(
     localId = localId,
     remoteId = remoteId,
@@ -854,6 +859,7 @@ private fun DraftItemInput.toEntity(
     maxPackageQuantity = maxPackageQuantity,
     requiredBaseUnit = requiredBaseUnit,
     targetQuantity = targetQuantity,
+    pieceGrams = pieceGrams,
     syncState = syncState.name
 )
 
@@ -911,5 +917,6 @@ private fun ShoppingListItemDto.toEntity(
     maxPackageQuantity = flexibleConstraints?.maxPackageQuantity,
     requiredBaseUnit = flexibleConstraints?.requiredBaseUnit,
     targetQuantity = flexibleConstraints?.targetQuantity,
+    pieceGrams = pieceGrams,
     syncState = SyncState.SYNCED.name
 )

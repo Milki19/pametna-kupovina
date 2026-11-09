@@ -88,9 +88,31 @@ public class ShoppingListRepository {
                     resultSet.getObject(
                             "updated_at",
                             OffsetDateTime.class
-                    )
+                    ),
+                    resultSet.getBigDecimal("piece_grams")
             );
     };
+
+    /**
+     * What one counted piece of the item weighs, for "3 kom (≈0,3 kg)" on
+     * the list: the same app.piece_grams (V156) the plan weighs pieces with,
+     * in the market of the list's account. Only where the item counts pieces.
+     */
+    private static final String PIECE_GRAMS = """
+            CASE WHEN shopping_list_item.required_base_unit = 'piece'
+                  AND shopping_list_item.target_quantity IS NOT NULL
+                  AND shopping_list_item.flexible_category_normalized IS NOT NULL
+                 THEN app.piece_grams(
+                     COALESCE((SELECT account.market_id
+                               FROM app.shopping_list AS list
+                               JOIN app.account AS account ON account.id = list.account_id
+                               WHERE list.id = shopping_list_item.shopping_list_id),
+                              app.default_market_id())::INTEGER,
+                     NULL,
+                     shopping_list_item.shopping_intent_id,
+                     shopping_list_item.flexible_category_normalized)
+            END AS piece_grams,
+            """;
 
     private final JdbcClient jdbcClient;
 
@@ -301,6 +323,7 @@ public class ShoppingListRepository {
                                        min_package_quantity,
                                        max_package_quantity,
                                        required_base_unit, target_quantity,
+""" + PIECE_GRAMS + """
                                        created_at,
                                        updated_at
                                 FROM app.shopping_list_item
@@ -484,6 +507,7 @@ public class ShoppingListRepository {
                                   min_package_quantity,
                                   max_package_quantity,
                                   required_base_unit, target_quantity,
+""" + PIECE_GRAMS + """
                                   created_at,
                                   updated_at
                         """)
@@ -677,6 +701,7 @@ public class ShoppingListRepository {
                               min_package_quantity,
                               max_package_quantity,
                               required_base_unit, target_quantity,
+""" + PIECE_GRAMS + """
                               created_at,
                               updated_at
                     """)
@@ -813,6 +838,7 @@ public class ShoppingListRepository {
                                min_package_quantity,
                                max_package_quantity,
                                required_base_unit, target_quantity,
+""" + PIECE_GRAMS + """
                                created_at,
                                updated_at
                         FROM app.shopping_list_item
@@ -861,6 +887,7 @@ public class ShoppingListRepository {
                                   min_package_quantity,
                                   max_package_quantity,
                                   required_base_unit, target_quantity,
+""" + PIECE_GRAMS + """
                                   created_at,
                                   updated_at
                         """)
@@ -923,6 +950,7 @@ public class ShoppingListRepository {
                                   min_package_quantity,
                                   max_package_quantity,
                                   required_base_unit, target_quantity,
+""" + PIECE_GRAMS + """
                                   created_at,
                                   updated_at
                         """)

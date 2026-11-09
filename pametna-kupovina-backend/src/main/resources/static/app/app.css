@@ -281,6 +281,7 @@ textarea.add-text { min-height: 88px; }
 .pill.warn { background: var(--amber); color: var(--on-amber); }
 .pill.err { background: var(--error-soft); color: var(--on-error-soft); }
 .amount { padding: 6px 12px; border-radius: 12px; background: var(--low); font-weight: 650; white-space: nowrap; }
+.amount .approx { display: block; font-size: .8em; font-weight: 500; color: var(--muted); text-align: center; }
 .badge { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 10px; background: var(--primary-mist); color: var(--on-primary-mist); font-weight: 800; font-size: 14px; flex: none; }
 .letter { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 14px; background: var(--primary-mist); color: var(--on-primary-mist); font-size: 22px; font-weight: 750; flex: none; }
 

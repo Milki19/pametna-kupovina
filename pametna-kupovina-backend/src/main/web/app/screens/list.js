@@ -12,7 +12,27 @@ import { purchaseBought, purchaseItems } from './purchase.js';
 
 function itemAmount(item) {
   const c = item.flexibleConstraints;
-  return c && c.targetQuantity ? amountLabel(c.targetQuantity * item.quantity, c.requiredBaseUnit) : `${decimal(item.quantity)} kom`;
+  if (!(c && c.targetQuantity)) return `${decimal(item.quantity)} kom`;
+  const amount = amountLabel(c.targetQuantity * item.quantity, c.requiredBaseUnit);
+  const weight = piecesWeight(item);
+  return weight ? `${amount} (${weight})` : amount;
+}
+
+// Na spisku napomena ide u drugi red, da naziv ne ostane u uskoj koloni.
+function itemAmountHtml(item) {
+  const weight = piecesWeight(item);
+  if (!weight) return esc(itemAmount(item));
+  const c = item.flexibleConstraints;
+  return `${esc(amountLabel(c.targetQuantity * item.quantity, c.requiredBaseUnit))} <span class="approx">(${esc(weight)})</span>`;
+}
+
+// „limun 3“ je 3 komada, a ne 3 kg: uz komade voća i povrća stoji i koliko
+// otprilike teže, kao napomena u planu „3 kom ≈ 0,3 kg“ (šesti test, V156).
+function piecesWeight(item) {
+  const c = item.flexibleConstraints;
+  if (!c || c.requiredBaseUnit !== 'piece' || !c.targetQuantity || !(item.pieceGrams > 0)) return null;
+  const kilograms = Math.max(0.01, Math.round(c.targetQuantity * item.quantity * item.pieceGrams / 10) / 100);
+  return `≈${decimal(kilograms, 2)} kg`;
 }
 
 // „mlevenog mesa“ i „mleveno meso“, „mleka 2,8%“ i „mleko 2 8“: iste reči u
@@ -400,7 +420,7 @@ function renderList() {
                   ${item.note ? `<div class="muted small">${esc(item.note)}</div>` : ''}
                   ${itemRule(item) ? `<div class="muted small">${esc(itemRule(item))}</div>` : ''}
                 </div>
-                <span class="amount">${esc(itemAmount(item))}</span>
+                <span class="amount">${itemAmountHtml(item)}</span>
               </div>
               <button class="icon-action" data-act="delete" data-id="${item.id}" aria-label="Obriši ${esc(item.name)}">${icon.trash}</button>
             </div>
