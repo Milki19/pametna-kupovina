@@ -245,6 +245,7 @@ public class StoreShoppingOfferRepository {
                                    pack.size AS package_size,
                                    pack.unit AS package_unit,
                                    need.packages,
+                                   asked.target_quantity * item.quantity AS target_amount,
                                    -- Everything the offer below ranks by but the price
                                    -- is the same in every shop of the chain: worked out
                                    -- here once, not again for every shop.
@@ -309,7 +310,7 @@ public class StoreShoppingOfferRepository {
                                      -- only where nothing fits better.
                                      CASE
                                          WHEN item.target_quantity IS NOT NULL
-                                          AND need.packages * pack.size > item.target_quantity * item.quantity
+                                          AND need.packages * pack.size > asked.target_quantity * item.quantity
                                               * CASE WHEN requested_intent.default_base_unit = 'piece'
                                                      THEN 2 ELSE 1.25 END
                                              THEN 1
@@ -455,14 +456,22 @@ public class StoreShoppingOfferRepository {
                                 WHERE typed_product.id = candidate_assignment.retailer_product_id
                                 OFFSET 0
                             ) AS product
+                            -- "limun 3": three pieces, or 3 × 100 g where weighed (V156).
+                            CROSS JOIN LATERAL app.asked_in_shop(
+                                item.target_quantity, item.required_base_unit,
+                                requested_intent.weighed_out, product.id,
+                                item.shopping_intent_id, item.flexible_category_normalized
+                            ) AS asked
                             CROSS JOIN LATERAL (
-                                SELECT CASE WHEN counted.by_piece
+                                SELECT CASE WHEN asked.by_the_piece
+                                            THEN COALESCE(product.quantity_value, 1)
+                                            WHEN counted.by_piece
                                             THEN product.package_count::NUMERIC
                                             WHEN counted.by_the_kilogram
                                             THEN 1000
                                             ELSE product.quantity_value
                                        END AS size,
-                                       CASE WHEN counted.by_piece
+                                       CASE WHEN asked.by_the_piece OR counted.by_piece
                                             THEN 'piece'
                                             WHEN counted.by_the_kilogram
                                             THEN 'g'
@@ -481,7 +490,8 @@ public class StoreShoppingOfferRepository {
                                     -- The name is read only for an item counted
                                     -- in pieces: it was read for every product
                                     -- of every item.
-                                    SELECT COALESCE(item.required_base_unit = 'piece', FALSE)
+                                    SELECT COALESCE(asked.required_base_unit = 'piece', FALSE)
+                                           AND NOT asked.by_the_piece
                                            AND COALESCE(
                                                product.base_unit IN ('g', 'ml')
                                                AND requested_intent.default_base_unit
@@ -492,8 +502,8 @@ public class StoreShoppingOfferRepository {
                                            -- "jabuke 2kg" of apples sold loose by
                                            -- the kilogram: each kilogram is a
                                            -- pack (V90).
-                                           CASE WHEN item.target_quantity IS NOT NULL
-                                                 AND item.required_base_unit = 'g'
+                                           CASE WHEN asked.target_quantity IS NOT NULL
+                                                 AND asked.required_base_unit = 'g'
                                                  AND product.quantity_value IS NULL
                                                 THEN app.sold_by_the_kilogram(product.id)
                                                 -- With no amount, a kilogram of
@@ -517,15 +527,15 @@ public class StoreShoppingOfferRepository {
                                     -- Loose goods are weighed out: "banane 1,5 kg"
                                     -- is 1,5 kg at the price of one (V125).
                                     WHEN pack.by_the_kilogram
-                                    THEN ROUND(item.target_quantity * item.quantity / NULLIF(pack.size, 0), 3)
-                                    ELSE CEIL(item.target_quantity * item.quantity / NULLIF(pack.size, 0))
+                                    THEN ROUND(asked.target_quantity * item.quantity / NULLIF(pack.size, 0), 3)
+                                    ELSE CEIL(asked.target_quantity * item.quantity / NULLIF(pack.size, 0))
                                 END AS packages
                             ) need
                             WHERE item.id IN (:itemIds)
                               AND item.matching_rule = 'FLEXIBLE_CATEGORY'
                               AND requested_intent.shopping_intent_id IS NOT NULL
                               AND (item.target_quantity IS NULL OR (
-                                  pack.size > 0 AND pack.unit = item.required_base_unit
+                                  pack.size > 0 AND pack.unit = asked.required_base_unit
                                   -- Eggs come in cartons of 6, 10, 15 or 30: twelve
                                   -- from a shop with only cartons of ten are two
                                   -- cartons, not no price. Up to twice what was
@@ -538,7 +548,7 @@ public class StoreShoppingOfferRepository {
                                   -- (test 1.11.).
                                   -- Nine boxes of discs for 4,5 kg of powder are
                                   -- weighed against what other shops ask (PlanRules).
-                                  AND need.packages * pack.size <= item.target_quantity * item.quantity * 2
+                                  AND need.packages * pack.size <= asked.target_quantity * item.quantity * 2
                               ))
                               -- Found by one of the intent's types, so it is of a kind
                               -- the item allows: asked again, that was 30,000 lookups.
@@ -573,8 +583,8 @@ public class StoreShoppingOfferRepository {
                                   )
                               )
                               AND (
-                                  item.required_base_unit IS NULL
-                                  OR pack.unit = item.required_base_unit
+                                  asked.required_base_unit IS NULL
+                                  OR pack.unit = asked.required_base_unit
                               )
                               AND (
                                   item.min_package_quantity IS NULL
@@ -594,6 +604,7 @@ public class StoreShoppingOfferRepository {
                                    pack.size AS package_size,
                                    pack.unit AS package_unit,
                                    need.packages,
+                                   item.target_quantity * item.quantity AS target_amount,
                                    -- Everything the offer below ranks by but the price
                                    -- is the same in every shop of the chain: worked out
                                    -- here once, not again for every shop.
@@ -1255,6 +1266,7 @@ public class StoreShoppingOfferRepository {
                                    candidate.package_size,
                                    candidate.package_unit,
                                    candidate.packages,
+                                   candidate.target_amount,
                                    candidate.kind_rank,
                                    candidate.uncommon_rank,
                                    candidate.wanted_rank,
@@ -1573,6 +1585,7 @@ public class StoreShoppingOfferRepository {
                                    candidate_row.package_size,
                                    candidate_row.package_unit,
                                    candidate_row.packages,
+                                   candidate_row.target_amount,
                                    store_price.price_date,
                                    store_price.regular_price,
                                    store_price.discounted_price,
@@ -1643,9 +1656,11 @@ public class StoreShoppingOfferRepository {
                                COALESCE(offer.usual_choice, TRUE) AS usual_choice,
                                COALESCE(offer.wanted_rank = 1, FALSE) AS wanted_missing,
                                offer.packages, offer.package_size, offer.package_unit,
-                               item.target_quantity * item.quantity AS target_amount,
+                               -- In the shop's unit: "limun 3" weighed is 300 g (V156).
+                               COALESCE(offer.target_amount, item.target_quantity * item.quantity) AS target_amount,
                                offer.packages * offer.package_size AS supplied_amount,
-                               offer.packages * offer.package_size - item.target_quantity * item.quantity AS extra_amount,
+                               offer.packages * offer.package_size
+                                   - COALESCE(offer.target_amount, item.target_quantity * item.quantity) AS extra_amount,
                                ROUND(offer.effective_price / NULLIF(offer.package_size, 0) *
                                    CASE WHEN offer.package_unit IN ('g','ml') THEN 1000 ELSE 1 END, 2) AS unit_price
                         FROM pricing_store

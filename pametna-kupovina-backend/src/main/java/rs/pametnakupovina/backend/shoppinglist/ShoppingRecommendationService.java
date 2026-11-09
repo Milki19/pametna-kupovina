@@ -1439,8 +1439,39 @@ public class ShoppingRecommendationService {
                         : PlanRules.overTheAmount(offer)
                         ? "Najbliže pakovanje: manjeg ovde nema, pa dobijaš više"
                                 + " nego što piše na spisku."
-                        : biggerPack
+                        : biggerPack != null ? biggerPack
+                        : piecesWeighedNote(item, offer)
         );
+    }
+
+    /**
+     * "3 kom ≈ 0,3 kg": pieces of fruit or vegetables bought where the shop
+     * weighs them, so the line says how many kilograms its price is for
+     * (V156). Null where the shop sells them by the piece.
+     */
+    static String piecesWeighedNote(ShoppingListItemResponse item, StoreItemOffer offer) {
+        FlexibleItemConstraints constraints = item.flexibleConstraints();
+        PurchaseQuantity bought = offer.purchaseQuantity();
+        if (constraints == null
+                || !"piece".equals(constraints.requiredBaseUnit())
+                || constraints.targetQuantity() == null
+                || bought == null
+                || !"g".equals(bought.baseUnit())
+                || bought.targetAmount() == null
+                || bought.targetAmount().signum() <= 0) {
+            return null;
+        }
+        BigDecimal pieces = constraints.targetQuantity()
+                .multiply(item.quantity() == null ? BigDecimal.ONE : item.quantity());
+        BigDecimal kilograms = bought.targetAmount()
+                .divide(BigDecimal.valueOf(1000), 2, RoundingMode.HALF_UP)
+                .stripTrailingZeros();
+        if (kilograms.signum() == 0) {
+            kilograms = new BigDecimal("0.01");
+        }
+        String weight = (kilograms.scale() <= 0 ? kilograms.setScale(0) : kilograms)
+                .toPlainString().replace('.', ',');
+        return amountText(pieces, "piece") + " ≈ " + weight + " kg.";
     }
 
     /**

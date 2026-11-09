@@ -38,26 +38,17 @@ public class DatabasePieceMassCatalog implements PieceMassCatalog {
                 && (normalizedWord == null || normalizedWord.isBlank())) {
             return Optional.empty();
         }
-        return jdbcClient.sql("""
-                        SELECT grams
-                        FROM app.piece_mass
-                        WHERE (market_id = :marketId OR market_id IS NULL)
-                          AND (product_type_id = :typeId
-                               OR shopping_intent_id = :intentId
-                               OR (normalized_word = :word AND language = :language))
-                        ORDER BY CASE WHEN product_type_id IS NOT NULL THEN 0
-                                      WHEN shopping_intent_id IS NOT NULL THEN 1
-                                      ELSE 2 END,
-                                 (market_id IS NULL),
-                                 id
-                        LIMIT 1
-                        """)
+        // The rule lives in app.piece_grams (V156), which the plan's query
+        // reads too, so a piece weighs the same here and there.
+        return jdbcClient.sql("SELECT app.piece_grams(CAST(:marketId AS INTEGER), CAST(:typeId AS BIGINT), CAST(:intentId AS BIGINT), CAST(:word AS TEXT))")
                 .param("marketId", market.id())
                 .param("typeId", productTypeId)
                 .param("intentId", shoppingIntentId)
                 .param("word", normalizedWord)
-                .param("language", market.defaultLanguage())
                 .query(BigDecimal.class)
-                .optional();
+                .list()
+                .stream()
+                .filter(java.util.Objects::nonNull)
+                .findFirst();
     }
 }

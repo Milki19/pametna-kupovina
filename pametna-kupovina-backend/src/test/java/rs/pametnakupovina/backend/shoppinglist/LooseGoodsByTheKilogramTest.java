@@ -228,11 +228,14 @@ class LooseGoodsByTheKilogramTest {
             assertThat(apples.lineTotal()).isEqualByComparingTo("119.99");
         });
         // "paradajz 1 kom" is loose tomatoes at 189,99 a kilogram, not a
-        // 500 g mix at 399,98 (test of 17.10.2026).
+        // 500 g mix at 399,98 (test of 17.10.2026), and one tomato is about
+        // 150 g weighed out, not a kilogram (V156).
         assertThat(offers.get(5)).satisfies(tomatoes -> {
             assertThat(tomatoes.productName()).isEqualTo(LOOSE_TOMATOES);
             assertThat(tomatoes.purchaseQuantity().unitPrice()).isEqualByComparingTo("189.99");
-            assertThat(tomatoes.lineTotal()).isEqualByComparingTo("189.99");
+            assertThat(tomatoes.purchaseQuantity().packages()).isEqualByComparingTo("0.15");
+            assertThat(tomatoes.purchaseQuantity().targetAmount()).isEqualByComparingTo("150");
+            assertThat(tomatoes.lineTotal()).isEqualByComparingTo("28.50");
         });
         assertThat(offers.get(6).productName()).isEqualTo(LOOSE_TOMATOES);
     }
