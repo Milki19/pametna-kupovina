@@ -189,8 +189,8 @@ function renderRecommendation() {
         <button class="scenario" aria-pressed="${x.type === s.type}" data-act="scenario" data-type="${x.type}" ${x.available ? '' : 'disabled'}>
           <span class="small muted">${scenarioShort[x.type]}</span>
           <span class="price">${x.available && x.totalCost != null ? whole(x.totalCost) : 'nema'}</span>
-          <span class="small muted">ukupno</span>
-          ${x.available ? `<span class="small muted">korpa ${whole(x.basketCost)}</span>
+          <span class="small muted">${onFoot ? 'korpa' : 'ukupno'}</span>
+          ${x.available ? `<span class="small muted">${onFoot ? `~${duration(x.routeDurationSeconds)} hoda` : `korpa ${whole(x.basketCost)}`}</span>
             <span class="small"><b>${x.coveredItems} od ${x.items.length}</b> ${plural(x.items.length, 'stavke', 'stavke', 'stavki')}</span>` : ''}
         </button>`).join('')}
       </div>
@@ -200,7 +200,7 @@ function renderRecommendation() {
         <div class="title">${scenarioTitle[s.type]}</div>
         ${s.available ? `
           <div class="big">${s.totalCost != null ? money(s.totalCost) : 'nema cene'}</div>
-          ${s.totalCost != null ? `<p class="muted small">${onFoot ? 'samo korpa: peške ne računamo put ni vreme u dinarima'
+          ${s.totalCost != null ? `<p class="muted small">${onFoot ? `korpa · ~${duration(s.routeDurationSeconds)} hoda; vreme hoda je uračunato u izbor po tvojoj ceni sata`
             : `korpa ${money(s.basketCost)} + put i vreme ${money(s.totalCost - s.basketCost)}`}</p>` : ''}
           <div class="stats">
             <div><span class="small muted">Prodavnice</span><b>${s.stopCount}</b></div>
@@ -247,9 +247,9 @@ function renderRecommendation() {
         ${[
           s.dataAsOf ? `Cene su iz cenovnika od ${date(s.dataAsOf)}; cenovnik ne govori da li je artikal na polici.` : 'Za ovaj scenario nema važećih cena.',
           s.disclaimer || result.disclaimer,
-          s.available && onFoot ? `Korpa ${money(s.basketCost)}.` : null,
+          s.available && onFoot ? `Korpa ${money(s.basketCost)}, oko ${duration(s.routeDurationSeconds)} hoda.` : null,
           s.available && !onFoot ? `Korpa ${money(s.basketCost)}, put ${money(s.travelCost)}, vreme ${money(s.timeCost)}, stajanja ${money(s.stopCost)}.` : null,
-          onFoot ? 'Peške ne računamo put ni vreme u dinarima. Kad je razlika u korpi mala, biramo bližu radnju i manje radnji.'
+          onFoot ? `Peške kilometar ne košta. Vreme hoda računamo ${money(a.valuePerHour)} po satu i ${money(a.costPerStop)} po stajanju, pa plan biramo po korpi i tom vremenu. Prikazujemo samo korpu i minute hoda.`
             : `Put računamo ${money(a.costPerKm)} po kilometru, vreme ${money(a.valuePerHour)} po satu i ${money(a.costPerStop)} po stajanju.`,
           s.approximateRoute ? 'Udaljenosti su procena: vazdušna linija uvećana za ulice, bez saobraćaja.' : null,
           `Razmotreno ${counted(result.candidateStoreCount, 'prodavnica', 'prodavnice', 'prodavnica')} u krugu od ${decimal(a.candidateRadiusMeters / 1000, 1)} km.`

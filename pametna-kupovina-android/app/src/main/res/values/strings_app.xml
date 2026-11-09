@@ -74,7 +74,7 @@
 
     <!-- Time and stops -->
     <string name="trip_title">Vreme i prevoz</string>
-    <string name="trip_intro">Plan sabira korpu, kilometre, vreme u putu i stajanja. Jeftinija korpa dalje od tebe pobeđuje samo ako ušteda pokrije put.</string>
+    <string name="trip_intro">Plan sabira korpu, kilometre, vreme u putu i stajanja. Jeftinija korpa dalje od tebe pobeđuje samo ako ušteda pokrije put. Peške kilometar ne košta, a sat hoda se računa po ovoj ceni; na planu peške vidiš korpu i minute hoda.</string>
     <string name="trip_intro_title">Šta ti vredi više: vreme ili ušteda</string>
     <string name="trip_hour_hint">Koliko ti vredi sat vožnje ili hoda do radnji i nazad.</string>
     <string name="trip_km_label">Kilometar kolima</string>

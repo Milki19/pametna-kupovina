@@ -859,7 +859,8 @@ private fun ScenarioDetails(scenario: OptimizationScenarioDto, walking: Boolean 
     ) {
         // Put i vreme is everything above the basket, so the two parts
         // always add up to the total shown above them. On foot the plan
-        // costs the basket alone (utisak 31.10.).
+        // shows the basket and the minutes; the hour still counts in the
+        // choice at the shopper's price (šesti test 6.11.).
         scenario.totalCost?.let {
             Text(
                 if (walking) {
@@ -1291,7 +1292,11 @@ private fun CalculationDetails(
                         scenario.disclaimer.ifBlank { result.disclaimer },
                         scenario.takeIf { it.available }?.let {
                             if (assumptions.walking) {
-                                stringResource(R.string.rec_calc_basket_only, money(it.basketCost))
+                                stringResource(
+                                    R.string.rec_calc_basket_only,
+                                    money(it.basketCost),
+                                    duration(it.routeDurationSeconds)
+                                )
                             } else {
                                 stringResource(
                                     R.string.rec_calc_costs,
@@ -1303,7 +1308,11 @@ private fun CalculationDetails(
                             }
                         },
                         if (assumptions.walking) {
-                            stringResource(R.string.rec_calc_walking)
+                            stringResource(
+                                R.string.rec_calc_walking,
+                                money(assumptions.valuePerHour),
+                                money(assumptions.costPerStop)
+                            )
                         } else {
                             stringResource(
                                 R.string.rec_calc_rates,

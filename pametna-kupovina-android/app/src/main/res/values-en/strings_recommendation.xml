@@ -47,7 +47,7 @@
     <string name="rec_no_price">no price</string>
     <string name="rec_savings">You save %1$s %2$s</string>
     <string name="rec_basket_plus_travel">basket %1$s + travel and time %2$s</string>
-    <string name="rec_basket_only_walking">basket only: on foot we do not count travel or time in money</string>
+    <string name="rec_basket_only_walking">basket and minutes of walking; the walking time counts in the choice at your price of an hour</string>
     <!-- %1$s broj prodavnica, %2$s razdaljina, %3$s vreme -->
     <string name="rec_scenario_route">%1$s · %2$s · %3$s</string>
     <plurals name="rec_store_count">
@@ -92,10 +92,10 @@
     <string name="rec_calc_data_as_of">Prices come from the price list of %1$s; a price list doesn\'t say whether the item is on the shelf.</string>
     <string name="rec_calc_no_prices">There are no valid prices for this scenario.</string>
     <string name="rec_calc_costs">Basket %1$s, travel %2$s, time %3$s, stops %4$s.</string>
-    <string name="rec_calc_basket_only">Basket %1$s.</string>
+    <string name="rec_calc_basket_only">Basket %1$s, about %2$s of walking.</string>
     <string name="rec_calc_change_trip">Change the value of time and travel</string>
     <string name="rec_calc_rates">We count travel at %1$s per kilometer, time at %2$s per hour and %3$s per stop.</string>
-    <string name="rec_calc_walking">On foot we do not count travel or time in money. When the baskets differ little, we pick the closer shop and fewer shops.</string>
+    <string name="rec_calc_walking">On foot a kilometre costs nothing. We count walking time at %1$s per hour and %2$s per stop, and pick the plan by the basket and that time. We show only the basket and the minutes of walking.</string>
     <string name="rec_item_price_from">Price from %1$s</string>
     <string name="rec_calc_approximate">Distances are estimates: the straight line plus an allowance for streets, without traffic.</string>
     <plurals name="rec_calc_candidates">

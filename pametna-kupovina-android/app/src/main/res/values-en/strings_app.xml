@@ -73,7 +73,7 @@
 
     <!-- Time and stops -->
     <string name="trip_title">Time and travel</string>
-    <string name="trip_intro">The plan adds up the basket, the kilometres, time on the road and stops. A cheaper basket farther away wins only if the saving covers the trip.</string>
+    <string name="trip_intro">The plan adds up the basket, the kilometres, time on the road and stops. A cheaper basket farther away wins only if the saving covers the trip. On foot a kilometre costs nothing, and an hour of walking counts at this price; a plan on foot shows the basket and the minutes of walking.</string>
     <string name="trip_intro_title">What matters more: time or savings</string>
     <string name="trip_hour_hint">What an hour of driving or walking to the shops and back is worth to you.</string>
     <string name="trip_km_label">A kilometre by car</string>

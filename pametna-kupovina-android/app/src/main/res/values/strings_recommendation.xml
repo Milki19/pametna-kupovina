@@ -48,7 +48,7 @@
     <string name="rec_no_price">nema cene</string>
     <string name="rec_savings">Ušteda %1$s %2$s</string>
     <string name="rec_basket_plus_travel">korpa %1$s + put i vreme %2$s</string>
-    <string name="rec_basket_only_walking">samo korpa: peške ne računamo put ni vreme u dinarima</string>
+    <string name="rec_basket_only_walking">korpa i minuti hoda; vreme hoda je uračunato u izbor po tvojoj ceni sata</string>
     <!-- %1$s broj prodavnica, %2$s razdaljina, %3$s vreme -->
     <string name="rec_scenario_route">%1$s · %2$s · %3$s</string>
     <plurals name="rec_store_count">
@@ -95,10 +95,10 @@
     <string name="rec_calc_data_as_of">Cene su iz cenovnika od %1$s; cenovnik ne govori da li je artikal na polici.</string>
     <string name="rec_calc_no_prices">Za ovaj scenario nema važećih cena.</string>
     <string name="rec_calc_costs">Korpa %1$s, put %2$s, vreme %3$s, stajanja %4$s.</string>
-    <string name="rec_calc_basket_only">Korpa %1$s.</string>
+    <string name="rec_calc_basket_only">Korpa %1$s, oko %2$s hoda.</string>
     <string name="rec_calc_change_trip">Promeni cenu vremena i prevoza</string>
     <string name="rec_calc_rates">Put računamo %1$s po kilometru, vreme %2$s po satu i %3$s po stajanju.</string>
-    <string name="rec_calc_walking">Peške ne računamo put ni vreme u dinarima. Kad je razlika u korpi mala, biramo bližu radnju i manje radnji.</string>
+    <string name="rec_calc_walking">Peške kilometar ne košta. Vreme hoda računamo %1$s po satu i %2$s po stajanju, pa plan biramo po korpi i tom vremenu. Prikazujemo samo korpu i minute hoda.</string>
     <string name="rec_item_price_from">Cena od %1$s</string>
     <string name="rec_calc_approximate">Udaljenosti su procena: vazdušna linija uvećana za ulice, bez saobraćaja.</string>
     <plurals name="rec_calc_candidates">

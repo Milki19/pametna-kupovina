@@ -95,7 +95,7 @@ function renderTripCosts(message = null) {
     html: `
       <div class="card soft">
         <div class="title">Šta ti vredi više: vreme ili ušteda</div>
-        <p class="muted small">Plan sabira korpu, gorivo, vreme u putu i stajanja. Jeftinija korpa dalje od tebe pobeđuje samo ako ušteda pokrije put.</p>
+        <p class="muted small">Plan sabira korpu, gorivo, vreme u putu i stajanja. Jeftinija korpa dalje od tebe pobeđuje samo ako ušteda pokrije put. Peške kilometar ne košta, a sat hoda se računa po ovoj ceni; na planu peške vidiš korpu i minute hoda.</p>
       </div>
       <form class="card" data-form="trip-costs">
         <label class="label" for="trip-hour">Sat u putu (${esc(t.currency)})</label>
