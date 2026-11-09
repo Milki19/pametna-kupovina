@@ -191,6 +191,24 @@ class ShoppingListScreenTest {
     }
 
     @Test
+    fun `spoji sve nudi samo grupe koje se mogu sabrati, i to kad ih je bar dve`() {
+        val one = duplicateGroups(listOf(flexible(1, "jogurt"), flexible(2, "jogurt")))
+        assertTrue(mergeAllGroups(one).isEmpty())
+        val groups = duplicateGroups(
+            listOf(
+                flexible(1, "jogurt"), flexible(2, "Jogurt"),
+                flexible(3, "mleko", target = 1000.0, unit = "ml"), flexible(4, "mleko", target = 500.0, unit = "ml"),
+                flexible(5, "sir", target = 400.0, unit = "g"), flexible(6, "sir", target = 2.0, unit = "piece"),
+                flexible(7, "hleb")
+            )
+        )
+        assertEquals(3, groups.size)
+        val all = mergeAllGroups(groups)
+        assertEquals(listOf("jogurt", "mleko"), all.map { it.items.first().name })
+        assertEquals(1500.0, all[1].merged!!.targetQuantity!!, 0.0)
+    }
+
+    @Test
     fun `isti tacan proizvod dva puta sabira pakovanja`() {
         val merged = mergedItem(listOf(existingItem, existingItem.copy(localId = 2, quantity = 2.0)))!!
         assertEquals(3.0, merged.quantity, 0.0)

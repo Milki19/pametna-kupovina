@@ -23,6 +23,7 @@ import rs.pametnakupovina.app.data.preferences.TravelModeStore
 import rs.pametnakupovina.app.data.ItemSyncValidationException
 import kotlinx.coroutines.CancellationException
 import rs.pametnakupovina.app.data.local.DraftItemEntity
+import rs.pametnakupovina.app.ui.screens.DuplicateGroup
 import rs.pametnakupovina.app.data.network.ProductCandidateDto
 import rs.pametnakupovina.app.data.network.RecommendationItemDto
 import rs.pametnakupovina.app.data.network.ShoppingItemMatchResultDto
@@ -310,6 +311,21 @@ class ShoppingListViewModel @Inject constructor(
             repository.updateItem(items.first(), merged.asInput())
             items.drop(1).forEach { repository.deleteItem(it) }
             _uiState.update { it.copy(notice = uiText(R.string.list_notice_merged, merged.name)) }
+        }
+    }
+
+    /** „Spoji sve“: svaka grupa kao jedno „Spoji“, u jednoj izmeni spiska. */
+    fun mergeAllDuplicates(groups: List<DuplicateGroup>) {
+        val mergeable = groups.filter { it.merged != null }
+        if (mergeable.isEmpty()) return
+        mutate {
+            mergeable.forEach { group ->
+                repository.updateItem(group.items.first(), group.merged!!.asInput())
+                group.items.drop(1).forEach { repository.deleteItem(it) }
+            }
+            _uiState.update {
+                it.copy(notice = uiPlural(R.plurals.list_notice_merged_all, mergeable.size, mergeable.size))
+            }
         }
     }
 

@@ -259,7 +259,21 @@ fun ShoppingListScreen(
                     item(key = "empty") { EmptyList(Modifier.enter(entrance, 1)) }
                 }
                 // Ista stavka dva puta: upozorenje, a kad se količine mogu sabrati i dugme koje ih spaja.
-                duplicateGroups(state.items).forEach { group ->
+                val duplicates = duplicateGroups(state.items)
+                // Veliki spisak sa više duplikata: jedno dugme za sve (šesti test, stavka 15).
+                val mergeable = mergeAllGroups(duplicates)
+                if (mergeable.isNotEmpty()) {
+                    item(key = "duplicates-all") {
+                        NoticeBanner(
+                            text = pluralStringResource(R.plurals.list_duplicate_merge_all_hint, mergeable.size, mergeable.size),
+                            tone = StatusTone.WARNING,
+                            actionLabel = stringResource(R.string.list_duplicate_merge_all, mergeable.size),
+                            onAction = { viewModel.mergeAllDuplicates(mergeable) },
+                            modifier = Modifier.padding(bottom = AppSpacing.lg)
+                        )
+                    }
+                }
+                duplicates.forEach { group ->
                     item(key = "duplicates-${group.items.first().localId}") {
                         NoticeBanner(
                             text = stringResource(
@@ -745,6 +759,10 @@ internal fun duplicateGroups(items: List<DraftItemEntity>): List<DuplicateGroup>
     items.groupBy { sameName(it.name) }.values
         .filter { group -> group.size > 1 && group.none { it.syncState == SyncState.PENDING_PASTE.name } }
         .map { DuplicateGroup(it, mergedItem(it)) }
+
+/** Grupe za „Spoji sve“: samo one koje se mogu sabrati, i to tek kad ih je bar dve. */
+internal fun mergeAllGroups(groups: List<DuplicateGroup>): List<DuplicateGroup> =
+    groups.filter { it.merged != null }.takeIf { it.size > 1 }.orEmpty()
 
 /**
  * Prva stavka ostaje (mesto, pravilo, proizvod) i dobija zbir količina.

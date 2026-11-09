@@ -200,18 +200,15 @@ function duplicateNotice(items) {
       : mergeable.length ? ' Gde se količine mogu sabrati, spoji ih; ostalo obriši ako je greška.'
         : ' Razlikuju se po proizvodu, brendu ili jedinici, pa ih ne spajam. Ako je to greška, obriši višak.');
   if (!mergeable.length) return notice(text, 'warn');
-  return `<div class="card">${notice(text, 'warn')}<div class="btn-row">${mergeable.map(group =>
+  // Veliki spisak sa više duplikata: jedno dugme za sve, pre pojedinačnih (šesti test, stavka 15).
+  const all = mergeable.length > 1
+    ? `<button class="btn primary" data-act="merge-all">Spoji sve (${mergeable.length})</button>` : '';
+  return `<div class="card">${notice(text, 'warn')}<div class="btn-row wrap">${all}${mergeable.map(group =>
     `<button class="btn tonal" data-act="merge" data-id="${group[0].id}">Spoji „${esc(group[0].name)}“</button>`).join('')}</div></div>`;
 }
 
-/** Prva stavka dobija zbir, ostale se brišu; spisak se zatim čita sa servera. */
-async function mergeDuplicates(id) {
-  await flushDelete();
-  const listId = listRef(listState.list);
-  const group = duplicateGroups(listState.list.items).find(g => g[0].id === id);
-  const plan = group && mergePlan(group);
-  if (!plan) return renderList();
-  const { keep, quantity, constraints } = plan;
+/** Prva stavka grupe dobija zbir, ostale se brišu. */
+async function mergeGroup(listId, { keep, quantity, constraints }, group) {
   await api('PUT', `shopping-lists/${listId}/items/${keep.id}`, {
     ...itemRequest(keep), quantity, flexibleConstraints: constraints
   });
@@ -219,11 +216,45 @@ async function mergeDuplicates(id) {
     await api('DELETE', `shopping-lists/${listId}/items/${extra.id}`)
       .catch(error => { if (error.status !== 404) throw error; });
   }
+}
+
+/** Spaja jednu grupu; spisak se zatim čita sa servera. */
+async function mergeDuplicates(id) {
+  await flushDelete();
+  const listId = listRef(listState.list);
+  const group = duplicateGroups(listState.list.items).find(g => g[0].id === id);
+  const plan = group && mergePlan(group);
+  if (!plan) return renderList();
+  await mergeGroup(listId, plan, group);
   listState.editing = null;
   listState.list = await api('GET', `shopping-lists/${listId}`);
   renderList();
-  const merged = listState.list.items.find(i => i.id === keep.id);
+  const merged = listState.list.items.find(i => i.id === plan.keep.id);
   toast(merged ? `Spojeno: ${merged.name}, ${itemAmount(merged)}.` : 'Spojeno.');
+}
+
+/**
+ * „Spoji sve“: svaka grupa koja se može sabrati, istim zahtevima kao jedno
+ * „Spoji“. Grupe koje se ne mogu sabrati ostaju sa upozorenjem. Kad jedna
+ * izmena ne uspe, spisak se ipak čita sa servera, pa se vidi šta je spojeno.
+ */
+async function mergeAllDuplicates() {
+  await flushDelete();
+  const listId = listRef(listState.list);
+  const groups = duplicateGroups(listState.list.items)
+    .map(group => ({ group, plan: mergePlan(group) })).filter(g => g.plan);
+  let done = 0;
+  try {
+    for (const { group, plan } of groups) {
+      await mergeGroup(listId, plan, group);
+      done++;
+    }
+  } finally {
+    listState.editing = null;
+    listState.list = await api('GET', `shopping-lists/${listId}`);
+    renderList();
+  }
+  toast(`Spojeno: ${counted(done, 'stavka', 'stavke', 'stavki')}.`);
 }
 
 /** Stavka kakva jeste, u obliku koji server prima za dodavanje i izmenu. */
@@ -427,4 +458,4 @@ async function deleteItem(id) {
   });
 }
 
-export { clearList, deleteItem, flushDelete, listState, MAX_QUANTITY, mergeDuplicates, parseNumber, removeBought, renderList, saveItem, showList };
+export { clearList, deleteItem, flushDelete, listState, MAX_QUANTITY, mergeAllDuplicates, mergeDuplicates, parseNumber, removeBought, renderList, saveItem, showList };
