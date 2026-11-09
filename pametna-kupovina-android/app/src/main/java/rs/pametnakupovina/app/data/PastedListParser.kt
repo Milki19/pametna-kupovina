@@ -38,6 +38,13 @@ object PastedListParser {
         "^(.+?)\\s+[x×]\\s*($DECIMAL_NUMBER)$",
         RegexOption.IGNORE_CASE
     )
+
+    // "grcki jogurt 3x", "jogurt 3 puta": broj pakovanja posle naziva, kao
+    // rečnik jedinica na serveru (V157).
+    private val trailingTimes = Regex(
+        "^(.+?)\\s+($DECIMAL_NUMBER)\\s*(?:[x×]|puta)$",
+        RegexOption.IGNORE_CASE
+    )
     private val bullet = Regex("^[\\s*•·▪◦-]+")
 
     // Isto kao ShoppingListTextParser na serveru: „Kupi:" je naslov poruke,
@@ -142,7 +149,7 @@ object PastedListParser {
         val (withoutNote, note) = withNote(approximately.replace(written, ""))
         val clean = countFromBrackets(withoutNote)
         val leading = leadingQuantity.matchEntire(clean)
-        val trailing = trailingQuantity.matchEntire(clean)
+        val trailing = trailingQuantity.matchEntire(clean) ?: trailingTimes.matchEntire(clean)
 
         val line = when {
             leading != null -> ParsedDraftLine(

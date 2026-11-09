@@ -1,15 +1,34 @@
 package rs.pametnakupovina.backend.shoppinglist;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import rs.pametnakupovina.backend.market.Market;
+import rs.pametnakupovina.backend.market.MarketRepository;
+import rs.pametnakupovina.backend.matching.BuiltInUnitWords;
+import rs.pametnakupovina.backend.matching.SerbianTextTransliterator;
+import rs.pametnakupovina.backend.matching.UnitVocabulary;
+import rs.pametnakupovina.backend.matching.UnitWord;
+import rs.pametnakupovina.backend.product.CatalogMemo;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
 import java.util.regex.MatchResult;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
+/**
+ * Reads a pasted list. The unit words ("kg", "kom", "kesica", "rolni",
+ * "3x") come from the market's dictionary, app.unit_word (V157), not from
+ * expressions written here, so another market or language only adds rows.
+ */
 @Component
 public class ShoppingListTextParser {
 
@@ -19,47 +38,9 @@ public class ShoppingListTextParser {
     private static final String QUANTITY =
             "(?<quantity>[0-9]+(?:[.,][0-9]+)?)";
 
-    private static final String PIECE_UNIT =
-            "(?:kom(?:ad(?:a|i)?)?\\.?|ком(?:ад(?:а|и)?)?\\.?|pcs)";
-
     /** "• mleko", "- hleb", "1. jaja": list marks copied from notes and chats. */
     private static final Pattern LIST_MARK = Pattern.compile(
             "^(?:[*•·▪◦‣–—-]+\\s*|[0-9]{1,2}[.)]\\s+(?=\\p{L}))"
-    );
-
-    /** How many packages: "2x mleko", "jaja 2 kom", "hleb x3". */
-    private static final List<Pattern> COUNT_PATTERNS = List.of(
-            Pattern.compile(
-                    "^" + QUANTITY + "\\s*[x×]\\s*(?<name>.+)$", FLAGS),
-            Pattern.compile(
-                    "^" + QUANTITY + "\\s*" + PIECE_UNIT
-                            + "\\s+(?<name>.+)$", FLAGS),
-            Pattern.compile(
-                    "^(?<name>.+?)\\s+[x×]\\s*" + QUANTITY + "$", FLAGS),
-            Pattern.compile(
-                    "^(?<name>.+?)\\s+(?:[-–—]\\s*)?" + QUANTITY
-                            + "\\s+" + PIECE_UNIT + "$", FLAGS)
-    );
-
-    /**
-     * Weight and volume written next to the name state how much is needed in
-     * total, not how many packages: "ćevapi 3kg" is three kilograms however
-     * the shop packs them. Spelled-out forms appear in real lists too
-     * ("sitan sir 400grama").
-     */
-    private static final String AMOUNT_UNIT =
-            "(?<unit>kg|kilogram(?:a)?|kil[aeou]|g|gr|grama|gram"
-                    + "|l|lit(?:ar|ra|re|ara)?|ml|mililitar(?:a)?"
-                    + "|кг|килограм(?:а)?|кил[аеоу]|г|гр|грама|грам"
-                    + "|л|лит(?:ар|ра|ре|ара)?|мл|милилитар(?:а)?)";
-
-    private static final List<Pattern> AMOUNT_PATTERNS = List.of(
-            Pattern.compile(
-                    "^(?<name>.+?)\\s*(?:[-–—]\\s*)?" + QUANTITY
-                            + "\\s*" + AMOUNT_UNIT + "$", FLAGS),
-            Pattern.compile(
-                    "^" + QUANTITY + "\\s*" + AMOUNT_UNIT
-                            + "\\s+(?<name>.+)$", FLAGS)
     );
 
     /** "pola kile sira": half of a kilogram or a litre, said in words. */
@@ -116,27 +97,9 @@ public class ShoppingListTextParser {
             FLAGS
     );
 
-    /** "voda 6x1,5l", "pivo 6x0,5": a pack of six bottles of a size. */
-    private static final Pattern MULTIPACK_AFTER = Pattern.compile(
-            "^(?<name>.*\\p{L}.*?)\\s+(?<count>[0-9]{1,2})\\s*[x×]\\s*(?<size>[0-9]+(?:[.,][0-9]+)?\\s*"
-                    + AMOUNT_UNIT.replace("(?<unit>", "(?:") + "?)$", FLAGS
-    );
-
-    /** "6x1,5l vode": the same pack written first. */
-    private static final Pattern MULTIPACK_BEFORE = Pattern.compile(
-            "^(?<count>[0-9]{1,2})\\s*[x×]\\s*(?<size>[0-9]+(?:[.,][0-9]+)?\\s*"
-                    + AMOUNT_UNIT.replace("(?<unit>", "(?:") + ")\\s+(?<name>\\p{L}.*)$", FLAGS
-    );
-
     /** "piletina oko 1kg", "cca 2 kom": an approximate amount is still the amount. */
     private static final Pattern APPROXIMATELY = Pattern.compile(
             "(?<![\\p{L}0-9])(?:oko|otprilike|cca\\.?|около|отприлике|~)\\s*(?=[0-9])", FLAGS
-    );
-
-    /** "jogurte (3)", "sir (500g)": the amount written in brackets. */
-    private static final Pattern AMOUNT_IN_BRACKETS = Pattern.compile(
-            "\\s*\\(\\s*(?<number>[0-9]+(?:[.,][0-9]+)?)\\s*(?:(?<piece>" + PIECE_UNIT + ")|(?<measure>"
-                    + AMOUNT_UNIT.replace("(?<unit>", "(?:") + "))?\\s*\\)", FLAGS
     );
 
     /**
@@ -185,11 +148,189 @@ public class ShoppingListTextParser {
     /** "paradajz i krastavac": two things to buy on one line. */
     private static final Pattern AND = Pattern.compile("\\s+(?:i|и)\\s+", FLAGS);
 
+    private static final Pattern LETTERS = Pattern.compile("\\p{L}+");
+
+    private final Supplier<List<UnitWord>> unitWords;
+    private volatile Units units;
+
+    /** The Serbian words of V157, for a parser made without the database. */
+    public ShoppingListTextParser() {
+        this(() -> BuiltInUnitWords.SERBIAN);
+    }
+
+    /** The default market's words, remembered until the catalogue changes. */
+    @Autowired
+    public ShoppingListTextParser(UnitVocabulary vocabulary, MarketRepository markets, CatalogMemo memo) {
+        this(() -> {
+            Market market = memo.remember(List.of("defaultMarket"), markets::defaultMarket);
+            List<UnitWord> words = vocabulary.words(market);
+            // A database the migration has not reached yet still reads "2 kg".
+            return words.isEmpty() ? BuiltInUnitWords.SERBIAN : words;
+        });
+    }
+
+    ShoppingListTextParser(Supplier<List<UnitWord>> unitWords) {
+        this.unitWords = unitWords;
+    }
+
+    private Units units() {
+        List<UnitWord> words = unitWords.get();
+        Units current = units;
+        if (current == null || current.words != words) {
+            current = new Units(words);
+            units = current;
+        }
+        return current;
+    }
+
+    /**
+     * The expressions built from one dictionary. A unit next to a number is
+     * first written as the dictionary has it ("Flaše" → "flase", "кг" →
+     * "kg"), so the expressions only need the dictionary's own spelling.
+     */
+    private static final class Units {
+
+        private final List<UnitWord> words;
+        private final Map<String, UnitWord> byWord = new HashMap<>();
+
+        /** How many packages: "2x mleko", "jaja 2 kom", "hleb x3", "grcki jogurt 3x". */
+        private final List<Pattern> countPatterns;
+        /** The same, said with a word for a pack: "5 kesica kvasca", "4 kutije jaja". */
+        private final List<Pattern> packPatterns;
+        /** "toalet papir 10 rolni": one pack, ten rolls in it. */
+        private final List<Pattern> insidePatterns;
+        /**
+         * Weight and volume written next to the name state how much is needed
+         * in total, not how many packages: "ćevapi 3kg" is three kilograms
+         * however the shop packs them. Spelled-out forms appear in real lists
+         * too ("sitan sir 400grama").
+         */
+        private final List<Pattern> amountPatterns;
+        /** "voda 6x1,5l", "pivo 6x0,5": a pack of six bottles of a size. */
+        private final Pattern multipackAfter;
+        /** "6x1,5l vode": the same pack written first. */
+        private final Pattern multipackBefore;
+        /** "jogurte (3)", "sir (500g)", "kvasac (2 kesice)": the amount written in brackets. */
+        private final Pattern amountInBrackets;
+
+        Units(List<UnitWord> words) {
+            this.words = words;
+            for (UnitWord word : words) {
+                byWord.putIfAbsent(word.word(), word);
+            }
+            String measure = alternation(word -> word.role() == UnitWord.Role.MEASURE);
+            String pieces = alternation(word -> word.role() == UnitWord.Role.COUNT && !word.insidePack());
+            String packs = alternation(word -> word.role() == UnitWord.Role.PACK);
+            String inside = alternation(word -> word.role() == UnitWord.Role.COUNT && word.insidePack());
+            String times = alternation(word -> word.role() == UnitWord.Role.MULTIPLIER);
+            String counted = "(?:" + pieces + ")(?!\\p{L})\\.?";
+            String packed = "(?:" + packs + ")(?!\\p{L})\\.?";
+            String countedOrPacked = "(?:" + pieces + "|" + packs + ")(?!\\p{L})\\.?";
+            String multiplied = "(?:" + times + ")(?!\\p{L})";
+            String amount = "(?<unit>" + measure + ")(?!\\p{L})\\.?";
+            String size = "(?:" + measure + ")";
+
+            countPatterns = List.of(
+                    Pattern.compile("^" + QUANTITY + "\\s*" + multiplied + "\\s*(?<name>.+)$", FLAGS),
+                    Pattern.compile("^" + QUANTITY + "\\s*" + counted + "\\s+(?<name>.+)$", FLAGS),
+                    Pattern.compile("^(?<name>.+?)\\s+" + multiplied + "\\s*" + QUANTITY + "$", FLAGS),
+                    Pattern.compile("^(?<name>.+?)\\s+(?:[-–—]\\s*)?" + QUANTITY + "\\s*" + counted + "$", FLAGS),
+                    Pattern.compile("^(?<name>.+?)\\s+(?:[-–—]\\s*)?" + QUANTITY + "\\s*" + multiplied + "$", FLAGS)
+            );
+            packPatterns = packs.isEmpty() ? List.of() : List.of(
+                    Pattern.compile("^" + QUANTITY + "\\s*" + packed + "\\s+(?<name>.+)$", FLAGS),
+                    Pattern.compile("^(?<name>.+?)\\s+(?:[-–—]\\s*)?" + QUANTITY + "\\s*" + packed + "$", FLAGS)
+            );
+            insidePatterns = inside.isEmpty() ? List.of() : List.of(
+                    Pattern.compile("^(?<name>.+?)\\s+(?:[-–—]\\s*)?" + QUANTITY
+                            + "\\s*(?:" + inside + ")(?!\\p{L})$", FLAGS),
+                    Pattern.compile("^" + QUANTITY + "\\s*(?:" + inside + ")(?!\\p{L})\\s+(?<name>.+)$", FLAGS)
+            );
+            amountPatterns = List.of(
+                    Pattern.compile("^(?<name>.+?)\\s*(?:[-–—]\\s*)?" + QUANTITY + "\\s*" + amount + "$", FLAGS),
+                    Pattern.compile("^" + QUANTITY + "\\s*" + amount + "\\s+(?<name>.+)$", FLAGS)
+            );
+            multipackAfter = Pattern.compile(
+                    "^(?<name>.*\\p{L}.*?)\\s+(?<count>[0-9]{1,2})\\s*x\\s*(?<size>[0-9]+(?:[.,][0-9]+)?\\s*"
+                            + size + "?)$", FLAGS);
+            multipackBefore = Pattern.compile(
+                    "^(?<count>[0-9]{1,2})\\s*x\\s*(?<size>[0-9]+(?:[.,][0-9]+)?\\s*"
+                            + size + ")\\s+(?<name>\\p{L}.*)$", FLAGS);
+            amountInBrackets = Pattern.compile(
+                    "\\s*\\(\\s*(?<number>[0-9]+(?:[.,][0-9]+)?)\\s*(?:(?<piece>" + countedOrPacked + ")|(?<measure>"
+                            + size + "(?!\\p{L})\\.?))?\\s*\\)", FLAGS);
+        }
+
+        /** The words of a role, longest first, so "kilograma" is tried before "kg" and "g". */
+        private String alternation(Predicate<UnitWord> role) {
+            return words.stream()
+                    .filter(role)
+                    .map(UnitWord::word)
+                    .distinct()
+                    .sorted(Comparator.comparingInt(String::length).reversed())
+                    .map(Pattern::quote)
+                    .collect(Collectors.joining("|"));
+        }
+
+        boolean isUnit(String word) {
+            return byWord.containsKey(SerbianTextTransliterator.toLatinAsciiLowercase(word));
+        }
+
+        UnitWord unit(String written) {
+            String word = SerbianTextTransliterator.toLatinAsciiLowercase(written).replace(".", "");
+            UnitWord unit = byWord.get(word);
+            if (unit == null) {
+                throw new IllegalStateException("Jedinica nije u rečniku: " + written);
+            }
+            return unit;
+        }
+
+        /**
+         * "2 Flaše", "1,5 кг", "3X": a unit right after a number, or a
+         * multiplier right before one ("x3"), written as the dictionary has
+         * it. Other words stay as written: "6 jaja L" keeps its size letter.
+         */
+        String spelled(String line) {
+            String text = line.replace('×', 'x');
+            Matcher letters = LETTERS.matcher(text);
+            StringBuilder out = new StringBuilder(text.length());
+            int last = 0;
+            while (letters.find()) {
+                String word = letters.group();
+                UnitWord unit = byWord.get(SerbianTextTransliterator.toLatinAsciiLowercase(word));
+                boolean afterNumber = digitBefore(text, letters.start());
+                boolean beforeNumber = unit != null && unit.role() == UnitWord.Role.MULTIPLIER
+                        && digitAfter(text, letters.end());
+                out.append(text, last, letters.start());
+                out.append(unit != null && (afterNumber || beforeNumber) ? unit.word() : word);
+                last = letters.end();
+            }
+            return out.append(text.substring(last)).toString();
+        }
+
+        private static boolean digitBefore(String text, int index) {
+            int at = index - 1;
+            while (at >= 0 && text.charAt(at) == ' ') {
+                at--;
+            }
+            return at >= 0 && Character.isDigit(text.charAt(at));
+        }
+
+        private static boolean digitAfter(String text, int index) {
+            int at = index;
+            while (at < text.length() && text.charAt(at) == ' ') {
+                at++;
+            }
+            return at < text.length() && Character.isDigit(text.charAt(at));
+        }
+    }
+
     public ParsedShoppingListText parse(String text) {
         if (text == null) {
             return new ParsedShoppingListText(List.of(), 0);
         }
 
+        Units units = units();
         List<ParsedShoppingListLine> items = new ArrayList<>();
         List<Integer> lineNumbers = new ArrayList<>();
         int blankLineCount = 0;
@@ -206,8 +347,8 @@ public class ShoppingListTextParser {
             }
 
             for (String part : itemsOnLine(withoutHeading(rawLine))) {
-                for (String item : bothOf(part)) {
-                    items.add(parseLine(item));
+                for (String item : bothOf(part, units::isUnit)) {
+                    items.add(parseLine(item, units));
                     lineNumbers.add(lineNumber);
                 }
             }
@@ -247,6 +388,11 @@ public class ShoppingListTextParser {
      * "kilo i po" are one thing.
      */
     static List<String> bothOf(String part) {
+        return bothOf(part, word -> BuiltInUnitWords.SERBIAN.stream()
+                .anyMatch(unit -> unit.word().equals(SerbianTextTransliterator.toLatinAsciiLowercase(word))));
+    }
+
+    private static List<String> bothOf(String part, Predicate<String> isUnit) {
         String line = withoutMarks(part);
         Matcher and = AND.matcher(line);
         if (!and.find()) {
@@ -259,8 +405,8 @@ public class ShoppingListTextParser {
                 || left.contains("(") || right.contains(")")) {
             return List.of(part);
         }
-        String[] leftWords = words(left);
-        String[] rightWords = words(right);
+        String[] leftWords = words(left, isUnit);
+        String[] rightWords = words(right, isUnit);
         if (leftWords.length == 0 || rightWords.length == 0
                 || leftWords.length > 2 || rightWords.length > 2) {
             return List.of(part);
@@ -275,12 +421,12 @@ public class ShoppingListTextParser {
     }
 
     /** The words of a part, numbers and units left out. */
-    private static String[] words(String part) {
+    private static String[] words(String part, Predicate<String> isUnit) {
         return WORD.matcher(part).results()
                 .map(MatchResult::group)
                 .filter(word -> word.length() >= 2
-                        && !word.matches("(?iu)kg|gr?|l|ml|kom|komad[a]?|x|pola|kil[aeou]|kilograma?"
-                                + "|grama?|lit(?:ar|ra|re)|пола|кил[аеоу]|литар|литр[ае]"))
+                        && !isUnit.test(word)
+                        && !word.matches("(?iu)pola|пола"))
                 .toArray(String[]::new);
     }
 
@@ -357,8 +503,8 @@ public class ShoppingListTextParser {
      * "jogurte (3)" is three, "sir (500g)" half a kilo: the brackets move to
      * the end of the line, where the counting and the amount patterns look.
      */
-    private static String amountFromBrackets(String line) {
-        Matcher bracket = AMOUNT_IN_BRACKETS.matcher(line);
+    private static String amountFromBrackets(String line, Units units) {
+        Matcher bracket = units.amountInBrackets.matcher(line);
         if (!bracket.find()) {
             return line;
         }
@@ -371,6 +517,10 @@ public class ShoppingListTextParser {
 
     /** A count and an amount can share a line: "2x ćevapi 3kg" is 2 × 3 kg. */
     public ParsedShoppingListLine parseLine(String rawLine) {
+        return parseLine(rawLine, units());
+    }
+
+    private ParsedShoppingListLine parseLine(String rawLine, Units units) {
         String line = withoutMarks(rawLine);
         if (line.isEmpty()) {
             line = rawLine.trim();
@@ -378,26 +528,44 @@ public class ShoppingListTextParser {
 
         line = APPROXIMATELY.matcher(line).replaceAll("");
         line = withNote(line).line();
-        line = amountFromBrackets(line);
-        line = amountInWords(line);
-        line = multipackFirst(line);
+        line = units.spelled(line);
+        line = amountFromBrackets(line, units);
+        line = units.spelled(amountInWords(line));
+        line = multipackFirst(line, units);
 
         BigDecimal quantity = BigDecimal.ONE;
         String rest = line;
+        boolean packsNamed = false;
 
-        for (Pattern pattern : COUNT_PATTERNS) {
-            Matcher matcher = pattern.matcher(line);
-            if (matcher.matches() && !matcher.group("name").isBlank()) {
-                quantity = number(matcher.group("quantity"));
-                rest = matcher.group("name").trim();
-                break;
+        counting:
+        for (List<Pattern> patterns : List.of(units.countPatterns, units.packPatterns)) {
+            for (Pattern pattern : patterns) {
+                Matcher matcher = pattern.matcher(line);
+                if (matcher.matches() && !matcher.group("name").isBlank()) {
+                    quantity = number(matcher.group("quantity"));
+                    rest = matcher.group("name").trim();
+                    packsNamed = patterns == units.packPatterns;
+                    break counting;
+                }
             }
         }
 
-        for (Pattern pattern : AMOUNT_PATTERNS) {
+        // "toalet papir 10 rolni" is one pack of ten rolls: the words stay in
+        // the name, which looks for a pack of ten ("10/1"), and the count
+        // stays the packs written before them ("2x toalet papir 10 rolni").
+        for (Pattern pattern : units.insidePatterns) {
             Matcher matcher = pattern.matcher(rest);
             if (matcher.matches() && hasLetter(matcher.group("name"))) {
-                return amountLine(matcher, rawLine, quantity, rest);
+                return new ParsedShoppingListLine(
+                        rest, rawLine, quantity, null, null, rest, null,
+                        number(matcher.group("quantity")), packsNamed);
+            }
+        }
+
+        for (Pattern pattern : units.amountPatterns) {
+            Matcher matcher = pattern.matcher(rest);
+            if (matcher.matches() && hasLetter(matcher.group("name"))) {
+                return amountLine(matcher, rawLine, quantity, rest, units, packsNamed);
             }
         }
 
@@ -413,18 +581,20 @@ public class ShoppingListTextParser {
                     null,
                     null,
                     rest,
-                    number(bare.group("number"))
+                    number(bare.group("number")),
+                    null,
+                    packsNamed
             );
         }
 
         return new ParsedShoppingListLine(
-                rest, rawLine, quantity, null, null, rest, null
+                rest, rawLine, quantity, null, null, rest, null, null, packsNamed
         );
     }
 
     /** "voda 6x1,5l" reads as "6x voda 1,5l": six packages of 1,5 l. */
-    private static String multipackFirst(String line) {
-        for (Pattern pattern : List.of(MULTIPACK_AFTER, MULTIPACK_BEFORE)) {
+    private static String multipackFirst(String line, Units units) {
+        for (Pattern pattern : List.of(units.multipackAfter, units.multipackBefore)) {
             Matcher pack = pattern.matcher(line);
             if (pack.matches()) {
                 return pack.group("count") + "x " + pack.group("name").trim() + " "
@@ -449,47 +619,24 @@ public class ShoppingListTextParser {
             Matcher matcher,
             String rawLine,
             BigDecimal quantity,
-            String nameWithAmount
+            String nameWithAmount,
+            Units units,
+            boolean packsNamed
     ) {
         BigDecimal amount = number(matcher.group("quantity"));
-        String unit = latinUnit(matcher.group("unit").toLowerCase(Locale.ROOT));
-
-        BigDecimal inBaseUnit = unit.startsWith("k") || unit.startsWith("l")
-                ? amount.multiply(BigDecimal.valueOf(1000))
-                : amount;
-        String baseUnit = unit.startsWith("l") || unit.startsWith("m")
-                ? "ml"
-                : "g";
+        UnitWord unit = units.unit(matcher.group("unit"));
 
         return new ParsedShoppingListLine(
                 matcher.group("name").trim(),
                 rawLine,
                 quantity,
-                inBaseUnit.stripTrailingZeros(),
-                baseUnit,
+                unit.inBaseUnit(amount).stripTrailingZeros(),
+                unit.baseUnit().databaseValue(),
                 nameWithAmount,
-                null
+                null,
+                null,
+                packsNamed
         );
-    }
-
-    /** "кг" reads as "kg": only the letters the units are written with. */
-    private static String latinUnit(String unit) {
-        StringBuilder latin = new StringBuilder(unit.length());
-        for (char letter : unit.toCharArray()) {
-            latin.append(switch (letter) {
-                case 'к' -> 'k';
-                case 'г' -> 'g';
-                case 'р' -> 'r';
-                case 'а' -> 'a';
-                case 'м' -> 'm';
-                case 'л' -> 'l';
-                case 'и' -> 'i';
-                case 'т' -> 't';
-                case 'о' -> 'o';
-                default -> letter;
-            });
-        }
-        return latin.toString();
     }
 
     private static boolean hasLetter(String value) {

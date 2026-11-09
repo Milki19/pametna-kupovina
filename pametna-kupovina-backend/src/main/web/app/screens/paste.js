@@ -12,6 +12,8 @@ const paste = (() => {
   const number = String.raw`\d+(?:[.,]\d+)?`;
   const leading = new RegExp(String.raw`^(${number})\s*[x×]\s+(.+)$`, 'iu');
   const trailing = new RegExp(String.raw`^(.+?)\s+[x×]\s*(${number})$`, 'iu');
+  // „grcki jogurt 3x“, „jogurt 3 puta“: broj pakovanja posle naziva (rečnik jedinica, V157).
+  const trailingTimes = new RegExp(String.raw`^(.+?)\s+(${number})\s*(?:[x×]|puta)$`, 'iu');
   const bullet = /^[\s*•·▪◦-]+/u;
   const emoji = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{2300}-\u{23FF}\u{FE0E}\u{FE0F}\u{200D}\u{20E3}\u{E0020}-\u{E007F}]+/gu;
   const heading = /^[^0-9:]{1,40}:$/u;
@@ -59,7 +61,7 @@ const paste = (() => {
     const count = inBrackets.exec(rest);
     const clean = count ? `${cut(rest, count)} x${count[1]}` : rest;
     const first = leading.exec(clean);
-    const last = first ? null : trailing.exec(clean);
+    const last = first ? null : trailing.exec(clean) || trailingTimes.exec(clean);
     const name = (first ? first[2] : last ? last[1] : clean).trim();
     const quantity = first ? toQuantity(first[1]) : last ? toQuantity(last[2]) : 1;
     if (!name) return null;
