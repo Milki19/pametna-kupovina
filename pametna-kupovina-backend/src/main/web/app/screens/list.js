@@ -1,6 +1,6 @@
 // Spisak: stavke, dodavanje, izmena, duplikati i brisanje sa „Vrati“.
 
-import { api, listRef, loadList } from '../core/api.js';
+import { api, isSameList, listRef, loadList } from '../core/api.js';
 import { amountLabel, counted, decimal, esc, notice, pill, separators, spinner } from '../core/format.js';
 import { icon, salesShortcut } from '../core/html.js';
 import { failed, fieldError, screen, toast, view } from '../core/screen.js';
@@ -260,7 +260,7 @@ function lostListNotice() {
  */
 function boughtOnList(items) {
   const done = saved.get('purchaseDone');
-  if (!done || done === true || done.listId !== listState.list.id) return [];
+  if (!done || done === true || !isSameList(done.listId, listState.list)) return [];
   const bought = new Set(done.bought.map(String));
   return items.filter(i => bought.has(String(i.id)));
 }
@@ -291,7 +291,7 @@ function purchaseDoneNotice(items) {
 /** Briše samo kupljene stavke, jednu po jednu, istim zahtevom kao brisanje na spisku. */
 async function removeBought() {
   await flushDelete();
-  const listId = listState.list.id;
+  const listId = listRef(listState.list);
   const bought = boughtOnList(listState.list.items);
   for (const item of bought) {
     // Već obrisano (drugi telefon u domaćinstvu) nije greška.
@@ -320,7 +320,7 @@ async function clearList() {
   }
   saved.set('purchaseDone', null);
   const purchase = saved.get('purchase');
-  if (purchase?.listId === listId || purchase?.listId === listState.list.id) saved.set('purchase', null);
+  if (isSameList(purchase?.listId, listState.list)) saved.set('purchase', null);
   listState.editing = null;
   listState.list = await api('GET', `shopping-lists/${listId}`);
   renderList();
@@ -330,7 +330,7 @@ function renderList() {
   const items = listState.list.items;
   let purchase = saved.get('purchase');
   // Kupovina po spisku koji ovaj pregledač više nema (stari, ili drugi u domaćinstvu).
-  if (purchase?.listId != null && purchase.listId !== listRef(listState.list) && purchase.listId !== listState.list.id) {
+  if (purchase?.listId != null && !isSameList(purchase.listId, listState.list)) {
     saved.set('purchase', null);
     purchase = null;
   }

@@ -5,11 +5,12 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * {@code id} is the list's number, which Android up to 2.0.6 keeps using;
- * {@code publicId} is the random id newer clients call it by.
+ * {@code id} is the list's number, which only Android up to 2.0.8 still
+ * gets ({@link InternalListId}); {@code publicId} is the random id everyone
+ * else calls it by.
  */
 public record ShoppingListResponse(
-        Long id,
+        @InternalListId Long id,
         UUID publicId,
         String name,
         OffsetDateTime createdAt,

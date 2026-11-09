@@ -173,9 +173,9 @@ async function createInvite() {
   const list = await loadList();
   listState.list = list;
   const invite = await api('POST', 'accounts/invite');
-  // Broj, ne nasumičan ID: Android 2.0.6 čita samo broj, a link otvara i on.
-  // Kad stari APK ode, ovde ide listRef(list).
-  household.link = householdLink(invite.code, list.id);
+  // Nasumičan ID: Android 2.0.8 ga otvara (getShoppingListByRef), a broj
+  // server webu više ne šalje.
+  household.link = householdLink(invite.code, listRef(list));
   household.validMinutes = invite.validMinutes || 15;
   showHousehold();
 }
@@ -223,9 +223,9 @@ async function joinHousehold(code, listId) {
   } catch (error) {
     if (error.status !== 404) throw error;
   }
-  if (shared && shared.id !== own.id) {
+  if (shared && listRef(shared) !== listRef(own)) {
     for (const item of own.items) {
-      await api('POST', `shopping-lists/${shared.id}/items`, {
+      await api('POST', `shopping-lists/${listRef(shared)}/items`, {
         name: item.name,
         rawInput: item.rawInput,
         barcode: item.barcode,
@@ -236,7 +236,7 @@ async function joinHousehold(code, listId) {
         flexibleConstraints: item.flexibleConstraints
       });
     }
-    await api('DELETE', `shopping-lists/${own.id}`).catch(() => {});
+    await api('DELETE', `shopping-lists/${listRef(own)}`).catch(() => {});
     saved.set('listId', listRef(shared));
   }
   household = { link: null, validMinutes: 15, error: null };
