@@ -45,6 +45,7 @@ import rs.pametnakupovina.app.data.network.ShoppingApiService
 import rs.pametnakupovina.app.data.network.ShoppingItemMatchActionDto
 import rs.pametnakupovina.app.data.network.ShoppingItemRuleDto
 import rs.pametnakupovina.app.data.network.ShoppingListItemDto
+import rs.pametnakupovina.app.data.network.ShoppingListSummaryDto
 import rs.pametnakupovina.app.data.network.ShoppingListMatchingDto
 import rs.pametnakupovina.app.data.network.ShoppingRecommendationDto
 import rs.pametnakupovina.app.data.network.UnlocatedPriceOptionDto
@@ -664,11 +665,15 @@ class ShoppingRepository @Inject constructor(
         val existing = clientIdentityStore.getActiveListId()
         if (existing != null) return existing
 
-        val created = api.createShoppingList(
-            CreateShoppingListRequestDto(name = "Moja kupovina")
-        )
-        clientIdentityStore.setActiveListId(created.id)
-        return created.id
+        // The device may already have a list on the server (the app forgot
+        // its id): that one is used, so it is not left hidden next to a new,
+        // empty one.
+        val listId = existingList(api.getShoppingLists())?.id
+            ?: api.createShoppingList(
+                CreateShoppingListRequestDto(name = "Moja kupovina")
+            ).id
+        clientIdentityStore.setActiveListId(listId)
+        return listId
     }
 
     private suspend fun recreateListAndPush(): Long {
@@ -681,6 +686,13 @@ class ShoppingRepository @Inject constructor(
 
     private suspend fun pushPending(listId: Long) = pushPendingItems(api, dao, listId)
 }
+
+/**
+ * The list a device already has: one with items, the latest changed among
+ * them (the server sends them newest first); with only empty ones, the latest.
+ */
+internal fun existingList(lists: List<ShoppingListSummaryDto>): ShoppingListSummaryDto? =
+    lists.firstOrNull { it.itemCount > 0 } ?: lists.firstOrNull()
 
 data class RejectedItem(val name: String, val reason: String?)
 

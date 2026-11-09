@@ -58,7 +58,8 @@ async function api(method, path, body, retried = false, signal = undefined) {
 }
 
 /**
- * Jedan spisak po uređaju, kao u aplikaciji; nov ako je stari nestao. Dva
+ * Jedan spisak po uređaju, kao u aplikaciji: zapamćen, pa postojeći na
+ * serveru, pa tek onda nov. Dva
  * istovremena poziva (prvo otvaranje pa osvežen izgled tržišta) dele isti
  * odgovor, inače bi prazan pregledač napravio dva spiska i stavke bi završile
  * u onom koji se posle više ne otvara.
@@ -109,9 +110,25 @@ async function loadListOnce() {
       forgetLostList();
     }
   }
-  const created = await api('POST', 'shopping-lists', { name: 'Moja kupovina' });
-  saved.set('listId', listRef(created));
-  return api('GET', `shopping-lists/${listRef(created)}`);
+  // Pregledač ne zna svoj spisak (obrisani podaci, nov pregledač sa istim
+  // ključem), ali uređaj ga možda već ima: prvo se pita server, pa se tek
+  // onda pravi nov, da ne bi stari spisak ostao sakriven pored novog praznog.
+  const existing = await existingList();
+  const ref = existing
+      ? listRef(existing)
+      : listRef(await api('POST', 'shopping-lists', { name: 'Moja kupovina' }));
+  saved.set('listId', ref);
+  return api('GET', `shopping-lists/${ref}`);
+}
+
+/**
+ * Spisak koji uređaj već ima: onaj sa stavkama, a među njima poslednji
+ * menjan (server ih daje od poslednje izmene). Samo prazni: poslednji.
+ */
+async function existingList() {
+  const lists = await api('GET', 'shopping-lists');
+  if (!Array.isArray(lists) || !lists.length) return null;
+  return lists.find(list => list.itemCount > 0) || lists[0];
 }
 
 export { api, listRef, listVersion, loadList, remembered };
