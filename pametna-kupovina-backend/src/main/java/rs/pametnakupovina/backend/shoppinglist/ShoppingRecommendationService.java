@@ -171,7 +171,7 @@ public class ShoppingRecommendationService {
         // Prices, travel costs and "today" are the market's; a shop across
         // the border quotes another currency and never enters the plan. The
         // value of an hour and of a stop is the account's, where it set one.
-        Market market = onFoot(marketRepository.forPlanningShoppingList(listId), walking);
+        Market market = marketRepository.forPlanningShoppingList(listId);
         LocalDate asOfDate = requestedDate != null
                 ? requestedDate
                 : market.today();
@@ -397,10 +397,13 @@ public class ShoppingRecommendationService {
                 nearbyStores
         );
         RouteMatrix routeMatrix = walking ? onFoot(drivingMatrix) : drivingMatrix;
+        // One cost for every way of going (TripCost): on foot the kilometre
+        // is free and the hour counts at the shopper's price.
+        TripPrices prices = tripPrices(market, walking);
 
         List<EvaluatedPlan> evaluatedSingles =
                 singleStorePlans.stream()
-                        .map(plan -> evaluate(plan, routeMatrix, market))
+                        .map(plan -> evaluate(plan, routeMatrix, prices))
                         .toList();
 
         List<EvaluatedPlan> evaluatedAll = new ArrayList<>(
@@ -409,7 +412,7 @@ public class ShoppingRecommendationService {
 
         evaluatedAll.addAll(
                 twoStorePlans.stream()
-                        .map(plan -> evaluate(plan, routeMatrix, market))
+                        .map(plan -> evaluate(plan, routeMatrix, prices))
                         .toList()
         );
 
@@ -437,10 +440,18 @@ public class ShoppingRecommendationService {
             }
         }
 
-        // Every rule the shown plans keep lives in PlanGuard (V155).
+        // Every rule the shown plans keep lives in PlanGuard (V155), and it
+        // is the last step for every filter: 1 km, the walking circle, the
+        // farther shops, by car. Each of them is a request of its own and
+        // ends here, so no filter can leave Najbolje ukupno dearer in total
+        // than another plan that buys the same (šesti test 6.11.).
         PlanSet<EvaluatedPlan> guarded = PlanGuard.guard(
                 new PlanSet<>(bestSingle, recommended, lowestPrice));
         EvaluatedPlan shownSingle = guarded.singleStore();
+        if (guarded.bestTotal() != recommended) {
+            // "Kupi usput" was worked out for the plan the guard replaced.
+            onTheWay = null;
+        }
         recommended = guarded.bestTotal();
         lowestPrice = guarded.lowestBasket();
 
@@ -840,7 +851,7 @@ public class ShoppingRecommendationService {
     private EvaluatedPlan evaluate(
             CandidatePlan plan,
             RouteMatrix routeMatrix,
-            Market market
+            TripPrices prices
     ) {
         RouteEvaluation route = evaluateRoute(
                 plan.stores(),
@@ -852,7 +863,7 @@ public class ShoppingRecommendationService {
                 route.distanceKm(),
                 route.durationSeconds(),
                 plan.stores().size(),
-                TripPrices.of(market)
+                prices
         );
 
         return new EvaluatedPlan(
@@ -1679,12 +1690,12 @@ public class ShoppingRecommendationService {
 
         String base = switch (type) {
             case SINGLE_STORE -> walking
-                    ? "Najbolja jedna prodavnica u krugu hoda: korpa, pa koliko je blizu."
+                    ? "Najbolja jedna prodavnica u krugu hoda kad se uračunaju korpa i vreme hoda."
                     : "Najbolja jedna prodavnica kad se uračunaju korpa, put i vreme.";
             case RECOMMENDED_BALANCE -> walking
-                    ? "Najbolji balans cene korpe, hoda i broja prodavnica. Peške ne"
-                            + " računamo put ni vreme u dinarima; kad je razlika u korpi"
-                            + " mala, biramo bližu radnju i manje radnji."
+                    ? "Najbolji balans korpe, vremena hoda i broja prodavnica. Sat hoda"
+                            + " računamo po tvojoj ceni vremena, a kilometar peške ne košta;"
+                            + " prikazujemo samo korpu i minute hoda."
                     : "Najbolji balans cene korpe, puta, vremena i broja stajanja.";
             case LOWEST_PRICE ->
                     "Najniža cena korpe među svim jednom i dvema prodavnicama; put nije kriterijum rangiranja.";
@@ -1773,9 +1784,9 @@ public class ShoppingRecommendationService {
                 candidateRadius,
                 properties.getMaxCandidateStores(),
                 properties.getMaxPriceAgeDays(),
-                money(market.travelCostPerKm()),
-                money(market.valuePerHour()),
-                money(market.costPerStop()),
+                money(tripPrices(market, walking).perKm()),
+                money(tripPrices(market, walking).perHour()),
+                money(tripPrices(market, walking).perStop()),
                 money(walking
                         ? properties.getWalkingSpeedKmh()
                         : properties.getStraightLineAverageSpeedKmh()),
@@ -1784,24 +1795,9 @@ public class ShoppingRecommendationService {
         );
     }
 
-    /** Peške kilometar ne košta; vreme i stajanja i dalje koštaju. */
-    private static Market onFoot(Market market, boolean walking) {
-        if (!walking) {
-            return market;
-        }
-        return new Market(
-                market.id(),
-                market.code(),
-                market.name(),
-                market.currencyCode(),
-                market.currencyMinorUnits(),
-                market.locale(),
-                market.defaultLanguage(),
-                market.timeZone(),
-                BigDecimal.ZERO,
-                market.valuePerHour(),
-                market.costPerStop()
-        );
+    /** Peške kilometar ne košta; sat (po ceni naloga) i stajanja i dalje koštaju. */
+    private static TripPrices tripPrices(Market market, boolean walking) {
+        return TripPrices.of(market).forMode(walking ? TravelMode.WALKING : TravelMode.DRIVING);
     }
 
     /** Isto rastojanje, ali vreme brzinom hoda, ne kolima. */

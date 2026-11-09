@@ -66,6 +66,47 @@ class TripCostAndPlanGuardTest {
     }
 
     @Test
+    void theBestTotalIsNeverDearerInTotalThanAPlanOfTheSameItems() {
+        // Šesti test 6.11.: on foot Najbolje ukupno 2.968 against 2.868 RSD.
+        Plan single = Plan.of(10, "2950", "3200", 1);
+        Plan best = Plan.of(10, "2968", "3300", 1, 2);
+        Plan lowest = Plan.of(10, "2868", "3150", 3);
+        PlanSet<Plan> guarded = PlanGuard.guard(new PlanSet<>(single, best, lowest));
+        assertThat(guarded.bestTotal()).isSameAs(lowest);
+        assertThat(guarded.lowestBasket()).isSameAs(lowest);
+        assertThat(guarded.singleStore()).isSameAs(single);
+    }
+
+    @Test
+    void aPlanWithFewerItemsDoesNotReplaceTheBestTotal() {
+        Plan single = Plan.of(8, "2000", "2100", 1);
+        Plan best = Plan.of(10, "2968", "3300", 1, 2);
+        PlanSet<Plan> guarded = PlanGuard.guard(new PlanSet<>(single, best, best));
+        assertThat(guarded.bestTotal()).isSameAs(best);
+        assertThat(PlanGuard.guard(new PlanSet<Plan>(single, null, null)).bestTotal()).isNull();
+    }
+
+    @Test
+    void twoEqualPlansAreShownAsOne() {
+        Plan single = Plan.of(10, "2900", "3000", 1);
+        Plan sameAsSingle = Plan.of(10, "2900", "3000", 1);
+        Plan lowest = Plan.of(10, "2800", "3100", 2, 3);
+        Plan sameAsLowest = Plan.of(10, "2800", "3100", 3, 2);
+        PlanSet<Plan> guarded = PlanGuard.guard(new PlanSet<>(single, sameAsSingle, lowest));
+        assertThat(guarded.bestTotal()).isSameAs(single);
+        assertThat(guarded.lowestBasket()).isSameAs(lowest);
+
+        Plan dearSingle = Plan.of(10, "2900", "3200", 1);
+        PlanSet<Plan> lowestTwice = PlanGuard.guard(new PlanSet<>(dearSingle, lowest, sameAsLowest));
+        assertThat(lowestTwice.bestTotal()).isSameAs(lowest);
+        assertThat(lowestTwice.lowestBasket()).isSameAs(lowest);
+        // Other shops, or another basket, are another plan.
+        assertThat(PlanGuard.samePlan(single, Plan.of(10, "2900", "3000", 2))).isFalse();
+        assertThat(PlanGuard.samePlan(single, Plan.of(10, "2901", "3001", 1))).isFalse();
+        assertThat(PlanGuard.samePlan(single, single)).isFalse();
+    }
+
+    @Test
     void rulesApplyInTheirOrder() {
         Plan a = Plan.of(1, "10", "10", 1);
         Plan b = Plan.of(1, "20", "20", 2);
@@ -77,6 +118,9 @@ class TripCostAndPlanGuardTest {
         };
         PlanSet<Plan> twice = PlanGuard.guard(new PlanSet<>(a, b, null), List.of(swap, swap));
         assertThat(twice.singleStore()).isSameAs(a);
-        assertThat(PlanGuard.RULES).hasAtLeastOneElementOfType(PlanGuard.LowestBasketIsLowest.class);
+        assertThat(PlanGuard.RULES).hasExactlyElementsOfTypes(
+                PlanGuard.BestTotalIsLowestTotal.class,
+                PlanGuard.LowestBasketIsLowest.class,
+                PlanGuard.SamePlanIsOnePlan.class);
     }
 }

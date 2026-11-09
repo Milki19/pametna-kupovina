@@ -712,6 +712,112 @@ class ShoppingRecommendationServiceTest {
         assertThat(response.recommendedBalance().routeDurationSeconds()).isEqualTo(1_600L);
     }
 
+    /**
+     * Šesti test 6.11.: on foot the plan walked 50 minutes to save about
+     * 600 RSD. The hour of walking counts in the choice at the shopper's
+     * price; the response shows the basket and the minutes, no money for time.
+     */
+    @Test
+    void onFootTheHourOfWalkingCountsInTheChoice() {
+        // Far shop: 3,8 km there and back, about 51 min, 338 RSD at 400 RSD/h.
+        ShoppingRecommendationResponse smallSaving = walkFarForLess(200, TestMarkets.serbia());
+        assertThat(smallSaving.recommendedBalance().stores())
+                .extracting(store -> store.storeId()).containsExactly(1L);
+        assertThat(smallSaving.lowestPrice().stores())
+                .extracting(store -> store.storeId()).containsExactly(2L);
+        assertThat(smallSaving.recommendedBalance().timeCost()).isEqualByComparingTo("0");
+        assertThat(smallSaving.recommendedBalance().totalCost())
+                .isEqualByComparingTo(smallSaving.recommendedBalance().basketCost());
+        assertThat(smallSaving.recommendedBalance().explanation())
+                .contains("po tvojoj ceni vremena")
+                .doesNotContain("ne računamo put ni vreme");
+
+        ShoppingRecommendationResponse bigSaving = walkFarForLess(600, TestMarkets.serbia());
+        assertThat(bigSaving.recommendedBalance().stores())
+                .extracting(store -> store.storeId()).containsExactly(2L);
+
+        // The same 600 RSD is not worth the walk to whom an hour is worth 1.000 RSD.
+        rs.pametnakupovina.backend.market.Market dearHour = TestMarkets.serbia();
+        dearHour = new rs.pametnakupovina.backend.market.Market(
+                dearHour.id(), dearHour.code(), dearHour.name(), dearHour.currencyCode(),
+                dearHour.currencyMinorUnits(), dearHour.locale(), dearHour.defaultLanguage(),
+                dearHour.timeZone(), dearHour.travelCostPerKm(), new BigDecimal("1000.00"),
+                dearHour.costPerStop());
+        ShoppingRecommendationResponse dear = walkFarForLess(600, dearHour);
+        assertThat(dear.recommendedBalance().stores())
+                .extracting(store -> store.storeId()).containsExactly(1L);
+        assertThat(dear.assumptions().valuePerHour()).isEqualByComparingTo("1000");
+        assertThat(dear.assumptions().costPerKm()).isEqualByComparingTo("0");
+    }
+
+    /**
+     * For every saving and way of going the rules hold: Najjeftinija korpa
+     * is the lowest basket, and by car Najbolje ukupno the lowest total
+     * (on foot the total shown is the basket, so only the choice counts time).
+     */
+    @Test
+    void byCarAndOnFootTheBestTotalIsNeverDearerThanAPlanOfTheSameItems() {
+        for (int saving : new int[] {50, 200, 600, 1500}) {
+            for (TravelMode mode : TravelMode.values()) {
+                ShoppingRecommendationResponse response =
+                        walkFarForLess(saving, TestMarkets.serbia(), mode);
+                OptimizationScenarioResponse best = response.recommendedBalance();
+                assertThat(response.lowestPrice().coveredItems()).isEqualTo(best.coveredItems());
+                assertThat(response.lowestPrice().basketCost())
+                        .isLessThanOrEqualTo(best.basketCost());
+                if (mode == TravelMode.DRIVING) {
+                    assertThat(best.totalCost()).isLessThanOrEqualTo(response.singleStore().totalCost());
+                    assertThat(best.totalCost()).isLessThanOrEqualTo(response.lowestPrice().totalCost());
+                }
+            }
+        }
+    }
+
+    private ShoppingRecommendationResponse walkFarForLess(int saving, rs.pametnakupovina.backend.market.Market market) {
+        return walkFarForLess(saving, market, TravelMode.WALKING);
+    }
+
+    private ShoppingRecommendationResponse walkFarForLess(
+            int saving,
+            rs.pametnakupovina.backend.market.Market market,
+            TravelMode mode
+    ) {
+        ShoppingListRepository listRepository = mock(ShoppingListRepository.class);
+        NearbyStoreRepository nearbyRepository = mock(NearbyStoreRepository.class);
+        StoreShoppingOfferRepository offerRepository = mock(StoreShoppingOfferRepository.class);
+        RouteMatrixProvider routeProvider = mock(RouteMatrixProvider.class);
+        MarketRepository markets = mock(MarketRepository.class);
+        when(markets.forPlanningShoppingList(anyLong())).thenReturn(market);
+        ShoppingRecommendationService service = new ShoppingRecommendationService(
+                listRepository, nearbyRepository, offerRepository, routeProvider,
+                new ShoppingOptimizationProperties(), markets);
+
+        ShoppingListItemResponse basket = item(1L, "Bakin spisak", 101L);
+        when(listRepository.findById(10L)).thenReturn(Optional.of(new ShoppingListResponse(
+                10L, "Test korpa", OffsetDateTime.now(), OffsetDateTime.now(), List.of(basket))));
+        NearbyStore near = store(1L, "A");
+        NearbyStore far = store(2L, "B");
+        when(nearbyRepository.findPricingEligibleNearby(eq(SERBIA), eq(44.0), eq(19.0),
+                org.mockito.ArgumentMatchers.anyInt(), eq(20)))
+                .thenReturn(List.of(near, far));
+        when(offerRepository.findOffers(eq(10L), anyList(), eq(DATE), eq(true)))
+                .thenAnswer(call -> offersFor(call.getArgument(1), List.of(
+                        offer(near, basket, 2000 + saving, 1001L),
+                        offer(far, basket, 2000, 2001L))));
+        long[][] meters = {{0, 300, 1_900}, {300, 0, 1_800}, {1_900, 1_800, 0}};
+        String[] ids = {"USER", "STORE:1", "STORE:2"};
+        List<RouteMatrixEntry> entries = new ArrayList<>();
+        for (int from = 0; from < ids.length; from++) {
+            for (int to = 0; to < ids.length; to++) {
+                entries.add(new RouteMatrixEntry(ids[from], ids[to], meters[from][to], null));
+            }
+        }
+        when(routeProvider.calculate(anyList()))
+                .thenReturn(new RouteMatrix("TEST", "STRAIGHT_LINE_ESTIMATE", true, entries));
+
+        return service.recommend(10L, 44.0, 19.0, DATE, mode);
+    }
+
     /** Test 20.10.: +238 RSD and half an hour more only for wet wipes at 25 RSD. */
     @Test
     void anItemWorthLessThanAStopIsBoughtOnTheWayInsteadOfInASecondShop() {

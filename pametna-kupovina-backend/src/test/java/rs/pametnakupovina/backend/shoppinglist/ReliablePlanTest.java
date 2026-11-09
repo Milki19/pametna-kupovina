@@ -204,7 +204,9 @@ class ReliablePlanTest {
         // Still chosen with the minutes and the stops: one shop, not two
         // for 5 RSD.
         assertThat(response.recommendedBalance().stopCount()).isEqualTo(1);
-        assertThat(response.recommendedBalance().explanation()).contains("Peške ne računamo");
+        assertThat(response.recommendedBalance().explanation())
+                .contains("po tvojoj ceni vremena")
+                .contains("samo korpu i minute hoda");
     }
 
     /**
