@@ -15,7 +15,6 @@ import rs.pametnakupovina.backend.market.MarketRepository;
 
 import java.math.BigDecimal;
 import java.util.Arrays;
-import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -50,14 +49,12 @@ class ModelContractDatabaseTest {
     private KindTaxonomy kindTaxonomy;
 
     @Test
-    void theTablesStartEmpty() {
-        // piece_mass and sale_mode are filled by V156, unit_word by V157.
-        for (String table : List.of("variant_word", "product_type_required_attribute")) {
-            assertThat(jdbcClient.sql("SELECT COUNT(*) FROM app." + table).query(Long.class).single())
-                    .as(table).isZero();
-        }
-        assertThat(jdbcClient.sql("SELECT COUNT(*) FROM app.product_type WHERE base_type_id IS NOT NULL")
-                .query(Long.class).single()).isZero();
+    void onlyFrozenFishHasABaseKind() {
+        // piece_mass and sale_mode are filled by V156, unit_word by V157, variant_word and
+        // product_type_required_attribute by V160. V161 gives frozen fish its base kind,
+        // fresh fish; nothing else has one yet.
+        assertThat(jdbcClient.sql("SELECT code FROM app.product_type WHERE base_type_id IS NOT NULL")
+                .query(String.class).list()).containsExactly("FROZEN_FISH");
     }
 
     @Test
@@ -151,6 +148,8 @@ class ModelContractDatabaseTest {
     @Test
     void aVariantWordIsFoundOnlyWhole() {
         Market market = marketRepository.defaultMarket();
+        // Only this test's rows: V160 fills the table.
+        jdbcClient.sql("DELETE FROM app.variant_word").update();
         long sugar = jdbcClient.sql("""
                         INSERT INTO app.product_attribute_definition (code, name, value_kind)
                         VALUES ('S0_SUGAR', 'Šećer', 'TEXT') RETURNING id

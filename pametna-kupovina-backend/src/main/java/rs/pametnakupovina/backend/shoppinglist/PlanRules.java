@@ -214,6 +214,61 @@ final class PlanRules {
                 : null;
     }
 
+    /**
+     * A line that names only a base kind ("riba") takes nothing dearer than
+     * this many times what the whole kind usually costs a kilogram or a
+     * litre in the market: four sea bass at 2.504 RSD/kg are not "riba"
+     * where fish usually costs about a thousand (test 6.11.).
+     */
+    static final BigDecimal MAX_TIMES_BASE_KIND = BigDecimal.valueOf(2);
+
+    /**
+     * What a plain line's base kind usually costs, per kilogram ("g") or
+     * litre ("ml"); the units the market has too few chains for are left out.
+     */
+    record KindLimit(String kindName, Map<String, BigDecimal> usualPerThousand, String currency) {
+
+        BigDecimal usualFor(String baseUnit) {
+            return baseUnit == null ? null : usualPerThousand.get(baseUnit);
+        }
+    }
+
+    /** A kilogram or a litre of what the offer brings; null where it is not known. */
+    static PricePerThousand perThousand(StoreItemOffer offer, BaseKindPrices.PackAmount pack) {
+        if (!offer.available() || offer.lineTotal() == null) {
+            return null;
+        }
+        PurchaseQuantity quantity = offer.purchaseQuantity();
+        if (quantity != null && ("g".equals(quantity.baseUnit()) || "ml".equals(quantity.baseUnit()))
+                && quantity.suppliedAmount() != null && quantity.suppliedAmount().signum() > 0) {
+            return new PricePerThousand(offer.lineTotal().multiply(WHOLE_UNIT)
+                    .divide(quantity.suppliedAmount(), 2, RoundingMode.HALF_UP), quantity.baseUnit());
+        }
+        if (pack != null && pack.amount() != null && pack.amount().signum() > 0
+                && offer.effectivePrice() != null) {
+            return new PricePerThousand(offer.effectivePrice().multiply(WHOLE_UNIT)
+                    .divide(pack.amount(), 2, RoundingMode.HALF_UP), pack.baseUnit());
+        }
+        return null;
+    }
+
+    record PricePerThousand(BigDecimal price, String baseUnit) {
+    }
+
+    /**
+     * Within what the line's base kind usually costs, or nothing to judge
+     * it by: a line that names more than the kind, an amount not known, a
+     * kind with too few chains.
+     */
+    static boolean withinBaseKind(StoreItemOffer offer, KindLimit limit, BaseKindPrices.PackAmount pack) {
+        if (limit == null || !offer.available()) {
+            return true;
+        }
+        PricePerThousand price = perThousand(offer, pack);
+        BigDecimal usual = price == null ? null : limit.usualFor(price.baseUnit());
+        return usual == null || price.price().compareTo(usual.multiply(MAX_TIMES_BASE_KIND)) <= 0;
+    }
+
     private static String amountKey(Long itemId, String baseUnit) {
         return itemId + ":" + baseUnit;
     }
