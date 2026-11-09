@@ -412,6 +412,65 @@ public class ShoppingIntentResolver {
                 .single();
     }
 
+    /**
+     * Products of this many other brands saying the words make them a
+     * property of the kind, not a brand: granules are sold by Friskies,
+     * Purina and a shop's own label alike, Grand coffee only by Grand.
+     */
+    static final int OTHER_BRANDS_OF_A_PROPERTY = 3;
+
+    /**
+     * Whether words a shopper writes in brackets describe the kind rather
+     * than name a brand: "hrana za mačke (granule)" asks for dry cat food,
+     * and was read as the brand "Granule" with no price near anyone (šesti
+     * test, 6.11.2026). Some chain lists "Granule" as a brand, so the names
+     * decide: products of the kind with a price say the words as whole
+     * words under at least three brands other than that one. The catalog
+     * decides market by market, with no list of words to keep.
+     */
+    public boolean wordsDescribeTheKind(long shoppingIntentId, String words) {
+        return memo.remember(
+                List.of("wordsDescribeTheKind", String.valueOf(shoppingIntentId), String.valueOf(words)),
+                () -> readWordsDescribeTheKind(shoppingIntentId, words)
+        );
+    }
+
+    private boolean readWordsDescribeTheKind(long shoppingIntentId, String words) {
+        String normalized = normalizer.normalize(words == null ? "" : words);
+        if (rs.pametnakupovina.backend.matching.WholeWords.of(normalized).isEmpty()) {
+            return false;
+        }
+        return jdbcClient.sql("""
+                        SELECT COUNT(DISTINCT app.product_match_brand_key(
+                                   COALESCE(NULLIF(BTRIM(canonical.brand), ''), product.brand)
+                               )) >= ?
+                        FROM app.shopping_intent_product_type AS allowed
+                        JOIN app.retailer_product_type AS assignment
+                          ON assignment.product_type_id = allowed.product_type_id
+                        JOIN app.retailer_product AS product
+                          ON product.id = assignment.retailer_product_id
+                        LEFT JOIN app.canonical_product AS canonical
+                          ON canonical.id = product.canonical_product_id
+                        WHERE allowed.shopping_intent_id = ?
+                          AND allowed.enabled_by_default = TRUE
+                          AND product.normalized_name ~ ?
+                          AND app.product_match_brand_key(COALESCE(NULLIF(BTRIM(canonical.brand), ''), product.brand)) <> ''
+                          AND app.product_match_brand_key(COALESCE(NULLIF(BTRIM(canonical.brand), ''), product.brand))
+                              <> app.product_match_brand_key(?)
+                          AND EXISTS (
+                              SELECT 1
+                              FROM app.current_price_offer AS offer
+                              WHERE offer.retailer_product_id = product.id
+                          )
+                        """)
+                .param(1, OTHER_BRANDS_OF_A_PROPERTY)
+                .param(2, shoppingIntentId)
+                .param(3, rs.pametnakupovina.backend.matching.WholeWords.sqlPattern(normalized))
+                .param(4, words)
+                .query(Boolean.class)
+                .single();
+    }
+
     public boolean isKnownBrand(String value) {
         return memo.remember(
                 List.of("isKnownBrand", String.valueOf(value)),
