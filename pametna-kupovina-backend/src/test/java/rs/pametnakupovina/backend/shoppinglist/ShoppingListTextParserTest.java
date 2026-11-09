@@ -320,4 +320,100 @@ class ShoppingListTextParserTest {
         assertThat(text.items().get(0).bareNumber()).isEqualByComparingTo("2");
         assertThat(text.items().get(1).targetQuantity()).isEqualByComparingTo("500");
     }
+
+    // Šesti test (6.11.2026), stavka 8: jedinice iz rečnika (V157).
+
+    @Test
+    void aMultiplierAfterTheNameCountsPacks() {
+        ParsedShoppingListLine yogurt = parseOne("grcki jogurt 3x");
+        assertThat(yogurt.name()).isEqualTo("grcki jogurt");
+        assertThat(yogurt.quantity()).isEqualByComparingTo("3");
+        assertThat(yogurt.targetQuantity()).isNull();
+
+        assertThat(parseOne("Grčki jogurt 3X").quantity()).isEqualByComparingTo("3");
+        assertThat(parseOne("jogurt 3 x").quantity()).isEqualByComparingTo("3");
+        assertThat(parseOne("jogurt 3 puta").quantity()).isEqualByComparingTo("3");
+        assertThat(parseOne("3 puta jogurt").name()).isEqualTo("jogurt");
+        assertThat(parseOne("jogurt ×3").quantity()).isEqualByComparingTo("3");
+    }
+
+    @Test
+    void aCountedPackWordCountsPacksInAnyCase() {
+        ParsedShoppingListLine yeast = parseOne("5 kesica kvasca");
+        assertThat(yeast.name()).isEqualTo("kvasca");
+        assertThat(yeast.quantity()).isEqualByComparingTo("5");
+
+        for (String line : List.of("kvasac 5 kesica", "kvasac 5 kesice", "kvasac - 5 kesica", "kvasac 5kesica")) {
+            ParsedShoppingListLine read = parseOne(line);
+            assertThat(read.name()).as(line).isEqualTo("kvasac");
+            assertThat(read.quantity()).as(line).isEqualByComparingTo("5");
+        }
+        assertThat(parseOne("2 flaše vode").quantity()).isEqualByComparingTo("2");
+        assertThat(parseOne("2 flaše vode").name()).isEqualTo("vode");
+        assertThat(parseOne("pivo 4 limenke").quantity()).isEqualByComparingTo("4");
+        assertThat(parseOne("pivo 4 limenke").name()).isEqualTo("pivo");
+        assertThat(parseOne("2 kutije jaja").name()).isEqualTo("jaja");
+        assertThat(parseOne("4 kutije jaja").packsNamed()).isTrue();
+        assertThat(parseOne("jaja 10 kom").packsNamed()).isFalse();
+        assertThat(parseOne("grcki jogurt 3x").packsNamed()).isFalse();
+        assertThat(parseOne("2 pakovanja keksa").quantity()).isEqualByComparingTo("2");
+        assertThat(parseOne("кафа 3 кесице").quantity()).isEqualByComparingTo("3");
+    }
+
+    @Test
+    void aPackWordWithAnAmountIsPacksOfThatAmount() {
+        ParsedShoppingListLine water = parseOne("2 flaše vode 1,5l");
+        assertThat(water.name()).isEqualTo("vode");
+        assertThat(water.quantity()).isEqualByComparingTo("2");
+        assertThat(water.targetQuantity()).isEqualByComparingTo("1500");
+        assertThat(water.baseUnit()).isEqualTo("ml");
+    }
+
+    @Test
+    void rollsAreCountedInsideOnePack() {
+        ParsedShoppingListLine paper = parseOne("toalet papir 10 rolni");
+        // The words stay, so the plan looks for a pack of ten ("10/1").
+        assertThat(paper.name()).isEqualTo("toalet papir 10 rolni");
+        assertThat(paper.quantity()).isEqualByComparingTo("1");
+        assertThat(paper.targetQuantity()).isNull();
+        assertThat(paper.bareNumber()).isNull();
+        assertThat(paper.piecesInPack()).isEqualByComparingTo("10");
+        assertThat(paper.amount().total()).hasValueSatisfying(total -> assertThat(total).isEqualByComparingTo("10"));
+
+        ParsedShoppingListLine two = parseOne("2x toalet papir 10 rolni");
+        assertThat(two.quantity()).isEqualByComparingTo("2");
+        assertThat(two.piecesInPack()).isEqualByComparingTo("10");
+        assertThat(parseOne("ubrus 2 rolne").piecesInPack()).isEqualByComparingTo("2");
+    }
+
+    @Test
+    void decilitresAreMillilitres() {
+        ParsedShoppingListLine milk = parseOne("mleko 5dl");
+        assertThat(milk.name()).isEqualTo("mleko");
+        assertThat(milk.targetQuantity()).isEqualByComparingTo("500");
+        assertThat(milk.baseUnit()).isEqualTo("ml");
+    }
+
+    @Test
+    void anotherMarketsWordsAreReadWithoutNewCode() {
+        ShoppingListTextParser croatian = new ShoppingListTextParser(() -> List.of(
+                new rs.pametnakupovina.backend.matching.UnitWord("kg", rs.pametnakupovina.backend.matching.UnitWord.Role.MEASURE,
+                        rs.pametnakupovina.backend.matching.BaseUnit.GRAM, BigDecimal.valueOf(1000)),
+                new rs.pametnakupovina.backend.matching.UnitWord("vrecice", rs.pametnakupovina.backend.matching.UnitWord.Role.PACK,
+                        null, BigDecimal.ONE),
+                new rs.pametnakupovina.backend.matching.UnitWord("x", rs.pametnakupovina.backend.matching.UnitWord.Role.MULTIPLIER,
+                        null, BigDecimal.ONE)));
+        ParsedShoppingListLine yeast = croatian.parse("kvasac 3 vrećice").items().getFirst();
+        assertThat(yeast.name()).isEqualTo("kvasac");
+        assertThat(yeast.quantity()).isEqualByComparingTo("3");
+        // "kesica" is no word of that market.
+        assertThat(croatian.parse("kvasac 3 kesice").items().getFirst().quantity()).isEqualByComparingTo("1");
+    }
+
+    @Test
+    void aUnitWordAwayFromANumberStaysInTheName() {
+        assertThat(parseOne("kesice za zamrzivač").name()).isEqualTo("kesice za zamrzivač");
+        assertThat(parseOne("6 jaja L").name()).isEqualTo("jaja L");
+        assertThat(parseOne("Flaša za vodu").name()).isEqualTo("Flaša za vodu");
+    }
 }

@@ -38,7 +38,7 @@ public class DatabaseUnitVocabulary implements UnitVocabulary {
     private List<UnitWord> read(Market market) {
         return jdbcClient.sql("""
                         SELECT DISTINCT ON (normalized_word)
-                               normalized_word, role, base_unit, factor
+                               normalized_word, role, base_unit, factor, inside_pack
                         FROM app.unit_word
                         WHERE active
                           AND language = :language
@@ -51,7 +51,8 @@ public class DatabaseUnitVocabulary implements UnitVocabulary {
                         rs.getString("normalized_word"),
                         UnitWord.Role.valueOf(rs.getString("role")),
                         rs.getString("base_unit") == null ? null : BaseUnit.fromDatabase(rs.getString("base_unit")),
-                        rs.getBigDecimal("factor")))
+                        rs.getBigDecimal("factor"),
+                        rs.getBoolean("inside_pack")))
                 .list()
                 .stream()
                 .sorted((a, b) -> Integer.compare(b.word().length(), a.word().length()))

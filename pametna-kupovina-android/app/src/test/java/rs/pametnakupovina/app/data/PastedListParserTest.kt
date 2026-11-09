@@ -145,4 +145,13 @@ class PastedListParserTest {
         )
         assertEquals(4, PastedListParser.parse(text).size)
     }
+
+    @Test
+    fun `broj pakovanja posle naziva`() {
+        for (text in listOf("grcki jogurt 3x", "grcki jogurt 3 x", "grcki jogurt 3 puta")) {
+            val item = PastedListParser.parse(text).single()
+            assertEquals(text, "grcki jogurt", item.name)
+            assertEquals(text, 3.0, item.quantity, 0.0)
+        }
+    }
 }

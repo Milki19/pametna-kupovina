@@ -138,6 +138,10 @@ public record TestSkup(
         /** What the parser read: packages times the amount of one, or just packages. */
         public static Kolicina of(ParsedShoppingListLine line) {
             BigDecimal count = line.quantity() == null ? BigDecimal.ONE : line.quantity();
+            // "toalet papir 10 rolni": one pack of ten pieces (V157).
+            if (line.piecesInPack() != null) {
+                return new Kolicina(count.multiply(line.piecesInPack()), "kom");
+            }
             if (line.targetQuantity() == null || line.baseUnit() == null) {
                 return new Kolicina(count, "kom");
             }

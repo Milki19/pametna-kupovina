@@ -145,8 +145,10 @@ public class ShoppingLineInterpreter {
         }
 
         // Something counted by the piece and sold in cartons: "jaja 10 kom"
-        // asks for ten eggs, however many fit in one shop's carton.
+        // asks for ten eggs, however many fit in one shop's carton. "4
+        // kutije jaja" names the cartons themselves (V157).
         if ("piece".equals(intent.defaultBaseUnit())
+                && !line.packsNamed()
                 && target == null
                 && packages.compareTo(MIN_COUNT_OF_PIECES) >= 0
                 && packages.stripTrailingZeros().scale() <= 0) {

@@ -51,8 +51,8 @@ class ModelContractDatabaseTest {
 
     @Test
     void theTablesStartEmpty() {
-        // piece_mass and sale_mode are filled by V156.
-        for (String table : List.of("unit_word", "variant_word", "product_type_required_attribute")) {
+        // piece_mass and sale_mode are filled by V156, unit_word by V157.
+        for (String table : List.of("variant_word", "product_type_required_attribute")) {
             assertThat(jdbcClient.sql("SELECT COUNT(*) FROM app." + table).query(Long.class).single())
                     .as(table).isZero();
         }
@@ -81,12 +81,10 @@ class ModelContractDatabaseTest {
     @Test
     void theMarketsOwnUnitWordWinsOverTheLanguages() {
         Market market = marketRepository.defaultMarket();
+        // V157 has "kom" as a COUNT for the whole language; the market's own row wins.
         jdbcClient.sql("""
                         INSERT INTO app.unit_word (market_id, language, normalized_word, role, base_unit, factor)
-                        VALUES (NULL, :language, 'kesica', 'PACK', NULL, 1),
-                               (NULL, :language, 'kg', 'MEASURE', 'g', 1000),
-                               (:marketId, :language, 'kom', 'COUNT', 'piece', 1),
-                               (NULL, :language, 'kom', 'PACK', NULL, 1)
+                        VALUES (:marketId, :language, 'kom', 'PACK', NULL, 1)
                         """)
                 .param("language", market.defaultLanguage())
                 .param("marketId", market.id())
@@ -96,9 +94,10 @@ class ModelContractDatabaseTest {
             assertThat(word.inBaseUnit(new BigDecimal("1.5"))).isEqualByComparingTo("1500");
         });
         assertThat(unitVocabulary.find(market, "kom")).hasValueSatisfying(
-                word -> assertThat(word.role()).isEqualTo(UnitWord.Role.COUNT));
-        assertThat(unitVocabulary.words(market)).extracting(UnitWord::word).first().isEqualTo("kesica");
-        assertThat(unitVocabulary.find(market, "rolna")).isEmpty();
+                word -> assertThat(word.role()).isEqualTo(UnitWord.Role.PACK));
+        assertThat(unitVocabulary.words(market)).extracting(word -> word.word().length())
+                .isSortedAccordingTo(java.util.Comparator.reverseOrder());
+        assertThat(unitVocabulary.find(market, "mrkva")).isEmpty();
 
         assertThatThrownBy(() -> jdbcClient.sql("""
                         INSERT INTO app.unit_word (language, normalized_word, role, base_unit)
