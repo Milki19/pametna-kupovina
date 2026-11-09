@@ -12,6 +12,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
@@ -192,7 +193,14 @@ public class ShoppingLineInterpreter {
         long kind = intent.shoppingIntentId();
         Optional<CategoryAndBrand> split =
                 brandBesideCategory(kindPhrase, intent.normalizedAlias())
-                        .filter(found -> intentResolver.kindHasProductsOfBrand(kind, found.brand()));
+                        .filter(found -> intentResolver.kindHasProductsOfBrand(kind, found.brand()))
+                        // Brackets hold a note or a property: "hrana za mačke
+                        // (granule)" is dry cat food, not the brand "Granule"
+                        // (šesti test, 6.11.2026). Only a brand the kind's
+                        // products do not say under other brands stays one:
+                        // "kafa (Grand)" is Grand coffee.
+                        .filter(found -> !found.inBrackets()
+                                || !intentResolver.wordsDescribeTheKind(kind, found.brand()));
 
         if (split.isEmpty()) {
             // "feta sir", "mleko 3,2%", "šampon za decu": the kind, and what
@@ -445,19 +453,26 @@ public class ShoppingLineInterpreter {
             }
         }
 
-        String brand = String.join(" ", brandWords);
+        String written = String.join(" ", brandWords);
+        Matcher bracketed = BRACKETED.matcher(written);
+        boolean inBrackets = bracketed.matches();
+        String brand = inBrackets ? bracketed.group(1).trim() : written;
 
-        if (brandWords.isEmpty() || !intentResolver.isKnownBrand(brand)) {
+        if (brandWords.isEmpty() || brand.isEmpty() || !intentResolver.isKnownBrand(brand)) {
             return Optional.empty();
         }
 
         return Optional.of(new CategoryAndBrand(
                 String.join(" ", categoryWords),
-                brand
+                brand,
+                inBrackets
         ));
     }
 
-    private record CategoryAndBrand(String category, String brand) {
+    /** "(granule)", "(Grand)": the words beside the kind, all in one pair of brackets. */
+    private static final Pattern BRACKETED = Pattern.compile("^\\(([^()]*)\\)$");
+
+    private record CategoryAndBrand(String category, String brand, boolean inBrackets) {
     }
 
     public record InterpretedLine(

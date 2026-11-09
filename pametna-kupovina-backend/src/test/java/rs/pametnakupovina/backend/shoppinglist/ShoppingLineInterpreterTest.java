@@ -249,4 +249,47 @@ class ShoppingLineInterpreterTest {
         assertThat(beer.quantity()).isEqualByComparingTo("6");
         assertThat(beer.targetQuantity()).isNull();
     }
+    @Test
+    void wordsInBracketsThatProductsOfOtherBrandsSayAreAPropertyNotABrand() {
+        // "(granule)" was read as the brand "Granule", and cat food had no
+        // price (šesti test, 6.11.2026).
+        kind("hrana za mačke (granule)", "hrana za macke", false, "g");
+        // Some chain lists "Granule" as a brand, with or without brackets.
+        when(resolver.isKnownBrand(anyString())).thenReturn(true);
+        when(resolver.kindHasProductsOfBrand(anyLong(), anyString())).thenReturn(true);
+        when(resolver.wordsDescribeTheKind(7L, "granule")).thenReturn(true);
+        when(resolver.kindHasProductsMatching(anyLong(), anyString())).thenReturn(true);
+
+        var food = interpreter.interpret("hrana za mačke (granule) 2 kg");
+
+        assertThat(food.matchingRule()).isEqualTo(ShoppingItemRule.FLEXIBLE_CATEGORY);
+        assertThat(food.requiredBrand()).isNull();
+        assertThat(food.normalizedCategory()).isEqualTo("hrana za macke");
+        assertThat(food.category()).contains("granule");
+        assertThat(food.targetQuantity()).isEqualByComparingTo("2000");
+    }
+
+    @Test
+    void aBrandInBracketsThatOnlyItsOwnProductsSayStaysTheBrand() {
+        kind("kafa (Grand)", "kafa", false, "g");
+        when(resolver.isKnownBrand("Grand")).thenReturn(true);
+        when(resolver.kindHasProductsOfBrand(anyLong(), eq("Grand"))).thenReturn(true);
+        when(resolver.wordsDescribeTheKind(7L, "Grand")).thenReturn(false);
+
+        var coffee = interpreter.interpret("kafa (Grand)");
+
+        assertThat(coffee.matchingRule()).isEqualTo(ShoppingItemRule.FLEXIBLE_CATEGORY);
+        assertThat(coffee.category()).isEqualTo("kafa");
+        assertThat(coffee.requiredBrand()).isEqualTo("Grand");
+    }
+
+    @Test
+    void aBrandWithoutBracketsIsNotAskedWhetherItDescribesTheKind() {
+        kind("Pivo Zaječarsko", "pivo", false, "ml");
+        when(resolver.isKnownBrand("Zaječarsko")).thenReturn(true);
+        when(resolver.kindHasProductsOfBrand(anyLong(), eq("Zaječarsko"))).thenReturn(true);
+        when(resolver.wordsDescribeTheKind(anyLong(), anyString())).thenReturn(true);
+
+        assertThat(interpreter.interpret("Pivo Zaječarsko").requiredBrand()).isEqualTo("Zaječarsko");
+    }
 }
