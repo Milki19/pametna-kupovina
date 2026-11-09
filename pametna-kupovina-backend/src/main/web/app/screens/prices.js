@@ -8,7 +8,6 @@ import { failed, screen, toast, view } from '../core/screen.js';
 import { saved } from '../core/storage.js';
 import { listState } from './list.js';
 import { picking, renderPick, runPick } from './matching.js';
-import { updatePastePreview } from './paste.js';
 
 let search = { query: '', onSale: false, page: null, items: [], error: null };
 
@@ -144,8 +143,6 @@ document.addEventListener('input', event => {
     search.items = [];
     search.error = null;
     renderSearch();
-  } else if (field.id === 'many') {
-    updatePastePreview(field);
   } else if (field.id === 'pick-q' && picking) {
     picking.query = field.value;
     if (searchable(field.value)) return pickTyping.later(() => runPick(field.value));

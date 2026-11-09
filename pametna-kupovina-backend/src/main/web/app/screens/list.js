@@ -3,12 +3,12 @@
 import { api, isSameList, listRef, loadList } from '../core/api.js';
 import { amountLabel, counted, decimal, esc, notice, pill, separators, spinner } from '../core/format.js';
 import { icon, salesShortcut } from '../core/html.js';
+import { copy, enqueue, keepCopy, send, waiting } from '../core/outbox.js';
 import { failed, fieldError, screen, toast, view } from '../core/screen.js';
 import { reportProblem } from '../core/session.js';
+import { account, purchaseBought, purchaseItems } from '../core/shared.js';
 import { saved } from '../core/storage.js';
-import { account } from './account.js';
 import { addLabel, paste, pasteAskCard, pastedUnknown, pastePreviewHtml, rejectedMark, rejectedNote } from './paste.js';
-import { purchaseBought, purchaseItems } from './purchase.js';
 
 function itemAmount(item) {
   const c = item.flexibleConstraints;
@@ -69,7 +69,71 @@ function itemAttention(item) {
   return '';
 }
 
-let listState = { list: null, adding: null, editing: null, rejected: null, pasteAsk: null, pastedUnknown: new Set() };
+let listState = { list: null, adding: null, editing: null, rejected: null, pasteAsk: null, pastedUnknown: new Set(), offline: false };
+
+/**
+ * Izmena spiska: ide serveru, a bez veze čeka u redu (core/outbox.js) i šalje
+ * se kad se veza vrati. Ekran je već pokazuje (lokalna izmena pre poziva).
+ * Vraća false kad izmena čeka.
+ */
+async function change(method, path, body) {
+  try {
+    await api(method, path, body);
+    return true;
+  } catch (error) {
+    if (!error.offline) throw error;
+    await enqueue({ method, path, body });
+    return false;
+  }
+}
+
+/**
+ * Spisak sa servera posle izmene. Dok neka izmena čeka vezu, server ga nema
+ * celog, pa ostaje onaj na ekranu (sa lokalnim izmenama); i kad veza baš
+ * tada nestane.
+ */
+async function refresh(listId) {
+  if (waiting()) return;
+  try {
+    listState.list = await api('GET', `shopping-lists/${listId}`);
+    listState.offline = false;
+  } catch (error) {
+    if (!error.offline) throw error;
+    listState.offline = true;
+  }
+}
+
+/** Poruka posle izmene: bez veze kaže da izmena čeka. */
+const saidOffline = text => waiting() ? `${text} Bez veze: šalje se kad se veza vrati.` : text;
+
+/**
+ * Šalje izmene koje čekaju (pre čitanja spiska, i kad se veza vrati). Izmenu
+ * koju server odbije kaže, umesto da je prećuti.
+ */
+async function sendWaiting() {
+  if (!waiting()) return { sent: 0, left: 0 };
+  const result = await send(api);
+  if (result.refused.length) {
+    toast(`Server nije primio ${counted(result.refused.length, 'izmenu', 'izmene', 'izmena')} sa telefona: ${result.refused[0].error.message}`, null, null, true);
+  }
+  return result;
+}
+
+/** Veza se vratila: izmene idu serveru, a Spisak se osveži ako je otvoren. */
+async function onlineAgain() {
+  const before = waiting();
+  const { sent, left } = await sendWaiting();
+  const open = listState.list && view.dataset.screen === 'list';
+  if (!open || (!sent && !listState.offline) || left) return;
+  try {
+    listState.list = await loadList();
+    listState.offline = false;
+  } catch { return; }
+  renderList();
+  if (before) toast(`Veza je tu: poslato ${counted(sent, 'izmena', 'izmene', 'izmena')}.`);
+}
+window.addEventListener('online', onlineAgain);
+document.addEventListener('visibilitychange', () => { if (!document.hidden && waiting() && navigator.onLine) onlineAgain(); });
 
 // Iste granice kao na serveru: količina 0,01–999, naziv koji se kuca do 80 znakova.
 const MIN_QUANTITY = 0.01;
@@ -97,7 +161,7 @@ function itemEditor(item) {
   // Bez upisane količine („mleko, 1 kom“) nudi se komad, ne kilogram.
   const unit = storedUnit(c.requiredBaseUnit, c.targetQuantity) || 'kom';
   const amount = c.targetQuantity ? inputNumber(c.targetQuantity / editUnits[unit][1]) : '';
-  return `<form class="card" data-form="edit-item" data-id="${item.id}">
+  return `<form class="card" data-form="edit-item" data-id="${item.id}" data-key="edit-${item.id}">
     <div class="label accent">Izmeni stavku</div>
     ${flexible ? `
       <label class="label" for="edit-name">Šta kupuješ</label>
@@ -117,6 +181,8 @@ function itemEditor(item) {
 }
 
 async function saveItem(id, data) {
+  // Brisanje koje čeka „Vrati“ ide prvo, da se obrisana stavka ne vrati sa servera.
+  await flushDelete();
   const listId = listRef(listState.list);
   const item = listState.list.items.find(i => i.id === id);
   const quantity = parseNumber(data.get('quantity'));
@@ -145,7 +211,7 @@ async function saveItem(id, data) {
       ...(amount && c.requiredBaseUnit && c.requiredBaseUnit !== baseUnit ? { minPackageQuantity: null, maxPackageQuantity: null } : {})
     };
   }
-  await api('PUT', `shopping-lists/${listId}/items/${id}`, {
+  const body = {
     name,
     rawInput: name === item.name ? item.rawInput : name,
     barcode: item.barcode,
@@ -154,11 +220,14 @@ async function saveItem(id, data) {
     quantity,
     matchingRule: item.matchingRule,
     flexibleConstraints: flexible ? constraints : item.flexibleConstraints
-  });
+  };
+  await change('PUT', `shopping-lists/${listId}/items/${id}`, body);
   listState.editing = null;
-  listState.list = await api('GET', `shopping-lists/${listId}`);
+  // Na ekranu odmah; sa servera kad sve stigne (refresh).
+  Object.assign(item, { name, rawInput: body.rawInput, quantity, flexibleConstraints: body.flexibleConstraints });
+  await refresh(listId);
   renderList();
-  toast('Sačuvano.');
+  toast(saidOffline('Sačuvano.'));
 }
 
 async function showList() {
@@ -166,8 +235,13 @@ async function showList() {
   listState.editing = null;
   try {
     listState.list = await loadList();
+    listState.offline = false;
   } catch (error) {
-    return failed('Moj spisak', error, '#/spisak');
+    // Bez mreže: spisak kakav je poslednji put bio na ovom telefonu.
+    const kept = error.offline ? await copy() : null;
+    if (!kept) return failed('Moj spisak', error, '#/spisak');
+    listState.list = kept;
+    listState.offline = true;
   }
   renderList();
 }
@@ -177,7 +251,8 @@ const sameName = name => String(name || '').normalize('NFD').replace(/[\u0300-\u
   .replace(/đ/gi, 'dj').toLowerCase().replace(/\s+/g, ' ').trim();
 const duplicateGroups = items => {
   const seen = new Map();
-  items.forEach(item => seen.set(sameName(item.name), [...(seen.get(sameName(item.name)) || []), item]));
+  // Stavka dodata bez veze još nema svoj broj na serveru, pa se ne spaja.
+  items.filter(item => !item.waiting).forEach(item => seen.set(sameName(item.name), [...(seen.get(sameName(item.name)) || []), item]));
   return [...seen.values()].filter(group => group.length > 1);
 };
 
@@ -229,13 +304,17 @@ function duplicateNotice(items) {
 
 /** Prva stavka grupe dobija zbir, ostale se brišu. */
 async function mergeGroup(listId, { keep, quantity, constraints }, group) {
-  await api('PUT', `shopping-lists/${listId}/items/${keep.id}`, {
+  await change('PUT', `shopping-lists/${listId}/items/${keep.id}`, {
     ...itemRequest(keep), quantity, flexibleConstraints: constraints
   });
   for (const extra of group.slice(1)) {
-    await api('DELETE', `shopping-lists/${listId}/items/${extra.id}`)
+    await change('DELETE', `shopping-lists/${listId}/items/${extra.id}`)
       .catch(error => { if (error.status !== 404) throw error; });
   }
+  // Na ekranu odmah; sa servera kad sve stigne (refresh).
+  Object.assign(keep, { quantity, flexibleConstraints: constraints });
+  const extras = new Set(group.slice(1));
+  listState.list.items = listState.list.items.filter(item => !extras.has(item));
 }
 
 /** Spaja jednu grupu; spisak se zatim čita sa servera. */
@@ -247,10 +326,10 @@ async function mergeDuplicates(id) {
   if (!plan) return renderList();
   await mergeGroup(listId, plan, group);
   listState.editing = null;
-  listState.list = await api('GET', `shopping-lists/${listId}`);
+  await refresh(listId);
   renderList();
   const merged = listState.list.items.find(i => i.id === plan.keep.id);
-  toast(merged ? `Spojeno: ${merged.name}, ${itemAmount(merged)}.` : 'Spojeno.');
+  toast(saidOffline(merged ? `Spojeno: ${merged.name}, ${itemAmount(merged)}.` : 'Spojeno.'));
 }
 
 /**
@@ -271,10 +350,10 @@ async function mergeAllDuplicates() {
     }
   } finally {
     listState.editing = null;
-    listState.list = await api('GET', `shopping-lists/${listId}`);
+    await refresh(listId);
     renderList();
   }
-  toast(`Spojeno: ${counted(done, 'stavka', 'stavke', 'stavki')}.`);
+  toast(saidOffline(`Spojeno: ${counted(done, 'stavka', 'stavke', 'stavki')}.`));
 }
 
 /** Stavka kakva jeste, u obliku koji server prima za dodavanje i izmenu. */
@@ -288,6 +367,13 @@ const itemRequest = item => ({
   matchingRule: item.matchingRule,
   flexibleConstraints: item.flexibleConstraints
 });
+
+/** Bez veze: koliko izmena čeka, ili da je ovo spisak sačuvan na telefonu. */
+function offlineNotice() {
+  const count = waiting();
+  if (count) return notice(`Bez veze: ${counted(count, 'izmena čeka', 'izmene čekaju', 'izmena čeka')} slanje. Šalje se samo kad se veza vrati.`, 'warn');
+  return listState.offline ? notice('Bez veze: ovo je spisak sačuvan na ovom telefonu.', 'warn') : '';
+}
 
 function lostListNotice() {
   if (!saved.get('listLost')) return '';
@@ -346,12 +432,13 @@ async function removeBought() {
   const bought = boughtOnList(listState.list.items);
   for (const item of bought) {
     // Već obrisano (drugi telefon u domaćinstvu) nije greška.
-    await api('DELETE', `shopping-lists/${listId}/items/${item.id}`).catch(error => { if (error.status !== 404) throw error; });
+    await change('DELETE', `shopping-lists/${listId}/items/${item.id}`).catch(error => { if (error.status !== 404) throw error; });
+    listState.list.items = listState.list.items.filter(i => i !== item);
   }
   saved.set('purchaseDone', null);
-  listState.list = await api('GET', `shopping-lists/${listId}`);
+  await refresh(listId);
   renderList();
-  toast(`Sklonjeno sa spiska: ${counted(bought.length, 'stavka', 'stavke', 'stavki')}`);
+  toast(saidOffline(`Sklonjeno sa spiska: ${counted(bought.length, 'stavka', 'stavke', 'stavki')}`));
 }
 
 /** Sve stavke odjednom; spisak ostaje isti, pa ga ukućani i aplikacija i dalje vide. */
@@ -364,17 +451,32 @@ async function clearList() {
   }
   const listId = listRef(listState.list);
   try {
-    await api('DELETE', `shopping-lists/${listId}/items`);
+    await change('DELETE', `shopping-lists/${listId}/items`);
   } catch (error) {
     reportProblem('clear-list', error);
     throw error;
   }
+  listState.list.items = [];
   saved.set('purchaseDone', null);
   const purchase = saved.get('purchase');
   if (isSameList(purchase?.listId, listState.list)) saved.set('purchase', null);
   listState.editing = null;
-  listState.list = await api('GET', `shopping-lists/${listId}`);
+  await refresh(listId);
   renderList();
+}
+
+/**
+ * Stavka dodata bez veze: server je još nije video, pa se ni ne menja ni ne
+ * briše dok ne stigne. Nalepljena piše kako je upisana (količinu čita server),
+ * kao u pregledu pre dodavanja.
+ */
+function waitingItem(item) {
+  return `<div class="card item" data-key="wait-${item.id}">
+    <div class="row"><div class="grow">
+      ${pill('Čeka vezu', 'warn')}
+      <div class="name">${esc(item.name)}</div>
+      ${item.note ? `<div class="muted small">${esc(item.note)}</div>` : ''}
+    </div>${item.waiting === 'paste' && item.quantity === 1 ? '' : `<span class="amount">${esc(item.waiting === 'paste' ? `× ${decimal(item.quantity)}` : itemAmount(item))}</span>`}</div></div>`;
 }
 
 function renderList() {
@@ -402,7 +504,8 @@ function renderList() {
   screen({
     title: 'Moj spisak',
     subtitle: items.length ? counted(items.length, 'stavka', 'stavke', 'stavki') : null,
-    html: lostListNotice() + purchaseDoneNotice(items) +
+    key: 'list',
+    html: offlineNotice() + lostListNotice() + purchaseDoneNotice(items) +
       (purchase ? `<a class="card row" href="#/kupovina" style="text-decoration:none;color:inherit">
           <div class="grow"><div class="name">Kupovina u toku</div>
           <div class="muted small">Kupljeno ${purchaseBought(purchase)} od ${purchaseItems(purchase).length}</div></div>${icon.chevron}</a>` : '') +
@@ -410,8 +513,9 @@ function renderList() {
       // Akcije su prečica dok je spisak prazan; posle su na kartici Cene, da stavke budu na prvom ekranu.
       (listState.adding || items.length ? '' : salesShortcut()) +
       (items.length
-        ? `<div class="section">Stavke na spisku ${pill(items.length)}</div>` + duplicateNotice(items) + shown.map(item => item.id === listState.editing ? itemEditor(item) : `
-          <div class="card item">
+        ? `<div class="section">Stavke na spisku ${pill(items.length)}</div>` + duplicateNotice(items) + shown.map(item => item.id === listState.editing ? itemEditor(item)
+          : item.waiting ? waitingItem(item) : `
+          <div class="card item" data-key="item-${item.id}">
             <div class="row">
               <div class="item-tap" data-act="edit" data-id="${item.id}" role="button" tabindex="0" aria-label="Izmeni ${esc(item.name)}">
                 <div class="grow">
@@ -430,8 +534,10 @@ function renderList() {
            <p class="muted">Dodaj stavku po stavku, ili nalepi ceo spisak iz poruke ili beleške.</p></div>`),
     action: `<button class="btn primary main" data-act="calculate" ${items.length ? '' : 'disabled'}>Izračunaj</button>`
   });
+  // Bez mreže se spisak otvara ovakav kakav je sada.
+  keepCopy(listState.list);
   const field = view.querySelector('[data-form] input:not([type=hidden]), [data-form] textarea');
-  if (field && !listState.editing) field.focus();
+  if (field && !listState.editing && document.activeElement !== field) field.focus();
   const editing = view.querySelector('[data-form=edit-item]');
   if (editing) editing.scrollIntoView({ block: 'nearest' });
 }
@@ -447,7 +553,7 @@ function flushDelete() {
     const { listId, item, timer } = pendingDelete;
     clearTimeout(timer);
     pendingDelete = null;
-    deleting = api('DELETE', `shopping-lists/${listId}/items/${item.id}`)
+    deleting = change('DELETE', `shopping-lists/${listId}/items/${item.id}`)
       .catch(error => { if (error.status !== 404) toast(`Nije obrisano: ${item.name}. ${error.message}`, null, null, true); });
   }
   return deleting;
@@ -472,10 +578,13 @@ async function deleteItem(id) {
       }
       return;
     }
-    await api('POST', `shopping-lists/${listId}/items`, itemRequest(item));
-    listState.list = await api('GET', `shopping-lists/${listId}`);
+    const sent = await change('POST', `shopping-lists/${listId}/items`, itemRequest(item));
+    if (!sent && listState.list && listRef(listState.list) === listId) {
+      listState.list.items.splice(Math.min(index, listState.list.items.length), 0, { ...item, waiting: true });
+    }
+    await refresh(listId);
     renderList();
   });
 }
 
-export { clearList, deleteItem, flushDelete, listState, MAX_QUANTITY, mergeAllDuplicates, mergeDuplicates, parseNumber, removeBought, renderList, saveItem, showList };
+export { change, clearList, deleteItem, flushDelete, listState, MAX_QUANTITY, mergeAllDuplicates, mergeDuplicates, parseNumber, refresh, removeBought, renderList, saidOffline, saveItem, sendWaiting, showList };

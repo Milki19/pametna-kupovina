@@ -3,12 +3,11 @@
 import { date, esc, market, money, notice, pill, whole } from '../core/format.js';
 import { icon } from '../core/html.js';
 import { screen, toast, view } from '../core/screen.js';
+import { purchaseBought, purchaseItems } from '../core/shared.js';
 import { saved } from '../core/storage.js';
 import { distinctScenarios, mapsUrl, onTheWay, quantityLine, recommendation, scenarioTitle, selectedType, storeAddress } from './plan.js';
 
 /** Kupuje se samo ono što ima prodavnicu u planu; stavke bez nje se ne broje. */
-const purchaseItems = purchase => purchase.scenario.items.filter(i => i.storeId != null);
-const purchaseBought = purchase => purchaseItems(purchase).filter(i => purchase.checked[i.itemId]).length;
 /** Gde stavka stoji: gore ono što još treba, dole sklopljeno kupljeno i preskočeno. */
 const purchaseGroup = (purchase, item) =>
   purchase.checked[item.itemId] ? 'bought' : purchase.skipped?.[item.itemId] ? 'skipped' : 'active';

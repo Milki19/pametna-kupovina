@@ -3,11 +3,9 @@
 // menja za sesiju i dalje šalje samo kratak pristupni token. Napredak kupovine
 // ostaje u pregledaču, kao u aplikaciji.
 //
-// Ulaz za esbuild: moduli iz core/, screens/ i lib/ spajaju se u jedan
-// static/app/app.js (vidi src/main/web/build.mjs).
-//
-// Ruter se uvozi prvi, pa se svi ekrani izvrše pre njega: on ih pri
-// učitavanju skuplja u routes, actions i forms (i account* iz naloga).
+// Ulaz za esbuild: static/app/app.js nosi jezgro (core/) i Spisak, a ostali
+// ekrani su posebni delovi u static/app/chunks/, koje ruter učitava sa
+// import() kad zatrebaju (vidi src/main/web/build.mjs i core/router.js).
 
 import { route } from './core/router.js';
 import { refreshMarket } from './core/format.js';
@@ -16,7 +14,7 @@ import { toast } from './core/screen.js';
 // Kartica otvorena danima, ili stranica iz keša kad mreža nije stigla, vrti
 // staru verziju. Kad server ima noviju, ona se učita na sledećem prelazu
 // između ekrana, kad nema ničeg nesačuvanog.
-const loadedScripts = new URL(document.currentScript.src).search;
+const loadedScripts = new URL(import.meta.url).search;
 let newerVersion = false;
 let versionCheckedAt = 0;
 

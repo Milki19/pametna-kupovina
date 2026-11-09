@@ -3,7 +3,7 @@
 import { api, listRef } from '../core/api.js';
 import { counted, decimal, esc, plural } from '../core/format.js';
 import { toast, view } from '../core/screen.js';
-import { listState, renderList } from './list.js';
+import { change, listState, refresh, renderList, saidOffline } from './list.js';
 
 // Isto čitanje kao PastedListParser u Android aplikaciji (i ShoppingListTextParser
 // na serveru): „Kupi:“ je naslov, „(3)“ i „2x“ su količina, „za malog“ je beleška,
@@ -108,6 +108,12 @@ function updatePastePreview(field) {
   }
 }
 
+// Pregled se osvežava dok se kuca. Ovde, a ne u Cenama, jer je Nalepi deo
+// prvog ekrana, a Cene se učitavaju tek kad zatrebaju.
+document.addEventListener('input', event => {
+  if (event.target.id === 'many') updatePastePreview(event.target);
+});
+
 /** Više stavki na spisak koji nije prazan: prvo pitanje „Dodaj na spisak“ ili „Zameni spisak“. */
 async function submitPaste(text) {
   if (listState.list.items.length && itemCount(text) > 1) {
@@ -147,7 +153,13 @@ function rejectedNote() {
 
 async function addText(text) {
   const listId = listRef(listState.list);
-  const result = await api('POST', `shopping-lists/${listId}/items/paste`, { text });
+  let result;
+  try {
+    result = await api('POST', `shopping-lists/${listId}/items/paste`, { text });
+  } catch (error) {
+    if (!error.offline) throw error;
+    return addWithoutNetwork(listId, text);
+  }
   const rejected = result.rejectedLines || [];
   // Nalepljen spisak (više stavki, i posle „Dodaj na spisak“ / „Zameni spisak“), ne jedna stavka.
   const pasted = itemCount(text) > 1;
@@ -157,7 +169,9 @@ async function addText(text) {
   }
   listState.rejected = rejected.length ? { text: rejected.map(line => line.text).join('\n'), lines: rejected } : null;
   if (!rejected.length) listState.adding = null;
-  listState.list = await api('GET', `shopping-lists/${listId}`);
+  // Neka ranija izmena još čeka vezu: dodato se vidi sa servera kad i ona stigne.
+  listState.list.items.push(...(result.items || []).filter(item => !listState.list.items.some(i => i.id === item.id)));
+  await refresh(listId);
   renderList();
   const unknown = listState.pastedUnknown.size;
   const read = !pasted || !result.createdCount ? ''
@@ -167,6 +181,26 @@ async function addText(text) {
   const added = (result.createdCount === 1 ? 'Dodato.'
     : result.createdCount ? `Dodato: ${counted(result.createdCount, 'stavka', 'stavke', 'stavki')}.` : 'Nema stavki za dodavanje.') + read;
   toast(rejected.length ? `${added} Nije dodato: ${rejected.length}, razlog je ispod polja.` : added);
+}
+
+/**
+ * Bez veze: nalepljeno čeka u redu i šalje se serveru kakvo je, a dotle je na
+ * spisku onako kako ga čita pregled (naziv, broj, beleška), sa „Čeka vezu“.
+ * Server ga posle čita svojim pravilima, isto kao da je stiglo odmah.
+ */
+async function addWithoutNetwork(listId, text) {
+  await change('POST', `shopping-lists/${listId}/items/paste`, { text });
+  const lines = paste(text).filter(line => !line.skipped);
+  const stamp = Date.now();
+  listState.list.items.push(...lines.map((line, i) => ({
+    id: -(stamp + i), name: line.name, note: line.note, quantity: line.quantity,
+    matchingRule: 'FLEXIBLE_CATEGORY', flexibleConstraints: null, waiting: 'paste'
+  })));
+  listState.rejected = null;
+  listState.adding = null;
+  listState.offline = true;
+  renderList();
+  toast(saidOffline(lines.length === 1 ? 'Dodato na telefonu.' : `Dodato na telefonu: ${counted(lines.length, 'stavka', 'stavke', 'stavki')}.`));
 }
 
 export { addLabel, addText, paste, pasteAskCard, pastedUnknown, pastePreviewHtml, rejectedMark, rejectedNote, submitPaste, updatePastePreview };
