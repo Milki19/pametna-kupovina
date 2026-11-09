@@ -1216,6 +1216,8 @@ public class StoreShoppingOfferRepository {
                                   )
                               )
                         ),
+                        -- Two text blocks: one string constant holds at most 64 KB.
+                        """.concat("""
                         -- Products shoppers said twice in two days a shop lacks
                         -- (V121), read once instead of once per shop and product.
                         missing_in_store AS MATERIALIZED (
@@ -1808,7 +1810,7 @@ public class StoreShoppingOfferRepository {
                         ORDER BY store.id ASC,
                                  priced.item_created_at ASC,
                                  priced.item_id ASC
-                        """)
+                        """))
                 .param("asOfDate", asOfDate)
                 .param("itemIds", itemIds)
                 .param("storeIds", storeIds)
