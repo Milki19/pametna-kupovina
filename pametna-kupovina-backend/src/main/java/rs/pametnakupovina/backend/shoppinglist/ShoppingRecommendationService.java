@@ -414,18 +414,17 @@ public class ShoppingRecommendationService {
             }
         }
 
-        // Najjeftinija korpa is never dearer than another plan that covers
-        // as much (test 1.11.: 3.831 against 3.621 RSD in Najbolje ukupno).
-        // As much is as many items, as asked: the usual kind and size only
-        // orders the plans that cost the same, or Najjeftinija stays dearer
-        // than Jedna stanica (proba 5.11.: 4.069,87 against 3.829,87 RSD,
-        // where one shop's Persil did not count as the usual one).
-        lowestPrice = cheapestOfSameCoverage(lowestPrice, recommended, bestSingle);
+        // Every rule the shown plans keep lives in PlanGuard (V155).
+        PlanSet<EvaluatedPlan> guarded = PlanGuard.guard(
+                new PlanSet<>(bestSingle, recommended, lowestPrice));
+        EvaluatedPlan shownSingle = guarded.singleStore();
+        recommended = guarded.bestTotal();
+        lowestPrice = guarded.lowestBasket();
 
         OptimizationScenarioResponse singleScenario = buildScenario(
                 RecommendationScenarioType.SINGLE_STORE,
-                bestSingle,
-                bestSingle,
+                shownSingle,
+                shownSingle,
                 shoppingList.items(),
                 itemsWithAnyNearbyOffer,
                 routeMatrix,
@@ -438,7 +437,7 @@ public class ShoppingRecommendationService {
         OptimizationScenarioResponse recommendedScenario = buildScenario(
                 RecommendationScenarioType.RECOMMENDED_BALANCE,
                 recommended,
-                bestSingle,
+                shownSingle,
                 shoppingList.items(),
                 itemsWithAnyNearbyOffer,
                 routeMatrix,
@@ -451,7 +450,7 @@ public class ShoppingRecommendationService {
         OptimizationScenarioResponse lowestPriceScenario = buildScenario(
                 RecommendationScenarioType.LOWEST_PRICE,
                 lowestPrice,
-                bestSingle,
+                shownSingle,
                 shoppingList.items(),
                 itemsWithAnyNearbyOffer,
                 routeMatrix,
@@ -822,32 +821,12 @@ public class ShoppingRecommendationService {
                 routeMatrix
         );
 
-        BigDecimal travelCost = money(
-                BigDecimal.valueOf(route.distanceKm())
-                        .multiply(market.travelCostPerKm())
-        );
-
-        BigDecimal timeCost = money(
-                BigDecimal.valueOf(route.durationSeconds())
-                        .divide(
-                                BigDecimal.valueOf(3600),
-                                8,
-                                RoundingMode.HALF_UP
-                        )
-                        .multiply(market.valuePerHour())
-        );
-
-        BigDecimal stopCost = money(
-                market.costPerStop().multiply(
-                        BigDecimal.valueOf(plan.stores().size())
-                )
-        );
-
-        BigDecimal totalCost = money(
-                plan.basketCost()
-                        .add(travelCost)
-                        .add(timeCost)
-                        .add(stopCost)
+        TripCost cost = TripCost.of(
+                plan.basketCost(),
+                route.distanceKm(),
+                route.durationSeconds(),
+                plan.stores().size(),
+                TripPrices.of(market)
         );
 
         return new EvaluatedPlan(
@@ -856,10 +835,10 @@ public class ShoppingRecommendationService {
                 route.stops(),
                 route.distanceKm(),
                 route.durationSeconds(),
-                travelCost,
-                timeCost,
-                stopCost,
-                totalCost
+                cost.travel(),
+                cost.time(),
+                cost.stops(),
+                cost.total()
         );
     }
 
@@ -1097,30 +1076,6 @@ public class ShoppingRecommendationService {
         return one.plan().coveredItems() == other.plan().coveredItems()
                 && wantedItems(one) == wantedItems(other)
                 && usualItems(one) == usualItems(other);
-    }
-
-    /** Plans a shopper compares by price: as many items, as asked. */
-    private static boolean sameItemsAsAsked(EvaluatedPlan one, EvaluatedPlan other) {
-        return one.plan().coveredItems() == other.plan().coveredItems()
-                && wantedItems(one) == wantedItems(other);
-    }
-
-    private static EvaluatedPlan cheapestOfSameCoverage(
-            EvaluatedPlan lowestPrice,
-            EvaluatedPlan... others
-    ) {
-        if (lowestPrice == null) {
-            return null;
-        }
-        EvaluatedPlan cheapest = lowestPrice;
-        for (EvaluatedPlan other : others) {
-            if (other != null
-                    && sameItemsAsAsked(other, lowestPrice)
-                    && other.plan().basketCost().compareTo(cheapest.plan().basketCost()) < 0) {
-                cheapest = other;
-            }
-        }
-        return cheapest;
     }
 
     private EvaluatedPlan chooseByTotalCost(
@@ -1787,7 +1742,34 @@ public class ShoppingRecommendationService {
             BigDecimal timeCost,
             BigDecimal stopCost,
             BigDecimal totalCost
-    ) {
+    ) implements CostedPlan {
+
+        @Override
+        public int coveredItems() {
+            return plan.coveredItems();
+        }
+
+        @Override
+        public long wantedItems() {
+            return ShoppingRecommendationService.wantedItems(this);
+        }
+
+        @Override
+        public long usualItems() {
+            return ShoppingRecommendationService.usualItems(this);
+        }
+
+        @Override
+        public BigDecimal basketCost() {
+            return plan.basketCost();
+        }
+
+        @Override
+        public java.util.Set<Long> storeIds() {
+            return plan.stores().stream()
+                    .map(NearbyStore::storeId)
+                    .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        }
     }
 
     private record RouteEvaluation(
