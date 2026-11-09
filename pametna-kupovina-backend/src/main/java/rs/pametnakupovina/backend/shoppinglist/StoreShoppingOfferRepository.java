@@ -3,6 +3,11 @@ package rs.pametnakupovina.backend.shoppinglist;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
+import rs.pametnakupovina.backend.market.Market;
+import rs.pametnakupovina.backend.market.MarketRepository;
+import rs.pametnakupovina.backend.matching.KindTaxonomy;
+import rs.pametnakupovina.backend.matching.ProductNameNormalizer;
+import rs.pametnakupovina.backend.matching.VariantWord;
 import rs.pametnakupovina.backend.product.CatalogMemo;
 
 import java.time.LocalDate;
@@ -64,10 +69,22 @@ public class StoreShoppingOfferRepository {
 
     private final JdbcClient jdbcClient;
     private final CatalogMemo memo;
+    private final KindTaxonomy kinds;
+    private final MarketRepository markets;
+    private final ProductNameNormalizer normalizer;
 
-    public StoreShoppingOfferRepository(JdbcClient jdbcClient, CatalogMemo memo) {
+    public StoreShoppingOfferRepository(
+            JdbcClient jdbcClient,
+            CatalogMemo memo,
+            KindTaxonomy kinds,
+            MarketRepository markets,
+            ProductNameNormalizer normalizer
+    ) {
         this.jdbcClient = jdbcClient;
         this.memo = memo;
+        this.kinds = kinds;
+        this.markets = markets;
+        this.normalizer = normalizer;
     }
 
     /**
@@ -75,7 +92,11 @@ public class StoreShoppingOfferRepository {
      * row without what only names or orders it, so two lines that ask the
      * same, in this list or anyone's, are priced once.
      */
-    record PlanItem(Long id, String name, String spec) {
+    /**
+     * @param variantWords what a flexible line says beyond its kind, its
+     *                     brand included: where its variant is named (V160)
+     */
+    record PlanItem(Long id, String name, String spec, String variantWords) {
     }
 
     private List<PlanItem> planItems(Long listId) {
@@ -87,7 +108,11 @@ public class StoreShoppingOfferRepository {
                                    'created_at', 'updated_at',
                                    'matching_decision_id', 'matching_score',
                                    'matching_algorithm_version', 'flexible_category'
-                               ])::TEXT) AS spec
+                               ])::TEXT) AS spec,
+                               CASE WHEN item.matching_rule = 'FLEXIBLE_CATEGORY'
+                                    THEN CONCAT_WS(' ', item.required_brand,
+                                                   item.flexible_category_normalized)
+                               END AS variant_words
                         FROM app.shopping_list_item AS item
                         WHERE item.shopping_list_id = :listId
                         ORDER BY item.created_at, item.id
@@ -96,7 +121,8 @@ public class StoreShoppingOfferRepository {
                 .query((resultSet, rowNumber) -> new PlanItem(
                         resultSet.getLong("id"),
                         resultSet.getString("name"),
-                        resultSet.getString("spec")))
+                        resultSet.getString("spec"),
+                        resultSet.getString("variant_words")))
                 .list();
     }
 
@@ -158,7 +184,8 @@ public class StoreShoppingOfferRepository {
         List<Object> key = java.util.Arrays.asList(
                 "planOffers", listId, items, shops, asOfDate, includeUnlocated, List.of(bought));
         return memo.rememberOffers(key, () -> List.copyOf(
-                offersByItem(items, shops, asOfDate, includeUnlocated, bought)));
+                offersByItem(items, shops, asOfDate, includeUnlocated, bought,
+                        markets.forShoppingList(listId))));
     }
 
     /**
@@ -172,11 +199,13 @@ public class StoreShoppingOfferRepository {
             List<Long> shops,
             LocalDate asOfDate,
             boolean includeUnlocated,
-            Long[] bought
+            Long[] bought,
+            Market market
     ) {
         long generation = memo.offersGeneration();
         Map<String, List<StoreItemOffer>> bySpec = new HashMap<>();
         Map<String, Long> askedFor = new LinkedHashMap<>();
+        Map<Long, List<VariantWord>> variants = new HashMap<>();
         for (PlanItem item : items) {
             if (bySpec.containsKey(item.spec()) || askedFor.containsKey(item.spec())) {
                 continue;
@@ -187,12 +216,16 @@ public class StoreShoppingOfferRepository {
                 bySpec.put(item.spec(), kept);
             } else {
                 askedFor.put(item.spec(), item.id());
+                List<VariantWord> named = variantsNamed(market, item.variantWords());
+                if (!named.isEmpty()) {
+                    variants.put(item.id(), named);
+                }
             }
         }
         if (!askedFor.isEmpty()) {
             Map<Long, List<StoreItemOffer>> byItem = new HashMap<>();
             for (StoreItemOffer offer : queryOffers(
-                    List.copyOf(askedFor.values()), shops, asOfDate, includeUnlocated, bought)) {
+                    List.copyOf(askedFor.values()), shops, asOfDate, includeUnlocated, bought, variants)) {
                 byItem.computeIfAbsent(offer.itemId(), ignored -> new ArrayList<>()).add(offer);
             }
             askedFor.forEach((spec, itemId) -> {
@@ -217,6 +250,19 @@ public class StoreShoppingOfferRepository {
         return offers;
     }
 
+    /**
+     * The variants a line names ("kapsule", "zero", "orasi"), by the one
+     * dictionary of them (KindTaxonomy, V155). A product that has another
+     * value of such an attribute, or whose kind must say it and does not,
+     * is no choice for the line, not a substitute (V160).
+     */
+    private List<VariantWord> variantsNamed(Market market, String words) {
+        if (words == null || words.isBlank()) {
+            return List.of();
+        }
+        return kinds.variantsIn(market, normalizer.normalize(words));
+    }
+
     private static List<Object> itemKey(
             String spec, List<Long> shops, LocalDate asOfDate, boolean includeUnlocated, Long[] bought) {
         return java.util.Arrays.asList(
@@ -228,8 +274,17 @@ public class StoreShoppingOfferRepository {
             List<Long> storeIds,
             LocalDate asOfDate,
             boolean includeUnlocated,
-            Long[] boughtFamilyIds
+            Long[] boughtFamilyIds,
+            Map<Long, List<VariantWord>> variants
     ) {
+        List<Long> variantItemIds = new ArrayList<>();
+        List<String> variantCodes = new ArrayList<>();
+        List<String> variantValues = new ArrayList<>();
+        variants.forEach((itemId, named) -> named.forEach(variant -> {
+            variantItemIds.add(itemId);
+            variantCodes.add(variant.attributeCode());
+            variantValues.add(variant.value());
+        }));
         return jdbcClient.sql("""
                         -- Which products can answer each item in each chain, worked
                         -- out once per chain instead of once per store: twenty
@@ -1325,6 +1380,40 @@ public class StoreShoppingOfferRepository {
                                          )
                                    ) AS has_loose_observation
                             FROM candidate
+                            -- A variant the line names is a filter, not a hint:
+                            -- "Nespresso kapsule" are no ground coffee, "Coca
+                            -- Cola zero" no plain Cola (šesti test, 6.11.2026).
+                            -- A product with another value is no choice, and so
+                            -- is one whose kind must say it and does not (V160).
+                            WHERE NOT EXISTS (
+                                SELECT 1
+                                FROM UNNEST(
+                                    CAST(:variantItemIds AS BIGINT[]),
+                                    CAST(:variantCodes AS TEXT[]),
+                                    CAST(:variantValues AS TEXT[])
+                                ) AS asked(item_id, attribute_code, text_value)
+                                JOIN app.product_attribute_definition AS definition
+                                  ON definition.code = asked.attribute_code
+                                LEFT JOIN app.retailer_product_attribute AS said
+                                  ON said.retailer_product_id = candidate.retailer_product_id
+                                 AND said.attribute_definition_id = definition.id
+                                WHERE asked.item_id = candidate.item_id
+                                  AND (
+                                      said.text_value IS DISTINCT FROM asked.text_value
+                                      AND (
+                                          said.retailer_product_id IS NOT NULL
+                                          OR EXISTS (
+                                              SELECT 1
+                                              FROM app.retailer_product_type AS typed
+                                              JOIN app.product_type_required_attribute AS required
+                                                ON required.product_type_id = typed.product_type_id
+                                               AND required.attribute_definition_id = definition.id
+                                              WHERE typed.retailer_product_id =
+                                                    candidate.retailer_product_id
+                                          )
+                                      )
+                                  )
+                            )
                         ),
                         -- Every price a candidate has in the newest lists, read
                         -- once per product. Looked up again for every shop of
@@ -1725,6 +1814,9 @@ public class StoreShoppingOfferRepository {
                 .param("storeIds", storeIds)
                 .param("includeUnlocated", includeUnlocated)
                 .param("boughtFamilyIds", boughtFamilyIds)
+                .param("variantItemIds", variantItemIds.toArray(Long[]::new))
+                .param("variantCodes", variantCodes.toArray(String[]::new))
+                .param("variantValues", variantValues.toArray(String[]::new))
                 .query(ROW_MAPPER)
                 .list();
     }

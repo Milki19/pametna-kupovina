@@ -783,6 +783,14 @@ public class ProductCatalogMaintenanceService {
                 "PATTERN:PACKAGING_FORM",
                 null
         );
+
+        // Variants a list can ask for (zero, kapsule, smrznuto, mešavina),
+        // read from the names by app.attribute_value_rule, so a new chain's
+        // capsules are capsules from its first import (V160).
+        jdbcClient.sql("SELECT app.read_attribute_values(?)")
+                .param(1, retailerId)
+                .query(Integer.class)
+                .single();
     }
 
     private void synchronizeTextAttribute(
