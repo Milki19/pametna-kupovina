@@ -16,9 +16,40 @@ const PLAN_REMEMBERED_FOR = 60 * 60 * 1000;
 const planInputs = list => JSON.stringify(list.items.map(i => [i.id, i.name, i.barcode, i.quantity, i.matchingRule,
   i.matchingStatus, i.matchedCanonicalProductId, i.matchedProductFamilyId, i.matchingDecisionId, i.flexibleConstraints]));
 let selectedType = 'RECOMMENDED_BALANCE';
-function chooseScenario(type) { selectedType = type; renderRecommendation(); }
+function chooseScenario(type) {
+  selectedType = type;
+  const s = recommendation && recommendation[scenarioKey[type]];
+  if (s && s.detailsFailed) delete s.detailsFailed;
+  renderRecommendation();
+}
 /** Plan je računat po staroj ceni vremena ili prevoza. */
 function forgetRecommendation() { recommendation = null; recommendationFor = null; }
+
+// Preporuke u dva koraka (šesti test: 100 stavki su bile 212 KB): server
+// odmah šalje zbir i pokrivenost sva tri plana i stavke izabranog, a stavke
+// drugog plana tek kad se on otvori.
+const scenarioKey = { SINGLE_STORE: 'singleStore', RECOMMENDED_BALANCE: 'recommendedBalance', LOWEST_PRICE: 'lowestPrice' };
+/** Broj stavki spiska; plan bez stavki ga nosi posebno. */
+const itemTotal = s => s.itemCount ?? s.items.length;
+/** Plan čije stavke još nisu stigle (stari server šalje sve, bez `detailed`). */
+const withoutItems = s => s.detailed === false;
+let recommendationUrl = null;
+const loadingDetails = new Set();
+async function loadDetails(result, type) {
+  if (loadingDetails.has(type)) return;
+  loadingDetails.add(type);
+  try {
+    const opened = await api('GET', `${recommendationUrl}&plan=${type}`);
+    if (recommendation !== result) return;
+    result[scenarioKey[type]] = opened[scenarioKey[type]];
+  } catch (error) {
+    if (recommendation !== result) return;
+    result[scenarioKey[type]] = { ...result[scenarioKey[type]], detailsFailed: true };
+  } finally {
+    loadingDetails.delete(type);
+  }
+  if (recommendation === result && location.hash === '#/preporuke') renderRecommendation();
+}
 const scenarioTitle = { SINGLE_STORE: 'Jedna prodavnica', RECOMMENDED_BALANCE: 'Preporučeni balans', LOWEST_PRICE: 'Najniža cena' };
 const scenarioShort = { SINGLE_STORE: 'Jedna stanica', RECOMMENDED_BALANCE: 'Najbolje ukupno', LOWEST_PRICE: 'Najjeftinija korpa' };
 const scenarioBadge = { SINGLE_STORE: 'Najbrže i najlakše', RECOMMENDED_BALANCE: 'Preporučeno', LOWEST_PRICE: 'Najniža cena korpe' };
@@ -53,7 +84,7 @@ function quantityLine(item) {
 function scenarioWarnings(s, result) {
   const warnings = [];
   if (!s.available) return warnings;
-  const missing = s.items.length - s.coveredItems - (s.onTheWay?.itemIds.length || 0);
+  const missing = itemTotal(s) - s.coveredItems - (s.onTheWay?.itemIds.length || 0);
   if (!s.complete && missing > 0) {
     const unrecognised = Math.min(s.unmatchedItems, missing);
     const unpriced = missing - unrecognised;
@@ -104,7 +135,8 @@ function balanceExplanation(s, result) {
       || s.totalCost == null || single.totalCost == null) return '';
   const more = s.totalCost - single.totalCost;
   if (Math.round(more) <= 0) return '';
-  const inSingle = new Set(single.items.filter(i => i.resultStatus === 'AVAILABLE').map(i => i.itemId));
+  const inSingle = new Set(single.availableItemIds
+    || single.items.filter(i => i.resultStatus === 'AVAILABLE').map(i => i.itemId));
   const extra = s.items.filter(i => i.resultStatus === 'AVAILABLE' && !inSingle.has(i.itemId)).map(i => i.requestedName);
   if (!extra.length) return '';
   const names = extra.length > 4 ? `${extra.slice(0, 3).join(', ')} i još ${extra.length - 3}` : extra.join(', ');
@@ -147,7 +179,9 @@ async function showRecommendation() {
       '<p class="center muted">Računam tri scenarija…</p>' + '<div class="skeleton" aria-hidden="true"></div>'.repeat(3) });
     // Lanci bez adresa su najveći deo računanja, a nisu u planu: plan se
     // prikaže bez njih, a oni stignu odmah zatim.
-    recommendation = await api('GET', `shopping-lists/${listId}/recommendations?latitude=${origin.lat}&longitude=${origin.lng}${travel}&unlocated=false`);
+    const url = `shopping-lists/${listId}/recommendations?latitude=${origin.lat}&longitude=${origin.lng}${travel}&unlocated=false`;
+    recommendation = await api('GET', `${url}&plan=${selectedType}`);
+    recommendationUrl = url;
     recommendationFor = { key, at: Date.now() };
   } catch (error) {
     return failed('Preporuke', error, '#/preporuke');
@@ -173,6 +207,8 @@ function renderRecommendation() {
   const scenarios = distinctScenarios(result);
   const s = scenarios.find(x => x.type === selectedType) || result.recommendedBalance;
   const stores = [...s.stores].sort((a, b) => a.stopOrder - b.stopOrder);
+  const waiting = withoutItems(s);
+  if (waiting && !s.detailsFailed) loadDetails(result, s.type);
   const unresolved = s.items.filter(i => i.resultStatus !== 'AVAILABLE' && !onTheWay(s, i));
   const a = result.assumptions;
   const onFoot = a?.travelMode === 'WALKING';
@@ -191,7 +227,7 @@ function renderRecommendation() {
           <span class="price">${x.available && x.totalCost != null ? whole(x.totalCost) : 'nema'}</span>
           <span class="small muted">${onFoot ? 'korpa' : 'ukupno'}</span>
           ${x.available ? `<span class="small muted">${onFoot ? `~${duration(x.routeDurationSeconds)} hoda` : `korpa ${whole(x.basketCost)}`}</span>
-            <span class="small"><b>${x.coveredItems} od ${x.items.length}</b> ${plural(x.items.length, 'stavke', 'stavke', 'stavki')}</span>` : ''}
+            <span class="small"><b>${x.coveredItems} od ${itemTotal(x)}</b> ${plural(itemTotal(x), 'stavke', 'stavke', 'stavki')}</span>` : ''}
         </button>`).join('')}
       </div>
       <div class="card stripe">
@@ -207,9 +243,13 @@ function renderRecommendation() {
             <div><span class="small muted">Razdaljina</span><b>${distance(s.routeDistanceKm)}</b></div>
             <div><span class="small muted">Vreme</span><b>~${duration(s.routeDurationSeconds)}</b></div>
           </div>
-          <div class="row"><span class="grow">Pokrivenost korpe</span><b style="color:var(--primary)">${s.coveredItems} od ${s.items.length} ${plural(s.items.length, 'stavke', 'stavke', 'stavki')}</b></div>`
+          <div class="row"><span class="grow">Pokrivenost korpe</span><b style="color:var(--primary)">${s.coveredItems} od ${itemTotal(s)} ${plural(itemTotal(s), 'stavke', 'stavke', 'stavki')}</b></div>`
           : `<p>${esc(s.explanation)}</p>`}
-      </div>` + onTheWayNotice(s, onFoot) + nearOnlyOffer(s, result) + balanceExplanation(s, result) +
+      </div>` + (waiting ? (s.detailsFailed
+        ? `<div class="card soft row"><span class="grow small">Stavke ovog plana nisu stigle.</span>
+            <button class="btn small" data-act="scenario" data-type="${s.type}">Pokušaj ponovo</button></div>`
+        : `<p class="center muted small" role="status">Učitavam stavke plana…</p><div class="skeleton" aria-hidden="true"></div>`) : '')
+      + onTheWayNotice(s, onFoot) + nearOnlyOffer(s, result) + balanceExplanation(s, result) +
       scenarioWarnings(s, result).map(w => notice(w, 'warn')).join('') +
       (s.available && stores.length ? `
         <a class="btn" href="${esc(mapsUrl(origin, stores, result.assumptions?.travelMode === 'WALKING'))}" target="_blank" rel="noopener">${icon.route}${stores.length === 1 ? 'Pregled puta do prodavnice' : `Pregled rute kroz ${stores.length} ${plural(stores.length, 'prodavnicu', 'prodavnice', 'prodavnica')}`}</a>
@@ -256,7 +296,7 @@ function renderRecommendation() {
         ].filter(Boolean).map(line => `<p class="small">${esc(line)}</p>`).join('')}
         <a class="btn text small" href="#/vreme">Promeni cenu vremena i prevoza</a>
       </details>`,
-    action: s.available ? `<button class="btn primary main" data-act="start-purchase">Započni kupovinu po ovom planu</button>` : ''
+    action: s.available && !waiting ? `<button class="btn primary main" data-act="start-purchase">Započni kupovinu po ovom planu</button>` : ''
   });
 }
 

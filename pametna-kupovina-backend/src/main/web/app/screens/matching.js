@@ -334,7 +334,8 @@ async function rematch(itemId) {
 /** „Pogrešan proizvod" u planu: odluka se pamti kao odbijena, a zamena se bira u koraku 1. */
 let pendingPick = null;
 async function wrongProduct(itemId) {
-  const planItem = recommendation && recommendation.recommendedBalance.items.find(i => i.itemId === itemId);
+  const planItem = recommendation && (distinctScenarios(recommendation).find(x => x.type === selectedType)
+    || recommendation.recommendedBalance).items.find(i => i.itemId === itemId);
   const name = planItem ? planItem.requestedName : '';
   if (!confirm(`Označi proizvod za „${name}“ kao pogrešan i izaberi drugi?`)) return;
   const listId = saved.get('listId');
