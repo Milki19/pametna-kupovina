@@ -90,12 +90,12 @@ public class SaleService {
         SaleSort order = sort == null ? SaleSort.DISCOUNT : sort;
         // The same page for the same place is the same for everyone until the
         // list is read again (k6, 3.11.2026: 130 ms of the database each).
-        // Only a place the app already rounded to about a kilometre is kept
-        // as part of the key; an exact one is answered and forgotten.
-        if (near != null && !(roughly(near.latitude()) && roughly(near.longitude()))) {
-            return read(filter, order, page, limit, near != null, radius);
+        // Only a place rounded to about a kilometre is kept as part of the
+        // key, five minutes at most; an exact one is answered and forgotten.
+        if (near != null && !near.isRough()) {
+            return read(filter, order, page, limit, true, radius);
         }
-        return memo.rememberOffers(
+        return memo.rememberShared(
                 java.util.Arrays.asList(CatalogMemo.SALE_PAGE, filter, order, page, limit),
                 () -> read(filter, order, page, limit, near != null, radius));
     }
@@ -139,12 +139,6 @@ public class SaleService {
                 retailers,
                 located ? radius : null
         );
-    }
-
-    /** Two decimals at most, as the apps send it (about a kilometre). */
-    static boolean roughly(double degrees) {
-        double hundredths = degrees * 100;
-        return Math.abs(hundredths - Math.rint(hundredths)) < 1e-6;
     }
 
     private static String blankToNull(String value) {

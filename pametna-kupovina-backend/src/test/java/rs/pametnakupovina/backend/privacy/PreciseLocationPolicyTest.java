@@ -84,6 +84,30 @@ class PreciseLocationPolicyTest {
         }
     }
 
+    @Test
+    void searchAndSalesSeeOnlyARoundedPlaceAndSaySo() {
+        ListAppender<ILoggingEvent> appender = startAppender();
+
+        try {
+            String result = policy.useRoughlyForAWhile(
+                    PreciseLocationPurpose.SEARCH_RANKING,
+                    LATITUDE,
+                    LONGITUDE,
+                    location -> location.latitude() + ":" + location.longitude()
+            );
+
+            assertThat(result).isEqualTo("44.12:19.65");
+            assertThat(appender.list).hasSize(1);
+            assertThat(appender.list.getFirst().getFormattedMessage())
+                    .contains("SEARCH_RANKING")
+                    .contains("retention=ROUNDED_1KM_5MIN")
+                    .doesNotContain("44.12")
+                    .doesNotContain(Double.toString(LATITUDE));
+        } finally {
+            stopAppender(appender);
+        }
+    }
+
     private ListAppender<ILoggingEvent> startAppender() {
         ListAppender<ILoggingEvent> appender = new ListAppender<>();
         appender.start();

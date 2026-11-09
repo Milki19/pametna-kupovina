@@ -119,6 +119,28 @@ public class CanonicalProductSearchService {
         requireSearchableLength(query);
 
         String strippedQuery = query.strip();
+        // The same words, page and rounded place are the same answer for
+        // everyone, so the first person pays and the rest are answered from
+        // memory (šesti test: every phone paid its own first search). An
+        // exact place is answered and forgotten.
+        if (near != null && !near.isRough()) {
+            return answer(strippedQuery, query, page, limit, includeWithoutPrice, near, onSale);
+        }
+        return memo.rememberShared(
+                List.of(CatalogMemo.SEARCH_ANSWER, strippedQuery, page, limit, includeWithoutPrice, onSale,
+                        near == null ? "" : near.latitude(), near == null ? "" : near.longitude()),
+                () -> answer(strippedQuery, query, page, limit, includeWithoutPrice, near, onSale));
+    }
+
+    private CanonicalProductSearchPage answer(
+            String strippedQuery,
+            String query,
+            int page,
+            int limit,
+            boolean includeWithoutPrice,
+            PreciseLocation near,
+            boolean onSale
+    ) {
         RankedQuery ranked = rank(query, includeWithoutPrice, near);
         List<ScoredRow> scoredRows = ranked.rows();
         if (onSale) {
@@ -424,7 +446,7 @@ public class CanonicalProductSearchService {
 
     /**
      * Each product's nearest shop. How far each chain is from here is the
-     * same for every search from this place, so it is asked once in ten
+     * same for every search from this place, so it is asked once in five
      * minutes: twenty searches from one place measured the shops of the
      * whole city twenty times (proba 5.11.2026: 2,15 s cold, 0,53 s warm).
      */
@@ -432,9 +454,12 @@ public class CanonicalProductSearchService {
         if (near == null || rows.isEmpty()) {
             return Map.of();
         }
-        Map<Long, Double> chains = memo.rememberOffers(
-                List.of("nearestChains", near.latitude(), near.longitude()),
-                () -> searchRepository.nearestChainMeters(near.latitude(), near.longitude()));
+        // A place is part of a key only rounded, and five minutes at most.
+        Map<Long, Double> chains = near.isRough()
+                ? memo.rememberShared(
+                        List.of("nearestChains", near.latitude(), near.longitude()),
+                        () -> searchRepository.nearestChainMeters(near.latitude(), near.longitude()))
+                : searchRepository.nearestChainMeters(near.latitude(), near.longitude());
         if (chains.isEmpty()) {
             return Map.of();
         }

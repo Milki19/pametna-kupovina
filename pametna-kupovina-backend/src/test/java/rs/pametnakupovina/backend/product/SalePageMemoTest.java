@@ -55,6 +55,7 @@ class SalePageMemoTest {
     void aNewReadOfTheSalesListStartsOverButKeepsThePlans() {
         page(44.81, 20.46);
         memo.rememberOffers(List.of("planOffers", 1L), () -> "ponude");
+        assertThat(memo.sharedSize()).isEqualTo(1);
         memo.salesChanged();
         page(44.81, 20.46);
 
@@ -64,8 +65,14 @@ class SalePageMemoTest {
 
     @Test
     void twoDecimalsAreRough() {
-        assertThat(SaleService.roughly(44.81)).isTrue();
-        assertThat(SaleService.roughly(-0.07)).isTrue();
-        assertThat(SaleService.roughly(44.8125)).isFalse();
+        assertThat(new PreciseLocation(44.81, -0.07).isRough()).isTrue();
+        assertThat(new PreciseLocation(44.8125, 20.46).isRough()).isFalse();
+        assertThat(new PreciseLocation(44.8125, 20.4651).roughly()).isEqualTo(new PreciseLocation(44.81, 20.47));
+        assertThat(new PreciseLocation(44.8125, 20.4651).roughly().isRough()).isTrue();
+    }
+
+    @Test
+    void aSalesPageIsKeptFiveMinutesAtMost() {
+        assertThat(CatalogMemo.SHARED_MAX_AGE).isEqualTo(java.time.Duration.ofMinutes(5));
     }
 }

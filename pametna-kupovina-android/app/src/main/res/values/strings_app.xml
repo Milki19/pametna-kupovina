@@ -114,7 +114,7 @@
     <string name="location_find_address">Pronađi adresu</string>
     <string name="location_open_location_settings">Otvori podešavanja lokacije</string>
     <string name="location_open_app_permissions">Otvori dozvole aplikacije</string>
-    <string name="location_privacy_note">Lokacija služi za ovo računanje i za redosled pretrage. Aplikacija je ne prati u pozadini, a server je ne čuva. Adresu server traži preko OpenStreetMap-a i ne upisuje je.</string>
+    <string name="location_privacy_note">Lokacija služi za ovo računanje i za redosled pretrage. Aplikacija je ne prati u pozadini. Za plan je server ne čuva; za pretragu i Akcije je zaokružena na 1 km, čuva se 5 minuta. Adresu server traži preko OpenStreetMap-a i ne upisuje je.</string>
     <string name="location_found_current">Lokacija je pronađena. Proveri je i pokreni računanje.</string>
     <string name="location_found_address">Pronađeno: %1$s</string>
     <string name="location_not_found_type_address">Lokacija nije pronađena. Upiši adresu.</string>

@@ -9,7 +9,7 @@
 <body>
 <header>
   <h1>Politika privatnosti</h1>
-  <p>Aplikacija Pametna kupovina · poslednja izmena 01.11.2026. (web verzija)</p>
+  <p>Aplikacija Pametna kupovina · poslednja izmena 08.11.2026. (web verzija)</p>
 </header>
 <main>
 
@@ -66,9 +66,12 @@ u pregledaču briše se i broj uređaja.</p>
   su prodavnice blizu i koliko put košta. Koordinate se koriste samo dok taj
   zahtev traje. <strong>Ne upisuju se u bazu niti u zapise servera</strong> i
   ne vezuju se za vaše spiskove. Umesto GPS-a možete uneti i mesto ručno.
-  Uz pretragu proizvoda, ako je dozvola već data, šalje se i poslednja poznata
-  lokacija <strong>zaokružena na oko kilometar</strong>, samo da bi se prvo
-  videli proizvodi iz prodavnica u blizini — važi isto: ne čuva se.</dd>
+  Uz pretragu proizvoda i Akcije, ako je dozvola već data, šalje se i
+  poslednja poznata lokacija <strong>zaokružena na 1 km, čuva se 5 minuta</strong>:
+  server tako zaokružena mesta drži u memoriji uz gotov odgovor (proizvode
+  iz prodavnica u blizini), da bi i drugi koji isto traže iz istog kraja
+  dobili odgovor odmah. Ne upisuje se u bazu ni u zapise servera, ne vezuje
+  se za vaš uređaj ni spisak, a posle 5 minuta se briše.</dd>
 
   <dt>Prijava preko Google-a (samo ako je sami izaberete)</dt>
   <dd>Kada se prijavite, Google nam pošalje potvrdu o prijavi. Iz nje se čuva

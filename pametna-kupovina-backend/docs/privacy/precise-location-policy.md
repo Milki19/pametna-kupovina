@@ -30,6 +30,24 @@ Retention oznaka je `REQUEST_ONLY`:
 Zbog toga nema perioda čuvanja ni korisničke operacije brisanja za precizne
 koordinate: backend nema trajnu kopiju koju bi mogao da obriše.
 
+### Izuzetak: pretraga i Akcije (`ROUNDED_1KM_5MIN`, od 8.11.2026)
+
+Pretraga proizvoda (`SEARCH_RANKING`) i Akcije (`NEARBY_SALES`) idu kroz
+`PreciseLocationPolicy.useRoughlyForAWhile`:
+
+- server koordinate odmah zaokruži na dve decimale (oko 1 km), pa ni
+  operacija ni keš nikad ne vide tačnu lokaciju;
+- zaokruženo mesto sme da bude deo ključa deljenog keša odgovora
+  (`CatalogMemo.rememberShared`) najviše 5 minuta; ključ nema `clientToken`,
+  uređaj, nalog ni spisak, pa isti odgovor dobija svako ko isto traži iz
+  istog kraja;
+- keš je samo u memoriji procesa; svakog minuta se brišu odgovori stariji od
+  5 minuta, a uvoz cena, nova lista akcija ili prijava „nema u prodavnici“
+  brišu sve odmah;
+- u log ide samo svrha, oznaka `ROUNDED_1KM_5MIN` i ishod.
+
+Stranica `/privatnost` to kaže rečima „zaokruženo na 1 km, čuva se 5 minuta“.
+
 ## Logovanje
 
 Aplikacija sme da zabeleži samo:
