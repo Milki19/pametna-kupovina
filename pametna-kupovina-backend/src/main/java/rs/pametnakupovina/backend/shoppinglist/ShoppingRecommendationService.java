@@ -56,6 +56,7 @@ public class ShoppingRecommendationService {
     private final RouteMatrixProvider routeMatrixProvider;
     private final ShoppingOptimizationProperties properties;
     private final MarketRepository marketRepository;
+    private final BaseKindPrices baseKindPrices;
     // The same plan asked for by several people at once (or by one, twice) is
     // worked out once: five at once were answered after 1, 2, 3, 4 and 5 s on
     // the server's two cores (peti test, 1.11.2026).
@@ -69,6 +70,21 @@ public class ShoppingRecommendationService {
             ShoppingOptimizationProperties properties,
             MarketRepository marketRepository
     ) {
+        this(shoppingListRepository, nearbyStoreRepository, offerRepository, routeMatrixProvider,
+                properties, marketRepository, BaseKindPrices.NONE);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public ShoppingRecommendationService(
+            ShoppingListRepository shoppingListRepository,
+            NearbyStoreRepository nearbyStoreRepository,
+            StoreShoppingOfferRepository offerRepository,
+            RouteMatrixProvider routeMatrixProvider,
+            ShoppingOptimizationProperties properties,
+            MarketRepository marketRepository,
+            BaseKindPrices baseKindPrices
+    ) {
+        this.baseKindPrices = baseKindPrices;
         this.shoppingListRepository = shoppingListRepository;
         this.nearbyStoreRepository = nearbyStoreRepository;
         this.offerRepository = offerRepository;
@@ -246,8 +262,13 @@ public class ShoppingRecommendationService {
         Map<Long, BigDecimal> usualLinePrices = PlanRules.usualLinePrices(pricedOfferRows);
         // How much a line usually brings, so a much bigger pack says so.
         Map<String, BigDecimal> usualAmounts = PlanRules.usualAmounts(pricedOfferRows);
-        List<StoreItemOffer> allOfferRows =
-                PlanRules.keep(pricedOfferRows, usualUnitPrices, usualLinePrices);
+        // A line that names only a base kind ("riba") is judged against what
+        // the whole kind costs in the market, not only the few offers around.
+        Map<Long, PlanRules.KindLimit> kindLimits = kindLimits(listId, market);
+        Map<Long, Map<Long, DearOfKind>> dearOfKind = new java.util.HashMap<>();
+        List<StoreItemOffer> allOfferRows = withinBaseKinds(
+                PlanRules.keep(pricedOfferRows, usualUnitPrices, usualLinePrices),
+                kindLimits, dearOfKind);
 
         Set<Long> nearbyStoreIds = Set.copyOf(storeIds);
         List<StoreItemOffer> offerRows = allOfferRows.stream()
@@ -317,7 +338,9 @@ public class ShoppingRecommendationService {
                         PlanRules.usualLinePrices(fartherPriced));
                 fartherUsualLines.putAll(usualLinePrices);
                 List<StoreItemOffer> fartherOffers = preferFreshOffers(
-                        PlanRules.keep(fartherPriced, fartherUsual, fartherUsualLines),
+                        withinBaseKinds(
+                                PlanRules.keep(fartherPriced, fartherUsual, fartherUsualLines),
+                                kindLimits, dearOfKind),
                         asOfDate,
                         properties.getMaxPriceAgeDays()
                 );
@@ -431,7 +454,8 @@ public class ShoppingRecommendationService {
                 null,
                 walking,
                 candidateRadius,
-                usualAmounts
+                usualAmounts,
+                dearOfKind
         );
 
         OptimizationScenarioResponse recommendedScenario = buildScenario(
@@ -444,7 +468,8 @@ public class ShoppingRecommendationService {
                 onTheWay,
                 walking,
                 candidateRadius,
-                usualAmounts
+                usualAmounts,
+                dearOfKind
         );
 
         OptimizationScenarioResponse lowestPriceScenario = buildScenario(
@@ -457,7 +482,8 @@ public class ShoppingRecommendationService {
                 null,
                 walking,
                 candidateRadius,
-                usualAmounts
+                usualAmounts,
+                dearOfKind
         );
 
         return new ShoppingRecommendationResponse(
@@ -1143,7 +1169,8 @@ public class ShoppingRecommendationService {
             OnTheWay onTheWay,
             boolean walking,
             int candidateRadius,
-            Map<String, BigDecimal> usualAmounts
+            Map<String, BigDecimal> usualAmounts,
+            Map<Long, Map<Long, DearOfKind>> dearOfKind
     ) {
         Map<Long, StoreItemOffer> assignments = evaluated == null
                 ? Map.of()
@@ -1213,7 +1240,12 @@ public class ShoppingRecommendationService {
                 unmatchedItems++;
             } else {
                 status = RecommendationItemStatus.NO_VALID_PRICE;
-                if (itemsWithAnyNearbyOffer.contains(item.id())) {
+                DearOfKind dear = evaluated == null
+                        ? null
+                        : cheapestDearOfKind(evaluated.plan().stores(), item.id(), dearOfKind);
+                if (dear != null) {
+                    explanation = dearOfKindText(item, dear);
+                } else if (itemsWithAnyNearbyOffer.contains(item.id())) {
                     explanation = "U prodavnicama ovog plana nema cene, "
                             + "a ima je u drugom planu.";
                 } else if (walking) {
@@ -1389,6 +1421,91 @@ public class ShoppingRecommendationService {
     /** What the plan is shown to cost: on foot, the basket alone. */
     private static BigDecimal shownTotal(EvaluatedPlan evaluated, boolean walking) {
         return walking ? evaluated.plan().basketCost() : evaluated.totalCost();
+    }
+
+    /**
+     * An offer left out for a plain line because the kind usually costs far
+     * less: shown with the item, so the shopper reads why the shop has none.
+     */
+    record DearOfKind(StoreItemOffer offer, PlanRules.PricePerThousand price, PlanRules.KindLimit limit) {
+    }
+
+    private Map<Long, PlanRules.KindLimit> kindLimits(Long listId, Market market) {
+        Map<Long, BaseKindPrices.PlainKind> plain = baseKindPrices.plainLines(listId);
+        Map<Long, PlanRules.KindLimit> limits = new java.util.HashMap<>();
+        plain.forEach((itemId, kind) -> {
+            Map<String, BigDecimal> usual = new java.util.HashMap<>();
+            for (String unit : List.of("g", "ml")) {
+                baseKindPrices.usualPerThousand(market, kind.baseKindId(), unit)
+                        .ifPresent(price -> usual.put(unit, price));
+            }
+            if (!usual.isEmpty()) {
+                limits.put(itemId, new PlanRules.KindLimit(kind.name(), Map.copyOf(usual), market.currencyCode()));
+            }
+        });
+        return limits;
+    }
+
+    /** The offers within their base kind; the rest are noted per shop and item. */
+    private List<StoreItemOffer> withinBaseKinds(
+            List<StoreItemOffer> offers,
+            Map<Long, PlanRules.KindLimit> kindLimits,
+            Map<Long, Map<Long, DearOfKind>> dearOfKind
+    ) {
+        if (kindLimits.isEmpty()) {
+            return offers;
+        }
+        List<Long> unknownAmounts = offers.stream()
+                .filter(offer -> offer.available() && kindLimits.containsKey(offer.itemId()))
+                .filter(offer -> PlanRules.perThousand(offer, null) == null)
+                .map(StoreItemOffer::retailerProductId)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .toList();
+        Map<Long, BaseKindPrices.PackAmount> packs = baseKindPrices.packAmounts(unknownAmounts);
+        List<StoreItemOffer> kept = new ArrayList<>(offers.size());
+        for (StoreItemOffer offer : offers) {
+            PlanRules.KindLimit limit = kindLimits.get(offer.itemId());
+            BaseKindPrices.PackAmount pack = offer.retailerProductId() == null
+                    ? null
+                    : packs.get(offer.retailerProductId());
+            if (PlanRules.withinBaseKind(offer, limit, pack)) {
+                kept.add(offer);
+            } else {
+                dearOfKind.computeIfAbsent(offer.storeId(), id -> new java.util.HashMap<>())
+                        .put(offer.itemId(), new DearOfKind(offer, PlanRules.perThousand(offer, pack), limit));
+            }
+        }
+        return kept;
+    }
+
+    private static DearOfKind cheapestDearOfKind(
+            List<NearbyStore> stores,
+            Long itemId,
+            Map<Long, Map<Long, DearOfKind>> dearOfKind
+    ) {
+        DearOfKind cheapest = null;
+        for (NearbyStore store : stores) {
+            DearOfKind dear = dearOfKind.getOrDefault(store.storeId(), Map.of()).get(itemId);
+            if (dear != null && (cheapest == null
+                    || dear.price().price().compareTo(cheapest.price().price()) < 0)) {
+                cheapest = dear;
+            }
+        }
+        return cheapest;
+    }
+
+    /** "Ovde nema obične vrste za „riba“: „Brancin svež“ je 2504 RSD/kg, a sveža riba obično oko 1000 RSD/kg." */
+    static String dearOfKindText(ShoppingListItemResponse item, DearOfKind dear) {
+        String unit = "ml".equals(dear.price().baseUnit()) ? "l" : "kg";
+        BigDecimal usual = dear.limit().usualFor(dear.price().baseUnit());
+        String kind = dear.limit().kindName() == null
+                ? "ova vrsta"
+                : dear.limit().kindName().toLowerCase(java.util.Locale.ROOT);
+        return "Ovde nema obične vrste za „" + item.name() + "“: „" + dear.offer().productName()
+                + "“ je " + wholeAmount(dear.price().price()) + " " + dear.limit().currency() + "/" + unit
+                + ", a " + kind + " obično košta oko " + wholeAmount(usual) + " "
+                + dear.limit().currency() + "/" + unit + ".";
     }
 
     private static String decimalKm(int meters) {
