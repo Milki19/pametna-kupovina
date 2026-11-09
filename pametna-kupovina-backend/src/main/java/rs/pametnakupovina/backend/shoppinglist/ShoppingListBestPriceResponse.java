@@ -4,7 +4,7 @@ import java.math.BigDecimal;
 import java.util.List;
 
 public record ShoppingListBestPriceResponse(
-        Long listId,
+        @InternalListId Long listId,
         String listName,
         int matchedItems,
         int unmatchedItems,

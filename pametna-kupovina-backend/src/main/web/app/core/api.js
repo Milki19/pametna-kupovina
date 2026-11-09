@@ -83,10 +83,14 @@ function forgetLostList() {
 
 /**
  * Spisak se serveru predstavlja nasumičnim ID-jem (publicId), a ne rednim
- * brojem, koji otkriva koliko spiskova ima i ne krije se u linku. Broj i
- * dalje radi (Android 2.0.6), pa server bez publicId ostaje na broju.
+ * brojem, koji otkriva koliko spiskova ima i ne krije se u linku. Server
+ * broj webu više ne šalje (samo Androidu do 2.0.8); broj ostaje ovde samo za
+ * pregledač koji ga je zapamtio pre nasumičnog ID-ja.
  */
 const listRef = list => list.publicId || list.id;
+
+/** Da li je zapamćen ID (nasumičan, ili stari broj) baš ovaj spisak. */
+const isSameList = (ref, list) => ref != null && (ref === listRef(list) || (list.id != null && ref === list.id));
 
 /** Pregledač koji je pamtio broj prelazi na nasumičan ID; kupovina u toku ide za njim. */
 function rememberListRef(known, list) {
@@ -94,7 +98,7 @@ function rememberListRef(known, list) {
   if (known === ref) return;
   saved.set('listId', ref);
   const purchase = saved.get('purchase');
-  if (purchase && purchase.listId === list.id) saved.set('purchase', { ...purchase, listId: ref });
+  if (purchase && list.id != null && purchase.listId === list.id) saved.set('purchase', { ...purchase, listId: ref });
 }
 
 async function loadListOnce() {
@@ -131,4 +135,4 @@ async function existingList() {
   return lists.find(list => list.itemCount > 0) || lists[0];
 }
 
-export { api, listRef, listVersion, loadList, remembered };
+export { api, isSameList, listRef, listVersion, loadList, remembered };

@@ -3,7 +3,7 @@ package rs.pametnakupovina.backend.shoppinglist;
 import java.util.List;
 
 public record ShoppingListMatchingResponse(
-        Long listId,
+        @InternalListId Long listId,
         int totalItems,
         int automaticallyMatchedItems,
         int confirmedItems,

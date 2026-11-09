@@ -4,7 +4,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 public record ShoppingRecommendationResponse(
-        Long listId,
+        @InternalListId Long listId,
         String listName,
         LocalDate requestedDate,
         int candidateStoreCount,

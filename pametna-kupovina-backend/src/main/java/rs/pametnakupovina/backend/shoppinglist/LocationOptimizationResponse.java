@@ -4,7 +4,7 @@ import java.math.BigDecimal;
 import java.util.List;
 
 public record LocationOptimizationResponse(
-        Long listId,
+        @InternalListId Long listId,
         String listName,
         double latitude,
         double longitude,

@@ -40,6 +40,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 @Testcontainers
 class DeviceSessionTest {
 
+    private static final String ANDROID_208 = "okhttp/4.12.0";
+
     static final String ADMIN_KEY = "test-admin-key-that-is-long-enough-1234";
 
     @Container
@@ -208,6 +210,7 @@ class DeviceSessionTest {
 
         MvcResult created = mvc.perform(post("/api/v1/shopping-lists")
                         .header(CredentialsFilter.LEGACY_TOKEN_HEADER, oldNumber)
+                        .header("User-Agent", ANDROID_208)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"Iz verzije 1.8\"}"))
                 .andReturn();
@@ -370,8 +373,14 @@ class DeviceSessionTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"Nasumičan ID\"}"))
                 .andReturn();
-        long number = json(created).path("id").asLong();
+        // The web gets only the random id (šesti test, stavka 11) ...
+        assertThat(json(created).has("id")).isFalse();
         String publicId = json(created).path("publicId").asText();
+        // ... and Android up to 2.0.8 still gets the number it calls the list by.
+        long number = json(mvc.perform(authorized(get("/api/v1/shopping-lists/" + publicId), access(mine))
+                        .header("User-Agent", ANDROID_208))
+                .andReturn()).path("id").asLong();
+        assertThat(number).isPositive();
         assertThat(UUID.fromString(publicId).toString()).isEqualTo(publicId);
 
         MvcResult added = mvc.perform(authorized(post("/api/v1/shopping-lists/" + publicId + "/items/paste"), access(mine))
@@ -382,15 +391,16 @@ class DeviceSessionTest {
 
         JsonNode byRandomId = json(mvc.perform(authorized(get("/api/v1/shopping-lists/" + publicId), access(mine)))
                 .andReturn());
-        assertThat(byRandomId.path("id").asLong()).isEqualTo(number);
+        assertThat(byRandomId.has("id")).isFalse();
         assertThat(byRandomId.path("publicId").asText()).isEqualTo(publicId);
         assertThat(byRandomId.path("items").size()).isEqualTo(2);
-        // Android 2.0.6 keeps calling it by its number.
+        // Android up to 2.0.8 keeps calling it by its number.
         JsonNode byNumber = json(mvc.perform(authorized(get("/api/v1/shopping-lists/" + number), access(mine)))
                 .andReturn());
         assertThat(byNumber.path("items").size()).isEqualTo(2);
         JsonNode all = json(mvc.perform(authorized(get("/api/v1/shopping-lists"), access(mine))).andReturn());
         assertThat(all.get(0).path("publicId").asText()).isEqualTo(publicId);
+        assertThat(all.get(0).has("id")).isFalse();
 
         MvcResult refused = mvc.perform(authorized(get("/api/v1/shopping-lists/" + publicId), access(stranger)))
                 .andReturn();
@@ -439,8 +449,10 @@ class DeviceSessionTest {
         return expected == 200 ? json(result) : null;
     }
 
+    /** As Android up to 2.0.8 does: it calls the list by the number it gets back. */
     private long createList(String accessToken, String name) throws Exception {
         MvcResult result = mvc.perform(authorized(post("/api/v1/shopping-lists"), accessToken)
+                        .header("User-Agent", ANDROID_208)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"" + name + "\"}"))
                 .andReturn();
