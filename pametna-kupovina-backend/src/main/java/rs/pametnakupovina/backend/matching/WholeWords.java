@@ -49,6 +49,38 @@ public final class WholeWords {
     }
 
     /**
+     * The endings a Serbian word takes in a list or a name, after its stem
+     * (SerbianWordForms#stem): case and number, nothing that makes another
+     * word. "kinoa" is "kin" with "oa"; "kina" or "kino" are forms of it,
+     * "kinder" is not (šesti test, 6.11.2026: kinoa became Kinder Cards).
+     */
+    private static final String ENDINGS =
+            "[aeiou]{1,2}|[oe][mgj]|i[hm]|[ia]ma|[oe]v[aeio]|[jck][aeiu]|a[ck]";
+
+    /**
+     * A word in any of its forms, whole, as a PostgreSQL regular expression
+     * (in Java with word boundaries for the edges): its stem, then the
+     * word's own ending or a case ending, then the end of the word. The
+     * ending is a non-capturing group, so the stem alone is what the trigram
+     * hint looks up ({@code WantedWords#hint}). A word shorter than four
+     * letters is kept whole.
+     */
+    public static String formsPattern(String word) {
+        String stem = SerbianWordForms.stem(word);
+        if (word.length() < 4 || !word.startsWith(stem)
+                || !word.chars().allMatch(Character::isLetter)) {
+            return "\\m" + word + "\\M";
+        }
+        String own = word.substring(stem.length());
+        String endings = own.isEmpty() || own.matches(ENDINGS)
+                ? ENDINGS
+                : own + "|" + ENDINGS;
+        // The empty branch first, inside the group: the hint reads the
+        // stem without a quantifier after it.
+        return "\\m" + stem + "(?:|" + endings + ")\\M";
+    }
+
+    /**
      * The same rule as a PostgreSQL regular expression, for SQL that must
      * agree with {@link #contains}: {@code name ~ WholeWords.sqlPattern(word)}.
      * The phrase is normalized already; anything but letters, digits and

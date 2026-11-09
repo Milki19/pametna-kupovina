@@ -278,7 +278,8 @@ public class ShoppingListMatchingService {
      * 13.09. still had "Belo meso 3kg" as an unknown product after the words
      * were learned. What nobody has decided on is read again from what was
      * written. A product someone picked or turned down is left alone, and a
-     * kind of product never falls back to a single product.
+     * kind from the dictionary never falls back to a single product; a kind
+     * found only by names does once no name says its words.
      */
     private ShoppingListItemResponse readAgain(
             Long listId,
@@ -342,7 +343,11 @@ public class ShoppingListMatchingService {
             ).orElse(item);
         }
 
-        if (undecidedProduct && !line.name().equals(item.name())) {
+        // A kind found only by the products' names ("tortilje") that no
+        // name says as a whole word any more is one product to look up, so
+        // it shows "Nije pronađeno" instead of what a name starts with:
+        // "kinoa" was Kinder Cards (šesti test, 6.11.2026).
+        if (unknownKind || !line.name().equals(item.name())) {
             return shoppingListRepository.updateItem(
                     listId,
                     item.id(),
