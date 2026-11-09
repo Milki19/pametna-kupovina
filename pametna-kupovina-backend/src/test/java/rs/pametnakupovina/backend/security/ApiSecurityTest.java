@@ -205,8 +205,11 @@ class ApiSecurityTest {
         MvcResult script = mvc.perform(call("GET", "/app/app.js").param("v", "2.0.4")).andReturn();
         MvcResult page = mvc.perform(call("GET", "/app/index.html")).andReturn();
         MvcResult worker = mvc.perform(call("GET", "/app/sw.js").param("v", "1")).andReturn();
+        // A screen's chunk carries its content hash in the name instead of ?v=.
+        MvcResult chunk = mvc.perform(call("GET", "/app/chunks/prices-AB12CD34.js")).andReturn();
 
         assertThat(script.getResponse().getHeader("Cache-Control")).contains("immutable");
+        assertThat(chunk.getResponse().getHeader("Cache-Control")).contains("immutable");
         assertThat(page.getResponse().getHeader("Cache-Control")).isEqualTo("no-cache");
         assertThat(worker.getResponse().getStatus()).isEqualTo(200);
         assertThat(worker.getResponse().getHeader("Cache-Control")).isEqualTo("no-cache");

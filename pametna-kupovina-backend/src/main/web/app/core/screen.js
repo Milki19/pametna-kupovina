@@ -1,6 +1,7 @@
 // Ekran, donja traka sa dugmetom i kratko obaveštenje (toast).
 
 import { esc, notice } from './format.js';
+import { patchChildren } from './patch.js';
 
 const view = document.getElementById('view');
 const actionBar = document.getElementById('action');
@@ -10,7 +11,12 @@ let enterPending = null;
 function enterNext(motion) { enterPending = motion; }
 let enterTimer = null;
 
-function screen({ title, subtitle = null, back = null, html, action = '' }) {
+/**
+ * Ekran sa `key` (Spisak) se pri ponovnom iscrtavanju ne gradi iznova:
+ * patchChildren menja samo ono što je drugačije. Prvi put, i na drugom
+ * ekranu, sadržaj se postavlja ceo, kao i do sada.
+ */
+function screen({ title, subtitle = null, back = null, html, action = '', key = null }) {
   document.getElementById('title').textContent = title;
   const sub = document.getElementById('subtitle');
   sub.hidden = !subtitle;
@@ -19,9 +25,12 @@ function screen({ title, subtitle = null, back = null, html, action = '' }) {
   backButton.hidden = !back;
   backButton.onclick = back ? () => { location.hash = back; } : null;
   document.body.classList.toggle('flow', Boolean(back));
-  view.innerHTML = html;
+  const again = key && view.dataset.screen === key;
+  if (again) patchChildren(view, html); else view.innerHTML = html;
+  if (key) view.dataset.screen = key; else delete view.dataset.screen;
   actionBar.hidden = !action;
-  actionBar.innerHTML = action ? `<div>${action}</div>` : '';
+  const bar = action ? `<div>${action}</div>` : '';
+  if (again) patchChildren(actionBar, bar); else actionBar.innerHTML = bar;
   // Ulazak na ekran se animira jednom, kad stigne pravi sadržaj, a ne na
   // svako ponovno iscrtavanje (kucanje, štikliranje).
   if (enterPending && !view.querySelector('.spinner')) {

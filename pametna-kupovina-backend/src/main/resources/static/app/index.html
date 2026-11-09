@@ -46,7 +46,8 @@
   </a>
 </nav>
 <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-<!-- Jedan app.js: esbuild ga spaja iz src/main/web/app pri build-u. -->
-<script src="app.js?v=2.1.2"></script>
+<!-- app.js je ES modul: esbuild ga spaja iz src/main/web/app, a ostale ekrane
+     učitava kad zatrebaju iz chunks/ (vidi src/main/web/build.mjs). -->
+<script type="module" src="app.js?v=2.2.1"></script>
 </body>
 </html>

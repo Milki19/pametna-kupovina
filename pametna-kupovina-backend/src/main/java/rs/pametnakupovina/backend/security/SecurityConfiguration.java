@@ -64,8 +64,9 @@ public class SecurityConfiguration {
                         .addHeaderWriter(new DelegatingRequestMatcherHeaderWriter(
                                 PathPatternRequestMatcher.withDefaults().matcher("/api/**"),
                                 new CacheControlHeadersWriter()))
-                        // Skripta sa ?v= se ne menja dok se broj ne podigne, pa
-                        // je pregledač ne traži ponovo; stranica i sw.js uvek.
+                        // Skripta sa ?v= se ne menja dok se broj ne podigne, a deo
+                        // ekrana (chunks/) nosi hash sadržaja u imenu, pa ih
+                        // pregledač ne traži ponovo; stranica i sw.js uvek.
                         .addHeaderWriter(new DelegatingRequestMatcherHeaderWriter(
                                 SecurityConfiguration::isVersionedWebFile,
                                 new StaticHeadersWriter("Cache-Control", "public, max-age=31536000, immutable")))
@@ -86,7 +87,7 @@ public class SecurityConfiguration {
         String path = request.getRequestURI();
         return path.startsWith("/app/")
                 && !isWebEntryPoint(request)
-                && request.getParameter("v") != null;
+                && (request.getParameter("v") != null || path.startsWith("/app/chunks/"));
     }
 
     private static boolean isWebEntryPoint(jakarta.servlet.http.HttpServletRequest request) {

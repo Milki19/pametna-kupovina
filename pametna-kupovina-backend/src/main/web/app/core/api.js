@@ -4,7 +4,7 @@
 import { accessToken } from './session.js';
 import { saved } from './storage.js';
 import { pkTiming } from '../lib/timing.js';
-import { flushDelete } from '../screens/list.js';
+import { flushDelete, sendWaiting } from '../screens/list.js';
 
 // Svaka izmena spiska podiže verziju. Provera proizvoda i preporuke se
 // pamte za verziju za koju su izračunate, a najduže deset minuta, jer spisak
@@ -33,7 +33,10 @@ async function api(method, path, body, retried = false, signal = undefined) {
   } catch (error) {
     // Otkazana pretraga (stiglo je novo slovo) nije greška veze.
     if (error.name === 'AbortError') throw error;
-    throw new Error('Nema veze sa serverom. Proveri internet i probaj ponovo.');
+    const offline = new Error('Nema veze sa serverom. Proveri internet i probaj ponovo.');
+    // Izmena spiska tada čeka u redu (core/outbox.js) umesto da se izgubi.
+    offline.offline = true;
+    throw offline;
   }
   if (response.status === 401 && !retried
       && (response.headers.get('WWW-Authenticate') || '').startsWith('Bearer')) {
@@ -103,6 +106,8 @@ function rememberListRef(known, list) {
 
 async function loadListOnce() {
   await flushDelete();
+  // Izmene napravljene bez mreže prvo stižu na server, pa se spisak čita.
+  await sendWaiting();
   const id = saved.get('listId');
   if (id) {
     try {

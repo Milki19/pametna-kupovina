@@ -7,6 +7,8 @@ import { icon } from '../core/html.js';
 import { routes, run } from '../core/router.js';
 import { failed, screen, toast } from '../core/screen.js';
 import { browserName } from '../core/session.js';
+import { forget as forgetOutbox } from '../core/outbox.js';
+import { account } from '../core/shared.js';
 import { saved } from '../core/storage.js';
 import { qrSvg } from '../lib/barcode.js';
 import { listState } from './list.js';
@@ -16,7 +18,6 @@ import { onListKeys } from './sales.js';
 
 // ---------- Nalog na ekranu Više ----------
 
-let account = { state: null, devices: [], error: null };
 
 const standaloneApp = () => navigator.standalone || matchMedia('(display-mode: standalone)').matches;
 
@@ -97,6 +98,8 @@ async function finishGoogleSignIn(idToken) {
 
 function clearBrowser() {
   try { Object.keys(localStorage).filter(k => k.startsWith('pk.')).forEach(k => localStorage.removeItem(k)); } catch { /* nema čega */ }
+  // Izmene koje čekaju vezu i sačuvan spisak idu sa nalogom.
+  forgetOutbox();
 }
 
 async function signOut() {
@@ -106,7 +109,7 @@ async function signOut() {
     : 'Izaći iz domaćinstva? Zajednički spisak, računi i kartice ostaju ukućanima, a ovde počinješ ispočetka.')) return;
   await api('DELETE', 'sessions/current');
   clearBrowser();
-  account = { state: null, devices: [], error: null };
+  Object.assign(account, { state: null, devices: [], error: null });
   // Bez odlaska na spisak: on bi odmah otvorio nov nalog.
   screen({
     title: 'Odjavljen si',
@@ -430,7 +433,7 @@ async function deleteAccount() {
     : 'Obrisati spisak, račune, kartice i sve podatke ovog uređaja sa servera? Ovo se ne može vratiti.')) return;
   await api('DELETE', 'accounts/me');
   clearBrowser();
-  account = { state: null, devices: [], error: null };
+  Object.assign(account, { state: null, devices: [], error: null });
   // Bez odlaska na spisak: on bi odmah napravio nov nalog.
   screen({
     title: 'Podaci obrisani',
@@ -440,4 +443,4 @@ async function deleteAccount() {
   });
 }
 
-export { account, accountActions, accountCard, accountForms, accountRoutes, deleteAccount, loadAccount };
+export { account, accountActions, accountCard, accountForms, accountRoutes, deleteAccount, loadAccount, showHousehold, showSpending };
