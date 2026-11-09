@@ -83,7 +83,6 @@ function route() {
 
 const actions = {
   retry: () => route(),
-  'add-one': () => { listState.adding = 'one'; listState.editing = null; listState.rejected = null; renderList(); },
   'add-many': () => { listState.adding = 'paste'; listState.editing = null; listState.rejected = null; listState.pasteAsk = null; renderList(); },
   'cancel-add': () => { listState.adding = null; listState.rejected = null; listState.pasteAsk = null; renderList(); },
   'paste-ask-cancel': () => { listState.pasteAsk = null; renderList(); },
@@ -200,7 +199,6 @@ const forms = {
     tripAmount(data, 'hour', tripCosts.maxValuePerHour),
     tripAmount(data, 'stop', tripCosts.maxCostPerStop),
     tripAmount(data, 'km', tripCosts.maxCostPerKm))),
-  'add-one': data => addText(data.get('text')),
   'add-many': data => submitPaste(String(data.get('text') || '')),
   'edit-item': (data, form) => {
     // Izmenjena stavka više nije „neprepoznata iz nalepljenog spiska“.
