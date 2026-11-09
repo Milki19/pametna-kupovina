@@ -30,8 +30,11 @@ class TestSkupFormatTest {
         assertThat(skup.stavke()).hasSizeGreaterThanOrEqualTo(60);
         assertThat(new HashSet<>(skup.stavke().stream().map(Stavka::id).toList()))
                 .hasSameSizeAs(skup.stavke());
+        // Loose lines are measured in the two usual cities; a real list only in its own.
         assertThat(skup.lokacije()).extracting(TestSkup.Lokacija::grad)
-                .containsExactly("Beograd", "Novi Sad");
+                .startsWith("Beograd", "Novi Sad");
+        assertThat(skup.stavke().stream().filter(s -> s.grad() == null)).isNotEmpty()
+                .allSatisfy(s -> assertThat(skup.u("Beograd")).contains(s));
         assertThat(skup.stavke()).allSatisfy(s -> assertThat(s.opis()).isNotBlank());
     }
 

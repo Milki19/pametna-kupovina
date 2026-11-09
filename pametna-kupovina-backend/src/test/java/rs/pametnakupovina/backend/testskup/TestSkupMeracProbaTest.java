@@ -47,7 +47,8 @@ class TestSkupMeracProbaTest {
 
     @Test
     void anEmptyCatalogueGivesAFullReportOfNothingFound(@TempDir Path dir) throws IOException {
-        TestSkup skup = TestSkup.load("RS", "sr");
+        // Only the loose lines: the 400 catalogue lines in 13 cities would slow CI down and prove nothing more here.
+        TestSkup skup = TestSkup.load("RS", "sr", "test-skup/RS-sr.tsv");
 
         TestSkupMerac.Ishod ishod = merac.meri(skup, dir);
 
