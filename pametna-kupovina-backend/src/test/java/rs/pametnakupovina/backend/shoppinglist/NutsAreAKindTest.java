@@ -64,6 +64,13 @@ class NutsAreAKindTest {
     private static final String SOAP = "SAPUN TECNI BADEM ORAH 500ML";
     private static final String CHOCOLATE = "COKOLADA MLECNA LESNIK 100G";
     private static final String COCONUT = "KOKOSOV ORAH KOM";
+    // The first trial let every name with a nut word in: these became nuts.
+    private static final String TURKISH_DELIGHT = "RATLUK ORAH 200G FINESSE";
+    private static final String CARAMEL = "100G ARO KARAMELA-LESNIK";
+    private static final String NUTMEG = "MUSKAT ORAH + RENDE 10G SPM";
+    private static final String MILKA = "MILKA CEO LESNIK 100G";
+    private static final String ALMOND_FLAKES = "BADEM LISTICI 100G";
+    private static final String ROASTED_HAZELNUTS = "LESNIK PECENI 100GR";
 
     private static final String HEADER = "KATEGORIJA;NAZIV KATEGORIJE;"
             + "Naziv proizvoda;Robna marka;Barkod proizvoda;Jedinica mere;"
@@ -83,7 +90,13 @@ class NutsAreAKindTest {
             + row(CREAM, "129,99")
             + row(SOAP, "199,99")
             + row(CHOCOLATE, "149,99")
-            + row(COCONUT, "149,99");
+            + row(COCONUT, "149,99")
+            + row(TURKISH_DELIGHT, "114,99")
+            + row(CARAMEL, "45,00")
+            + row(NUTMEG, "59,99")
+            + row(MILKA, "199,99")
+            + row(ALMOND_FLAKES, "209,99")
+            + row(ROASTED_HAZELNUTS, "259,99");
 
     private static String row(String name, String price) {
         barcode++;
@@ -200,16 +213,18 @@ class NutsAreAKindTest {
     @Test
     void walnutsAreWhatTheListSaysOrasi() {
         long shop = shop("NUTS", "/nuts.csv");
-        var offers = offers(shop, "orasi\nbademi");
+        var offers = offers(shop, "orasi\nbademi\nlešnici");
         String seen = seen(offers);
 
-        // Cheaper, but a baklava, a strudel and a nut mix are not walnuts.
+        // Cheaper, but a baklava, Turkish delight, a strudel and a nut mix are not walnuts.
         assertThat(productFor(offers, "orasi")).as(seen).isEqualTo(WALNUTS);
+        // Almonds before almond flakes; a hazelnut caramel is not hazelnuts.
         assertThat(productFor(offers, "bademi")).as(seen).isEqualTo(ALMONDS);
+        assertThat(productFor(offers, "le")).as(seen).isEqualTo(ROASTED_HAZELNUTS);
         assertThat(offers.values()).as(seen).noneMatch(StoreItemOffer::wantedMissing);
     }
 
-    /** A cake, a drink, cream, soap or chocolate with nuts is not nuts. */
+    /** A cake, a drink, cream, soap, chocolate or a sweet with nuts is not nuts. */
     @Test
     void whatOnlySaysTheWordIsNotNuts() {
         shop("NUTS", "/nuts.csv");
@@ -232,9 +247,11 @@ class NutsAreAKindTest {
         assertThat(kinds).as(kinds.toString())
                 .containsEntry(WALNUTS, "NUTS")
                 .containsEntry(ALMONDS, "NUTS")
-                .containsEntry(NUT_MIX, "NUTS")
+                .containsEntry(ALMOND_FLAKES, "NUTS")
+                .containsEntry(ROASTED_HAZELNUTS, "NUTS")
                 .containsEntry(ALMOND_DRINK, "PLANT_DRINK");
-        for (String other : List.of(BAKLAVA, STRUDEL, ALMOND_DRINK, CREAM, SOAP, CHOCOLATE, COCONUT)) {
+        for (String other : List.of(BAKLAVA, STRUDEL, ALMOND_DRINK, CREAM, SOAP, CHOCOLATE, COCONUT,
+                TURKISH_DELIGHT, CARAMEL, NUTMEG, MILKA)) {
             assertThat(kinds.get(other)).as(other + " " + kinds).isNotEqualTo("NUTS");
         }
     }
