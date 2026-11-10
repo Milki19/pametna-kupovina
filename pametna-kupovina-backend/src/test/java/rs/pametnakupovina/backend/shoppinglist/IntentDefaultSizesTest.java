@@ -76,9 +76,10 @@ class IntentDefaultSizesTest {
                 .list();
         // Baby, cat and dog food (V144) come from an 85 g pouch to a 10 kg
         // bag, so there is no usual pack to prefer.
+        // Freezer bags (V162) have no usual pack size (V162 leaves it empty).
         assertThat(withoutSize).containsExactly(
                 "BABY_FOOD", "BAKERY_ROLL", "CAT_FOOD", "DOG_FOOD",
-                "FISH", "FRESH_FISH", "FRESH_MEAT", "FRUIT", "VEGETABLE");
+                "FISH", "FREEZER_BAG", "FRESH_FISH", "FRESH_MEAT", "FRUIT", "VEGETABLE");
         // "piletina" was a 200 g pack: meat is usually 0,4 to 1,5 kg (V139).
         Map<String, Object> meat = usualSize("MEAT");
         assertThat(meat.get("default_base_unit")).isEqualTo("g");
