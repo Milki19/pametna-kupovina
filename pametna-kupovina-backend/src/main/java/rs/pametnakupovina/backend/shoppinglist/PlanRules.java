@@ -223,6 +223,13 @@ final class PlanRules {
     static final BigDecimal MAX_TIMES_BASE_KIND = BigDecimal.valueOf(2);
 
     /**
+     * Nor anything below this share of it: at 21 RSD/kg "iznutrice
+     * tolstolobika" are offal, not "riba" where fish usually costs 770
+     * (proba V165 na kopiji, 10.11.2026). Papalina at 246 RSD/kg stays.
+     */
+    static final BigDecimal MIN_SHARE_OF_BASE_KIND = new BigDecimal("0.2");
+
+    /**
      * What a plain line's base kind usually costs, per kilogram ("g") or
      * litre ("ml"); the units the market has too few chains for are left out.
      */
@@ -267,6 +274,16 @@ final class PlanRules {
         PricePerThousand price = perThousand(offer, pack);
         BigDecimal usual = price == null ? null : limit.usualFor(price.baseUnit());
         return usual == null || price.price().compareTo(usual.multiply(MAX_TIMES_BASE_KIND)) <= 0;
+    }
+
+    /** Far cheaper than its kind: most likely not the thing, so left out without a word. */
+    static boolean belowBaseKind(StoreItemOffer offer, KindLimit limit, BaseKindPrices.PackAmount pack) {
+        if (limit == null || !offer.available()) {
+            return false;
+        }
+        PricePerThousand price = perThousand(offer, pack);
+        BigDecimal usual = price == null ? null : limit.usualFor(price.baseUnit());
+        return usual != null && price.price().compareTo(usual.multiply(MIN_SHARE_OF_BASE_KIND)) < 0;
     }
 
     private static String amountKey(Long itemId, String baseUnit) {
