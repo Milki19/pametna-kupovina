@@ -64,7 +64,8 @@ class VariantFromTheListTest {
 
     private static final String GROUND = "GRAND KAFA MLEVENA 200G";
     private static final String DOLCE_GUSTO = "NESCAFE DOLCE GUSTO KAFA KAPSULE 16KOM";
-    private static final String NESPRESSO = "STARBUCKS KAFA KAPSULE NESPRESSO 10KOM";
+    // A line without a kind finds products whose first words say it.
+    private static final String NESPRESSO = "STARBUCKS NESPRESSO KAFA KAPSULE 10KOM";
     private static final String BEANS = "LAVAZZA KAFA U ZRNU 1KG";
     private static final String COLA = "COCA COLA 1,5L";
     private static final String COLA_ZERO = "COCA COLA ZERO 1,5L";

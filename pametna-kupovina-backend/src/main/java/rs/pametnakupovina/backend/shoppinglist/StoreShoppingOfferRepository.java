@@ -17,6 +17,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 @Repository
 public class StoreShoppingOfferRepository {
@@ -109,19 +110,25 @@ public class StoreShoppingOfferRepository {
                                    'matching_decision_id', 'matching_score',
                                    'matching_algorithm_version', 'flexible_category'
                                ])::TEXT) AS spec,
+                               -- The words as the line says them: the normalized
+                               -- category is the kind's alias alone, "coca cola"
+                               -- for "Coca Cola zero".
                                CASE WHEN item.matching_rule = 'FLEXIBLE_CATEGORY'
                                     THEN CONCAT_WS(' ', item.required_brand,
-                                                   item.flexible_category_normalized)
+                                                   COALESCE(item.flexible_category,
+                                                            item.flexible_category_normalized))
                                END AS variant_words
                         FROM app.shopping_list_item AS item
                         WHERE item.shopping_list_id = :listId
                         ORDER BY item.created_at, item.id
                         """)
                 .param("listId", listId)
+                // The spec leaves the shown category out, so the variant words
+                // are part of it: "coca cola" and "coca cola zero" differ.
                 .query((resultSet, rowNumber) -> new PlanItem(
                         resultSet.getLong("id"),
                         resultSet.getString("name"),
-                        resultSet.getString("spec"),
+                        resultSet.getString("spec") + "|" + Objects.toString(resultSet.getString("variant_words"), ""),
                         resultSet.getString("variant_words")))
                 .list();
     }

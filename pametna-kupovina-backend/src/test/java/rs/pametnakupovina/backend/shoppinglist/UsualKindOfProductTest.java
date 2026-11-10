@@ -200,7 +200,8 @@ class UsualKindOfProductTest {
         assertThat(typeOf(ICE_COFFEE)).isEqualTo("INSTANT_COFFEE");
         assertThat(typeOf(COFFEE_BASED)).isNull();
         assertThat(typeOf(GROUND_COFFEE)).isEqualTo("COFFEE");
-        assertThat(typeOf(VANILLA_SUGAR)).isNull();
+        // Vanilla sugar is a kind of its own since V162, never plain sugar.
+        assertThat(typeOf(VANILLA_SUGAR)).isEqualTo("VANILLA_SUGAR");
         assertThat(typeOf(DETERGENT)).isEqualTo("LAUNDRY_DETERGENT");
         assertThat(typeOf(SHAMPOO)).isEqualTo("SHAMPOO");
         assertThat(typeOf(TOILET_PAPER)).isEqualTo("TOILET_PAPER");

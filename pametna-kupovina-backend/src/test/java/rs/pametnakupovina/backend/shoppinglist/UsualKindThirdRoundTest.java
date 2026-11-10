@@ -211,7 +211,8 @@ class UsualKindThirdRoundTest {
     void theUsualKindWinsOverTheCheaperLookAlike() {
         long shop = shop();
 
-        assertThat(typeOf(TABLE_MARGARINE)).isNull();
+        // Margarine is a kind of its own since V162, never butter.
+        assertThat(typeOf(TABLE_MARGARINE)).isEqualTo("MARGARINE");
         assertThat(typeOf(BUTTER)).isEqualTo("BUTTER");
         assertThat(typeOf(DISH_DETERGENT)).isEqualTo("DISH_DETERGENT");
         assertThat(typeOf(DISHWASHER_SALT)).isNull();
