@@ -7,7 +7,8 @@
 --
 -- Vrsta su orašasti plodovi: orah, badem, lešnik, indijski orah, pistaći,
 -- makadamija, pekan. Kolač, čokolada, hleb, napitak, sapun ili vino sa
--- orasima nisu orasi. Mešavina jeste vrsta, ali „orasi“ je ne bira (V160).
+-- orasima nisu orasi. Mešavina „orašasti plodovi mix“ jeste vrsta, ali
+-- „orasi“ je ne bira (V160).
 -- Kikiriki ostaje kako je bio: „kikiriki puter“ i flips nisu ovde.
 -- Kokosov orah je voće (FRUIT) i ostaje voće.
 
@@ -15,6 +16,14 @@ INSERT INTO app.product_type (code, name, product_category_id, domain)
 VALUES ('NUTS', 'Orašasti plodovi', NULL, 'FOOD')
 ON CONFLICT (code) DO NOTHING;
 
+-- Naziv je orah kad njime počinje („ORAH JEZGRO 300G“, „BIO LEŠNIK SIROVI“,
+-- „Indijski orah slani Emma“) ili kad posle ploda kaže kakav je („BADEM
+-- PEČENI“, „LEŠNIK JEZGRA PRŽENI“). Prva proba je pustila svaki naziv sa
+-- rečju ploda, pa su vrsta postali ratluk, karamele, Milka, mortadela sa
+-- pistaćima i muskatni orah; to se ovde ne ponavlja. Zabranjene reči
+-- ostaju za nazive koji počinju plodom, a nisu plod („ORASI PAVLAKA“,
+-- „BADEM NAPITAK“, „LEŠNIK KREM“).
+--
 -- Pravilo dolazi posle svih postojećih (priority 95): proizvod koji već
 -- ima užu vrstu (napitak, sapun, čokolada) zadržava je.
 INSERT INTO app.product_type_rule (
@@ -25,18 +34,20 @@ INSERT INTO app.product_type_rule (
     confidence
 )
 SELECT type.id,
-       '\m(orah|oraha|orahe|orasi|orasast[a-z]*|badem|bademi|badema|lesnik|lesnici|lesnika|pistac[a-z]*|pistaci|pistacij[a-z]*'
-           || '|makadamij[a-z]*|pekan|walnut[a-z]*|almond[a-z]*|hazelnut[a-z]*|cashew[a-z]*|pistachio[a-z]*)\M',
+       '^(bio |pl |organsk[a-z]* )?(orah|oraha|orasi|orasast[a-z]*|badem|bademi|lesnik|lesnici|pistac[a-z]*'
+           || '|indijsk[a-z]* orah[a-z]*|ind orah|brazilsk[a-z]* orah[a-z]*|makadamij[a-z]*|pekan)\M'
+           || '|\m(orah|oraha|orasi|badem|bademi|lesnik|lesnici|pistac[a-z]*|makadamij[a-z]*|pekan)'
+           || ' (jezgr[a-z]*|sirov[a-z]*|pecen[a-z]*|przen[a-z]*|oljust[a-z]*|ociscen[a-z]*|blansir[a-z]*'
+           || '|listic[a-z]*|mleven[a-z]*|rinfuz[a-z]*|slan[a-z]*|neslan[a-z]*|celi|ceo|polovin[a-z]*|brazilsk[a-z]*|suv[a-z]*)\M',
        '\m(kokos[a-z]*|baklav[a-z]*|strudl[a-z]*|tort[a-z]*|kolac[a-z]*|keks[a-z]*|kreker[a-z]*|vafl[a-z]*'
-           || '|napolitank[a-z]*|cokolad[a-z]*|cok|bombon[a-z]*|pralin[a-z]*|krem[a-z]*|namaz[a-z]*|puter|pasta'
+           || '|napolitank[a-z]*|cokol[a-z]*|coko|cok|bombon[a-z]*|pralin[a-z]*|krem[a-z]*|namaz[a-z]*|puter|pasta'
            || '|halv[a-z]*|nugat|marcipan[a-z]*|sladoled[a-z]*|desert[a-z]*|puding[a-z]*|jogurt[a-z]*|mlek[a-z]*'
-           || '|mlijek[a-z]*|milk|napit[a-z]*|napic[a-z]*|drink|pavlak[a-z]*|sir|sira|vino|liker[a-z]*|rakij[a-z]*'
-           || '|ulje|ulja|brasn[a-z]*|hleb[a-z]*|baget[a-z]*|pecivo|peciva|kifl[a-z]*|kroasan[a-z]*|pita|pite'
-           || '|pletenic[a-z]*|musli|granol[a-z]*|pahuljic[a-z]*|kasa|kase|kasic[a-z]*|plocic[a-z]*|bar|barovi'
-           || '|med|meda|urm[a-z]*|kafa|caj|sapun[a-z]*|sampon[a-z]*|gel|tus|losion[a-z]*|balzam[a-z]*'
-           || '|kozmet[a-z]*|telo|tela|lice|ruke|kozu|hrana|hrane|plazma|marlenk[a-z]*|bueno|nutella|wafer[a-z]*'
-           || '|flips|cips|sos|sosa|pesto|sirup[a-z]*|arom[a-z]*|ekstrakt[a-z]*|kore|kora|testo|corn|kornet[a-z]*'
-           || '|dezodor[a-z]*|parfem[a-z]*|svec[a-z]*|mirisn[a-z]*|osvezivac[a-z]*)\M',
+           || '|milk|napit[a-z]*|drink|pavlak[a-z]*|sir|vino|liker[a-z]*|rakij[a-z]*|ulje|ulja|brasn[a-z]*'
+           || '|hleb[a-z]*|pecivo|peciva|kifl[a-z]*|kroasan[a-z]*|krofn[a-z]*|pita|pite|musli|granol[a-z]*'
+           || '|pahuljic[a-z]*|plocic[a-z]*|bar|med|urm[a-z]*|kafa|caj|sapun[a-z]*|sampon[a-z]*|gel|losion[a-z]*'
+           || '|ratluk[a-z]*|slatko|karamel[a-z]*|stapic[a-z]*|mortadel[a-z]*|salam[a-z]*|muskat[a-z]*'
+           || '|protein[a-z]*|sejk|shake|obrok|knjig[a-z]*|cappuc[a-z]*|kapucin[a-z]*|flips|cips|sos|pesto'
+           || '|sirup[a-z]*|arom[a-z]*|ekstrakt[a-z]*|kore|testo|hrana|hrane)\M',
        95,
        0.9700
 FROM app.product_type AS type
@@ -109,8 +120,8 @@ FROM (
             '\m(mesavin[a-z]*|mix|miks|slan[a-z]*)\M'),
         ('indijski orah', '\m(indijsk[a-z]*|cashew[a-z]*)\M', NULL),
         ('indijski orasi', '\m(indijsk[a-z]*|cashew[a-z]*)\M', NULL),
-        ('bademi', '\m(badem|bademi|badema|almond[a-z]*)\M', '\m(mesavin[a-z]*|mix|miks)\M'),
-        ('lesnici', '\m(lesnik|lesnici|lesnika|hazelnut[a-z]*)\M', '\m(mesavin[a-z]*|mix|miks)\M'),
+        ('bademi', '\m(badem|bademi|badema)\M', '\m(mesavin[a-z]*|mix|miks|listic[a-z]*|mleven[a-z]*|brasn[a-z]*)\M'),
+        ('lesnici', '\m(lesnik|lesnici|lesnika)\M', '\m(mesavin[a-z]*|mix|miks|mleven[a-z]*)\M'),
         ('pistaci', '\m(pistac[a-z]*|pistachio[a-z]*)\M', '\m(mesavin[a-z]*|mix|miks)\M'),
         ('orasasti plodovi', NULL, NULL)
 ) AS word (alias, required, uncommon)
