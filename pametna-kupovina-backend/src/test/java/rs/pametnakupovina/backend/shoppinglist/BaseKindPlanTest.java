@@ -114,6 +114,41 @@ class BaseKindPlanTest {
         assertThat(allLines(response)).noneMatch(line -> "Brancin svež".equals(line.productName()));
     }
 
+    /** Offal at 21 RSD/kg is no "riba" (proba V165 na kopiji): the plan takes the fish. */
+    @Test
+    void somethingFarCheaperThanTheKindIsNotIt() {
+        ShoppingListItemResponse fish = item(1L, "riba", "1");
+        NearbyStore offal = store(1L, "A");
+        NearbyStore carp = store(2L, "B");
+
+        ShoppingRecommendationResponse response = plan(List.of(fish), List.of(offal, carp), List.of(
+                kilos(offer(offal, fish, "Iznutrice tolstolobika", "20.89", 301L), 1),
+                kilos(offer(carp, fish, "Šaran", "649.99", 401L), 1)
+        ));
+
+        assertThat(response.lowestPrice().items().get(0).lineTotal()).isEqualByComparingTo("649.99");
+        assertThat(allLines(response)).noneMatch(line -> "Iznutrice tolstolobika".equals(line.productName()));
+        // Left out without a note: the shop is not "dearer than the kind".
+        assertThat(allLines(response)).noneMatch(line -> line.substituteNote() != null
+                && line.substituteNote().contains("Iznutrice"));
+    }
+
+    @Test
+    void theLowerBoundIsAFifthOfTheKind() {
+        ShoppingListItemResponse fish = item(1L, "riba", "1");
+        NearbyStore store = store(1L, "A");
+        PlanRules.KindLimit limit = new PlanRules.KindLimit("Sveža riba",
+                Map.of("g", new BigDecimal("1000.00")), "RSD");
+
+        assertThat(PlanRules.belowBaseKind(kilos(offer(store, fish, "Iznutrice", "20.89", 1L), 1), limit, null))
+                .isTrue();
+        assertThat(PlanRules.belowBaseKind(kilos(offer(store, fish, "Papalina", "246.12", 1L), 1), limit, null))
+                .isFalse();
+        assertThat(PlanRules.belowBaseKind(offer(store, fish, "Riba", "1.00", 1L), limit, null)).isFalse();
+        assertThat(PlanRules.belowBaseKind(kilos(offer(store, fish, "Iznutrice", "20.89", 1L), 1), null, null))
+                .isFalse();
+    }
+
     /** A fish sold by the kilogram whose amount the plan does not know is read per kilogram too. */
     @Test
     void aFishSoldByTheKilogramIsReadPerKilogram() {

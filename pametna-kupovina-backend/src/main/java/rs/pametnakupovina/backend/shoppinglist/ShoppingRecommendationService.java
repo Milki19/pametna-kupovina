@@ -1480,6 +1480,9 @@ public class ShoppingRecommendationService {
             BaseKindPrices.PackAmount pack = offer.retailerProductId() == null
                     ? null
                     : packs.get(offer.retailerProductId());
+            if (PlanRules.belowBaseKind(offer, limit, pack)) {
+                continue;
+            }
             if (PlanRules.withinBaseKind(offer, limit, pack)) {
                 kept.add(offer);
             } else {
