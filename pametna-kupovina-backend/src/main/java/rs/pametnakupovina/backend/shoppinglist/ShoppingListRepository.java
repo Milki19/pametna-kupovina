@@ -155,7 +155,7 @@ public class ShoppingListRepository {
         // bought as sour cream, špagete as fusilli). Where only some of the
         // kind's products say the word, the plan looks for those.
         String narrower = WantedWords.pattern(flexibleCategory, null, normalizer);
-        if (narrower == null) {
+        if (narrower == null || namesTheWholeKind(flexibleCategoryNormalized)) {
             return null;
         }
         Double share = memo.remember(List.of("narrowerWordShare", narrower, shoppingIntentId), () -> jdbcClient.sql("""
@@ -174,6 +174,26 @@ public class ShoppingListRepository {
                 .optional()
                 .orElse(null));
         return share != null && share > 0 && share < NARROWER_WORD_SHARE ? narrower : null;
+    }
+
+    /**
+     * "riba" is the whole kind, though few fish are named so: a shop writes
+     * "brancin" or "oslić". Read as narrower, "riba 4" lost the limit of a
+     * plain line and bought four sea bass for 12.520 RSD (S18, V165).
+     */
+    private boolean namesTheWholeKind(String normalizedAlias) {
+        if (normalizedAlias == null) {
+            return false;
+        }
+        return memo.remember(List.of("namesTheWholeKind", normalizedAlias), () -> jdbcClient.sql("""
+                        SELECT names_the_whole_kind
+                        FROM app.shopping_intent_alias
+                        WHERE normalized_alias = ?
+                        """)
+                .param(1, normalizedAlias)
+                .query(Boolean.class)
+                .optional()
+                .orElse(false));
     }
 
     public ShoppingListSummary create(
