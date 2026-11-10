@@ -315,7 +315,7 @@ class ShoppingListViewModel @Inject constructor(
     }
 
     /** „Spoji sve“: svaka grupa kao jedno „Spoji“, u jednoj izmeni spiska. */
-    fun mergeAllDuplicates(groups: List<DuplicateGroup>) {
+    internal fun mergeAllDuplicates(groups: List<DuplicateGroup>) {
         val mergeable = groups.filter { it.merged != null }
         if (mergeable.isEmpty()) return
         mutate {
