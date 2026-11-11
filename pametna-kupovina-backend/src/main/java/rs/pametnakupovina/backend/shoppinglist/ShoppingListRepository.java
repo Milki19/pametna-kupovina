@@ -153,18 +153,24 @@ public class ShoppingListRepository {
             ShoppingItemRule matchingRule,
             String flexibleCategory,
             String flexibleCategoryNormalized,
-            Long shoppingIntentId
+            Long shoppingIntentId,
+            java.math.BigDecimal targetQuantity
     ) {
         if (matchingRule != ShoppingItemRule.FLEXIBLE_CATEGORY) {
             return null;
         }
+        // A litre or kilogram left in the words, with nothing to buy by it,
+        // is a size the names say: the line interpreter keeps "60 l" so for
+        // bags (V166). A line with an amount to buy has it apart.
+        boolean sizesAreNamed = targetQuantity == null;
         // The words of the list's market that shops write otherwise (V168).
         Map<String, String> otherNames = sameWords.of(markets.forShoppingList(listId));
         String beyondKind = WantedWords.pattern(
                 flexibleCategory,
                 shoppingIntentId == null ? null : flexibleCategoryNormalized,
                 normalizer,
-                otherNames
+                otherNames,
+                sizesAreNamed
         );
         if (beyondKind != null || shoppingIntentId == null) {
             return beyondKind;
@@ -176,7 +182,7 @@ public class ShoppingListRepository {
         // "puter" is said by fewer than half of the butter, "puter" or
         // "maslac" by most of it: the word and its other names are
         // the whole kind (V168).
-        String narrower = WantedWords.pattern(flexibleCategory, null, normalizer, otherNames);
+        String narrower = WantedWords.pattern(flexibleCategory, null, normalizer, otherNames, sizesAreNamed);
         if (narrower == null || namesTheWholeKind(flexibleCategoryNormalized)) {
             return null;
         }
@@ -509,7 +515,7 @@ public class ShoppingListRepository {
                         : ShoppingItemMatchingStatus.CONFIRMED;
 
         String wanted = wantedPattern(listId, matchingRule, flexibleCategory,
-                flexibleCategoryNormalized, shoppingIntentId);
+                flexibleCategoryNormalized, shoppingIntentId, targetQuantity);
 
         return jdbcClient.sql("""
                         INSERT INTO app.shopping_list_item (
@@ -698,7 +704,7 @@ public class ShoppingListRepository {
                         : ShoppingItemMatchingStatus.CONFIRMED;
 
         String wanted = wantedPattern(listId, matchingRule, flexibleCategory,
-                flexibleCategoryNormalized, shoppingIntentId);
+                flexibleCategoryNormalized, shoppingIntentId, targetQuantity);
 
         return jdbcClient.sql("""
                     UPDATE app.shopping_list_item
