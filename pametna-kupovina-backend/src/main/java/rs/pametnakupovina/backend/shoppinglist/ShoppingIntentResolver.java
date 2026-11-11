@@ -273,14 +273,15 @@ public class ShoppingIntentResolver {
      * A product whose litres or kilograms are what it holds, not what it
      * weighs: a bag (app.capacity_rule, V166).
      */
-    private static final String HOLDS_ITS_SIZE = """
+    // Spaces around, like byHint: a text block drops the ones at its line ends.
+    private static final String HOLDS_ITS_SIZE = " " + """
             EXISTS (
                 SELECT 1
                 FROM app.capacity_rule AS rule
                 WHERE rule.active
                   AND product.normalized_name ~ rule.include_pattern
                   AND (rule.exclude_pattern IS NULL OR product.normalized_name !~ rule.exclude_pattern)
-            )""";
+            )""" + " ";
 
     /**
      * Whether most products of a kind hold what their litres or kilograms
