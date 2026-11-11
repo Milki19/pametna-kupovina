@@ -81,6 +81,16 @@ public final class WholeWords {
     }
 
     /**
+     * Any of the words, each in its forms and whole, as one PostgreSQL
+     * regular expression: "puter" or "maslac" (app.same_word, V168) is
+     * "maslaca" and "puterom" too, but no "puterica". The alternation is
+     * a plain group, so the trigram hint looks up all the words together.
+     */
+    public static String anyFormOf(List<String> words) {
+        return "\\m(" + String.join("|", words) + ")(?:|" + ENDINGS + ")\\M";
+    }
+
+    /**
      * The same rule as a PostgreSQL regular expression, for SQL that must
      * agree with {@link #contains}: {@code name ~ WholeWords.sqlPattern(word)}.
      * The phrase is normalized already; anything but letters, digits and

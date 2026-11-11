@@ -113,6 +113,8 @@ public final class WantedWords {
     /**
      * Words product names write otherwise: "sojino mleko" is "napitak od
      * soje" or "soja drink", "kukuruzne pahuljice" "corn flakes" (proba V140).
+     * By stem, in the code; the words of a market are rows of app.same_word
+     * (V168), by the word as the list writes it.
      */
     private static final Map<String, String> SAME_THING = Map.of(
             "sojin", "(soj|soy)",
@@ -170,7 +172,23 @@ public final class WantedWords {
             String kindAlias,
             ProductNameNormalizer normalizer
     ) {
-        List<String> terms = terms(category, kindAlias, normalizer);
+        return pattern(category, kindAlias, normalizer, Map.of());
+    }
+
+    /**
+     * @param sameWords what product names write for a word of the list, by
+     *                  the word as the list writes it: "puter" is
+     *                  "puter" or "maslac" in any of their forms
+     *                  (app.same_word, V168). A word it does not know is
+     *                  read by the stems of the code.
+     */
+    public static String pattern(
+            String category,
+            String kindAlias,
+            ProductNameNormalizer normalizer,
+            Map<String, String> sameWords
+    ) {
+        List<String> terms = terms(category, kindAlias, normalizer, sameWords);
         if (terms.isEmpty()) {
             return null;
         }
@@ -212,6 +230,15 @@ public final class WantedWords {
             String category,
             String kindAlias,
             ProductNameNormalizer normalizer
+    ) {
+        return terms(category, kindAlias, normalizer, Map.of());
+    }
+
+    static List<String> terms(
+            String category,
+            String kindAlias,
+            ProductNameNormalizer normalizer,
+            Map<String, String> sameWords
     ) {
         if (category == null || category.isBlank()) {
             return List.of();
@@ -291,8 +318,14 @@ public final class WantedWords {
                 continue;
             }
             String purpose = purpose(word, stem);
+            // "puter" is "maslac" too, and "maslac" "puter" (V168): shops
+            // write one word or the other, so "puter" alone was read as one
+            // of the butters and found only the names that say "puter".
+            String otherNames = sameWords.get(word);
             String synonym = SAME_THING.get(stem);
-            if (synonym != null) {
+            if (otherNames != null) {
+                terms.add(otherNames);
+            } else if (synonym != null) {
                 terms.add("\\m" + synonym);
             } else if (purpose != null) {
                 terms.add("\\m" + purpose);
