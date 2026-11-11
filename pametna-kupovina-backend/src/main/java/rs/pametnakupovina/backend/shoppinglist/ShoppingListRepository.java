@@ -3,12 +3,15 @@ package rs.pametnakupovina.backend.shoppinglist;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
+import rs.pametnakupovina.backend.market.MarketRepository;
 import rs.pametnakupovina.backend.matching.ProductNameNormalizer;
+import rs.pametnakupovina.backend.matching.SameWords;
 import rs.pametnakupovina.backend.product.CatalogMemo;
 
 import java.sql.Types;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -120,10 +123,22 @@ public class ShoppingListRepository {
 
     private final CatalogMemo memo;
 
-    public ShoppingListRepository(JdbcClient jdbcClient, ProductNameNormalizer normalizer, CatalogMemo memo) {
+    private final SameWords sameWords;
+
+    private final MarketRepository markets;
+
+    public ShoppingListRepository(
+            JdbcClient jdbcClient,
+            ProductNameNormalizer normalizer,
+            CatalogMemo memo,
+            SameWords sameWords,
+            MarketRepository markets
+    ) {
         this.jdbcClient = jdbcClient;
         this.normalizer = normalizer;
         this.memo = memo;
+        this.sameWords = sameWords;
+        this.markets = markets;
     }
 
     /**
@@ -134,6 +149,7 @@ public class ShoppingListRepository {
 
     /** What a flexible item asks for beyond its kind, kept with it (V140). */
     private String wantedPattern(
+            Long listId,
             ShoppingItemRule matchingRule,
             String flexibleCategory,
             String flexibleCategoryNormalized,
@@ -142,10 +158,13 @@ public class ShoppingListRepository {
         if (matchingRule != ShoppingItemRule.FLEXIBLE_CATEGORY) {
             return null;
         }
+        // The words of the list's market that shops write otherwise (V168).
+        Map<String, String> otherNames = sameWords.of(markets.forShoppingList(listId));
         String beyondKind = WantedWords.pattern(
                 flexibleCategory,
                 shoppingIntentId == null ? null : flexibleCategoryNormalized,
-                normalizer
+                normalizer,
+                otherNames
         );
         if (beyondKind != null || shoppingIntentId == null) {
             return beyondKind;
@@ -154,7 +173,10 @@ public class ShoppingListRepository {
         // one of the creams, "špagete" one of the pastas (proba V140: kajmak
         // bought as sour cream, špagete as fusilli). Where only some of the
         // kind's products say the word, the plan looks for those.
-        String narrower = WantedWords.pattern(flexibleCategory, null, normalizer);
+        // "puter" is said by fewer than half of the butter, "puter" or
+        // "maslac" by most of it: the word and its other names are
+        // the whole kind (V168).
+        String narrower = WantedWords.pattern(flexibleCategory, null, normalizer, otherNames);
         if (narrower == null || namesTheWholeKind(flexibleCategoryNormalized)) {
             return null;
         }
@@ -486,7 +508,7 @@ public class ShoppingListRepository {
                         ? ShoppingItemMatchingStatus.PENDING
                         : ShoppingItemMatchingStatus.CONFIRMED;
 
-        String wanted = wantedPattern(matchingRule, flexibleCategory,
+        String wanted = wantedPattern(listId, matchingRule, flexibleCategory,
                 flexibleCategoryNormalized, shoppingIntentId);
 
         return jdbcClient.sql("""
@@ -675,7 +697,7 @@ public class ShoppingListRepository {
                         ? ShoppingItemMatchingStatus.PENDING
                         : ShoppingItemMatchingStatus.CONFIRMED;
 
-        String wanted = wantedPattern(matchingRule, flexibleCategory,
+        String wanted = wantedPattern(listId, matchingRule, flexibleCategory,
                 flexibleCategoryNormalized, shoppingIntentId);
 
         return jdbcClient.sql("""
