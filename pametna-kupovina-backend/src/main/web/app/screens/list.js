@@ -111,7 +111,8 @@ const saidOffline = text => waiting() ? `${text} Bez veze: šalje se kad se veza
  * koju server odbije kaže, umesto da je prećuti.
  */
 async function sendWaiting() {
-  if (!waiting()) return { sent: 0, left: 0 };
+  // Bez provere waiting(): pri otvaranju stranice red iz IndexedDB još nije
+  // učitan, a send() sam sačeka da se učita i vrati 0 kad nema ništa.
   const result = await send(api);
   if (result.refused.length) {
     toast(`Server nije primio ${counted(result.refused.length, 'izmenu', 'izmene', 'izmena')} sa telefona: ${result.refused[0].error.message}`, null, null, true);
