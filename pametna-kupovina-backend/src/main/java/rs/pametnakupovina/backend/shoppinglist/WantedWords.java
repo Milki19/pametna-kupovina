@@ -148,6 +148,22 @@ public final class WantedWords {
             "rolni", "rolne", "rolna", "rola", "role", "rolnica", "rolnice"
     );
 
+    /**
+     * A size a product's name says rather than an amount to buy: a bag's
+     * litres or kilograms are what it holds (V166), so "kese za smeće 60 l"
+     * asks for 60-litre bags, named "60L", "60 l" or "60L/15".
+     */
+    private static final Map<String, String> NAMED_SIZE_UNITS = Map.ofEntries(
+            Map.entry("l", "(l|lit[a-z]*)"), Map.entry("lit", "(l|lit[a-z]*)"),
+            Map.entry("litar", "(l|lit[a-z]*)"), Map.entry("litra", "(l|lit[a-z]*)"),
+            Map.entry("litre", "(l|lit[a-z]*)"), Map.entry("ml", "ml"),
+            Map.entry("kg", "(kg|kil[a-z]*)"), Map.entry("kila", "(kg|kil[a-z]*)"),
+            Map.entry("kilo", "(kg|kil[a-z]*)"), Map.entry("kile", "(kg|kil[a-z]*)"),
+            Map.entry("kilogram", "(kg|kil[a-z]*)"), Map.entry("kilograma", "(kg|kil[a-z]*)"),
+            Map.entry("g", "(g|gr|gram[a-z]*)"), Map.entry("gr", "(g|gr|gram[a-z]*)"),
+            Map.entry("gram", "(g|gr|gram[a-z]*)"), Map.entry("grama", "(g|gr|gram[a-z]*)")
+    );
+
     private static final String FOOD_WRAP =
             "(hran|namirn|alu|aluminij|stretch|prijanj|frigo|kuhinj|pvc)";
 
@@ -188,7 +204,23 @@ public final class WantedWords {
             ProductNameNormalizer normalizer,
             Map<String, String> sameWords
     ) {
-        List<String> terms = terms(category, kindAlias, normalizer, sameWords);
+        return pattern(category, kindAlias, normalizer, sameWords, false);
+    }
+
+    /**
+     * @param sizesAreNamed a litre or kilogram in the words is a size the
+     *                      names say, not how much to buy: the line was
+     *                      read so for products that hold what they say
+     *                      (kese, V166)
+     */
+    public static String pattern(
+            String category,
+            String kindAlias,
+            ProductNameNormalizer normalizer,
+            Map<String, String> sameWords,
+            boolean sizesAreNamed
+    ) {
+        List<String> terms = terms(category, kindAlias, normalizer, sameWords, sizesAreNamed);
         if (terms.isEmpty()) {
             return null;
         }
@@ -240,6 +272,16 @@ public final class WantedWords {
             ProductNameNormalizer normalizer,
             Map<String, String> sameWords
     ) {
+        return terms(category, kindAlias, normalizer, sameWords, false);
+    }
+
+    static List<String> terms(
+            String category,
+            String kindAlias,
+            ProductNameNormalizer normalizer,
+            Map<String, String> sameWords,
+            boolean sizesAreNamed
+    ) {
         if (category == null || category.isBlank()) {
             return List.of();
         }
@@ -280,6 +322,10 @@ public final class WantedWords {
                     continue;
                 }
                 if (amount) {
+                    String named = sizesAreNamed ? NAMED_SIZE_UNITS.get(words.get(end + 1)) : null;
+                    if (named != null) {
+                        terms.add("\\m" + String.join(" ", words.subList(index, end + 1)) + " " + named + "\\M");
+                    }
                     index = end + 1;
                     continue;
                 }

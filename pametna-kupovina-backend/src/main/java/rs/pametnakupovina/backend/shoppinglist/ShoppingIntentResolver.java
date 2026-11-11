@@ -269,6 +269,68 @@ public class ShoppingIntentResolver {
      * for that no dictionary knows ("tortilje", "vlažne maramice") is found
      * by the products' own names.
      */
+    /**
+     * A product whose litres or kilograms are what it holds, not what it
+     * weighs: a bag (app.capacity_rule, V166).
+     */
+    private static final String HOLDS_ITS_SIZE = """
+            EXISTS (
+                SELECT 1
+                FROM app.capacity_rule AS rule
+                WHERE rule.active
+                  AND product.normalized_name ~ rule.include_pattern
+                  AND (rule.exclude_pattern IS NULL OR product.normalized_name !~ rule.exclude_pattern)
+            )""";
+
+    /**
+     * Whether most products of a kind hold what their litres or kilograms
+     * say: "kese za zamrzivač 3l" asks for 3-litre bags, not 3 l of bags.
+     */
+    public boolean kindHoldsItsSize(long shoppingIntentId) {
+        return memo.remember(
+                List.of("kindHoldsItsSize", String.valueOf(shoppingIntentId)),
+                () -> jdbcClient.sql("""
+                                SELECT COALESCE(AVG(CASE WHEN """ + HOLDS_ITS_SIZE + """
+                                                         THEN 1.0 ELSE 0.0 END), 0) >= 0.5
+                                FROM app.shopping_intent_product_type AS allowed
+                                JOIN app.retailer_product_type AS assignment
+                                  ON assignment.product_type_id = allowed.product_type_id
+                                JOIN app.retailer_product AS product
+                                  ON product.id = assignment.retailer_product_id
+                                WHERE allowed.shopping_intent_id = ?
+                                  AND allowed.enabled_by_default = TRUE
+                                """)
+                        .param(1, shoppingIntentId)
+                        .query(Boolean.class)
+                        .single()
+        );
+    }
+
+    /**
+     * The same for the products a line finds by name: "kese za smeće 60l"
+     * asks for 60-litre bin bags (V166 left their litres out of the size).
+     */
+    public boolean namesHoldTheirSize(String pattern) {
+        return memo.remember(
+                List.of("namesHoldTheirSize", String.valueOf(pattern)),
+                () -> jdbcClient.sql("""
+                                SELECT COALESCE(AVG(CASE WHEN """ + HOLDS_ITS_SIZE + """
+                                                         THEN 1.0 ELSE 0.0 END), 0) >= 0.5
+                                FROM app.retailer_product AS product
+                                WHERE """ + byHint(WantedWords.hint(pattern)) + """
+                                  product.normalized_name ~ ?
+                                  AND EXISTS (
+                                      SELECT 1
+                                      FROM app.current_price_offer AS offer
+                                      WHERE offer.retailer_product_id = product.id
+                                  )
+                                """)
+                        .param(1, pattern)
+                        .query(Boolean.class)
+                        .single()
+        );
+    }
+
     public boolean productsMatch(String pattern) {
         return memo.remember(
                 List.of("productsMatch", String.valueOf(pattern)),

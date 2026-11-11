@@ -145,6 +145,17 @@ public class ShoppingLineInterpreter {
             }
         }
 
+        // "kese za zamrzivač 3l": a bag's litres or kilograms are what it
+        // holds, not how much to buy (V166), so the size is a word its name
+        // says. Read as 3 l of bags, the line found no bag with a price.
+        String size = null;
+        if (target != null && ("ml".equals(unit) || "g".equals(unit))
+                && intentResolver.kindHoldsItsSize(intent.shoppingIntentId())) {
+            size = sizeWords(target, unit);
+            target = null;
+            unit = null;
+        }
+
         // Something counted by the piece and sold in cartons: "jaja 10 kom"
         // asks for ten eggs, however many fit in one shop's carton. "4
         // kutije jaja" names the cartons themselves (V157).
@@ -177,7 +188,7 @@ public class ShoppingLineInterpreter {
             if (named != null && intentResolver.kindIsBarelyTyped(intent.shoppingIntentId(), named)) {
                 return kindByName(line);
             }
-            return choice(name, name, intent, null, packages, target, unit);
+            return choice(withSize(name, size), withSize(name, size), intent, null, packages, target, unit);
         }
 
         // "parmezan salama" names salami, not parmesan: what the kind's own
@@ -215,14 +226,14 @@ public class ShoppingLineInterpreter {
                     || intentResolver.kindHasProductsMatching(intent.shoppingIntentId(), wanted)
                     || WantedWords.pattern(WantedWords.withoutSizeLetters(kindPhrase),
                             intent.normalizedAlias(), normalizer) == null) {
-                return choice(name, kindWords, intent, null, packages, target, unit);
+                return choice(withSize(name, size), withSize(kindWords, size), intent, null, packages, target, unit);
             }
             return kindByName(line);
         }
 
         return choice(
-                name,
-                split.get().category(),
+                withSize(name, size),
+                withSize(split.get().category(), size),
                 intent,
                 split.get().brand(),
                 packages,
@@ -290,6 +301,27 @@ public class ShoppingLineInterpreter {
             BigDecimal packages
     ) {
         BigDecimal target = line.targetQuantity();
+        // "kese za smeće 60l" asks for 60-litre bin bags: products that hold
+        // what they say are no amount to buy (V166). Read as 60 l of bags it
+        // had no price (proba V166, 11.11.2026).
+        if (target != null && target.signum() > 0
+                && ("ml".equals(line.baseUnit()) || "g".equals(line.baseUnit()))) {
+            String found = WantedWords.pattern(words, null, normalizer);
+            if (found != null && intentResolver.namesHoldTheirSize(found)) {
+                String size = sizeWords(target, line.baseUnit());
+                return new InterpretedLine(
+                        withSize(name, size),
+                        packages,
+                        ShoppingItemRule.FLEXIBLE_CATEGORY,
+                        withSize(words, size),
+                        normalizer.normalize(withSize(words, size)),
+                        null,
+                        null,
+                        null,
+                        null
+                );
+            }
+        }
         return new InterpretedLine(
                 name,
                 packages,
@@ -301,6 +333,19 @@ public class ShoppingLineInterpreter {
                 target != null && target.signum() > 0 ? target : null,
                 target != null && target.signum() > 0 ? line.baseUnit() : null
         );
+    }
+
+    /** "60 l", "1,5 l", "500 ml", "3 kg": a size as product names write it. */
+    static String sizeWords(BigDecimal amount, String unit) {
+        boolean whole = amount.compareTo(ONE_THOUSAND) >= 0;
+        BigDecimal shown = whole ? amount.divide(ONE_THOUSAND) : amount;
+        String number = shown.stripTrailingZeros().toPlainString().replace('.', ',');
+        String written = "ml".equals(unit) ? (whole ? "l" : "ml") : (whole ? "kg" : "g");
+        return number + " " + written;
+    }
+
+    private static String withSize(String words, String size) {
+        return size == null || words == null ? words : words + " " + size;
     }
 
     /**
