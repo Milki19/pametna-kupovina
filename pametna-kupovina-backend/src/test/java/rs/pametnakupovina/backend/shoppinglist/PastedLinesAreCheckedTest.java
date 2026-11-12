@@ -141,6 +141,18 @@ class PastedLinesAreCheckedTest {
                 .as("%s", answered)
                 .doesNotContain(ShoppingItemMatchingStatus.PENDING, ShoppingItemMatchingStatus.UNMATCHED);
 
+        // A kind found by name is not looked up in the product search on paste.
+        assertThat(pasted.items().stream()
+                .filter(item -> item.matchingStatus() != ShoppingItemMatchingStatus.CONFIRMED)
+                .filter(item -> item.matchingRule() == ShoppingItemRule.FLEXIBLE_CATEGORY))
+                .as("%s", answered)
+                .isNotEmpty()
+                .allSatisfy(item -> {
+                    assertThat(item.matchingAlgorithmVersion())
+                            .isEqualTo(ShoppingListMatchingService.PASTE_CHECK_VERSION);
+                    assertThat(item.matchingDecisionId()).isNull();
+                });
+
         // What the paste answered is what the list keeps and what "Izračunaj" finds.
         Map<String, ShoppingItemMatchingStatus> stored = shoppingListService.findById(list.id(), caller.accountId())
                 .items().stream()
