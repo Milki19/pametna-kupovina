@@ -28,6 +28,9 @@ public class ShoppingListMatchingService {
 
     private static final int CANDIDATE_LIMIT = 5;
 
+    /** What a pasted line was found by before anyone pressed "Izračunaj". */
+    static final String PASTE_CHECK_VERSION = "paste-name-check-v1";
+
     private final ShoppingListService shoppingListService;
     private final ShoppingListRepository shoppingListRepository;
     private final ProductMatchDecisionService decisionService;
@@ -185,7 +188,9 @@ public class ShoppingListMatchingService {
                 continue;
             }
             try {
-                checked.add(check(listId, item, caller, true).updated());
+                checked.add(item.matchingRule() == ShoppingItemRule.FLEXIBLE_CATEGORY
+                        ? checkByName(listId, item)
+                        : check(listId, item, caller, true).updated());
             } catch (RuntimeException failure) {
                 log.warn("Pasted item {} of list {} was not checked",
                         item.id(), listId, failure);
@@ -198,6 +203,42 @@ public class ShoppingListMatchingService {
                 pasted.ignoredBlankLineCount(),
                 List.copyOf(checked),
                 pasted.rejectedLines()
+        );
+    }
+
+    /**
+     * A kind nobody taught us is found exactly when products are named by
+     * its words, so pasting asks only that: the product search the full check
+     * also runs decides nothing for such a line, and with 38 of 100 pasted
+     * lines it made pasting 2 s slower (B3 uživo, 12.11.2026). "Izračunaj"
+     * still checks the line in full.
+     */
+    private ShoppingListItemResponse checkByName(
+            Long listId,
+            ShoppingListItemResponse item
+    ) {
+        return updateResult(
+                listId,
+                item.id(),
+                foundByName(listId, item)
+                        ? ShoppingItemMatchingStatus.AUTO_MATCHED
+                        : ShoppingItemMatchingStatus.UNMATCHED,
+                null,
+                null,
+                null,
+                PASTE_CHECK_VERSION
+        );
+    }
+
+    private boolean foundByName(Long listId, ShoppingListItemResponse item) {
+        return shoppingListRepository.hasProductsNamed(
+                listId,
+                item.id(),
+                item.flexibleConstraints() == null
+                        || item.flexibleConstraints().category() == null
+                        ? productNameNormalizer.normalize(item.name())
+                        : productNameNormalizer.normalize(
+                                item.flexibleConstraints().category())
         );
     }
 
@@ -527,15 +568,7 @@ public class ShoppingListMatchingService {
         // A kind nobody taught us is priced by name alone, so it is found
         // exactly when the plan can price it: one state here and in the plan.
         if (item.matchingRule() == ShoppingItemRule.FLEXIBLE_CATEGORY) {
-            status = shoppingListRepository.hasProductsNamed(
-                    listId,
-                    item.id(),
-                    item.flexibleConstraints() == null
-                            || item.flexibleConstraints().category() == null
-                            ? productNameNormalizer.normalize(item.name())
-                            : productNameNormalizer.normalize(
-                                    item.flexibleConstraints().category())
-            )
+            status = foundByName(listId, item)
                     ? ShoppingItemMatchingStatus.AUTO_MATCHED
                     : ShoppingItemMatchingStatus.UNMATCHED;
         }
