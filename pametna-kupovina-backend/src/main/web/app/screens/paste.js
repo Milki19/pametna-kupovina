@@ -138,8 +138,11 @@ function pasteAskCard() {
       </div></div>`;
 }
 
-/** Upravo nalepljena stavka čiju vrstu server nije prepoznao. */
-const pastedUnknown = item => listState.pastedUnknown.has(item.id) && item.matchingStatus !== 'CONFIRMED';
+/**
+ * Upravo nalepljena stavka za koju ni provera servera nije našla ništa. Server
+ * proverava nalepljeno pre odgovora, pa „med“ i „senf“ ne stoje kao neprepoznati.
+ */
+const pastedUnknown = item => listState.pastedUnknown.has(item.id) && item.matchingStatus === 'UNMATCHED';
 
 const rejectedMark = id => listState.rejected ? `aria-invalid="true" aria-describedby="${id}-error" ` : '';
 
@@ -165,7 +168,7 @@ async function addText(text) {
   const pasted = itemCount(text) > 1;
   if (pasted) {
     listState.pastedUnknown = new Set((result.items || [])
-      .filter(item => item.matchingStatus !== 'CONFIRMED').map(item => item.id));
+      .filter(item => item.matchingStatus === 'UNMATCHED').map(item => item.id));
   }
   listState.rejected = rejected.length ? { text: rejected.map(line => line.text).join('\n'), lines: rejected } : null;
   if (!rejected.length) listState.adding = null;
@@ -177,7 +180,7 @@ async function addText(text) {
   const read = !pasted || !result.createdCount ? ''
     : !unknown ? ' Sve je prepoznato.'
       : ` Prepoznato ${result.createdCount - unknown}, a ${unknown} ${plural(unknown, 'nije: stoji', 'nisu: stoje', 'nisu: stoje')}`
-        + ' na vrhu i traži se po nazivu kad klikneš Izračunaj.';
+        + ' na vrhu, pa probaj drugi naziv.';
   const added = (result.createdCount === 1 ? 'Dodato.'
     : result.createdCount ? `Dodato: ${counted(result.createdCount, 'stavka', 'stavke', 'stavki')}.` : 'Nema stavki za dodavanje.') + read;
   toast(rejected.length ? `${added} Nije dodato: ${rejected.length}, razlog je ispod polja.` : added);

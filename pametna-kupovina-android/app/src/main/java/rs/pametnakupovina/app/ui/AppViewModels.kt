@@ -50,7 +50,7 @@ data class ShoppingListUiState(
     val errorMessage: UiText? = null,
     val notice: UiText? = null,
     val skippedItems: SkippedItems? = null,
-    /** Upravo nalepljene stavke čiju vrstu server nije prepoznao (po ID-u na serveru). */
+    /** Upravo nalepljene stavke za koje ni provera servera nije našla ništa (po ID-u na serveru). */
     val pastedUnknownIds: Set<Long> = emptySet()
 )
 

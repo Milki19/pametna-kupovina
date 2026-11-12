@@ -411,7 +411,8 @@ class ShoppingRepository @Inject constructor(
 
     /**
      * Kako je server pročitao upravo nalepljene redove: koliko je prepoznato
-     * (vrsta proizvoda je poznata) i koje stavke se traže samo po nazivu.
+     * (vrsta je poznata ili ju je provera našla po nazivu) i za koje stavke
+     * provera nije našla ništa.
      * Null dok neki red još nije poslat (nema mreže).
      */
     suspend fun pastedReading(localIds: List<Long>): PasteReading? {
@@ -421,7 +422,8 @@ class ShoppingRepository @Inject constructor(
         // Red koji server nije primio ima svoju oznaku („Nije poslato") i ne broji se ovde.
         val pasted = rows.filter { it.syncState == SyncState.SYNCED.name }
         if (pasted.isEmpty()) return null
-        val unknown = pasted.filter { it.matchingStatus != "CONFIRMED" }
+        // Server proverava nalepljeno pre odgovora: neprepoznato je samo ono što ni provera ne nađe.
+        val unknown = pasted.filter { it.matchingStatus == "UNMATCHED" }
         return PasteReading(
             recognized = pasted.size - unknown.size,
             unknownRemoteIds = unknown.mapNotNull(DraftItemEntity::remoteId).toSet()

@@ -527,7 +527,7 @@ function renderList() {
             <div class="row">
               <div class="item-tap" data-act="edit" data-id="${item.id}" role="button" tabindex="0" aria-label="Izmeni ${esc(item.name)}">
                 <div class="grow">
-                  ${itemAttention(item) || (pastedUnknown(item) ? pill('Nije prepoznato', 'warn') : '')}
+                  ${pastedUnknown(item) ? pill('Nije prepoznato', 'warn') : itemAttention(item)}
                   <div class="name">${esc(item.name)}</div>
                   ${item.note ? `<div class="muted small">${esc(item.note)}</div>` : ''}
                   ${itemRule(item) ? `<div class="muted small">${esc(itemRule(item))}</div>` : ''}

@@ -617,8 +617,11 @@ private fun DraftItemRow(
     val attention = if (item.syncError != null) {
         stringResource(R.string.list_status_not_sent) to StatusTone.ERROR
     } else {
-        draftAttention(item.matchingStatus)?.let { (text, tone) -> stringResource(text) to tone }
-            ?: if (notRecognized) stringResource(R.string.list_status_not_recognized) to StatusTone.WARNING else null
+        if (notRecognized) {
+            stringResource(R.string.list_status_not_recognized) to StatusTone.WARNING
+        } else {
+            draftAttention(item.matchingStatus)?.let { (text, tone) -> stringResource(text) to tone }
+        }
     }
     val openPrices: (() -> Unit)? = item.canonicalProductId?.let { id -> { onOpenProduct(id) } }
         ?: item.productFamilyId
@@ -850,10 +853,13 @@ internal fun sameKindWords(first: String, second: String): Boolean {
     }
 }
 
-/** Stavka iz upravo nalepljenog spiska čiju vrstu server nije prepoznao, i još nije izabrana. */
+/**
+ * Stavka iz upravo nalepljenog spiska za koju ni provera servera nije našla
+ * ništa. Server proverava nalepljeno pre odgovora, pa „med“ i „senf“ nisu tu.
+ */
 internal fun pastedUnknown(item: DraftItemEntity, unknownRemoteIds: Set<Long>): Boolean =
     item.remoteId != null && item.remoteId in unknownRemoteIds &&
-        item.matchingStatus != "CONFIRMED" && item.syncError == null
+        item.matchingStatus == "UNMATCHED" && item.syncError == null
 
 private fun draftAttention(status: String): Pair<Int, StatusTone>? = when (status) {
     "NEEDS_CONFIRMATION" -> R.string.list_status_needs_confirmation to StatusTone.WARNING

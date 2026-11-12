@@ -1,5 +1,7 @@
 package rs.pametnakupovina.backend.shoppinglist;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,6 +22,9 @@ import java.util.List;
 
 @Service
 public class ShoppingListMatchingService {
+
+    private static final Logger log =
+            LoggerFactory.getLogger(ShoppingListMatchingService.class);
 
     private static final int CANDIDATE_LIMIT = 5;
 
@@ -153,6 +158,47 @@ public class ShoppingListMatchingService {
 
         shoppingListRepository.touch(listId);
         return result;
+    }
+
+    /**
+     * Pasted lines whose words name no kind are checked here, as "Izračunaj"
+     * would check them, before the answer goes back. The list then marks as
+     * not recognized only what the check finds nothing for: 32 of 100 pasted
+     * words (med, senf, keks) were marked until the check found them (B3,
+     * 12.11.2026). The lines are already saved, so a check that fails leaves
+     * them as they were and the paste still succeeds.
+     */
+    public PasteShoppingListItemsResponse checkPasted(
+            Long listId,
+            DeviceCaller caller,
+            PasteShoppingListItemsResponse pasted
+    ) {
+        if (pasted.items().stream().allMatch(item -> item.matchingStatus()
+                == ShoppingItemMatchingStatus.CONFIRMED)) {
+            return pasted;
+        }
+
+        List<ShoppingListItemResponse> checked = new ArrayList<>();
+        for (ShoppingListItemResponse item : pasted.items()) {
+            if (item.matchingStatus() == ShoppingItemMatchingStatus.CONFIRMED) {
+                checked.add(item);
+                continue;
+            }
+            try {
+                checked.add(check(listId, item, caller, true).updated());
+            } catch (RuntimeException failure) {
+                log.warn("Pasted item {} of list {} was not checked",
+                        item.id(), listId, failure);
+                checked.add(item);
+            }
+        }
+
+        return new PasteShoppingListItemsResponse(
+                pasted.createdCount(),
+                pasted.ignoredBlankLineCount(),
+                List.copyOf(checked),
+                pasted.rejectedLines()
+        );
     }
 
     static int countItemsWithStatus(
@@ -389,6 +435,52 @@ public class ShoppingListMatchingService {
             );
         }
 
+        Checked checked = check(
+                listId,
+                item,
+                caller,
+                includeProductsWithoutBarcode
+        );
+        ShoppingListItemResponse updated = checked.updated();
+        ProductMatchDecision decision = checked.decision();
+
+        boolean blocksOptimization =
+                updated.matchingRule() == ShoppingItemRule.EXACT_PRODUCT
+                        && updated.matchingStatus()
+                        == ShoppingItemMatchingStatus.NEEDS_CONFIRMATION;
+
+        return new ShoppingItemMatchResult(
+                updated.id(),
+                updated.name(),
+                updated.matchingRule(),
+                updated.matchingStatus(),
+                updated.matchedCanonicalProductId(),
+                updated.matchingDecisionId(),
+                updated.matchingScore(),
+                blocksOptimization,
+                explanation(
+                        updated,
+                        decision.candidates().isEmpty()
+                                ? null
+                                : decision.candidates().getFirst().name()
+                ),
+                decision.candidates()
+        );
+    }
+
+    private record Checked(
+            ShoppingListItemResponse updated,
+            ProductMatchDecision decision
+    ) {
+    }
+
+    /** Looks the item up and stores what was found. */
+    private Checked check(
+            Long listId,
+            ShoppingListItemResponse item,
+            DeviceCaller caller,
+            boolean includeProductsWithoutBarcode
+    ) {
         ProductMatchDecision decision;
 
         if (item.matchingRule()
@@ -458,28 +550,7 @@ public class ShoppingListMatchingService {
                 decision.algorithmVersion()
         );
 
-        boolean blocksOptimization =
-                updated.matchingRule() == ShoppingItemRule.EXACT_PRODUCT
-                        && updated.matchingStatus()
-                        == ShoppingItemMatchingStatus.NEEDS_CONFIRMATION;
-
-        return new ShoppingItemMatchResult(
-                updated.id(),
-                updated.name(),
-                updated.matchingRule(),
-                updated.matchingStatus(),
-                updated.matchedCanonicalProductId(),
-                updated.matchingDecisionId(),
-                updated.matchingScore(),
-                blocksOptimization,
-                explanation(
-                        updated,
-                        decision.candidates().isEmpty()
-                                ? null
-                                : decision.candidates().getFirst().name()
-                ),
-                decision.candidates()
-        );
+        return new Checked(updated, decision);
     }
 
     private ShoppingItemMatchResult resultForStoredItem(
