@@ -22,277 +22,11 @@ import java.util.Objects;
 @Repository
 public class StoreShoppingOfferRepository {
 
-    private static final RowMapper<StoreItemOffer> ROW_MAPPER =
-            (resultSet, rowNumber) -> new StoreItemOffer(
-                    resultSet.getLong("store_id"),
-                    resultSet.getString("retailer_code"),
-                    resultSet.getString("retailer_name"),
-                    resultSet.getString("store_format_code"),
-                    resultSet.getString("store_format_name"),
-                    resultSet.getString("store_name"),
-                    resultSet.getString("address"),
-                    resultSet.getString("city"),
-                    resultSet.getDouble("latitude"),
-                    resultSet.getDouble("longitude"),
-                    resultSet.getLong("item_id"),
-                    resultSet.getString("requested_name"),
-                    resultSet.getBigDecimal("requested_quantity"),
-                    ShoppingItemRule.valueOf(
-                            resultSet.getString("matching_rule")
-                    ),
-                    ShoppingItemMatchingStatus.valueOf(
-                            resultSet.getString("matching_status")
-                    ),
-                    resultSet.getObject(
-                            "retailer_product_id",
-                            Long.class
-                    ),
-                    resultSet.getObject(
-                            "canonical_product_id",
-                            Long.class
-                    ),
-                    resultSet.getString("product_name"),
-                    resultSet.getString("product_brand"),
-                    resultSet.getString("product_barcode"),
-                    resultSet.getObject("price_date", LocalDate.class),
-                    resultSet.getBigDecimal("regular_price"),
-                    resultSet.getBigDecimal("discounted_price"),
-                    resultSet.getBigDecimal("effective_price"),
-                    resultSet.getBigDecimal("line_total"),
-                    resultSet.getString("price_scope"),
-                    new PurchaseQuantity(resultSet.getBigDecimal("packages"),
-                            resultSet.getBigDecimal("package_size"), resultSet.getString("package_unit"),
-                            resultSet.getBigDecimal("target_amount"), resultSet.getBigDecimal("supplied_amount"),
-                            resultSet.getBigDecimal("extra_amount"), resultSet.getBigDecimal("unit_price")),
-                    resultSet.getBoolean("usual_choice"),
-                    resultSet.getBoolean("wanted_missing")
-            );
-
-    private final JdbcClient jdbcClient;
-    private final CatalogMemo memo;
-    private final KindTaxonomy kinds;
-    private final MarketRepository markets;
-    private final ProductNameNormalizer normalizer;
-
-    public StoreShoppingOfferRepository(
-            JdbcClient jdbcClient,
-            CatalogMemo memo,
-            KindTaxonomy kinds,
-            MarketRepository markets,
-            ProductNameNormalizer normalizer
-    ) {
-        this.jdbcClient = jdbcClient;
-        this.memo = memo;
-        this.kinds = kinds;
-        this.markets = markets;
-        this.normalizer = normalizer;
-    }
-
     /**
-     * A line of the list as the offer query sees it. {@code spec} is the
-     * row without what only names or orders it, so two lines that ask the
-     * same, in this list or anyone's, are priced once.
+     * The offers of each item in each shop. {@link #OFFERS_FROM_FACTS_SQL} is
+     * the same query reading what V172 worked out after the last import.
      */
-    /**
-     * @param variantWords what a flexible line says beyond its kind, its
-     *                     brand included: where its variant is named (V160)
-     */
-    record PlanItem(Long id, String name, String spec, String variantWords) {
-    }
-
-    private List<PlanItem> planItems(Long listId) {
-        return jdbcClient.sql("""
-                        SELECT item.id,
-                               item.name,
-                               md5((to_jsonb(item) - ARRAY[
-                                   'id', 'shopping_list_id', 'name', 'raw_input',
-                                   'created_at', 'updated_at',
-                                   'matching_decision_id', 'matching_score',
-                                   'matching_algorithm_version', 'flexible_category'
-                               ])::TEXT) AS spec,
-                               -- The words as the line says them: the normalized
-                               -- category is the kind's alias alone, "coca cola"
-                               -- for "Coca Cola zero".
-                               CASE WHEN item.matching_rule = 'FLEXIBLE_CATEGORY'
-                                    THEN CONCAT_WS(' ', item.required_brand,
-                                                   COALESCE(item.flexible_category,
-                                                            item.flexible_category_normalized))
-                               END AS variant_words
-                        FROM app.shopping_list_item AS item
-                        WHERE item.shopping_list_id = :listId
-                        ORDER BY item.created_at, item.id
-                        """)
-                .param("listId", listId)
-                // The spec leaves the shown category out, so the variant words
-                // are part of it: "coca cola" and "coca cola zero" differ.
-                .query((resultSet, rowNumber) -> new PlanItem(
-                        resultSet.getLong("id"),
-                        resultSet.getString("name"),
-                        resultSet.getString("spec") + "|" + Objects.toString(resultSet.getString("variant_words"), ""),
-                        resultSet.getString("variant_words")))
-                .list();
-    }
-
-    /**
-     * Proizvodi koje je vlasnik ovog spiska već kupovao, po skeniranim
-     * računima. Vraća se kao niz u parametru umesto kao podupit u sortiranju:
-     * upit koji se izvršava za svakog kandidata u svakoj prodavnici je ono što
-     * je preporuku i usporavalo. Prazan niz ne menja nijedan redosled.
-     */
-    private Long[] boughtFamilyIds(Long listId) {
-        return jdbcClient.sql("""
-                        SELECT DISTINCT item.product_family_id
-                        FROM app.receipt_item AS item
-                        JOIN app.receipt AS receipt
-                          ON receipt.id = item.receipt_id
-                        JOIN app.shopping_list AS list
-                          ON list.account_id = receipt.account_id
-                        WHERE list.id = :listId
-                          AND item.product_family_id IS NOT NULL
-                        """)
-                .param("listId", listId)
-                .query(Long.class)
-                .list()
-                .toArray(Long[]::new);
-    }
-
-    public List<StoreItemOffer> findOffers(
-            Long listId,
-            List<Long> storeIds,
-            LocalDate asOfDate
-    ) {
-        return findOffers(listId, storeIds, asOfDate, false);
-    }
-
-    /**
-     * @param includeUnlocated also prices the published lists whose shop we
-     *                         cannot place, so one pass answers both.
-     */
-    public List<StoreItemOffer> findOffers(
-            Long listId,
-            List<Long> storeIds,
-            LocalDate asOfDate,
-            boolean includeUnlocated
-    ) {
-        if (storeIds == null || storeIds.isEmpty()) {
-            return List.of();
-        }
-
-        // The same list in the same shops on the same day is priced once:
-        // opening the plan again, on foot and then by car, or from a step
-        // away, asks nothing (k6, 3.11.2026). The shops stand for the place;
-        // no coordinates are kept.
-        Long[] bought = boughtFamilyIds(listId);
-        List<PlanItem> items = planItems(listId);
-        if (items.isEmpty()) {
-            return List.of();
-        }
-        List<Long> shops = storeIds.stream().sorted().toList();
-        List<Object> key = java.util.Arrays.asList(
-                "planOffers", listId, items, shops, asOfDate, includeUnlocated, List.of(bought));
-        return memo.rememberOffers(key, () -> List.copyOf(
-                offersByItem(items, shops, asOfDate, includeUnlocated, bought,
-                        markets.forShoppingList(listId))));
-    }
-
-    /**
-     * Each item's offers in these shops are kept on their own, so a list
-     * opened for the first time asks only for the lines nobody nearby asked
-     * for in the last minutes, and "mleko 1 l" is priced once for everyone.
-     * Nothing in the query ties one line to another.
-     */
-    private List<StoreItemOffer> offersByItem(
-            List<PlanItem> items,
-            List<Long> shops,
-            LocalDate asOfDate,
-            boolean includeUnlocated,
-            Long[] bought,
-            Market market
-    ) {
-        long generation = memo.offersGeneration();
-        Map<String, List<StoreItemOffer>> bySpec = new HashMap<>();
-        Map<String, Long> askedFor = new LinkedHashMap<>();
-        Map<Long, List<VariantWord>> variants = new HashMap<>();
-        for (PlanItem item : items) {
-            if (bySpec.containsKey(item.spec()) || askedFor.containsKey(item.spec())) {
-                continue;
-            }
-            List<StoreItemOffer> kept = memo.keptOffers(
-                    itemKey(item.spec(), shops, asOfDate, includeUnlocated, bought));
-            if (kept != null) {
-                bySpec.put(item.spec(), kept);
-            } else {
-                askedFor.put(item.spec(), item.id());
-                List<VariantWord> named = variantsNamed(market, item.variantWords());
-                if (!named.isEmpty()) {
-                    variants.put(item.id(), named);
-                }
-            }
-        }
-        if (!askedFor.isEmpty()) {
-            Map<Long, List<StoreItemOffer>> byItem = new HashMap<>();
-            for (StoreItemOffer offer : queryOffers(
-                    List.copyOf(askedFor.values()), shops, asOfDate, includeUnlocated, bought, variants)) {
-                byItem.computeIfAbsent(offer.itemId(), ignored -> new ArrayList<>()).add(offer);
-            }
-            askedFor.forEach((spec, itemId) -> {
-                List<StoreItemOffer> offers = List.copyOf(byItem.getOrDefault(itemId, List.of()));
-                bySpec.put(spec, offers);
-                memo.keepOffers(itemKey(spec, shops, asOfDate, includeUnlocated, bought), offers, generation);
-            });
-        }
-
-        // As the query sorted them: by shop, then the list's own order.
-        List<StoreItemOffer> offers = new ArrayList<>();
-        Map<Long, Integer> position = new HashMap<>();
-        for (int index = 0; index < items.size(); index++) {
-            PlanItem item = items.get(index);
-            position.put(item.id(), index);
-            for (StoreItemOffer offer : bySpec.get(item.spec())) {
-                offers.add(offer.itemId().equals(item.id()) ? offer : offer.forItem(item.id(), item.name()));
-            }
-        }
-        offers.sort(Comparator.comparing(StoreItemOffer::storeId)
-                .thenComparing(offer -> position.get(offer.itemId())));
-        return offers;
-    }
-
-    /**
-     * The variants a line names ("kapsule", "zero", "orasi"), by the one
-     * dictionary of them (KindTaxonomy, V155). A product that has another
-     * value of such an attribute, or whose kind must say it and does not,
-     * is no choice for the line, not a substitute (V160).
-     */
-    private List<VariantWord> variantsNamed(Market market, String words) {
-        if (words == null || words.isBlank()) {
-            return List.of();
-        }
-        return kinds.variantsIn(market, normalizer.normalize(words));
-    }
-
-    private static List<Object> itemKey(
-            String spec, List<Long> shops, LocalDate asOfDate, boolean includeUnlocated, Long[] bought) {
-        return java.util.Arrays.asList(
-                "itemOffers", spec, shops, asOfDate, includeUnlocated, List.of(bought));
-    }
-
-    private List<StoreItemOffer> queryOffers(
-            List<Long> itemIds,
-            List<Long> storeIds,
-            LocalDate asOfDate,
-            boolean includeUnlocated,
-            Long[] boughtFamilyIds,
-            Map<Long, List<VariantWord>> variants
-    ) {
-        List<Long> variantItemIds = new ArrayList<>();
-        List<String> variantCodes = new ArrayList<>();
-        List<String> variantValues = new ArrayList<>();
-        variants.forEach((itemId, named) -> named.forEach(variant -> {
-            variantItemIds.add(itemId);
-            variantCodes.add(variant.attributeCode());
-            variantValues.add(variant.value());
-        }));
-        return jdbcClient.sql("""
+    static final String OFFERS_SQL = """
                         -- Which products can answer each item in each chain, worked
                         -- out once per chain instead of once per store: twenty
                         -- stores of a few chains asked the same question twenty
@@ -968,10 +702,22 @@ public class StoreShoppingOfferRepository {
                                   AND unnamed.retailer_id = chain.retailer_id
                                   AND unnamed.normalized_name IS NULL
                             ) AS found
-                            JOIN app.retailer_product AS product
-                              ON product.id = found.id
-                            LEFT JOIN app.canonical_product AS canonical
-                              ON canonical.id = product.canonical_product_id
+                            -- Each found product and its canonical brand by their
+                            -- keys. Joined freely, the planner hashed all 360,000
+                            -- products and 124,000 canonical products for a few
+                            -- thousand found (0.19 s of a 1.0 s plan, 13.11.2026).
+                            CROSS JOIN LATERAL (
+                                SELECT found_product.*
+                                FROM app.retailer_product AS found_product
+                                WHERE found_product.id = found.id
+                                OFFSET 0
+                            ) AS product
+                            LEFT JOIN LATERAL (
+                                SELECT found_canonical.*
+                                FROM app.canonical_product AS found_canonical
+                                WHERE found_canonical.id = product.canonical_product_id
+                                OFFSET 0
+                            ) AS canonical ON TRUE
                             CROSS JOIN LATERAL (
                                 SELECT CASE WHEN counted.by_piece
                                             THEN product.package_count::NUMERIC
@@ -1132,20 +878,30 @@ public class StoreShoppingOfferRepository {
                                   (
                                       item.matching_rule = 'FLEXIBLE_CATEGORY'
                                       AND (
-                                          EXISTS (
-                                              SELECT 1
-                                              FROM app.retailer_product_type
-                                                  AS assignment
-                                              JOIN app.shopping_intent_product_type
-                                                  AS allowed_type
-                                                ON allowed_type.product_type_id =
-                                                   assignment.product_type_id
-                                              WHERE assignment.retailer_product_id =
-                                                    product.id
-                                                AND allowed_type.shopping_intent_id =
-                                                    requested_intent.shopping_intent_id
-                                                AND allowed_type.enabled_by_default =
-                                                    TRUE
+                                          -- Asked per product, by its key. As a
+                                          -- hashed list the planner gathered every
+                                          -- typed product of every kind first
+                                          -- (120,000 rows, 0.07 s, 13.11.2026);
+                                          -- here a line has no active kind, so
+                                          -- there is never one to find.
+                                          (
+                                              requested_intent.shopping_intent_id IS NOT NULL
+                                              AND EXISTS (
+                                                  SELECT 1
+                                                  FROM app.retailer_product_type
+                                                      AS assignment
+                                                  JOIN app.shopping_intent_product_type
+                                                      AS allowed_type
+                                                    ON allowed_type.product_type_id =
+                                                       assignment.product_type_id
+                                                  WHERE assignment.retailer_product_id =
+                                                        product.id
+                                                    AND allowed_type.shopping_intent_id =
+                                                        requested_intent.shopping_intent_id
+                                                    AND allowed_type.enabled_by_default =
+                                                        TRUE
+                                                  OFFSET 0
+                                              )
                                           )
                                           OR (
                                               requested_intent.shopping_intent_id
@@ -1340,6 +1096,7 @@ public class StoreShoppingOfferRepository {
                                    candidate.pack_weight,
                                    candidate.bought_rank,
                                    candidate.typical_price,
+                                   -- [old prices from here]
                                    EXISTS (
                                        SELECT 1
                                        FROM app.price_observation AS loose
@@ -1387,7 +1144,9 @@ public class StoreShoppingOfferRepository {
                                                AND loose_current.scope_key =
                                                    loose_scope.scope_key
                                          )
-                                   ) AS has_loose_observation
+                                   )
+                                   -- [old prices to here]
+                                   AS has_loose_observation
                             FROM candidate
                             -- A variant the line names is a filter, not a hint:
                             -- "Nespresso kapsule" are no ground coffee, "Coca
@@ -1429,6 +1188,7 @@ public class StoreShoppingOfferRepository {
                         -- the chain, the same offers were read 33,000 times for
                         -- 13,600 products (2.5 s of a 4.6 s plan on the server).
                         price_source AS MATERIALIZED (
+                            -- [prices from here]
                             SELECT wanted.retailer_product_id,
                                    source.observed,
                                    source.source_store_id,
@@ -1550,6 +1310,7 @@ public class StoreShoppingOfferRepository {
                                   END,
                                   TRUE
                               )
+                            -- [prices to here]
                         ),
                         -- Each shop's price of each candidate: its own price
                         -- first, then its format's, then the chain's; the
@@ -1817,7 +1578,337 @@ public class StoreShoppingOfferRepository {
                         ORDER BY store.id ASC,
                                  priced.item_created_at ASC,
                                  priced.item_id ASC
-                        """))
+                        """);
+
+    /**
+     * {@link #OFFERS_SQL} with the two things that depend only on a product
+     * and the day read from the tables V172 builds after each import: whether
+     * an old price of the product can still count, and every price it has in
+     * the newest lists. The rest, every rank and condition of a line, is the
+     * same text. {@link PlanFacts} says when the tables are fresh.
+     */
+    static final String OFFERS_FROM_FACTS_SQL = swap(swap(OFFERS_SQL,
+            "-- [old prices from here]", "-- [old prices to here]", """
+                                   EXISTS (
+                                       SELECT 1
+                                       FROM app.plan_loose_product AS loose
+                                       WHERE loose.retailer_product_id =
+                                             candidate.retailer_product_id
+                                   )
+            """),
+            "-- [prices from here]", "-- [prices to here]", """
+                            SELECT price.retailer_product_id,
+                                   price.observed,
+                                   price.source_store_id,
+                                   price.scope_type,
+                                   price.format_key,
+                                   price.price_date,
+                                   price.regular_price,
+                                   price.discounted_price,
+                                   price.effective_price,
+                                   price.price_scope,
+                                   price.source_priority,
+                                   price.id
+                            FROM (
+                                SELECT DISTINCT candidate_row.retailer_product_id
+                                FROM candidate_row
+                            ) AS wanted
+                            -- Each product's rows by the index, as before: joined
+                            -- freely, the planner may read the whole table.
+                            CROSS JOIN LATERAL (
+                                SELECT own_price.*
+                                FROM app.plan_price_source AS own_price
+                                WHERE own_price.retailer_product_id = wanted.retailer_product_id
+                                OFFSET 0
+                            ) AS price
+            """);
+
+    /** {@code sql} with what lies between the two marks, both included, replaced. */
+    static String swap(String sql, String from, String to, String replacement) {
+        int start = sql.indexOf(from);
+        int end = sql.indexOf(to);
+        if (start < 0 || end < start
+                || sql.indexOf(from, start + 1) >= 0 || sql.indexOf(to, end + 1) >= 0) {
+            throw new IllegalStateException("The plan's query lost its mark " + from);
+        }
+        return sql.substring(0, start) + replacement.strip() + sql.substring(end + to.length());
+    }
+
+
+    private static final RowMapper<StoreItemOffer> ROW_MAPPER =
+            (resultSet, rowNumber) -> new StoreItemOffer(
+                    resultSet.getLong("store_id"),
+                    resultSet.getString("retailer_code"),
+                    resultSet.getString("retailer_name"),
+                    resultSet.getString("store_format_code"),
+                    resultSet.getString("store_format_name"),
+                    resultSet.getString("store_name"),
+                    resultSet.getString("address"),
+                    resultSet.getString("city"),
+                    resultSet.getDouble("latitude"),
+                    resultSet.getDouble("longitude"),
+                    resultSet.getLong("item_id"),
+                    resultSet.getString("requested_name"),
+                    resultSet.getBigDecimal("requested_quantity"),
+                    ShoppingItemRule.valueOf(
+                            resultSet.getString("matching_rule")
+                    ),
+                    ShoppingItemMatchingStatus.valueOf(
+                            resultSet.getString("matching_status")
+                    ),
+                    resultSet.getObject(
+                            "retailer_product_id",
+                            Long.class
+                    ),
+                    resultSet.getObject(
+                            "canonical_product_id",
+                            Long.class
+                    ),
+                    resultSet.getString("product_name"),
+                    resultSet.getString("product_brand"),
+                    resultSet.getString("product_barcode"),
+                    resultSet.getObject("price_date", LocalDate.class),
+                    resultSet.getBigDecimal("regular_price"),
+                    resultSet.getBigDecimal("discounted_price"),
+                    resultSet.getBigDecimal("effective_price"),
+                    resultSet.getBigDecimal("line_total"),
+                    resultSet.getString("price_scope"),
+                    new PurchaseQuantity(resultSet.getBigDecimal("packages"),
+                            resultSet.getBigDecimal("package_size"), resultSet.getString("package_unit"),
+                            resultSet.getBigDecimal("target_amount"), resultSet.getBigDecimal("supplied_amount"),
+                            resultSet.getBigDecimal("extra_amount"), resultSet.getBigDecimal("unit_price")),
+                    resultSet.getBoolean("usual_choice"),
+                    resultSet.getBoolean("wanted_missing")
+            );
+
+    private final JdbcClient jdbcClient;
+    private final CatalogMemo memo;
+    private final KindTaxonomy kinds;
+    private final MarketRepository markets;
+    private final ProductNameNormalizer normalizer;
+    private final PlanFacts planFacts;
+
+    public StoreShoppingOfferRepository(
+            JdbcClient jdbcClient,
+            CatalogMemo memo,
+            KindTaxonomy kinds,
+            MarketRepository markets,
+            ProductNameNormalizer normalizer,
+            PlanFacts planFacts
+    ) {
+        this.jdbcClient = jdbcClient;
+        this.memo = memo;
+        this.kinds = kinds;
+        this.markets = markets;
+        this.normalizer = normalizer;
+        this.planFacts = planFacts;
+    }
+
+    /**
+     * A line of the list as the offer query sees it. {@code spec} is the
+     * row without what only names or orders it, so two lines that ask the
+     * same, in this list or anyone's, are priced once.
+     */
+    /**
+     * @param variantWords what a flexible line says beyond its kind, its
+     *                     brand included: where its variant is named (V160)
+     */
+    record PlanItem(Long id, String name, String spec, String variantWords) {
+    }
+
+    private List<PlanItem> planItems(Long listId) {
+        return jdbcClient.sql("""
+                        SELECT item.id,
+                               item.name,
+                               md5((to_jsonb(item) - ARRAY[
+                                   'id', 'shopping_list_id', 'name', 'raw_input',
+                                   'created_at', 'updated_at',
+                                   'matching_decision_id', 'matching_score',
+                                   'matching_algorithm_version', 'flexible_category'
+                               ])::TEXT) AS spec,
+                               -- The words as the line says them: the normalized
+                               -- category is the kind's alias alone, "coca cola"
+                               -- for "Coca Cola zero".
+                               CASE WHEN item.matching_rule = 'FLEXIBLE_CATEGORY'
+                                    THEN CONCAT_WS(' ', item.required_brand,
+                                                   COALESCE(item.flexible_category,
+                                                            item.flexible_category_normalized))
+                               END AS variant_words
+                        FROM app.shopping_list_item AS item
+                        WHERE item.shopping_list_id = :listId
+                        ORDER BY item.created_at, item.id
+                        """)
+                .param("listId", listId)
+                // The spec leaves the shown category out, so the variant words
+                // are part of it: "coca cola" and "coca cola zero" differ.
+                .query((resultSet, rowNumber) -> new PlanItem(
+                        resultSet.getLong("id"),
+                        resultSet.getString("name"),
+                        resultSet.getString("spec") + "|" + Objects.toString(resultSet.getString("variant_words"), ""),
+                        resultSet.getString("variant_words")))
+                .list();
+    }
+
+    /**
+     * Proizvodi koje je vlasnik ovog spiska već kupovao, po skeniranim
+     * računima. Vraća se kao niz u parametru umesto kao podupit u sortiranju:
+     * upit koji se izvršava za svakog kandidata u svakoj prodavnici je ono što
+     * je preporuku i usporavalo. Prazan niz ne menja nijedan redosled.
+     */
+    private Long[] boughtFamilyIds(Long listId) {
+        return jdbcClient.sql("""
+                        SELECT DISTINCT item.product_family_id
+                        FROM app.receipt_item AS item
+                        JOIN app.receipt AS receipt
+                          ON receipt.id = item.receipt_id
+                        JOIN app.shopping_list AS list
+                          ON list.account_id = receipt.account_id
+                        WHERE list.id = :listId
+                          AND item.product_family_id IS NOT NULL
+                        """)
+                .param("listId", listId)
+                .query(Long.class)
+                .list()
+                .toArray(Long[]::new);
+    }
+
+    public List<StoreItemOffer> findOffers(
+            Long listId,
+            List<Long> storeIds,
+            LocalDate asOfDate
+    ) {
+        return findOffers(listId, storeIds, asOfDate, false);
+    }
+
+    /**
+     * @param includeUnlocated also prices the published lists whose shop we
+     *                         cannot place, so one pass answers both.
+     */
+    public List<StoreItemOffer> findOffers(
+            Long listId,
+            List<Long> storeIds,
+            LocalDate asOfDate,
+            boolean includeUnlocated
+    ) {
+        if (storeIds == null || storeIds.isEmpty()) {
+            return List.of();
+        }
+
+        // The same list in the same shops on the same day is priced once:
+        // opening the plan again, on foot and then by car, or from a step
+        // away, asks nothing (k6, 3.11.2026). The shops stand for the place;
+        // no coordinates are kept.
+        Long[] bought = boughtFamilyIds(listId);
+        List<PlanItem> items = planItems(listId);
+        if (items.isEmpty()) {
+            return List.of();
+        }
+        List<Long> shops = storeIds.stream().sorted().toList();
+        List<Object> key = java.util.Arrays.asList(
+                "planOffers", listId, items, shops, asOfDate, includeUnlocated, List.of(bought));
+        return memo.rememberOffers(key, () -> List.copyOf(
+                offersByItem(items, shops, asOfDate, includeUnlocated, bought,
+                        markets.forShoppingList(listId))));
+    }
+
+    /**
+     * Each item's offers in these shops are kept on their own, so a list
+     * opened for the first time asks only for the lines nobody nearby asked
+     * for in the last minutes, and "mleko 1 l" is priced once for everyone.
+     * Nothing in the query ties one line to another.
+     */
+    private List<StoreItemOffer> offersByItem(
+            List<PlanItem> items,
+            List<Long> shops,
+            LocalDate asOfDate,
+            boolean includeUnlocated,
+            Long[] bought,
+            Market market
+    ) {
+        long generation = memo.offersGeneration();
+        Map<String, List<StoreItemOffer>> bySpec = new HashMap<>();
+        Map<String, Long> askedFor = new LinkedHashMap<>();
+        Map<Long, List<VariantWord>> variants = new HashMap<>();
+        for (PlanItem item : items) {
+            if (bySpec.containsKey(item.spec()) || askedFor.containsKey(item.spec())) {
+                continue;
+            }
+            List<StoreItemOffer> kept = memo.keptOffers(
+                    itemKey(item.spec(), shops, asOfDate, includeUnlocated, bought));
+            if (kept != null) {
+                bySpec.put(item.spec(), kept);
+            } else {
+                askedFor.put(item.spec(), item.id());
+                List<VariantWord> named = variantsNamed(market, item.variantWords());
+                if (!named.isEmpty()) {
+                    variants.put(item.id(), named);
+                }
+            }
+        }
+        if (!askedFor.isEmpty()) {
+            Map<Long, List<StoreItemOffer>> byItem = new HashMap<>();
+            for (StoreItemOffer offer : queryOffers(
+                    List.copyOf(askedFor.values()), shops, asOfDate, includeUnlocated, bought, variants)) {
+                byItem.computeIfAbsent(offer.itemId(), ignored -> new ArrayList<>()).add(offer);
+            }
+            askedFor.forEach((spec, itemId) -> {
+                List<StoreItemOffer> offers = List.copyOf(byItem.getOrDefault(itemId, List.of()));
+                bySpec.put(spec, offers);
+                memo.keepOffers(itemKey(spec, shops, asOfDate, includeUnlocated, bought), offers, generation);
+            });
+        }
+
+        // As the query sorted them: by shop, then the list's own order.
+        List<StoreItemOffer> offers = new ArrayList<>();
+        Map<Long, Integer> position = new HashMap<>();
+        for (int index = 0; index < items.size(); index++) {
+            PlanItem item = items.get(index);
+            position.put(item.id(), index);
+            for (StoreItemOffer offer : bySpec.get(item.spec())) {
+                offers.add(offer.itemId().equals(item.id()) ? offer : offer.forItem(item.id(), item.name()));
+            }
+        }
+        offers.sort(Comparator.comparing(StoreItemOffer::storeId)
+                .thenComparing(offer -> position.get(offer.itemId())));
+        return offers;
+    }
+
+    /**
+     * The variants a line names ("kapsule", "zero", "orasi"), by the one
+     * dictionary of them (KindTaxonomy, V155). A product that has another
+     * value of such an attribute, or whose kind must say it and does not,
+     * is no choice for the line, not a substitute (V160).
+     */
+    private List<VariantWord> variantsNamed(Market market, String words) {
+        if (words == null || words.isBlank()) {
+            return List.of();
+        }
+        return kinds.variantsIn(market, normalizer.normalize(words));
+    }
+
+    private static List<Object> itemKey(
+            String spec, List<Long> shops, LocalDate asOfDate, boolean includeUnlocated, Long[] bought) {
+        return java.util.Arrays.asList(
+                "itemOffers", spec, shops, asOfDate, includeUnlocated, List.of(bought));
+    }
+
+    private List<StoreItemOffer> queryOffers(
+            List<Long> itemIds,
+            List<Long> storeIds,
+            LocalDate asOfDate,
+            boolean includeUnlocated,
+            Long[] boughtFamilyIds,
+            Map<Long, List<VariantWord>> variants
+    ) {
+        List<Long> variantItemIds = new ArrayList<>();
+        List<String> variantCodes = new ArrayList<>();
+        List<String> variantValues = new ArrayList<>();
+        variants.forEach((itemId, named) -> named.forEach(variant -> {
+            variantItemIds.add(itemId);
+            variantCodes.add(variant.attributeCode());
+            variantValues.add(variant.value());
+        }));
+        return jdbcClient.sql(planFacts.freshFor(asOfDate) ? OFFERS_FROM_FACTS_SQL : OFFERS_SQL)
                 .param("asOfDate", asOfDate)
                 .param("itemIds", itemIds)
                 .param("storeIds", storeIds)
