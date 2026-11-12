@@ -67,6 +67,8 @@ class SixthTestCoverageTest {
     private static final String SUGAR = "SECER KRISTAL 1KG";
     private static final String BAKING_MARGARINE = "MARGARIN ZA KOLACE VITA 250G";
     private static final String TABLE_MARGARINE = "MARGARIN DIJAMANT CLASSIC STONI 250G";
+    /** Cheaper than the block, but diet margarine is not for cakes (V171). */
+    private static final String DIET_MARGARINE = "DOBRO JUTRO MARGARIN DIJET 250G";
     private static final String PUFF_PASTRY = "LISNATO TESTO SA MARGARINOM 500G";
     private static final String BUTTER = "MASLAC 82% 250G";
 
@@ -92,6 +94,7 @@ class SixthTestCoverageTest {
             + row(SUGAR, "119,99")
             + row(BAKING_MARGARINE, "179,99")
             + row(TABLE_MARGARINE, "169,99")
+            + row(DIET_MARGARINE, "119,99")
             + row(PUFF_PASTRY, "229,99")
             + row(BUTTER, "399,99");
 
@@ -259,7 +262,8 @@ class SixthTestCoverageTest {
                 .containsEntry(FREEZER_BAGS, "FREEZER_BAG")
                 .containsEntry(VANILLA_SUGAR, "VANILLA_SUGAR")
                 .containsEntry(BAKING_MARGARINE, "MARGARINE")
-                .containsEntry(TABLE_MARGARINE, "MARGARINE");
+                .containsEntry(TABLE_MARGARINE, "MARGARINE")
+                .containsEntry(DIET_MARGARINE, "MARGARINE");
         for (String other : List.of(OAT_PORRIDGE, OAT_FLAKES, BIN_BAGS, ICE_BAGS, VANILLA_PUDDING, PUFF_PASTRY)) {
             assertThat(kinds.get(other)).as(other + " " + kinds)
                     .isNotIn("PLANT_DRINK", "FREEZER_BAG", "VANILLA_SUGAR", "MARGARINE");
