@@ -101,11 +101,14 @@ class DraftItemRowTest {
 
     @Test
     fun `neprepoznata nalepljena stavka je oznacena dok se ne izabere`() {
-        val pasted = flexible("xyz grickalica").copy(remoteId = 7)
+        val pasted = flexible("xyz grickalica").copy(remoteId = 7, matchingStatus = "UNMATCHED")
         val ids = setOf(7L)
 
         assertTrue(pastedUnknown(pasted, ids))
         assertFalse(pastedUnknown(pasted.copy(matchingStatus = "CONFIRMED"), ids))
+        // „med“: vrsta nije u rečniku, ali provera ga nalazi po nazivu (B3).
+        assertFalse(pastedUnknown(pasted.copy(matchingStatus = "AUTO_MATCHED"), ids))
+        assertFalse(pastedUnknown(pasted.copy(matchingStatus = "PENDING"), ids))
         assertFalse(pastedUnknown(pasted.copy(syncError = "Naziv mora imati bar jedno slovo."), ids))
         assertFalse(pastedUnknown(pasted, emptySet()))
         assertFalse(pastedUnknown(pasted.copy(remoteId = null), ids))

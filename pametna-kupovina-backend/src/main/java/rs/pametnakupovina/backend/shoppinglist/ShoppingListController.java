@@ -86,10 +86,14 @@ public class ShoppingListController {
             DeviceCaller caller,
             @RequestBody PasteShoppingListItemsRequest request
     ) {
-        return service.addPastedItems(
+        return matchingService.checkPasted(
                 listId,
-                caller.accountId(),
-                request
+                caller,
+                service.addPastedItems(
+                        listId,
+                        caller.accountId(),
+                        request
+                )
         );
     }
 
