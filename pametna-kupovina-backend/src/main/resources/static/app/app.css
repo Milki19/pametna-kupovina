@@ -242,10 +242,19 @@ a.card:active, button.card:active { transform: scale(0.98); }
 .btn svg { width: 20px; height: 20px; }
 .btn-row { display: flex; gap: 8px; }
 .btn-row > .btn { flex: 1; }
-/* Duplikati: više dugmadi prelazi u novi red, a „Spoji sve“ je ceo red iznad njih. */
-.btn-row.wrap { flex-wrap: wrap; }
-.btn-row.wrap > .btn { flex: 1 1 auto; }
-.btn-row.wrap > .btn.primary { flex-basis: 100%; }
+/* Duplikati: jedna niska traka iznad stavki; grupe se otvaraju na dodir. */
+.dup-bar { padding: 4px 4px 4px 12px; border-radius: 18px; background: var(--amber); color: var(--on-amber); }
+.dup-bar > .row { gap: 8px; flex-wrap: wrap; }
+.dup-toggle {
+  min-height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 4px;
+  border: 0; background: none; color: inherit; font: inherit; font-weight: 700; text-align: left; cursor: pointer;
+}
+.dup-toggle:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; border-radius: 12px; }
+.dup-chevron { margin-left: auto; }
+.dup-bar .btn.primary { min-height: 44px; padding: 8px 14px; flex: 0 0 auto; }
+.dup-list { display: grid; gap: 2px; padding: 4px 8px 6px 4px; border-top: 1px solid color-mix(in srgb, currentColor 22%, transparent); margin-top: 4px; }
+.dup-list .row { min-height: 44px; gap: 8px; }
+.dup-list .btn.text { color: inherit; text-decoration: underline; flex: none; }
 .icon-action { display: grid; place-items: center; width: 44px; height: 44px; border: 0; background: none; color: var(--muted); border-radius: 14px; cursor: pointer; flex: none; transition: transform 0.22s cubic-bezier(0.3, 1.4, 0.5, 1); }
 .icon-action:active:not(:disabled) { transform: scale(0.9); }
 

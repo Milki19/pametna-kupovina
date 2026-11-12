@@ -57,6 +57,11 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
+import androidx.compose.material3.Surface
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Button
+import androidx.compose.animation.animateContentSize
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -119,6 +124,7 @@ fun ShoppingListScreen(
     var showItemEditor by rememberSaveable { mutableStateOf(false) }
     var showPasteDialog by rememberSaveable { mutableStateOf(false) }
     var confirmClear by rememberSaveable { mutableStateOf(false) }
+    var duplicatesExpanded by rememberSaveable { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
@@ -258,31 +264,17 @@ fun ShoppingListScreen(
                 if (state.items.isEmpty()) {
                     item(key = "empty") { EmptyList(Modifier.enter(entrance, 1)) }
                 }
-                // Ista stavka dva puta: upozorenje, a kad se količine mogu sabrati i dugme koje ih spaja.
+                // Ista stavka više puta: jedna niska traka sa „Spoji sve“, grupe tek na dodir
+                // (šesti test, stavka 13), da stavke ostanu na prvom ekranu.
                 val duplicates = duplicateGroups(state.items)
-                // Veliki spisak sa više duplikata: jedno dugme za sve (šesti test, stavka 15).
-                val mergeable = mergeAllGroups(duplicates)
-                if (mergeable.isNotEmpty()) {
-                    item(key = "duplicates-all") {
-                        NoticeBanner(
-                            text = pluralStringResource(R.plurals.list_duplicate_merge_all_hint, mergeable.size, mergeable.size),
-                            tone = StatusTone.WARNING,
-                            actionLabel = stringResource(R.string.list_duplicate_merge_all, mergeable.size),
-                            onAction = { viewModel.mergeAllDuplicates(mergeable) },
-                            modifier = Modifier.padding(bottom = AppSpacing.lg)
-                        )
-                    }
-                }
-                duplicates.forEach { group ->
-                    item(key = "duplicates-${group.items.first().localId}") {
-                        NoticeBanner(
-                            text = stringResource(
-                                if (group.merged != null) R.string.list_duplicate_merge_hint else R.string.list_duplicate_warning,
-                                group.items.first().name
-                            ),
-                            tone = StatusTone.WARNING,
-                            actionLabel = group.merged?.let { stringResource(R.string.list_duplicate_merge) },
-                            onAction = group.merged?.let { merged -> { viewModel.mergeDuplicates(group.items, merged) } },
+                if (duplicates.isNotEmpty()) {
+                    item(key = "duplicates") {
+                        DuplicateStrip(
+                            groups = duplicates,
+                            expanded = duplicatesExpanded,
+                            onToggle = { duplicatesExpanded = !duplicatesExpanded },
+                            onMergeAll = { viewModel.mergeAllDuplicates(mergeAllGroups(duplicates)) },
+                            onMerge = { group -> group.merged?.let { viewModel.mergeDuplicates(group.items, it) } },
                             modifier = Modifier.padding(bottom = AppSpacing.lg)
                         )
                     }
@@ -446,6 +438,109 @@ fun ShoppingListScreen(
                 viewModel.pasteItems(text, replace) { showPasteDialog = false }
             }
         )
+    }
+}
+
+/**
+ * Duplikati u jednoj niskoj traci: „N duplikata“ i „Spoji sve (N)“. Dodir na
+ * traku otvara grupe, svaku sa svojim „Spoji“, ili sa razlogom zašto se ne
+ * spaja (drugi proizvod, brend ili jedinica).
+ */
+@Composable
+private fun DuplicateStrip(
+    groups: List<DuplicateGroup>,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    onMergeAll: () -> Unit,
+    onMerge: (DuplicateGroup) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val mergeable = mergeAllGroups(groups)
+    val toggleLabel = stringResource(if (expanded) R.string.list_duplicates_hide else R.string.list_duplicates_show)
+    Surface(
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+        shape = MaterialTheme.shapes.medium,
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag("duplicates")
+    ) {
+        Column(modifier = Modifier.animateContentSize()) {
+            Row(
+                modifier = Modifier.padding(start = AppSpacing.xs, end = AppSpacing.xs, top = AppSpacing.xs, bottom = AppSpacing.xs),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 48.dp)
+                        .clip(MaterialTheme.shapes.small)
+                        .clickable(role = Role.Button, onClickLabel = toggleLabel, onClick = onToggle)
+                        .padding(horizontal = AppSpacing.sm),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(AppSpacing.sm)
+                ) {
+                    AppIcon(R.drawable.ic_warning, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Text(
+                        pluralStringResource(R.plurals.list_duplicates_count, groups.size, groups.size),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    AppIcon(
+                        if (expanded) R.drawable.ic_expand_less else R.drawable.ic_expand_more,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                if (mergeable.isNotEmpty()) {
+                    Button(
+                        onClick = onMergeAll,
+                        contentPadding = PaddingValues(horizontal = AppSpacing.md, vertical = AppSpacing.xs),
+                        modifier = Modifier.testTag("merge-all")
+                    ) {
+                        Text(stringResource(R.string.list_duplicate_merge_all, mergeable.size))
+                    }
+                }
+            }
+            if (expanded) {
+                HorizontalDivider(
+                    color = LocalContentColor.current.copy(alpha = 0.22f),
+                    modifier = Modifier.padding(horizontal = AppSpacing.md)
+                )
+                Column(modifier = Modifier.padding(start = AppSpacing.md, end = AppSpacing.xs, bottom = AppSpacing.xs)) {
+                    groups.forEach { group ->
+                        Row(
+                            modifier = Modifier.heightIn(min = 48.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f).padding(vertical = AppSpacing.xs)) {
+                                Text(
+                                    stringResource(R.string.list_duplicate_times, group.items.first().name, group.items.size),
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                                if (group.merged == null) {
+                                    Text(
+                                        stringResource(R.string.list_duplicate_cannot_merge),
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                            }
+                            if (group.merged != null) {
+                                TextButton(onClick = { onMerge(group) }) {
+                                    Text(
+                                        stringResource(R.string.list_duplicate_merge),
+                                        color = LocalContentColor.current,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -778,9 +873,9 @@ internal fun duplicateGroups(items: List<DraftItemEntity>): List<DuplicateGroup>
         .filter { group -> group.size > 1 && group.none { it.syncState == SyncState.PENDING_PASTE.name } }
         .map { DuplicateGroup(it, mergedItem(it)) }
 
-/** Grupe za „Spoji sve“: samo one koje se mogu sabrati, i to tek kad ih je bar dve. */
+/** Grupe za „Spoji sve“: samo one koje se mogu sabrati. */
 internal fun mergeAllGroups(groups: List<DuplicateGroup>): List<DuplicateGroup> =
-    groups.filter { it.merged != null }.takeIf { it.size > 1 }.orEmpty()
+    groups.filter { it.merged != null }
 
 /**
  * Prva stavka ostaje (mesto, pravilo, proizvod) i dobija zbir količina.

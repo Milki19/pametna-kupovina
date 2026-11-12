@@ -69,7 +69,7 @@ function itemAttention(item) {
   return '';
 }
 
-let listState = { list: null, adding: null, editing: null, rejected: null, pasteAsk: null, pastedUnknown: new Set(), offline: false };
+let listState = { list: null, adding: null, editing: null, rejected: null, pasteAsk: null, pastedUnknown: new Set(), offline: false, duplicatesOpen: false };
 
 /**
  * Izmena spiska: ide serveru, a bez veze čeka u redu (core/outbox.js) i šalje
@@ -287,20 +287,27 @@ function mergePlan(group) {
   return { keep, quantity: 1, constraints: { ...c, targetQuantity: Math.round(target * 1000) / 1000 } };
 }
 
+/**
+ * Duplikati: jedna niska traka iznad stavki, „N duplikata“ i
+ * „Spoji sve (N)“, da stavke ostanu na prvom ekranu (šesti test, stavka 13).
+ * Pojedinačne grupe se vide tek na dodir trake.
+ */
 function duplicateNotice(items) {
   const groups = duplicateGroups(items);
   if (!groups.length) return '';
   const mergeable = groups.filter(mergePlan);
-  const text = groups.map(group => `„${group[0].name}“ je na spisku ${group.length === 2 ? 'dva puta' : group.length + ' puta'}.`).join(' ')
-    + (mergeable.length === groups.length ? ' Spoji ih u jednu stavku ili obriši višak.'
-      : mergeable.length ? ' Gde se količine mogu sabrati, spoji ih; ostalo obriši ako je greška.'
-        : ' Razlikuju se po proizvodu, brendu ili jedinici, pa ih ne spajam. Ako je to greška, obriši višak.');
-  if (!mergeable.length) return notice(text, 'warn');
-  // Veliki spisak sa više duplikata: jedno dugme za sve, pre pojedinačnih (šesti test, stavka 15).
-  const all = mergeable.length > 1
-    ? `<button class="btn primary" data-act="merge-all">Spoji sve (${mergeable.length})</button>` : '';
-  return `<div class="card">${notice(text, 'warn')}<div class="btn-row wrap">${all}${mergeable.map(group =>
-    `<button class="btn tonal" data-act="merge" data-id="${group[0].id}">Spoji „${esc(group[0].name)}“</button>`).join('')}</div></div>`;
+  const open = listState.duplicatesOpen;
+  const times = group => group.length === 2 ? 'dva puta' : `${group.length} puta`;
+  const details = open ? `<div class="dup-list" id="dup-list">${groups.map(group => mergePlan(group)
+    ? `<div class="row"><div class="grow">„${esc(group[0].name)}“ ${times(group)}</div>
+        <button class="btn text" data-act="merge" data-id="${group[0].id}">Spoji</button></div>`
+    : `<div class="row"><div class="grow">„${esc(group[0].name)}“ ${times(group)}
+        <div class="small">Drugi proizvod, brend ili jedinica, pa ih ne spajam. Ako je greška, obriši višak.</div></div></div>`).join('')}</div>` : '';
+  return `<div class="dup-bar" data-key="duplicates">
+    <div class="row">
+      <button class="dup-toggle grow" data-act="duplicates" aria-expanded="${open}" aria-controls="dup-list"><span>${counted(groups.length, 'duplikat', 'duplikata', 'duplikata')}</span><span class="dup-chevron" aria-hidden="true">${open ? '⌃' : '⌄'}</span></button>
+      ${mergeable.length ? `<button class="btn primary" data-act="merge-all">Spoji sve (${mergeable.length})</button>` : ''}
+    </div>${details}</div>`;
 }
 
 /** Prva stavka grupe dobija zbir, ostale se brišu. */
