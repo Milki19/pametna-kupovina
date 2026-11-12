@@ -191,9 +191,11 @@ class ShoppingListScreenTest {
     }
 
     @Test
-    fun `spoji sve nudi samo grupe koje se mogu sabrati, i to kad ih je bar dve`() {
+    fun `spoji sve nudi samo grupe koje se mogu sabrati, vec od jedne`() {
         val one = duplicateGroups(listOf(flexible(1, "jogurt"), flexible(2, "jogurt")))
-        assertTrue(mergeAllGroups(one).isEmpty())
+        assertEquals(1, mergeAllGroups(one).size)
+        val apart = duplicateGroups(listOf(flexible(1, "sir", target = 400.0, unit = "g"), flexible(2, "sir", target = 2.0, unit = "piece")))
+        assertTrue(mergeAllGroups(apart).isEmpty())
         val groups = duplicateGroups(
             listOf(
                 flexible(1, "jogurt"), flexible(2, "Jogurt"),

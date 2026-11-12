@@ -171,6 +171,7 @@ const actions = {
   delete: el => deleteItem(Number(el.dataset.id)),
   merge: el => mergeDuplicates(Number(el.dataset.id)),
   'merge-all': mergeAllDuplicates,
+  duplicates: () => { listState.duplicatesOpen = !listState.duplicatesOpen; renderList(); },
   calculate: () => { location.hash = '#/provera'; },
   choose: lazy('matching', ({ matching, resolve }, el) => {
     const item = matching.items.find(i => i.itemId === Number(el.dataset.item));
