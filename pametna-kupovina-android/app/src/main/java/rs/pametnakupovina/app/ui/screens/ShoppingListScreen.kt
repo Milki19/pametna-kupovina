@@ -798,10 +798,10 @@ internal fun draftPiecesWeight(item: DraftItemEntity): String? {
     return "≈${decimal(kilograms)} kg"
 }
 
-/** Ukupna količina kad je upisana („2 kg"), inače samo broj pakovanja. */
+/** Ukupna količina kad je upisana („2 kg"), inače broj komada („1 kom"), kao na webu. */
 internal fun draftAmountLabel(item: DraftItemEntity): String =
     item.targetQuantity?.let { amountLabel(it * item.quantity, item.requiredBaseUnit) }
-        ?: decimal(item.quantity)
+        ?: "${decimal(item.quantity)} kom"
 
 /**
  * Says how an item is chosen only when that differs from the default of

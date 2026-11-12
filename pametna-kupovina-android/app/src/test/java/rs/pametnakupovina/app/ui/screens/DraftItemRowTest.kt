@@ -96,7 +96,9 @@ class DraftItemRowTest {
         assertEquals("2 l", draftAmountLabel(flexible("mleko", quantity = 2.0, target = 1000.0, unit = "ml")))
         assertEquals("1,5 kg", draftAmountLabel(flexible("vrat", target = 1500.0, unit = "g")))
         assertEquals("400 g", draftAmountLabel(flexible("sir", target = 400.0, unit = "g")))
-        assertEquals("3", draftAmountLabel(flexible("hleb", quantity = 3.0)))
+        // Bez upisane količine broj je komada, kao na webu („1 kom“).
+        assertEquals("3 kom", draftAmountLabel(flexible("hleb", quantity = 3.0)))
+        assertEquals("1 kom", draftAmountLabel(flexible("hleb")))
     }
 
     @Test
