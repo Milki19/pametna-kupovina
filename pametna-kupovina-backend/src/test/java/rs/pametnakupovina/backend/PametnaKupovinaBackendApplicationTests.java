@@ -3122,6 +3122,52 @@ class PametnaKupovinaBackendApplicationTests {
     }
 
     @Test
+    void anInactiveVerifiedLocationIsNotUsedForPrices() {
+        jdbcClient.sql("""
+                    INSERT INTO app.retailer (code, name)
+                    VALUES ('INACTIVE_LOCATION_TEST', 'Inactive locations')
+                    """)
+                .update();
+        RetailerLocationSource source = new RetailerLocationSource(
+                "INACTIVE_LOCATION_API",
+                "TEST_LOCATION_JSON",
+                "https://example.test/locations",
+                "OFFICIAL_RETAILER_API",
+                true,
+                null
+        );
+        VerifiedRetailerLocation open = new VerifiedRetailerLocation(
+                "001", "Otvorena", "Prva 1", "Kragujevac",
+                "STANDARD", "Standard", 44.01, 20.91, true
+        );
+        VerifiedRetailerLocation closed = new VerifiedRetailerLocation(
+                "002", "Zatvorena", "Avalska 2", "Kragujevac",
+                "STANDARD", "Standard", 44.02, 20.92, false
+        );
+
+        // Twice: the first run inserts, the second goes through ON CONFLICT.
+        for (int run = 0; run < 2; run++) {
+            retailerLocationImportService.importVerifiedLocations(
+                    "INACTIVE_LOCATION_TEST",
+                    List.of(open, closed),
+                    source
+            );
+            assertThat(jdbcClient.sql("""
+                            SELECT store.external_code || ':' ||
+                                   store.pricing_eligible || ':' ||
+                                   COALESCE(store.pricing_ineligibility_reason, '-')
+                            FROM app.store AS store
+                            JOIN app.retailer AS retailer
+                              ON retailer.id = store.retailer_id
+                            WHERE retailer.code = 'INACTIVE_LOCATION_TEST'
+                            ORDER BY store.external_code
+                            """)
+                    .query(String.class)
+                    .list()).containsExactly("001:true:-", "002:false:INACTIVE");
+        }
+    }
+
+    @Test
     void pilotStoreImportPersistsAddressFormatAndActiveStatus() {
         jdbcClient.sql("""
                         INSERT INTO app.retailer (code, name)

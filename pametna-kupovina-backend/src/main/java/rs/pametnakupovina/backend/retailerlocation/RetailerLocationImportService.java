@@ -774,6 +774,14 @@ public class RetailerLocationImportService {
             String pricingIneligibilityReason,
             boolean forcePricingIneligible
     ) {
+        // A chain lists a store it has closed or not yet opened as inactive.
+        // Lidl Kragujevac - Avalska came in that way on 15.11. still counted
+        // for prices, and kept the M1 report CRITICAL.
+        if (!active) {
+            pricingEligible = false;
+            pricingIneligibilityReason = "INACTIVE";
+            forcePricingIneligible = true;
+        }
         jdbcClient.sql("""
                     INSERT INTO app.store AS existing_store (
                         retailer_id,
